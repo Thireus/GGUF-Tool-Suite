@@ -136,4 +136,3 @@ Any **use, reproduction, or modification** of this software **must give clear an
 See the [LICENSE](./LICENSE) file for more details.
 
 🔗 https://gguf.thireus.com/
-

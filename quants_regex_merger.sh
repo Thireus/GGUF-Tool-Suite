@@ -1074,7 +1074,7 @@ extract_summaries() {
 
 echo "$custom" | grep -v '^#' | grep -v '^$' | shorten_regex_list | optimise_regex_list | reorder_and_group
 
-echo "$(cat <<< \"$custom\" | extract_summaries)"
+echo "$(cat <<< $custom | extract_summaries)"
 
 # At script end: extract metrics and generate filename
 # Safely join OUTPUTS (allow empty)
