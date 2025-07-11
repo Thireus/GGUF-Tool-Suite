@@ -60,12 +60,12 @@ mkdir -p kitchen && cd kitchen
 ~/ik_llama-main-b3904-41a9c8a-bin-win-cuda-12.8-x64-avx512/llama-cli \
   -m DeepSeek-R1-0528-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
   -mla 3 -fa -amb 1024 -fmoe -ctk f16 -c 16384 -ngl 99 \
-  -ot "blk\\.(3|4|5|6)\\.ffn_.*=CUDA0" \
-  -ot "blk\\.(7|8|9)\\.ffn_.*=CUDA1" \
-  -ot "blk\\.(10|11|12)\\.ffn_.*=CUDA2" \
+  -ot "blk\.(3|4|5|6)\.ffn_.*=CUDA0" \
+  -ot "blk\.(7|8|9)\.ffn_.*=CUDA1" \
+  -ot "blk\.(10|11|12)\.ffn_.*=CUDA2" \
   -ot exps=CPU -b 4096 -ub 4096 --warmup-batch --no-mmap --threads 36 \
   --main-gpu 0 \
-  -p '<｜begin▁of▁sentence｜><｜User｜>What is the solution of x+5=-2?<｜Assistant｜><think>\\n'
+  -p '<｜begin▁of▁sentence｜><｜User｜>What is the solution of x+5=-2?<｜Assistant｜><think>\n'
 ```
 
 ---
@@ -75,9 +75,9 @@ mkdir -p kitchen && cd kitchen
 ```bash
 python quant_assign.py ppl_results.csv \
   --gpu-tensors '.*' \
-  --cpu-tensors 'blk\\.([3-9]|[1-5][0-9]|60)\\.ffn_down_exps\\.weight' \
-                 'blk\\.([3-9]|[1-5][0-9]|60)\\.ffn_up_exps\\.weight' \
-                 'blk\\.([3-9]|[1-5][0-9]|60)\\.ffn_gate_exps\\.weight' \
+  --cpu-tensors 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight' \
+                 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight' \
+                 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight' \
   --cpu-quants iq4_ks iq3_k iq2_k iq1_m_r4 \
   --gpu-quants q8_0 iq5_k_r4 iq6_k \
   --cpu-tensors-max-size 230 \
@@ -85,7 +85,7 @@ python quant_assign.py ppl_results.csv \
   --tolerance 0.01 \
   --exponential-factor 8 \
   --gpu-assign-qtype iq4_xs \
-  --gpu-assign-tensors 'blk\\.([0-9]|[1-5][0-9]|60)\\.attn_k_b\\.weight=q8_0' \
+  --gpu-assign-tensors 'blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=q8_0' \
   | ./quants_regex_merger.sh \
     --model-name "recipe_examples/DeepSeek-R1-0528" \
     --add-ppl 0 \
@@ -136,3 +136,4 @@ Any **use, reproduction, or modification** of this software **must give clear an
 See the [LICENSE](./LICENSE) file for more details.
 
 🔗 https://gguf.thireus.com/
+
