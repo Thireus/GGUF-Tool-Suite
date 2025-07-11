@@ -982,6 +982,7 @@ def main():
 
     _bytes = 0
     _bpw = 0
+    _w = 0
     for cls in ['gpu', 'cpu']:
         quants_list = gpu_quants if cls == 'gpu' else cpu_quants
         _quants_list = quants_list
@@ -1027,6 +1028,7 @@ def main():
                         assigned_gib = assigned_bytes / GIB
                         _bytes += assigned_bytes
                         _bpw += bpw_val * assigned_bytes
+                        _w += assigned_bytes / bpw_val
                         print(f"# +{qt:<10}\t{cnt:<3}\t{bpw_val:<6}\t{assigned_gib:>6.2f} GiB\t-\t\t-")
                 else:
                     # for each qt in whatever loop you have:
@@ -1040,23 +1042,25 @@ def main():
                     assigned_gib = assigned_bytes / GIB
                     _bytes += assigned_bytes
                     _bpw   += bpw_val * assigned_bytes
+                    _w += assigned_bytes / bpw_val
                     print(f"# +{qt:<10}\t{cnt:<3}\t{bpw_val:<6}\t{assigned_gib:>6.2f} GiB\t-\t\t-")
             
             # Post-assigned tensors
             cnt = Counter(assignments[cls].values()).get(qt, 0)
-            if qt != 'f32':
+            if (cnt > 0 or qt in _quants_list) and qt != 'f32':
                 # Assigned size
                 assigned = [n for n, q in assignments[cls].items() if q == qt]
                 assigned_bytes = sum(sizes_map.get(n, 0) for n in assigned)
                 assigned_gib = assigned_bytes / GIB
                 _bytes += assigned_bytes
                 _bpw += bpw_val * assigned_bytes
+                _w += assigned_bytes / bpw_val
                 # Max size if all
                 max_gib = total_size_for_quant(names_post_assigned, qt) / GIB
                 pct = (assigned_bytes / (max_gib * GIB) * 100) if max_gib > 0 else 0
                 print(f"# {qt:<10}\t{cnt:<3}\t{bpw_val:<6}\t{assigned_gib:>6.2f} GiB\t{pct:>3.1f}%\t\t{max_gib:.2f}")
     
-    print(f"#\n# -Average BPW: {_bpw/_bytes:.4f}")
+    print(f"#\n# -Average BPW: {_bytes/_w:.4f}")
 
     print(f"#\n# -Notes:\n# - '+' means user-defined pre-assigned tensors and f32 tensors")
 
@@ -1074,7 +1078,10 @@ def main():
     else:
         sha256 = "N/A"
     print(f"# - Script SHA-256: {sha256}")
-    command_line = ' '.join(sys.argv)
+    # Reconstruct a safely quoted command‐line
+    quoted_args = [shlex.quote(arg) for arg in sys.argv]
+    command_line = ' '.join(quoted_args)
+
     # Wrap the command into lines starting with "# "
     wrapped_lines = textwrap.wrap(
         command_line,
