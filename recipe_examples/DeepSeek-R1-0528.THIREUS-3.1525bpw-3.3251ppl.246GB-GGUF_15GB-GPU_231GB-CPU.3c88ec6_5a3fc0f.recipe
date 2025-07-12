@@ -2,15 +2,15 @@
 # Model name: DeepSeek-R1-0528
 # Link to the original model: https://huggingface.co/deepseek-ai/DeepSeek-R1-0528
 
-## Model head & embeddings — qbits: 8 3 
+## Model head & embeddings — qbits: 32 8 
 output_norm\.weight=f32
 token_embd\.weight=q8_0
 output\.weight=q8_0
 
-## Special attention kernels — single-quant only (llama-quantize takes care of it)
+## Special attention kernels — single-quant only (llama-quantize takes care of it) — qbits: 8 
 blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=q8_0
 
-## Multi-headed attention parameters — qbits: 6 3 
+## Multi-headed attention parameters — qbits: 32 6 
 blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_norm\.weight=f32
 blk\.([0-9]|[1-5][0-9]|60)\.attn_q_b\.weight=iq6_k
 blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_b\.weight=iq6_k
@@ -21,14 +21,14 @@ blk\.([0-9]|[1-5][0-9]|60)\.attn_v_b\.weight=iq6_k
 blk\.([0-9]|[1-5][0-9]|60)\.attn_norm\.weight=f32
 blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a\.weight=iq6_k
 
-## Core FFN weights — qbits: 8 3 
+## Core FFN weights — qbits: 32 8 
 blk\.[0-2]\.ffn_gate\.weight=q8_0
 blk\.([0-9]|[1-5][0-9]|60)\.ffn_norm\.weight=f32
 blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_inp\.weight=f32
 blk\.[0-2]\.ffn_down\.weight=q8_0
 blk\.[0-2]\.ffn_up\.weight=q8_0
 
-## Other tensors
+## Other tensors — qbits: 32 
 blk\.([3-9]|[1-5][0-9]|60)\.exp_probs_b\.bias=f32
 
 ## GPU-loaded ffn_*_shexp

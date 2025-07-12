@@ -896,18 +896,16 @@ reorder_and_group() {
     done
   }
 
-  # Helper: compute unique sorted quant bits for a group
-  list_bits() {
-    local -n lines=$1
-    local bits=() bit
-    for l in "${lines[@]}"; do
-      q="${l#*=}"
-      [[ $q =~ ([0-9]) ]] && bits+=("${BASH_REMATCH[1]}")
-    done
-    printf '%s
-' "${bits[@]}" | sort -ru | tr '
-' ' '
-  }
+# Helper: compute unique sorted quant bits for a group
+list_bits() {
+  local -n lines=$1
+  local bits=() bit
+  for l in "${lines[@]}"; do
+    q="${l#*=}"
+    [[ $q =~ ([0-9]+) ]] && bits+=("${BASH_REMATCH[1]}")
+  done
+  printf '%s\n' "${bits[@]}" | sort -urn | tr '\n' ' '
+}
 
   # --- Output sections ---
   echo "## Quant mix recipe created using Thireus' GGUF Tool Suite - https://gguf.thireus.com/"
@@ -935,7 +933,7 @@ reorder_and_group() {
     fi
   done
   if (( ${#attn_special[@]} )); then
-    echo "## Special attention kernels — single-quant only (llama-quantize takes care of it)"
+    echo "## Special attention kernels — single-quant only (llama-quantize takes care of it) — qbits: $(list_bits attn_special)"
     for l in "${attn_special[@]}"; do echo "$l"; done
     echo
   fi
@@ -971,9 +969,15 @@ reorder_and_group() {
   fi
 
   # Any others not matched
-  if (( ${#others[@]} )); then
-    echo "## Other tensors"
-    for l in "${others[@]}"; do echo "$l"; done
+  other=()
+  for i in "${!others[@]}"; do
+    l="${others[i]}"
+    other+=( "$l" )
+    unset 'others[i]'
+  done
+  if (( ${#other[@]} )); then
+    echo "## Other tensors — qbits: $(list_bits other)"
+    for l in "${other[@]}"; do echo "$l"; done
     echo
   fi
 
