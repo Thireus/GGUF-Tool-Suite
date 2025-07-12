@@ -16,7 +16,7 @@
 ### ⚠️ Requirements
 
 - You **must use `ik_llama.cpp`** (compatibility with `llama.cpp` is **not guaranteed**).
-- Builds of `ik_llama.cpp` with patched `ulimit` support for Windows are available at:  
+- Builds of `ik_llama.cpp` with pre-patched `ulimit` for Windows are available at:  
   👉 https://github.com/Thireus/ik_llama.cpp  
 - Official repo:  
   👉 https://github.com/ikawrakow/ik_llama.cpp  
@@ -123,7 +123,7 @@ This is the **core file** used to determine optimal quant mix strategies.
 
 Big thanks to **ubergarm** for his support and for providing the invaluable **`imatrix` file**.
 
-📄 Ubergram's `imatrix` can be found here:  
+📄 Ubergarm's `imatrix` can be found here:  
 🔗 [imatrix_ubergarm.dat](https://huggingface.co/ubergarm/DeepSeek-R1-0528-GGUF/blob/main/imatrix-DeepSeek-R1-0528.dat)
 
 Also sincere thanks to **ikawrakow** and all **co-authors** of `ik_llama.cpp` for making this entire toolchain possible.
