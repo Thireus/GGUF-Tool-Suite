@@ -72,6 +72,8 @@ mkdir -p kitchen && cd kitchen
 
 ## 🛠️ Generate a Custom Recipe for Your Config
 
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Thireus/GGUF-Tool-Suite/blob/main/quant_recipe_pipeline.ipynb)
+
 ```bash
 python quant_assign.py ppl_results.csv \
   --gpu-tensors '.*' \

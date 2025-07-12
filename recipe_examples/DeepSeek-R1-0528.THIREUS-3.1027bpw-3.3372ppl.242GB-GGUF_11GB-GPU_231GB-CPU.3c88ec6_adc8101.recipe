@@ -2,15 +2,15 @@
 # Model name: DeepSeek-R1-0528
 # Link to the original model: https://huggingface.co/deepseek-ai/DeepSeek-R1-0528
 
-## Model head & embeddings — qbits: 8 3 
+## Model head & embeddings — qbits: 32 8 
 output_norm\.weight=f32
 token_embd\.weight=q8_0
 output\.weight=q8_0
 
-## Special attention kernels — single-quant only (llama-quantize takes care of it)
+## Special attention kernels — single-quant only (llama-quantize takes care of it) — qbits: 8 
 blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=q8_0
 
-## Multi-headed attention parameters — qbits: 4 3 
+## Multi-headed attention parameters — qbits: 32 4 
 blk\.([0-9]|[1-5][0-9]|60)\.attn_v_b\.weight=iq4_xs
 blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_norm\.weight=f32
 blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_mqa\.weight=iq4_xs
