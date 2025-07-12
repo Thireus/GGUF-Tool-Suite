@@ -15,8 +15,8 @@
 
 ### ⚠️ Requirements
 
-- You **must use `ik_llama.cpp`** (compatibility with `llama.cpp` is **not guaranteed**).
-- Builds of `ik_llama.cpp` with pre-patched `ulimit` for Windows are available at:  
+- You **must use `ik_llama.cpp`** with [this patch](https://github.com/Thireus/ik_llama.cpp/commit/a66490410a366a9605234b94d67f3d9b7b389140) (compatibility with `llama.cpp` is **not guaranteed**).
+- Source code and Windows builds of `ik_llama.cpp` with pre-patched `GGML_MAX_CONTEXTS` and `ulimit` are available at:  
   👉 https://github.com/Thireus/ik_llama.cpp  
 - Official repo:  
   👉 https://github.com/ikawrakow/ik_llama.cpp  
