@@ -489,7 +489,7 @@ ulimit -n 99999
 
 llama-quantize \
     --custom-q "$custom" \
-    --imatrix ../imatrix_ubergarm.dat \
+    --imatrix imatrix_ubergarm.dat \
     DeepSeek-R1-0528-THIREUS-TEMPLATE.gguf \
     DeepSeek-R1-0528-THIREUS-IQ3_XXS-SPECIAL.gguf \
     IQ3_XXS \

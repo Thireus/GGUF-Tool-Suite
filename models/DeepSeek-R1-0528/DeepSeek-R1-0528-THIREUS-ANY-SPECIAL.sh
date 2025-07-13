@@ -492,7 +492,7 @@ ulimit -n 99999
 # DeepSeek-R1-0528-THIREUS-TEMPLATE.gguf is too big and not worth using it because Q8_0 quanitsation is fast!
 mkdir DeepSeek-R1-0528-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
     --custom-q "$custom" \
-    --imatrix ../imatrix_ubergarm.dat \
+    --imatrix imatrix_ubergarm.dat \
     DeepSeek-R1-0528-THIREUS-BF16-SPECIAL_SPLIT/DeepSeek-R1-0528-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
     DeepSeek-R1-0528-THIREUS-${1^^}-SPECIAL_SPLIT/DeepSeek-R1-0528-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
     ${1^^} \
