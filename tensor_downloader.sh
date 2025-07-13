@@ -162,6 +162,7 @@ for srv in "${RSYNC_SERVERS[@]}"; do
     log "File already exists, verifying…"
     if verify_download "${DST}"; then
       log "✓ Verified; no need to download it again - ${DST} (${QUANT_U})"
+      chmod 444 "${DST}" # Apply special permission
       exit 0
     else
       log "✗ Verification failed; removing and downloading it"
