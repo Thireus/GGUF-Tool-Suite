@@ -146,14 +146,16 @@ while true; do
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] Invoking create_map_file.sh for each shard..."
 
         # Process each .gguf individually to avoid long arg lists
+        success=false
         for gguf_file in "${ggufs[@]}"; do
             if "$CREATE_MAP_SCRIPT" "$gguf_file"; then
                 echo "[$(date '+%Y-%m-%d %H:%M:%S')] create_map_file.sh succeeded on '$(basename "$gguf_file")'."
-                chmod 444 "$map_file" # Lock file
+                success=true
             else
                 echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: create_map_file.sh failed on '$(basename "$gguf_file")'." >&2
             fi
-        done
+        done && \
+        [[ "$success" == true ]] && chmod 444 "$map_file" # Lock file
         
         # ==============================
         # Optional deletion of unmatched shards
