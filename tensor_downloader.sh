@@ -5,7 +5,7 @@
 #** downloads pre-quantised tensors/shards to cook recipes.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-10-2025 -------------------- **#
+#** --------------- Updated: Jul-13-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -37,11 +37,33 @@ set -u
 #   DestinationDir  (optional)  default: "."
 #   Filename        (optional)  default: same as downloaded file
 #
-# Configurable defaults (override by exporting before running, or edit here):
-MODEL_NAME="${MODEL_NAME:-DeepSeek-R1-0528}" # Name of the LLM model
-MAINTAINER="${MAINTAINER:-THIREUS}" # Name of the GGUF maintainer which appears next to the model name
-CHUNK_FIRST=${CHUNK_FIRST:-2} # First chunk found in tensors.map
-CHUNKS_TOTAL=${CHUNK_LAST:-1148} # Total number of chunks of the model
+
+# -----------------------------------------------------------------------------
+# Default configuration (used if not overridden by download.conf)
+MODEL_NAME="DeepSeek-R1-0528" # Name of the LLM model
+MAINTAINER="THIREUS" # Name of the GGUF maintainer which appears next to the model name
+CHUNK_FIRST=2 # First chunk found in tensors.map
+CHUNKS_TOTAL=1148 # Total number of chunks of the model
+
+# Default download sources:
+# RSYNC_SERVERS: rsync endpoints (user:host:port:base_path)
+RSYNC_SERVERS=(
+  #"thireus:65.108.205.124:22:~/AI/DeepSeek-R1-0528-BF16-GGUF/SPECIAL/"
+)
+# CURL_ORGS: Hugging Face org/user and branch (org_or_user:branch)
+CURL_ORGS=(
+  "Thireus:main"
+)
+
+# -----------------------------------------------------------------------------
+# Load user config if present (must be in same directory)
+# Any variable or array defined in download.conf will override the above defaults.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIG_FILE="$SCRIPT_DIR/download.conf"
+if [[ -f "$CONFIG_FILE" ]]; then
+  # shellcheck source=/dev/null
+  source "$CONFIG_FILE"
+fi
 
 # -----------------------------------------------------------------------------
 # Parse args & display help if missing
@@ -69,17 +91,6 @@ CUSTOM_FILENAME="${4:-}"
 QUANT_U="${QUANT^^}"
 REPOSITORY_NAME="${MODEL_NAME}-${MAINTAINER}-${QUANT_U}-SPECIAL_SPLIT"
 CHUNKS=$(printf "%05d" "$CHUNKS_TOTAL") # Total number of chunks of the model
-
-# -----------------------------------------------------------------------------
-# User-defined download sources must follow after core vars
-# Format for RSYNC_SERVERS: "user:host:port:base_path"
-RSYNC_SERVERS=(
-  #"thireus:65.108.205.124:22:~/AI/DeepSeek-R1-0528-BF16-GGUF/SPECIAL/"
-)
-# HuggingFace org/user names and branch for curl
-CURL_ORGS=(
-  "Thireus:main"
-)
 
 # -----------------------------------------------------------------------------
 # Logging helper
@@ -171,6 +182,7 @@ for srv in "${RSYNC_SERVERS[@]}"; do
     log "Download complete, verifying…"
     if verify_download "${DST}"; then
       log "✓ Verified and saved via rsync (${RHOST}) - ${DST} (${QUANT_U})"
+      chmod 444 "${DST}" # Apply special permission
       exit 0
     else
       log "✗ Verification failed; removing and trying next"
@@ -192,7 +204,7 @@ for crl in "${CURL_ORGS[@]}"; do
     log "File already exists, verifying…"
     if verify_download "${DST}"; then
       log "✓ Verified; no need to download it again - ${DST} (${QUANT_U})"
-      chmod 400 "${DST}" # Apply special permission
+      chmod 444 "${DST}" # Apply special permission
       exit 0
     else
       log "✗ Verification failed; removing and downloading it"
@@ -213,7 +225,7 @@ for crl in "${CURL_ORGS[@]}"; do
     log "Download complete, verifying…"
     if verify_download "${DST}"; then
       log "✓ Verified and saved via curl (org: ${ORG}, banch: ${BRANCH}) - ${DST} (${QUANT_U})"
-      chmod 400 "${DST}" # Apply special permission
+      chmod 444 "${DST}" # Apply special permission
       exit 0
     else
       log "✗ Verification failed; removing and trying next"
