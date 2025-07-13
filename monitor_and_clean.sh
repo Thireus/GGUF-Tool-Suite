@@ -119,9 +119,10 @@ while true; do
             if [[ ! -s "$map_file" ]]; then
                 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Empty tensors.map; processing all shards."
             else
-                # Check if the file has 444 permissions (i.e., -r--r--r--)
-                perms=$(stat -c "%a" "$map_file")
-                if [ "$perms" -eq 444 ]; then
+                # Get only the user (owner) permission bits (first digit)
+                user_perms=$(stat -c "%a" "$map_file" | cut -c1)
+                # Check if user permission is read-only (i.e., 4)
+                if [ "$user_perms" -eq 4 ]; then
                     echo "[$(date '+%Y-%m-%d %H:%M:%S')] tensors.map already produced, skipping directory: $split_dir"
                     continue
                 else
@@ -148,11 +149,11 @@ while true; do
         for gguf_file in "${ggufs[@]}"; do
             if "$CREATE_MAP_SCRIPT" "$gguf_file"; then
                 echo "[$(date '+%Y-%m-%d %H:%M:%S')] create_map_file.sh succeeded on '$(basename "$gguf_file")'."
+                chmod 444 "$map_file" # Lock file
             else
                 echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: create_map_file.sh failed on '$(basename "$gguf_file")'." >&2
             fi
-        done && \
-        chmod 444 "$map_file" # Lock file
+        done
         
         # ==============================
         # Optional deletion of unmatched shards
