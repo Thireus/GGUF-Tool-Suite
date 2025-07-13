@@ -123,10 +123,13 @@ This is the **core file** used to determine optimal quant mix strategies.
 
 ## 🙏 Acknowledgements
 
-Big thanks to **ubergarm** for his support and for providing the invaluable **`imatrix` file**.
+Big thanks to **ubergarm** for his support and for providing the invaluable **`imatrix` files**.
 
-📄 Ubergarm's `imatrix` can be found here:  
+📄 Ubergarm's `imatrix` for DeepSeek-R1-0528 can be found here:  
 🔗 [imatrix_ubergarm.dat](https://huggingface.co/ubergarm/DeepSeek-R1-0528-GGUF/blob/main/imatrix-DeepSeek-R1-0528.dat)
+
+📄 Ubergarm's `imatrix` for DeepSeek-TNG-R1T2-Chimera can be found here:  
+🔗 [imatrix_r1t2_ubergarm.dat](https://huggingface.co/ubergarm/DeepSeek-TNG-R1T2-Chimera-GGUF/blob/main/imatrix-DeepSeek-TNG-R1T2-Chimera-Q8_0.dat)
 
 Also sincere thanks to **ikawrakow** and all **co-authors** of `ik_llama.cpp` for making this entire toolchain possible.
 
