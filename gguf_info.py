@@ -23,6 +23,10 @@
 #**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
 #***************************************************************#
 
+# Requirements:
+# If using llama.cpp: pip install gguf
+# If using ik_llama.cpp: pip install "gguf @ git+https://github.com/ikawrakow/ik_llama.cpp.git@main#subdirectory=gguf-py" --force; pip install sentencepiece numpy==1.26.4
+
 import sys
 from pathlib import Path
 
