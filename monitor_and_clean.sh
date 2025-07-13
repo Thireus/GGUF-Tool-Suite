@@ -5,7 +5,7 @@
 #** tensors.map files and optionally deletes unused shards.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-10-2025 -------------------- **#
+#** --------------- Updated: Jul-13-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -119,9 +119,9 @@ while true; do
             if [[ ! -s "$map_file" ]]; then
                 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Empty tensors.map; processing all shards."
             else
-                # Check if the file has 400 permissions (i.e., -r--------)
+                # Check if the file has 444 permissions (i.e., -r--r--r--)
                 perms=$(stat -c "%a" "$map_file")
-                if [ "$perms" -eq 400 ]; then
+                if [ "$perms" -eq 444 ]; then
                     echo "[$(date '+%Y-%m-%d %H:%M:%S')] tensors.map already produced, skipping directory: $split_dir"
                     continue
                 else
@@ -152,7 +152,7 @@ while true; do
                 echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: create_map_file.sh failed on '$(basename "$gguf_file")'." >&2
             fi
         done && \
-        chmod 400 "$map_file" # Lock file
+        chmod 444 "$map_file" # Lock file
         
         # ==============================
         # Optional deletion of unmatched shards

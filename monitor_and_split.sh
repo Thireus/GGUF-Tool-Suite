@@ -5,7 +5,7 @@
 #** models.                                                   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-10-2025 -------------------- **#
+#** --------------- Updated: Jul-13-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -92,7 +92,7 @@ while true; do
                 else
                     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Skipping deletion of original (DELETE_ORIGINAL=false)."
                 fi
-                chmod 400 "$split_dir"/*.gguf # Lock files
+                chmod 444 "$split_dir"/*.gguf # Lock files
             else
                 echo "[$(date '+%Y-%m-%d %H:%M:%S')] ERROR: Split failed for '$file'. You may want to check llama-gguf-split availability or file integrity."
                 # Optionally, could remove the created directory or leave for inspection.
