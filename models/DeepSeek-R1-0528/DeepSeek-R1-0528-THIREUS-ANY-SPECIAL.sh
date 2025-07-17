@@ -41,7 +41,7 @@ output\.weight=$1
 output_norm\.weight=f32
 token_embd\.weight=$1
 
-# GPU Only - not divisible by 256 so only supports qN_0
+# GPU Only - not divisible by 256 so only supports qN_0 - expected behaviour: will fallback to whatever qtype llama-quantize decides
 blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=$1
 
 # GPU Only

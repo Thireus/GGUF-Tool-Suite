@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** DeepSeek-TNG-R1T2-Chimera-THIREUS-ANY-SPECIAL.sh used for **#
-#** ppl bench purpose. Adjust $1 in $custom to your needs!    **#
+#** Kimi-K2-Instruct-THIREUS-ANY-SPECIAL.sh used for iq1_s*   **#
+#** qtypes only. Adjust $1 in $custom to your needs!          **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-16-2025 -------------------- **#
+#** --------------- Updated: Jul-17-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -31,53 +31,61 @@ _debug() {
   printf '[DEBUG] %s\n' "$*" >&2
 }
 
-# echo "$(for f in `ls DeepSeek-TNG-R1T2-Chimera-DQ4_K_R4-*.gguf`; do gguf_info.py "$f"; done)" | grep 'dtype=' | awk -F $'\t' '{print $1 "=" $3}' | sed 's/=dtype=/=/g' | sed 's/\./\\./g'
+# cat tensors.map | cut -d: -f 3,5 | sed 's/\:dtype//g' | sed 's/\./\\\./g' | ./quants_regex_merger.sh 
 custom="
-# Tensors left f32 means they're small and shouldn't/won't be quantised anyway
+## Quant mix recipe created using Thireus' GGUF Tool Suite - https://gguf.thireus.com/
 
-# Token embedding and output tensors (GPU)
-# note token_embd cannot be repacked quant type
+## Model head & embeddings — qbits: 32 16 — forcing it to be iq1_m_r4 (even though it'll revert to iq1_m) so that llama-quantize doesn't stop
+token_embd\.weight=iq1_m_r4
 output\.weight=$1
 output_norm\.weight=f32
-token_embd\.weight=$1
 
-# GPU Only - not divisible by 256 so only supports qN_0 - expected behaviour: will fallback to whatever qtype llama-quantize decides
-blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=$1
+## Special attention kernels — forcing it to be iq1_m so that llama-quantize doesn't stop — qbits: 16 
+blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=iq1_m
 
-# GPU Only
-blk\.([0-9]|[1-5][0-9]|60)\.attn_v_b\.weight=$1
-
-# GPU Only
-blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_b\.weight=$1
-
-# GPU Only
+## Multi-headed attention parameters - attn_v_b forced to iq2_ks so that llama-quantize doesn't stop — qbits: 32 16 
+blk\.([0-9]|[1-5][0-9]|60)\.attn_v_b\.weight=iq2_ks
 blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_norm\.weight=f32
-blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a\.weight=$1
+blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_mqa\.weight=$1
+blk\.([0-9]|[1-5][0-9]|60)\.attn_output\.weight=$1
 blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a_norm\.weight=f32
 blk\.([0-9]|[1-5][0-9]|60)\.attn_q_b\.weight=$1
 blk\.([0-9]|[1-5][0-9]|60)\.attn_norm\.weight=f32
-blk\.([0-9]|[1-5][0-9]|60)\.attn_output\.weight=$1
-blk\.([3-9]|[1-5][0-9]|60)\.exp_probs_b\.bias=f32
+blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a\.weight=$1
 
-# GPU Only
-blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_mqa\.weight=$1
-
-# GPU Only
-blk\.[0-2]\.ffn_down\.weight=$1
-blk\.[0-2]\.ffn_up\.weight=$1
-blk\.[0-2]\.ffn_gate\.weight=$1
-blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_inp\.weight=f32
+## Core FFN weights — qbits: 32 16 
+blk\.0\.ffn_gate\.weight=$1
 blk\.([0-9]|[1-5][0-9]|60)\.ffn_norm\.weight=f32
+blk\.0\.ffn_down\.weight=$1
+blk\.0\.ffn_up\.weight=$1
+blk\.([1-9]|[1-5][0-9]|60)\.ffn_gate_inp\.weight=f32
+
+## Other tensors — qbits: 32 
+blk\.([1-9]|[1-5][0-9]|60)\.exp_probs_b\.bias=f32
 
 ## GPU-loaded ffn_*_shexp
-blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_shexp\.weight=$1
-blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_shexp\.weight=$1
-blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_shexp\.weight=$1
+# ffn_down_shexp (down-projection) — qbits: 16 
+blk\.([1-9]|[1-5][0-9]|60)\.ffn_down_shexp\.weight=$1
+
+# ffn_up_shexp (up-projection) — qbits: 16 
+blk\.([1-9]|[1-5][0-9]|60)\.ffn_up_shexp\.weight=$1
+
+# ffn_gate_shexp (gate-projection) — qbits: 16 
+blk\.([1-9]|[1-5][0-9]|60)\.ffn_gate_shexp\.weight=$1
 
 ## CPU-loaded ffn_*_exps
-blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight=$1
-blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight=$1
-blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight=$1
+# ffn_down_exps (down-extraction) — qbits: 16 
+blk\.([1-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight=$1
+
+# ffn_up_exps (up-extraction) — qbits: 16 
+blk\.([1-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight=$1
+
+# ffn_gate_exps (gate-extraction) — qbits: 16 
+blk\.([1-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight=$1
+
+
+
+## THE END!
 "
 
 #custom="
@@ -489,11 +497,11 @@ custom=$(
 ulimit -S -s unlimited
 ulimit -n 99999
 
-# DeepSeek-TNG-R1T2-Chimera-THIREUS-TEMPLATE.gguf is too big and not worth using it because Q8_0 quanitsation is fast!
-mkdir DeepSeek-TNG-R1T2-Chimera-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
+# Kimi-K2-Instruct-THIREUS-TEMPLATE.gguf is too big and not worth using it because Q8_0 quanitsation is fast!
+mkdir Kimi-K2-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
     --custom-q "$custom" \
-    --imatrix imatrix_r1t2_ubergarm.dat \
-    DeepSeek-TNG-R1T2-Chimera-THIREUS-BF16-SPECIAL_SPLIT/DeepSeek-TNG-R1T2-Chimera-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
-    DeepSeek-TNG-R1T2-Chimera-THIREUS-${1^^}-SPECIAL_SPLIT/DeepSeek-TNG-R1T2-Chimera-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
+    --imatrix imatrix_kimik2_ubergarm.dat \
+    Kimi-K2-Instruct-THIREUS-BF16-SPECIAL_SPLIT/Kimi-K2-Instruct-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01097.gguf \
+    Kimi-K2-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/Kimi-K2-Instruct-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
     ${1^^} \
-    32 && chmod 444 DeepSeek-TNG-R1T2-Chimera-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
+    32 && chmod 444 Kimi-K2-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
