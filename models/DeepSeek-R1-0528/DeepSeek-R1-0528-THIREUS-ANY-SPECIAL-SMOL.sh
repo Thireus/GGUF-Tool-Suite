@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** DeepSeek-TNG-R1T2-Chimera-THIREUS-ANY-SPECIAL.sh used for **#
-#** ppl bench purpose. Adjust $1 in $custom to your needs!    **#
+#** DeepSeek-R1-0528-THIREUS-ANY-SPECIAL.sh used for 1-bit    **#
+#** qtypes only. Adjust $1 in $custom to your needs!          **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-16-2025 -------------------- **#
+#** --------------- Updated: Jul-17-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -31,18 +31,18 @@ _debug() {
   printf '[DEBUG] %s\n' "$*" >&2
 }
 
-# echo "$(for f in `ls DeepSeek-TNG-R1T2-Chimera-DQ4_K_R4-*.gguf`; do gguf_info.py "$f"; done)" | grep 'dtype=' | awk -F $'\t' '{print $1 "=" $3}' | sed 's/=dtype=/=/g' | sed 's/\./\\./g'
+# echo "$(for f in `ls DeepSeek-R1-0528-DQ4_K_R4-*.gguf`; do gguf_info.py "$f"; done)" | grep 'dtype=' | awk -F $'\t' '{print $1 "=" $3}' | sed 's/=dtype=/=/g' | sed 's/\./\\./g'
 custom="
 # Tensors left f32 means they're small and shouldn't/won't be quantised anyway
 
 # Token embedding and output tensors (GPU)
-# note token_embd cannot be repacked quant type
+# note token_embd cannot be repacked quant type - forced to be iq1_m_r4 so that llama-quantize doesn't stop
 output\.weight=$1
 output_norm\.weight=f32
-token_embd\.weight=$1
+token_embd\.weight=iq1_m_r4
 
-# GPU Only - not divisible by 256 so only supports qN_0 - expected behaviour: will fallback to whatever qtype llama-quantize decides
-blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=$1
+# GPU Only - not divisible by 256 so only supports qN_0 - forcing it to be iq1_m so that llama-quantize doesn't stop
+blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=iq1_m
 
 # GPU Only
 blk\.([0-9]|[1-5][0-9]|60)\.attn_v_b\.weight=$1
@@ -489,11 +489,11 @@ custom=$(
 ulimit -S -s unlimited
 ulimit -n 99999
 
-# DeepSeek-TNG-R1T2-Chimera-THIREUS-TEMPLATE.gguf is too big and not worth using it because Q8_0 quanitsation is fast!
-mkdir DeepSeek-TNG-R1T2-Chimera-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
+# DeepSeek-R1-0528-THIREUS-TEMPLATE.gguf is too big and not worth using it because Q8_0 quanitsation is fast!
+mkdir DeepSeek-R1-0528-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
     --custom-q "$custom" \
-    --imatrix imatrix_r1t2_ubergarm.dat \
-    DeepSeek-TNG-R1T2-Chimera-THIREUS-BF16-SPECIAL_SPLIT/DeepSeek-TNG-R1T2-Chimera-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
-    DeepSeek-TNG-R1T2-Chimera-THIREUS-${1^^}-SPECIAL_SPLIT/DeepSeek-TNG-R1T2-Chimera-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
+    --imatrix imatrix_ubergarm.dat \
+    DeepSeek-R1-0528-THIREUS-BF16-SPECIAL_SPLIT/DeepSeek-R1-0528-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
+    DeepSeek-R1-0528-THIREUS-${1^^}-SPECIAL_SPLIT/DeepSeek-R1-0528-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
     ${1^^} \
-    32 && chmod 444 DeepSeek-TNG-R1T2-Chimera-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
+    32 && chmod 444 DeepSeek-R1-0528-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"

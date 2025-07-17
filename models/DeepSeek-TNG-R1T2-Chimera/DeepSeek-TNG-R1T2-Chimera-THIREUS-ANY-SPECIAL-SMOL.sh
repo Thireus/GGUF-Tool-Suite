@@ -2,10 +2,10 @@
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
 #** DeepSeek-TNG-R1T2-Chimera-THIREUS-ANY-SPECIAL.sh used for **#
-#** ppl bench purpose. Adjust $1 in $custom to your needs!    **#
+#** 1-bit qtypes only. Adjust $1 in $custom to your needs!    **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-16-2025 -------------------- **#
+#** --------------- Updated: Jul-17-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -36,13 +36,13 @@ custom="
 # Tensors left f32 means they're small and shouldn't/won't be quantised anyway
 
 # Token embedding and output tensors (GPU)
-# note token_embd cannot be repacked quant type
+# note token_embd cannot be repacked quant type - forced to be iq1_m_r4 so that llama-quantize doesn't stop
 output\.weight=$1
 output_norm\.weight=f32
-token_embd\.weight=$1
+token_embd\.weight=iq1_m_r4
 
-# GPU Only - not divisible by 256 so only supports qN_0 - expected behaviour: will fallback to whatever qtype llama-quantize decides
-blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=$1
+# GPU Only - not divisible by 256 so only supports qN_0 - forcing it to be iq1_m so that llama-quantize doesn't stop
+blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=iq1_m
 
 # GPU Only
 blk\.([0-9]|[1-5][0-9]|60)\.attn_v_b\.weight=$1

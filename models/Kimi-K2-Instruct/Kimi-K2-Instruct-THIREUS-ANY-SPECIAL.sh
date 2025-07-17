@@ -40,7 +40,7 @@ token_embd\.weight=$1
 output\.weight=$1
 output_norm\.weight=f32
 
-## Special attention kernels — single-quant only (llama-quantize takes care of it) — qbits: 16 
+## Special attention kernels — single-quant only (llama-quantize will choose a fallback qtype) — qbits: 16 
 blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=$1
 
 ## Multi-headed attention parameters — qbits: 32 16 
