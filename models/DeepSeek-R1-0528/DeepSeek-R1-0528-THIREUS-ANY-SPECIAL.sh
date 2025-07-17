@@ -5,7 +5,7 @@
 #** benchmarking purpose. Adjust $1 in $custom to your needs! **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-13-2025 -------------------- **#
+#** --------------- Updated: Jul-16-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -42,7 +42,7 @@ output_norm\.weight=f32
 token_embd\.weight=$1
 
 # GPU Only - not divisible by 256 so only supports qN_0
-blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=q8_0
+blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=$1
 
 # GPU Only
 blk\.([0-9]|[1-5][0-9]|60)\.attn_v_b\.weight=$1
@@ -66,8 +66,8 @@ blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_mqa\.weight=$1
 blk\.[0-2]\.ffn_down\.weight=$1
 blk\.[0-2]\.ffn_up\.weight=$1
 blk\.[0-2]\.ffn_gate\.weight=$1
-blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_inp\.weight=q8_0
-blk\.([0-9]|[1-5][0-9]|60)\.ffn_norm\.weight=q8_0
+blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_inp\.weight=f32
+blk\.([0-9]|[1-5][0-9]|60)\.ffn_norm\.weight=f32
 
 ## GPU-loaded ffn_*_shexp
 blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_shexp\.weight=$1

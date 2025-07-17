@@ -15,7 +15,8 @@
 
 ### ⚠️ Requirements
 
-- You **must use `ik_llama.cpp`** with [this patch](https://github.com/Thireus/ik_llama.cpp/commit/a66490410a366a9605234b94d67f3d9b7b389140) (compatibility with `llama.cpp` is **not guaranteed**).
+- You **must compile the latest `ik_llama.cpp`** with `-DGGML_MAX_CONTEXTS=2048` - see pull requests: [#611](https://github.com/ikawrakow/ik_llama.cpp/pull/611), [#620](https://github.com/ikawrakow/ik_llama.cpp/pull/620) and [#622](https://github.com/ikawrakow/ik_llama.cpp/pull/622), and if using `llama.cpp` then make sure to apply these code changes. Note that compatibility with `llama.cpp` is **not guaranteed**.
+- If you are on Windows, you will also need [this patch(https://github.com/ikawrakow/ik_llama.cpp/pull/620)].
 - Source code and Windows builds of `ik_llama.cpp` with pre-patched `GGML_MAX_CONTEXTS` and `ulimit` are available at:  
   👉 https://github.com/Thireus/ik_llama.cpp  
 - Official repo:  
@@ -24,7 +25,7 @@
 ### 🧠 Important: Linux `ulimit` Patch
 
 Split models with a large number of files may **fail to load** unless you increase file descriptor limits.  
-Run the following command **before launching llama binaries**:
+Run the following command on Linux/macOS **before launching llama binaries**:
 
 ```bash
 # Lifts "too many open files" limitation
@@ -110,7 +111,7 @@ This is the **core file** used to determine optimal quant mix strategies.
 > ⚠️ Generating this CSV took **several days of GPU + CPU compute time**.
 
 - `IQ3-XXS` was chosen for CPU tensors as it fits within **256GB RAM**
-- Scripts used to generate:
+- Scripts used to generate (edit the "USER CONFIGURATION" section in the bash scripts as needed):
 
 ```bash
 ./benchmark_each_tensor.sh --qtypes iq1_m_r4
@@ -130,6 +131,9 @@ Big thanks to **ubergarm** for his support and for providing the invaluable **`i
 
 📄 Ubergarm's `imatrix` for DeepSeek-TNG-R1T2-Chimera can be found here:  
 🔗 [imatrix_r1t2_ubergarm.dat](https://huggingface.co/ubergarm/DeepSeek-TNG-R1T2-Chimera-GGUF/blob/main/imatrix-DeepSeek-TNG-R1T2-Chimera-Q8_0.dat)
+
+📄 Ubergarm's `imatrix` for Kimi-K2-Instruct can be found here:  
+🔗 [imatrix_kimik2_ubergarm.dat](https://huggingface.co/ubergarm/Kimi-K2-Instruct-GGUF/blob/main/imatrix-Kimi-K2-Instruct-Q8_0.dat)
 
 Also sincere thanks to **ikawrakow** and all **co-authors** of `ik_llama.cpp` for making this entire toolchain possible.
 
