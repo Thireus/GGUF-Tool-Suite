@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regexe entries.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-11-2025 -------------------- **#
+#** --------------- Updated: Jul-17-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -39,14 +39,16 @@ set -euo pipefail
 
 # ----------------- DEFAULTS & INITIALIZATION -----------------
 MAX_JOBS=8             # Default concurrency level
+NEW_MAP=true           # Whether to try obtain the latest map files
 FORCE_REDOWNLOAD=false # Whether to redownload all files (maps, shards, first shard)
 VERIFY_ONLY=false      # If true, only verify hashes and report errors
-BASE_DIR="."          # Base directory for model and download dirs
+BASE_DIR="."           # Base directory for model and download dirs
 
 # --------------------- USAGE & ARG PARSING -------------------
 usage() {
   echo "Usage: $0 [options] <recipe-file>" >&2
   echo "  -j, --max-jobs N        Set maximum concurrent downloads (default: $MAX_JOBS)" >&2
+  echo "      --no-new-map        Prevent the script from downloading new map files" >&2
   echo "      --force-redownload  Force redownload of all shards and maps, ignoring existing files" >&2
   echo "      --verify            Only verify existing shard hashes; report mismatches; skip downloads" >&2
   echo "  -d, --dest DIR          Base path for model and download dirs (default: .)" >&2
@@ -55,13 +57,17 @@ usage() {
 }
 
 # Parse arguments (supports GNU long options)
-PARSED_OPTS=$(getopt -n "$0" -o j:d: -l max-jobs:,force-redownload,verify,dest:,destination: -- "$@") || usage
+PARSED_OPTS=$(getopt -n "$0" -o j:d: -l max-jobs:,no-new-map,force-redownload,verify,dest:,destination: -- "$@") || usage
 eval set -- "$PARSED_OPTS"
 while true; do
   case "$1" in
     -j|--max-jobs)
       MAX_JOBS="$2"
       shift 2
+      ;;
+    --no-new-map)
+      NEW_MAP=false
+      shift
       ;;
     --force-redownload)
       FORCE_REDOWNLOAD=true
@@ -110,7 +116,7 @@ mkdir -p "$LOCAL_DOWNLOAD_DIR"
 echo "[INFO] Using base directory: $BASE_DIR"
 echo "[INFO] Download dir: $LOCAL_DOWNLOAD_DIR"
 echo "[INFO] Model dir: $LOCAL_MODEL_DIR"
-echo "[INFO] Max jobs: $MAX_JOBS, Force redownload: $FORCE_REDOWNLOAD, Verify only: $VERIFY_ONLY"
+echo "[INFO] Max jobs: $MAX_JOBS, Obtain new map: $NEW_MAP, Force redownload: $FORCE_REDOWNLOAD, Verify only: $VERIFY_ONLY"
 
 # -------------------- TIMESTAMP FUNCTION ---------------------
 timestamp() { date '+%Y-%m-%d %H:%M:%S'; }
@@ -175,7 +181,30 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
     echo "[$(timestamp)] Force redownload: removing existing map $mapfile"
     rm -f "$mapfile"
   fi
-  run_downloader "$_qtype" 0 . "$mapfile" || { echo "Error: failed to fetch map for $_qtype" >&2; exit 1; }
+  if [[ "$NEW_MAP" == true ]]; then
+      if [[ -f "$mapfile" ]]; then
+          mv -f "$mapfile" "$mapfile.bak"
+          if ! run_downloader "$_qtype" 0 . "$mapfile"; then
+              echo "Warning: failed to fetch map for $_qtype. Using existing map file." >&2
+              mv -f "$mapfile.bak" "$mapfile"
+          else
+              # Success: optionally remove backup or keep it
+              rm -f "$mapfile.bak"
+          fi
+      else
+          # $mapfile does not exist; just try downloading
+          if ! run_downloader "$_qtype" 0 . "$mapfile"; then
+              echo "Error: failed to fetch map for $_qtype" >&2
+              exit 1
+          fi
+      fi
+  else
+      # NEW_MAP is false; just download normally (which will only happen if the file doesn't already exist)
+      if ! run_downloader "$_qtype" 0 . "$mapfile"; then
+          echo "Error: failed to fetch map for $_qtype" >&2
+          exit 1
+      fi
+  fi
 
   while IFS=: read -r fname hash tname _; do
     if [[ $fname =~ -([0-9]{5})-of-[0-9]{5}\.gguf$ ]]; then
@@ -187,7 +216,7 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
         TENSORS_TO_FETCH+=("$tname")
       fi
     else
-      echo "[$(timestamp)] Warning: skipping invalid filename '$fname'" >&2
+      echo "Warning: skipping invalid filename '$fname'" >&2
     fi
   done < "$mapfile"
 done
@@ -219,41 +248,34 @@ download_shard() {
       local shard_id=$(echo "$shard_file" | sed -E 's/.*-([0-9]{5})-of-[0-9]{5}\.gguf/\1/')
 
       got=""
+      need_download=false
       if [[ "$FORCE_REDOWNLOAD" == true ]]; then
           echo "[$(timestamp)] Force redownload: removing existing shard $shard_file"
           rm -f "$dl_path" "$local_path" || true
-          need_download=true
           skip_mv=false
       else
-          need_download=false
           skip_mv=true
       fi
       while [[ "$need_download" == false ]] && [[ "$got" == "" ]]; do
-        if [[ "$FORCE_REDOWNLOAD" == true ]]; then
-            echo "[$(timestamp)] Force redownload: removing existing shard $shard_file"
-            rm -f "$dl_path" "$local_path" || true
-            need_download=true
-            skip_mv=false
-        elif [[ -f "$local_path" ]] || [[ -f "$dl_path" ]]; then
+        if [[ -f "$local_path" ]] || [[ -f "$dl_path" ]]; then
+            if [[ -f "$local_path" ]]; then
+                _path=$local_path
+            else
+                _path=$dl_path
+                skip_mv=false
+            fi
             if command -v sha256sum &>/dev/null; then
-                if [[ -f "$local_path" ]]; then
-                    _path=$local_path
-                else
-                    _path=$dl_path
-                    skip_mv=false
-                fi
                 got=$(sha256sum "$_path" | cut -d' ' -f1)
                 exp=$(get_t_hash "$qtype" "$tensor")
                 if [[ "$got" != "$exp" ]]; then
                     echo "[$(timestamp)] Will redownload due to hash mismatch for '$shard_file' - tensor '$tensor' of qtype: '$qtype' ($got != $exp)"
                     rm -f "$dl_path" "$local_path" || true
                     need_download=true
-                    skip_mv=false
                 else
                     echo "[$(timestamp)] File id '$shard_id' - tensor '$tensor' of qtype: '$qtype' hash is valid!"
                 fi
             else
-                skip_mv=false
+                echo "Warning: sha256sum command missing - hash cannot be verified!"
             fi
         else
             need_download=true
@@ -265,15 +287,16 @@ download_shard() {
                 echo "[$(timestamp)] Download failed; retrying in 10s..."
                 sleep 10
             done
+            need_download=false
             skip_mv=false
-            download=false
             got=""
-        fi
-        if [[ "$skip_mv" == true ]]; then
-            echo "[$(timestamp)] Shard ${shard_file} present and valid - tensor '$tensor' of qtype: '$qtype'"
         else
-            mv -f "$dl_path" "$LOCAL_MODEL_DIR/"
-            echo "[$(timestamp)] Saved file id '$shard_id' - tensor '$tensor' of qtype: '$qtype'"
+          if [[ "$skip_mv" == true ]]; then
+              echo "[$(timestamp)] Shard ${shard_file} present and valid - tensor '$tensor' of qtype: '$qtype'"
+          else
+              mv -f "$dl_path" "$LOCAL_MODEL_DIR/"
+              echo "[$(timestamp)] Saved file id '$shard_id' - tensor '$tensor' of qtype: '$qtype'"
+          fi
         fi
       done
 
