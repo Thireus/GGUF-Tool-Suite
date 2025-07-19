@@ -121,10 +121,10 @@ USER_REGEX=(
   '^blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=q8_0=locked'
 
   # GPU Only
+  # Best to keep this one locked for Kimi-K2 because it cannot be quantised lower than iq2_ks, so any benchmark using lower quant than this will be faulty for this tensor
   '^blk\.([0-9]|[1-5][0-9]|60)\.attn_v_b\.weight=q8_0=locked'
 
   # GPU Only
-  # Best to keep this one locked for Kimi-K2 because it cannot be quantised lower than iq2_ks, so any benchmark using lower quant than this will be faulty for this tensor
   '^blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_b\.weight=q8_0=locked'
 
   # GPU Only
