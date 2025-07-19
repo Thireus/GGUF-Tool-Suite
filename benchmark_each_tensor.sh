@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-10-2025 -------------------- **#
+#** --------------- Updated: Jul-19-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -113,15 +113,18 @@ USER_REGEX=(
   # note token_embd cannot be repacked quant type
   '^output\.weight=q8_0'
   '^output_norm\.weight=f32=locked'
+  # Be extremely careful about this one, especially if benchmarking below iq1_m, since it cannot be quantised to something lower than iq1_m, which is what will be used during benchmarking! Which will introduce incorrect ppl benchmark.
   '^token_embd\.weight=q8_0'
 
   # GPU Only - not divisible by 256 so only supports qN_0
+  # I recommend against unlocking this tensor, especially since it cannot be quantised to lower quants by llama, so the benchmark will be incorrect as it will use llama's auto-assigned fallback qtype without clear warning during the benchmark
   '^blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=q8_0=locked'
 
   # GPU Only
   '^blk\.([0-9]|[1-5][0-9]|60)\.attn_v_b\.weight=q8_0=locked'
 
   # GPU Only
+  # Best to keep this one locked for Kimi-K2 because it cannot be quantised lower than iq2_ks, so any benchmark using lower quant than this will be faulty for this tensor
   '^blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_b\.weight=q8_0=locked'
 
   # GPU Only
@@ -172,10 +175,13 @@ N_THREADS=18
 # 5. Number of chunks to process for PPL:
 PPL_COMMAND_CHUNKS_TO_PROCESS=${CUSTOM_CHUNKS:-250}
 
-# 6. List of qtypes to process in the loop:
+# 6. List of qtypes to process in the loop - it is recommended to assess the tensors.map of these as the quant of some tensors may differ:
+# If iq1_s_* is chosen, know that the bench of some tensors like token_embd will be faulty (will be using a higher qtype)
+# This is because these tensors have not been quantised to iq1_s due to llama refusal
 QTYPES=(${CUSTOM_QTYPES[@]:-"iq1_m_r4" "iq2_k"})
 
 # 7. Baseline QTYPE for baseline PPL computation
+# Try to use the highest baseline you can that fits in your VRAM+RAM
 BASELINE_QTYPE="iq3_xxs"
 
 # 8. PPL command template:
@@ -514,11 +520,18 @@ while true; do
         }
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] Main model shard for PPL: $main_model_file"
 
+        # collect all shard keys into an array…
+        shard_keys=( "${!shard_to_tensors[@]}" )
+        # …then shuffle them
+        mapfile -t shuffled_shard_keys < <(printf '%s\n' "${shard_keys[@]}" | shuf)
+
         # Loop over each shard filename and its tensor names
-        for shard_fname in "${!shard_to_tensors[@]}"; do
+        for shard_fname in "${shuffled_shard_keys[@]}"; do
             # For each tensor_name in this shard
             IFS=' ' read -r -a tensor_list <<< "${shard_to_tensors[$shard_fname]}"
-            for tensor_name in "${tensor_list[@]}"; do
+            # shuffle that array
+            mapfile -t shuffled_tensor_list < <(printf '%s\n' "${tensor_list[@]}" | shuf)
+            for tensor_name in "${shuffled_tensor_list[@]}"; do
                 result_file="bench_result.${tensor_name}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
                 if [[ -f "$result_file" ]]; then
                     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Result already exists for tensor='$tensor_name', qtype='$qtype' -> $result_file. Skipping."

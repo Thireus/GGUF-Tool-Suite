@@ -43,7 +43,7 @@ output_norm\.weight=f32
 ## Special attention kernels — forcing it to be iq1_m so that llama-quantize doesn't stop — qbits: 16 
 blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=iq1_m
 
-## Multi-headed attention parameters - attn_v_b forced to iq2_ks so that llama-quantize doesn't stop — qbits: 32 16 
+## Multi-headed attention parameters - attn_v_b forced to iq2_ks so that llama-quantize doesn't stop - THIS IS GOING TO BE PROBLEMATIC TO BENCHMARK — qbits: 32 16 
 blk\.([0-9]|[1-5][0-9]|60)\.attn_v_b\.weight=iq2_ks
 blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_norm\.weight=f32
 blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_mqa\.weight=$1

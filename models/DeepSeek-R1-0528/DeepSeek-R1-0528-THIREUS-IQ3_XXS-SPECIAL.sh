@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** DeepSeek-R1-0528-THIREUS-IQ3_XXS-SPECIAL.sh used to       **#
-#** create the split IQ3-XXS leading to the ppl_results.csv.  **#
+#** DeepSeek-R1-0528-THIREUS-IQ3_XXS-SPECIAL.sh used for      **#
+#** ppl_results.csv. You can also use iq3_xxs.recipe instead. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-11-2025 -------------------- **#
+#** --------------- Updated: Jul-19-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#

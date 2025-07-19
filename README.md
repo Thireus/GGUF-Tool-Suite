@@ -16,7 +16,7 @@
 ### ⚠️ Requirements
 
 - You **must compile the latest `ik_llama.cpp`** with `-DGGML_MAX_CONTEXTS=2048` - see pull requests: [#611](https://github.com/ikawrakow/ik_llama.cpp/pull/611), [#620](https://github.com/ikawrakow/ik_llama.cpp/pull/620) and [#622](https://github.com/ikawrakow/ik_llama.cpp/pull/622), and if using `llama.cpp` then make sure to apply these code changes. Note that compatibility with `llama.cpp` is **not guaranteed**.
-- If you are on Windows, you will also need [this patch(https://github.com/ikawrakow/ik_llama.cpp/pull/620)].
+- If you are on Windows, you will also need [this patch](https://github.com/ikawrakow/ik_llama.cpp/pull/620).
 - Source code and Windows builds of `ik_llama.cpp` with pre-patched `GGML_MAX_CONTEXTS` and `ulimit` are available at:  
   👉 https://github.com/Thireus/ik_llama.cpp  
 - Official repo:  

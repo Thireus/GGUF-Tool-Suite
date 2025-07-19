@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-11-2025 -------------------- **#
+#** --------------- Updated: Jul-19-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -314,12 +314,29 @@ def select_qtype(df, qtype_arg):
     return sel
 
 
-def fetch_map_for_qtype(qtype):
+# “Looks like q…k” ignoring case
+_INSPECT_RE = re.compile(r'^q.*k$', re.IGNORECASE)
+# Canonical form: lower-q, anything, upper-K
+_CANONICAL_RE = re.compile(r'^q.*K$')
+def fetch_map_for_qtype(qtype: str):
     """
     Fetch and cache tensors.{qtype}.map via tensor_downloader.sh.
     """
     if qtype in _fetched_maps:
         return True
+    # If it matches q…k (any case) but not exactly q…K, warn
+    if _INSPECT_RE.match(qtype) and not _CANONICAL_RE.match(qtype):
+        print(
+            f"[Warning] qtype={qtype!r} does not match the canonical pattern r'^q.*K$'. "
+            "Q‑types are case‑sensitive and there are specific ones that start with lowercase 'q' and end with uppercase 'K' "
+            "(e.g. 'q3_K')."
+        )
+    # Warn if it's fully capitalized
+    if qtype.isupper():
+        print(
+            f"[Warning] qtype={qtype!r} is fully capitalized. "
+            "Q‑types are case‑sensitive and there are no known quant types that are entirely uppercase."
+        )
     tmpdir = tempfile.gettempdir()
     local_map = os.path.join(tmpdir, f"tensors.{qtype}.map")
     cmd = [tensor_downloader, qtype.upper(), "0", tmpdir, f"tensors.{qtype}.map"]
@@ -645,16 +662,16 @@ def main():
     parser.add_argument('--gpu-irq-k', type=float, default=1.5,
                         help='IQR multiplier k for GPU outlier detection')
     parser.add_argument('csv_file', help='Input CSV file')
-    parser.add_argument('--qtype', help='QTYPE to analyze (default: lowest quant)')
-    parser.add_argument('--cpu-assign-qtype', help='QTYPE to assign to non-measured CPU tensors or tensors missing from csv (default: highest quant)')
-    parser.add_argument('--gpu-assign-qtype', help='QTYPE to assign to non-measured GPU tensors or tensors missing from csv (default: highest quant)')
-    parser.add_argument('--cpu-assign-tensors', nargs='+', default=[], help="List of regex=QTYPE patterns for CPU tensors to force-assign")
-    parser.add_argument('--gpu-assign-tensors', nargs='+', default=[], help="List of regex=QTYPE patterns for GPU tensors to force-assign")
+    parser.add_argument('--qtype', help='Case-sensitive qtype (e.g. q3_K) to analyze (default: lowest quant)')
+    parser.add_argument('--cpu-assign-qtype', help='Case-sensitive qtype (e.g. q6_K) to assign to non-measured CPU tensors or tensors missing from csv (default: highest quant)')
+    parser.add_argument('--gpu-assign-qtype', help='Case-sensitive qtype (e.g. q3_K) to assign to non-measured GPU tensors or tensors missing from csv (default: highest quant)')
+    parser.add_argument('--cpu-assign-tensors', nargs='+', default=[], help="List of regex=qtype (case-sensitive, e.g. q6_K) patterns for CPU tensors to force-assign")
+    parser.add_argument('--gpu-assign-tensors', nargs='+', default=[], help="List of regex=qtype (case-sensitive, e.g. q3_K) patterns for GPU tensors to force-assign")
     #parser.add_argument('--sample-ppl', help='CSV sample PPL file path', required=True)
     parser.add_argument('--cpu-tensors', nargs='+', default=[], help='Regex patterns for CPU tensors')
     parser.add_argument('--gpu-tensors', nargs='+', default=[], help='Regex patterns for GPU tensors')
-    parser.add_argument('--cpu-quants', nargs='+', help='Ordered list of CPU quants')
-    parser.add_argument('--gpu-quants', nargs='+', help='Ordered list of GPU quants')
+    parser.add_argument('--cpu-quants', nargs='+', help='Ordered list of CPU case-sensitive quants (e.g. q6_K)')
+    parser.add_argument('--gpu-quants', nargs='+', help='Ordered list of GPU case-sensitive quants (e.g. q3_K)')
     parser.add_argument('--cpu-tensors-max-size', type=str, help='Max CPU tensors size in GiB or percent (e.g., 80%)')
     parser.add_argument('--gpu-tensors-max-size', type=str, help='Max GPU tensors size in GiB or percent (e.g., 80%)')
     parser.add_argument('--exponential-factor', type=float, default=1.0,
