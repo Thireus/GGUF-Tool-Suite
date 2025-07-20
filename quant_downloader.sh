@@ -35,14 +35,13 @@ trap_handler() {
 }
 trap trap_handler SIGINT SIGTERM
 
-set -euo pipefail
-
 # ----------------- DEFAULTS & INITIALIZATION -----------------
 MAX_JOBS=8             # Default concurrency level
 NEW_MAP=true           # Whether to try obtain the latest map files
 FORCE_REDOWNLOAD=false # Whether to redownload all files (maps, shards, first shard)
 VERIFY_ONLY=false      # If true, only verify hashes and report errors
 BASE_DIR="."           # Base directory for model and download dirs
+QTYPE="BF16"           # Default quantization type used for the first shard and filenames
 
 # --------------------- USAGE & ARG PARSING -------------------
 usage() {
@@ -51,13 +50,14 @@ usage() {
   echo "      --no-new-map        Prevent the script from downloading new map files" >&2
   echo "      --force-redownload  Force redownload of all shards and maps, ignoring existing files" >&2
   echo "      --verify            Only verify existing shard hashes; report mismatches; skip downloads" >&2
+  echo "      --qtype QUANT       Set quantization type for the first shard and filenames (default: BF16); use highest qtype of the model!" >&2
   echo "  -d, --dest DIR          Base path for model and download dirs (default: .)" >&2
   echo "  <recipe-file>: path to recipe containing USER_REGEX lines (one per tensor; must have .recipe extension)" >&2
   exit 1
 }
 
 # Parse arguments (supports GNU long options)
-PARSED_OPTS=$(getopt -n "$0" -o j:d: -l max-jobs:,no-new-map,force-redownload,verify,dest:,destination: -- "$@") || usage
+PARSED_OPTS=$(getopt -n "$0" -o j:d: -l max-jobs:,no-new-map,force-redownload,verify,qtype:,dest:,destination: -- "$@") || usage
 eval set -- "$PARSED_OPTS"
 while true; do
   case "$1" in
@@ -76,6 +76,10 @@ while true; do
     --verify)
       VERIFY_ONLY=true
       shift
+      ;;
+    --qtype)
+      QTYPE="${2^^}"
+      shift 2
       ;;
     -d|--dest|--destination)
       BASE_DIR="$2"
@@ -164,9 +168,9 @@ done
 readarray -t UNIQUE_QTYPES < <(printf "%s
 " "${PATTERN_QTYPES[@]}" | sort -u)
 
-# Ensure BF16 included first
-if [[ " ${UNIQUE_QTYPES[*]} " != *"BF16"* ]]; then
-  UNIQUE_QTYPES=("BF16" "${UNIQUE_QTYPES[@]}")
+# Ensure QTYPE included first
+if [[ " ${UNIQUE_QTYPES[*]} " != *"${QTYPE}"* ]]; then
+  UNIQUE_QTYPES=("${QTYPE}" "${UNIQUE_QTYPES[@]}")
 fi
 
 # --------------- FETCH MAPS & COLLECT ----------------
@@ -174,7 +178,7 @@ declare -a TENSORS_TO_FETCH BF16_SHARDS
 for _q in "${UNIQUE_QTYPES[@]}"; do
   qtype=${_q^^}
   _qtype=$qtype
-  [[ "$qtype" == "F32" ]] && _qtype="BF16"
+  [[ "$qtype" == "F32" ]] && _qtype="${QTYPE}"
   echo "[$(timestamp)] Fetching ${_qtype} tensor map for ${qtype} quants"
   mapfile="tensors.${_qtype,,}.map"
   if [[ "$FORCE_REDOWNLOAD" == true ]]; then
@@ -211,7 +215,7 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
       shard_id=$((10#${BASH_REMATCH[1]}))
       set_shard_id "$tname" "$shard_id"
       set_t_hash "$qtype" "$tname" "$hash"
-      if [[ "$qtype" == "BF16" ]]; then
+      if [[ "$qtype" == "${QTYPE}" ]]; then
         BF16_SHARDS+=("$fname")
         TENSORS_TO_FETCH+=("$tname")
       fi
@@ -239,7 +243,7 @@ download_shard() {
     if [[ "$tensor" =~ $pat ]]; then
       qtype="${PATTERN_QTYPES[$i]^^]}"
       dl_type="$qtype"
-      [[ "${qtype^^}" == "F32" ]] && dl_type="BF16"
+      [[ "${qtype^^}" == "F32" ]] && dl_type="${QTYPE}"
 
       local shard_file="${BF16_SHARDS[$idx]}"
       local local_path="$LOCAL_MODEL_DIR/$shard_file"
@@ -318,6 +322,8 @@ if [[ "$VERIFY_ONLY" == "true" ]]; then
     while (( $(jobs -rp | wc -l) >= MAX_JOBS )); do sleep 0.1; done
   }
 
+  SCRIPT_PID=$$
+
   # 1) check first shard explicitly, in background
   wait_for_slot
   (
@@ -327,6 +333,11 @@ if [[ "$VERIFY_ONLY" == "true" ]]; then
       | sed "s/-[0-9]\{5\}-of-$total\.gguf$/-00001-of-$total.gguf/")")
     if [[ "$total" != "" && "$gguf_first" != "" && -f "$LOCAL_MODEL_DIR/$gguf_first" ]]; then
       echo "[$(timestamp)] OK: $gguf_first"
+      if [[ ! "$gguf_first" =~ "-BF16-" && "${QTYPE}" == "BF16" ]]; then
+        echo "[$(timestamp)] VERIFY_ONLY: Error - Non-BF16 qtype detected for first shard, please re-run using the --qtype option!!!"
+        kill -s TERM "$SCRIPT_PID"  # Kill parent
+        exit 2
+      fi
     else
       echo "[$(timestamp)] MISSING: $gguf_first"
       touch "$FAIL_MARKER"
@@ -396,7 +407,7 @@ if [[ "$VERIFY_ONLY" != true ]]; then
       rm -f "$LOCAL_MODEL_DIR/$gguf_first" "$LOCAL_DOWNLOAD_DIR/$gguf_first" || true
     fi
     if ! [ -f "$gguf_first" ]; then
-      until run_downloader "BF16" 1 "$LOCAL_DOWNLOAD_DIR" "$(basename "$gguf_first")"; do
+      until run_downloader "${QTYPE}" 1 "$LOCAL_DOWNLOAD_DIR" "$(basename "$gguf_first")"; do
         echo "[$(timestamp)] First shard download failed; retrying in 10s..."
         sleep 10
       done
