@@ -5,7 +5,7 @@
 #** downloads pre-quantised tensors/shards to cook recipes.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-13-2025 -------------------- **#
+#** --------------- Updated: Jul-20-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -55,6 +55,20 @@ CURL_ORGS=(
   "Thireus:main"
 )
 
+# Local fallbacks:
+# COPY_FOLDERS: local directories to copy from
+COPY_FOLDERS=(
+  #"/mnt/local_storage/DeepSeek"
+)
+# SYMLINK_FOLDERS: local directories to symlink from
+SYMLINK_FOLDERS=(
+  #"/mnt/local_storage/DeepSeek"
+)
+
+# Default download order if DOWNLOAD_ORDER is unset or empty:
+#   RSYNC first, then CURL, then COPY, then SYMLINK
+DEFAULT_ORDER=(SYMLINK COPY RSYNC CURL)
+
 # -----------------------------------------------------------------------------
 # Load user config if present (must be in same directory)
 # Any variable or array defined in download.conf will override the above defaults.
@@ -64,6 +78,33 @@ if [[ -f "$CONFIG_FILE" ]]; then
   # shellcheck source=/dev/null
   source "$CONFIG_FILE"
 fi
+
+# -----------------------------------------------------------------------------
+# Compute effective DOWNLOAD_ORDER
+# - If user did not set DOWNLOAD_ORDER or it’s empty, use DEFAULT_ORDER.
+# - Otherwise, take only valid entries (CURL or RSYNC for example) in the user-provided list.
+USER_ORDER=( "${DOWNLOAD_ORDER[@]:-}" )
+ORDER=()
+if [ ${#USER_ORDER[@]} -eq 0 ]; then
+  ORDER=( "${DEFAULT_ORDER[@]}" )
+else
+  ORDER=()
+  for m in "${USER_ORDER[@]}"; do
+    m_up="${m^^}"
+    if [[ " ${DEFAULT_ORDER[*]} " == *" $m_up "* ]]; then
+      ORDER+=( "$m_up" )
+    fi
+  done
+fi
+
+# # Append any missing defaults
+# for m in "${DEFAULT_ORDER[@]}"; do
+#   skip=
+#   for u in "${ORDER[@]}"; do
+#     [[ "$u" == "$m" ]] && { skip=1; break; }
+#   done
+#   [[ -n "$skip" ]] || ORDER+=( "$m" )
+# done
 
 # -----------------------------------------------------------------------------
 # Parse args & display help if missing
@@ -153,88 +194,198 @@ mkdir -p "${DEST}"
 
 # -----------------------------------------------------------------------------
 # Rsync attempts
-for srv in "${RSYNC_SERVERS[@]}"; do
-  IFS=":" read -r RUSER RHOST RPORT RPATH <<< "$srv"
-  SRC="${RUSER}@${RHOST}:${RPATH}/${REPOSITORY_NAME}/${FILENAME}"
-  DST="${DEST}/${CUSTOM_FILENAME}"
+do_rsync() {
+  for srv in "${RSYNC_SERVERS[@]}"; do
+    IFS=":" read -r RUSER RHOST RPORT RPATH <<< "$srv"
+    SRC="${RUSER}@${RHOST}:${RPATH}/${REPOSITORY_NAME}/${FILENAME}"
+    DST="${DEST}/${CUSTOM_FILENAME}"
 
-  if [ -f "${DST}" ]; then
-    log "File already exists, verifying…"
-    if verify_download "${DST}"; then
-      log "✓ Verified; no need to download it again - ${DST} (${QUANT_U})"
-      chmod 444 "${DST}" # Apply special permission
-      exit 0
-    else
-      log "✗ Verification failed; removing and downloading it"
-      rm -f "${DST}"
+    if [ -f "${DST}" ]; then
+      log "File already exists, verifying…"
+      if verify_download "${DST}"; then
+        log "✓ Verified; no need to download it again - ${DST} (${QUANT_U})"
+        chmod 444 "${DST}"
+        return 0
+      else
+        log "✗ Verification failed; removing and downloading it"
+        rm -f "${DST}"
+      fi
     fi
-  fi
 
-  log "Trying rsync from ${SRC} (port ${RPORT})"
-  if [ "${SHOW_PROGRESS:-false}" = true ]; then
-    RSYNC_OPTS="-vP"
-  else
-    RSYNC_OPTS="-q"
-  fi
-  rsync ${RSYNC_OPTS} --inplace -t -c -e "ssh -p ${RPORT}" \
-    "${SRC}" "${DST}"
-
-  if [ $? -eq 0 ]; then
-    log "Download complete, verifying…"
-    if verify_download "${DST}"; then
-      log "✓ Verified and saved via rsync (${RHOST}) - ${DST} (${QUANT_U})"
-      chmod 444 "${DST}" # Apply special permission
-      exit 0
+    log "Trying rsync from ${SRC} (port ${RPORT})"
+    if [ "${SHOW_PROGRESS:-false}" = true ]; then
+      RSYNC_OPTS="-vP"
     else
-      log "✗ Verification failed; removing and trying next"
-      rm -f "${DST}"
+      RSYNC_OPTS="-q"
     fi
-  else
-    log "✗ Rsync failed; trying next"
-  fi
-done
+    rsync ${RSYNC_OPTS} --inplace -t -c -e "ssh -p ${RPORT}" \
+      "${SRC}" "${DST}"
+
+    if [ $? -eq 0 ]; then
+      log "Download complete, verifying…"
+      if verify_download "${DST}"; then
+        log "✓ Verified and saved via rsync (${RHOST}) - ${DST} (${QUANT_U})"
+        chmod 444 "${DST}"
+        return 0
+      else
+        log "✗ Verification failed; removing and trying next"
+        rm -f "${DST}"
+      fi
+    else
+      log "✗ Rsync failed; trying next"
+    fi
+  done
+  return 1
+}
 
 # -----------------------------------------------------------------------------
 # Curl attempts
-for crl in "${CURL_ORGS[@]}"; do
-  IFS=":" read -r ORG BRANCH <<< "$crl"
-  URL="https://huggingface.co/${ORG}/${REPOSITORY_NAME}/resolve/${BRANCH}/${FILENAME}?download=true"
-  DST="${DEST}/${CUSTOM_FILENAME}"
+do_curl() {
+  for crl in "${CURL_ORGS[@]}"; do
+    IFS=":" read -r ORG BRANCH <<< "$crl"
+    URL="https://huggingface.co/${ORG}/${REPOSITORY_NAME}/resolve/${BRANCH}/${FILENAME}?download=true"
+    DST="${DEST}/${CUSTOM_FILENAME}"
 
-  if [ -f "${DST}" ]; then
-    log "File already exists, verifying…"
-    if verify_download "${DST}"; then
-      log "✓ Verified; no need to download it again - ${DST} (${QUANT_U})"
-      chmod 444 "${DST}" # Apply special permission
-      exit 0
-    else
-      log "✗ Verification failed; removing and downloading it"
-      rm -f "${DST}"
+    if [ -f "${DST}" ]; then
+      log "File already exists, verifying…"
+      if verify_download "${DST}"; then
+        log "✓ Verified; no need to download it again - ${DST} (${QUANT_U})"
+        chmod 444 "${DST}"
+        return 0
+      else
+        log "✗ Verification failed; removing and downloading it"
+        rm -f "${DST}"
+      fi
     fi
-  fi
 
-  log "Trying curl from ${URL}"
-  if [ "${SHOW_PROGRESS:-false}" = true ]; then
-    CURL_OPTS="--progress-bar"
-  else
-    CURL_OPTS="--silent"
-  fi
-  curl --fail -L --retry 3 -C - ${CURL_OPTS} -R \
-    "${URL}" -o "${DST}"
-
-  if [ $? -eq 0 ]; then
-    log "Download complete, verifying…"
-    if verify_download "${DST}"; then
-      log "✓ Verified and saved via curl (org: ${ORG}, banch: ${BRANCH}) - ${DST} (${QUANT_U})"
-      chmod 444 "${DST}" # Apply special permission
-      exit 0
+    log "Trying curl from ${URL}"
+    if [ "${SHOW_PROGRESS:-false}" = true ]; then
+      CURL_OPTS="--progress-bar"
     else
-      log "✗ Verification failed; removing and trying next"
-      rm -f "${DST}"
+      CURL_OPTS="--silent"
     fi
-  else
-    log "✗ Curl failed; trying next"
-  fi
+    curl --fail -L --retry 3 -C - ${CURL_OPTS} -R \
+      "${URL}" -o "${DST}"
+
+    if [ $? -eq 0 ]; then
+      log "Download complete, verifying…"
+      if verify_download "${DST}"; then
+        log "✓ Verified and saved via curl (org: ${ORG}, banch: ${BRANCH}) - ${DST} (${QUANT_U})"
+        chmod 444 "${DST}"
+        return 0
+      else
+        log "✗ Verification failed; removing and trying next"
+        rm -f "${DST}"
+      fi
+    else
+      log "✗ Curl failed; trying next"
+    fi
+  done
+  return 1
+}
+
+# -----------------------------------------------------------------------------
+# Copy attempts
+do_copy() {
+  for folder in "${COPY_FOLDERS[@]}"; do
+    SRC="${folder}/${REPOSITORY_NAME}/${FILENAME}"
+    DST="${DEST}/${CUSTOM_FILENAME}"
+
+    if [ ! -f "${SRC}" ]; then
+      log "✗ Source not found for copy: ${SRC}; trying next"
+      continue
+    fi
+
+    if [ -f "${DST}" ]; then
+      log "File already exists, verifying…"
+      if verify_download "${DST}"; then
+        log "✓ Verified; no need to copy it again - ${DST} (${QUANT_U})"
+        chmod 444 "${DST}"
+        return 0
+      else
+        log "✗ Verification failed; removing and copying it"
+        rm -f "${DST}"
+      fi
+    fi
+
+    log "Trying copy from ${SRC}"
+    cp --preserve=mode,timestamps "${SRC}" "${DST}"
+    if [ $? -eq 0 ]; then
+      log "Copy complete, verifying…"
+      if verify_download "${DST}"; then
+        log "✓ Verified and saved via copy - ${DST} (${QUANT_U})"
+        chmod 444 "${DST}"
+        return 0
+      else
+        log "✗ Verification failed after copy; removing and trying next"
+        rm -f "${DST}"
+      fi
+    else
+      log "✗ Copy failed; trying next"
+    fi
+  done
+  return 1
+}
+
+# -----------------------------------------------------------------------------
+# Symlink attempts
+do_symlink() {
+  for folder in "${SYMLINK_FOLDERS[@]}"; do
+    SRC="${folder}/${REPOSITORY_NAME}/${FILENAME}"
+    DST="${DEST}/${CUSTOM_FILENAME}"
+
+    if [ ! -f "${SRC}" ]; then
+      log "✗ Source not found for symlink: ${SRC}; trying next"
+      continue
+    fi
+
+    if [ -e "${DST}" ]; then
+      if [ -L "${DST}" ] && [ "$(readlink "${DST}")" = "${SRC}" ] && verify_download "${DST}"; then
+        log "✓ Verified existing symlink - ${DST} → ${SRC}"
+        chmod 444 "${DST}"
+        return 0
+      else
+        log "✗ Existing file/symlink invalid; removing and recreating symlink"
+        rm -f "${DST}"
+      fi
+    fi
+
+    log "Trying symlink from ${SRC}"
+    ln -s "${SRC}" "${DST}"
+    if [ $? -eq 0 ]; then
+      log "Symlink created, verifying…"
+      if verify_download "${DST}"; then
+        log "✓ Verified and linked - ${DST} → ${SRC}"
+        chmod 444 "${DST}"
+        return 0
+      else
+        log "✗ Verification failed after symlink; removing and trying next"
+        rm -f "${DST}"
+      fi
+    else
+      log "✗ Symlink creation failed; trying next"
+    fi
+  done
+  return 1
+}
+
+# -----------------------------------------------------------------------------
+# Execute in the requested order
+for method in "${ORDER[@]}"; do
+  case "$method" in
+    RSYNC)
+      do_rsync && exit 0
+      ;;
+    CURL)
+      do_curl && exit 0
+      ;;
+    COPY)
+      do_copy && exit 0
+      ;;
+    SYMLINK)
+      do_symlink && exit 0
+      ;;
+  esac
 done
 
 # -----------------------------------------------------------------------------
