@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regexe entries.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-17-2025 -------------------- **#
+#** --------------- Updated: Jul-20-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -28,9 +28,13 @@ set -euo pipefail
 
 # ---------------- SIGNAL HANDLING ----------------
 # Ensure child processes are killed on interrupt
+# Trap SIGINT and SIGTERM, kill the entire group, but never let kill’s
+# “no such process group” error exit the script.
 trap_handler() {
-  echo "[$(timestamp)] Signal caught, forwarding to children..."
-  pkill -P $$ 2>/dev/null
+  # ignore further SIGTERM so our kill -- -$$ won't re-enter this handler
+  trap '' SIGTERM
+  echo "[$(timestamp)] Signal caught, forwarding to process group..." >&2
+  kill -- -$$ 2>/dev/null || true
   exit 1
 }
 trap trap_handler SIGINT SIGTERM
@@ -124,6 +128,29 @@ echo "[INFO] Max jobs: $MAX_JOBS, Obtain new map: $NEW_MAP, Force redownload: $F
 
 # -------------------- TIMESTAMP FUNCTION ---------------------
 timestamp() { date '+%Y-%m-%d %H:%M:%S'; }
+
+# --------------- DETECT & DEFINE SHA256 HELPER ---------------
+if command -v sha256sum >/dev/null 2>&1; then
+  # GNU coreutils (Linux, or Linux‑style on macOS with coreutils)
+  _sha256sum() { sha256sum "$1" | cut -d' ' -f1; }
+elif command -v gsha256sum >/dev/null 2>&1; then
+  # GNU coreutils from Homebrew on macOS
+  _sha256sum() { gsha256sum "$1" | cut -d' ' -f1; }
+elif command -v shasum >/dev/null 2>&1; then
+  # macOS built‑in Perl shasum
+  _sha256sum() { shasum -a 256 "$1" | cut -d' ' -f1; }
+elif command -v openssl >/dev/null 2>&1; then
+  # fallback via OpenSSL
+  _sha256sum() {
+    openssl dgst -sha256 "$1" | awk '{print $NF}'
+  }
+else
+  # no reliable sha256 tool; define a stub that always fails
+  _sha256sum() {
+    echo "Warning: no sha256sum available - hashes cannot be computed" >&2
+    return 1
+  }
+fi
 
 # ------------------ READ USER_REGEX PATTERNS -----------------
 declare -a USER_REGEX
@@ -268,8 +295,8 @@ download_shard() {
                 _path=$dl_path
                 skip_mv=false
             fi
-            if command -v sha256sum &>/dev/null; then
-                got=$(sha256sum "$_path" | cut -d' ' -f1)
+            if command -v _sha256sum &>/dev/null; then
+                got=$(_sha256sum "$_path" | cut -d' ' -f1)
                 exp=$(get_t_hash "$qtype" "$tensor")
                 if [[ "$got" != "$exp" ]]; then
                     echo "[$(timestamp)] Will redownload due to hash mismatch for '$shard_file' - tensor '$tensor' of qtype: '$qtype' ($got != $exp)"
@@ -279,7 +306,7 @@ download_shard() {
                     echo "[$(timestamp)] File id '$shard_id' - tensor '$tensor' of qtype: '$qtype' hash is valid!"
                 fi
             else
-                echo "Warning: sha256sum command missing - hash cannot be verified!"
+                echo "Warning: _sha256sum command missing - hash cannot be verified!"
             fi
         else
             need_download=true
@@ -355,8 +382,8 @@ if [[ "$VERIFY_ONLY" == "true" ]]; then
           shardfile="${BF16_SHARDS[$idx]}"
           local_path="$LOCAL_MODEL_DIR/$shardfile"
 
-          if [[ -f "$local_path" ]] && command -v sha256sum &>/dev/null; then
-            got=$(sha256sum "$local_path" | cut -d' ' -f1)
+          if [[ -f "$local_path" ]] && command -v _sha256sum &>/dev/null; then
+            got=$(_sha256sum "$local_path" | cut -d' ' -f1)
             exp=$(get_t_hash "$qtype" "${TENSORS_TO_FETCH[$idx]}")
             if [[ "$got" != "$exp" ]]; then
               echo "[$(timestamp)] WRONG HASH: $shardfile ($got != $exp) - tensor: '${TENSORS_TO_FETCH[$idx]}' - qtype: '$qtype'"

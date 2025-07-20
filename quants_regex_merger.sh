@@ -5,7 +5,7 @@
 #** regex for llama-quantize consumption.                     **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-11-2025 -------------------- **#
+#** --------------- Updated: Jul-20-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -476,6 +476,29 @@ fi
 #blk\.59\.attn_q_b\.weight=iq5_k_r4
 #blk\.60\.attn_q_b\.weight=iq5_k_r4
 #"
+
+# --------------- DETECT & DEFINE SHA256 HELPER ---------------
+if command -v sha256sum >/dev/null 2>&1; then
+  # GNU coreutils (Linux, or Linux‑style on macOS with coreutils)
+  _sha256sum() { sha256sum "$1" | cut -d' ' -f1; }
+elif command -v gsha256sum >/dev/null 2>&1; then
+  # GNU coreutils from Homebrew on macOS
+  _sha256sum() { gsha256sum "$1" | cut -d' ' -f1; }
+elif command -v shasum >/dev/null 2>&1; then
+  # macOS built‑in Perl shasum
+  _sha256sum() { shasum -a 256 "$1" | cut -d' ' -f1; }
+elif command -v openssl >/dev/null 2>&1; then
+  # fallback via OpenSSL
+  _sha256sum() {
+    openssl dgst -sha256 "$1" | awk '{print $NF}'
+  }
+else
+  # no reliable sha256 tool; define a stub that always fails
+  _sha256sum() {
+    echo "Warning: no sha256sum available - hashes cannot be computed" >&2
+    return 1
+  }
+fi
 
 build_range_regex() {
   local S=$1 E=$2
@@ -1109,20 +1132,8 @@ fullCmd=$(printf "%s\n" "$all" \
   | tr -d '\\n')
 
 # compute first 7 chars of SHA-256 of $fullCmd, if possible
-if command -v sha256sum >/dev/null 2>&1; then
-  # GNU coreutils on Linux
-  cmdPart=$(printf '%s' "$fullCmd" | sha256sum | cut -c1-7)
-elif command -v gsha256sum >/dev/null 2>&1; then
-  # GNU coreutils on macOS (via Homebrew)
-  cmdPart=$(printf '%s' "$fullCmd" | gsha256sum | cut -c1-7)
-elif command -v shasum >/dev/null 2>&1; then
-  # macOS built-in (Perl script)
-  cmdPart=$(printf '%s' "$fullCmd" | shasum -a 256 | cut -c1-7)
-elif command -v openssl >/dev/null 2>&1; then
-  # OpenSSL fallback
-  cmdPart=$(printf '%s' "$fullCmd" \
-            | openssl dgst -sha256     \
-            | awk '{print substr($NF,1,7)}')
+if command -v _sha256sum >/dev/null 2>&1; then
+  cmdPart=$(printf '%s' "$fullCmd" | _sha256sum | cut -c1-7)
 else
   # fallback: just take the first 7 chars directly
   cmdPart='NA'
