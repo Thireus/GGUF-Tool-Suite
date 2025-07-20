@@ -5,7 +5,7 @@
 #** for your gguf models.                                     **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-10-2025 -------------------- **#
+#** --------------- Updated: Jul-20-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -38,9 +38,32 @@ trap 'echo "[$(date "+%Y-%m-%d %H:%M:%S")] Received termination signal. Exiting.
 # End of user configuration
 #
 
-# Check that sha256sum is available
-if ! command -v sha256sum &>/dev/null; then
-    echo "Warning: 'sha256sum' not found. Entries will omit hash." >&2
+# --------------- DETECT & DEFINE SHA256 HELPER ---------------
+if command -v sha256sum >/dev/null 2>&1; then
+  # GNU coreutils (Linux, or Linux‑style on macOS with coreutils)
+  _sha256sum() { sha256sum "$1" | cut -d' ' -f1; }
+elif command -v gsha256sum >/dev/null 2>&1; then
+  # GNU coreutils from Homebrew on macOS
+  _sha256sum() { gsha256sum "$1" | cut -d' ' -f1; }
+elif command -v shasum >/dev/null 2>&1; then
+  # macOS built‑in Perl shasum
+  _sha256sum() { shasum -a 256 "$1" | cut -d' ' -f1; }
+elif command -v openssl >/dev/null 2>&1; then
+  # fallback via OpenSSL
+  _sha256sum() {
+    openssl dgst -sha256 "$1" | awk '{print $NF}'
+  }
+else
+  # no reliable sha256 tool; define a stub that always fails
+  _sha256sum() {
+    echo "Warning: no sha256sum available - hashes cannot be computed" >&2
+    return 1
+  }
+fi
+
+# Check that _sha256sum is available
+if ! command -v _sha256sum &>/dev/null; then
+    echo "Warning: '_sha256sum' not found. Entries will omit hash." >&2
     USE_SHA256=false
 else
     USE_SHA256=true
@@ -73,7 +96,7 @@ for gguf_file in "$@"; do
 
     # Compute SHA256 if possible
     if [[ "$USE_SHA256" == "true" ]]; then
-        file_hash="$(sha256sum "$gguf_file" | awk '{print $1}')"
+        file_hash="$(_sha256sum "$gguf_file" | awk '{print $1}')"
     else
         file_hash=""
     fi

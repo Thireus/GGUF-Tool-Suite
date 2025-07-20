@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-19-2025 -------------------- **#
+#** --------------- Updated: Jul-20-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -50,6 +50,29 @@ trap 'echo "[$(date "+%Y-%m-%d %H:%M:%S")] Received termination signal. Exiting 
 # ----------------------------------------------------------------------------
 
 timestamp() { date '+%Y-%m-%d %H:%M:%S'; }
+
+# --------------- DETECT & DEFINE SHA256 HELPER ---------------
+if command -v sha256sum >/dev/null 2>&1; then
+  # GNU coreutils (Linux, or Linux‑style on macOS with coreutils)
+  _sha256sum() { sha256sum "$1" | cut -d' ' -f1; }
+elif command -v gsha256sum >/dev/null 2>&1; then
+  # GNU coreutils from Homebrew on macOS
+  _sha256sum() { gsha256sum "$1" | cut -d' ' -f1; }
+elif command -v shasum >/dev/null 2>&1; then
+  # macOS built‑in Perl shasum
+  _sha256sum() { shasum -a 256 "$1" | cut -d' ' -f1; }
+elif command -v openssl >/dev/null 2>&1; then
+  # fallback via OpenSSL
+  _sha256sum() {
+    openssl dgst -sha256 "$1" | awk '{print $NF}'
+  }
+else
+  # no reliable sha256 tool; define a stub that always fails
+  _sha256sum() {
+    echo "Warning: no sha256sum available - hashes cannot be computed" >&2
+    return 1
+  }
+fi
 
 # ================= COMMAND-LINE ARGUMENTS =================
 BENCH_CSV=""
@@ -345,13 +368,13 @@ process_line() {
 
   echo "[$(timestamp)] Checking $fname (qtype=$qtype)…" >&2
 
-  if ! command -v sha256sum &>/dev/null; then
-    echo "[$(timestamp)] sha256sum missing; skipping check for $fname." >&2
+  if ! command -v _sha256sum &>/dev/null; then
+    echo "[$(timestamp)] _sha256sum missing; skipping check for $fname." >&2
     return
   fi
 
   local actual_hash
-  actual_hash=$(sha256sum "$local_file" | cut -d' ' -f1)
+  actual_hash=$(_sha256sum "$local_file" | cut -d' ' -f1)
   if [[ "$actual_hash" == "$expected_hash" ]]; then
     echo "[$(timestamp)] Hash OK for $fname." >&2
     return
@@ -378,7 +401,7 @@ process_line() {
       if run_downloader "${try_q^^}" "$chunk_id" "${LOCAL_DOWNLOAD_DIR}" "${fname}"; then
 
         local new_hash
-        new_hash=$(sha256sum "$tmp" | cut -d' ' -f1)
+        new_hash=$(_sha256sum "$tmp" | cut -d' ' -f1)
         if [[ "$new_hash" == "$expected_hash" ]]; then
           mv -f "$tmp" "$local_file"
           echo "[$(timestamp)] Restored $fname with correct checksum via qtype=$try_q." >&2
@@ -418,8 +441,8 @@ wait
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Initial validation complete."
 
 # Check availability of required commands
-if ! command -v sha256sum &>/dev/null; then
-    echo "Warning: sha256sum not found; SHA256 verification will be skipped." >&2
+if ! command -v _sha256sum &>/dev/null; then
+    echo "Warning: _sha256sum not found; SHA256 verification will be skipped." >&2
     USE_SHA256=false
 else
     USE_SHA256=true
@@ -576,9 +599,9 @@ while true; do
                         break
                     fi
 
-                    # If we have a hash to verify and sha256sum available, check
+                    # If we have a hash to verify and _sha256sum available, check
                     if [[ -n "$expected_hash" && "$USE_SHA256" == "true" ]]; then
-                        actual_hash="$(sha256sum "$local_shard_tmp" | awk '{print $1}')"
+                        actual_hash="$(_sha256sum "$local_shard_tmp" | awk '{print $1}')"
                         if [[ "$actual_hash" == "$expected_hash" ]]; then
                             echo "[$(date '+%Y-%m-%d %H:%M:%S')] SHA256 matches for $shard_fname."
                             fetch_success=true
@@ -590,7 +613,7 @@ while true; do
                             continue
                         fi
                     else
-                        # No hash to check or no sha256sum: accept fetched file
+                        # No hash to check or no _sha256sum: accept fetched file
                         fetch_success=true
                         break
                     fi
