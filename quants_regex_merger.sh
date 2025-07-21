@@ -479,26 +479,37 @@ fi
 
 # --------------- DETECT & DEFINE SHA256 HELPER ---------------
 if command -v sha256sum >/dev/null 2>&1; then
-  # GNU coreutils (Linux, or Linux‑style on macOS with coreutils)
-  _sha256sum() { sha256sum "$1" | cut -d' ' -f1; }
+  # GNU coreutils on Linux
+  sha256tool=(sha256sum)
+  args=()
 elif command -v gsha256sum >/dev/null 2>&1; then
-  # GNU coreutils from Homebrew on macOS
-  _sha256sum() { gsha256sum "$1" | cut -d' ' -f1; }
+  # GNU coreutils on macOS (via Homebrew)
+  sha256tool=(gsha256sum)
+  args=()
 elif command -v shasum >/dev/null 2>&1; then
-  # macOS built‑in Perl shasum
-  _sha256sum() { shasum -a 256 "$1" | cut -d' ' -f1; }
+  # macOS built-in (Perl script)
+  sha256tool=(shasum)
+  args=(-a 256)
 elif command -v openssl >/dev/null 2>&1; then
-  # fallback via OpenSSL
-  _sha256sum() {
-    openssl dgst -sha256 "$1" | awk '{print $NF}'
-  }
+  # OpenSSL fallback
+  sha256tool=(openssl)
+  args=(dgst -sha256)
 else
-  # no reliable sha256 tool; define a stub that always fails
-  _sha256sum() {
-    echo "Warning: no sha256sum available - hashes cannot be computed" >&2
-    return 1
-  }
+  # fallback stub: always errors out
+  sha256tool=()
+  args=()
 fi
+
+# _sha256sum reads either from file (if you pass an arg) or from stdin
+_sha256sum() {
+  if (( $# > 0 )); then
+    # file‑mode: pass filename as $1
+    "${sha256tool[@]}" "${args[@]}" "$1" | awk '{print $1}'
+  else
+    # stdin‑mode: read data from pipe
+    "${sha256tool[@]}" "${args[@]}" | awk '{print $1}'
+  fi
+}
 
 build_range_regex() {
   local S=$1 E=$2
