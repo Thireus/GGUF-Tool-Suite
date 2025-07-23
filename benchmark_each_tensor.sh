@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-20-2025 -------------------- **#
+#** --------------- Updated: Jul-23-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -90,6 +90,7 @@ BENCH_CSV=""
 BENCH_FROM_QTYPE=""
 CUSTOM_QTYPES=()
 CUSTOM_CHUNKS=""
+SKIP_GPG=false # If true, skip the gpg signature verification of the signed files
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -103,6 +104,10 @@ while [[ $# -gt 0 ]]; do
       done;;
     --chunks)
       CUSTOM_CHUNKS="$2"; shift 2;;
+    --skip-gpg)
+      SKIP_GPG=true
+      shift
+      ;;
     *) echo "Unknown argument: $1" >&2; exit 1;;
   esac
 done
@@ -230,6 +235,33 @@ MAIN_SHARD_PATTERN="*-00001-of-*.gguf"
 
 # =============== End USER CONFIGURATION ===============
 
+# Verify gpg readiness
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ "$SKIP_GPG" != "true" ]]; then
+  if [ ! -f "$SCRIPT_DIR/trusted-keys.asc" ]; then
+    echo "[$(timestamp)] Error: trusted-keys.asc not found in the script directory."
+    echo "Hint: Provide trusted-keys.asc in the same directory as this script or use the --skip-gpg option to disable gpg signature verification."
+    exit 6
+  fi
+  if command -v gpg >/dev/null 2>&1; then
+    # Create a temporary GNUPGHOME
+    GNUPG_TMPDIR=$(mktemp -d)
+    if [ -z "$GNUPG_TMPDIR" ]; then
+      echo "[$(timestamp)] Error: Failed to create temporary GPG home directory." >&2
+      exit 8
+    fi
+    # Try importing the keys (silently) to check validity
+    if ! gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --import "$SCRIPT_DIR/trusted-keys.asc" > /dev/null 2>&1; then
+      echo "[$(timestamp)] Error: trusted-keys.asc contains missing or invalid GPG public keys."
+      echo "Hint: Add valid public keys to this file or re-run with the --skip-gpg option to bypass signature verification."
+      [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+      exit 7
+    fi
+  else
+    echo "[$(timestamp)] Warning: 'gpg' command not found. GPG signature verification skipped." >&2
+  fi
+fi
+
 # Helper: parse worst-tensor from CSV if requested
 if [[ -n "$BENCH_CSV" ]]; then
   echo "[$(timestamp)] Starting worst-tensor selection from CSV: $BENCH_CSV (from qtype=$BENCH_FROM_QTYPE)"
@@ -344,10 +376,26 @@ for LOCAL_QTYPE in "${_LOCAL_QTYPES[@]}"; do
   local_tensors_map="tensors.${LOCAL_QTYPE}.map"
   if run_downloader "${LOCAL_QTYPE^^}" "0" "." "${local_tensors_map}"; then
     echo "[$(timestamp)] Retrieved initial tensors map: $local_tensors_map"
+    # Download the signature
+    if [[ "$SKIP_GPG" != "true" ]]; then
+      if ! run_downloader "${LOCAL_QTYPE^^}" -1 . "$local_tensors_map.sig"; then
+          echo "[$(timestamp)] Error: failed to fetch map gpg signature for ${LOCAL_QTYPE^^}" >&2
+          [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+          exit 2
+      else
+        if gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --verify "$local_tensors_map.sig" "$local_tensors_map" > /dev/null 2>&1; then
+            echo "[$(timestamp)] GPG signature verification successful."
+        else
+            echo "[$(timestamp)] Error: GPG signature verification failed for '$local_tensors_map.sig'."
+            [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+            exit 3
+        fi
+      fi
+    fi
   elif [[ $__LOCAL_QTYPE == "f32" ]]; then
     echo "[$(timestamp)] Warning: Could not fetch BF16 tensors.map for LOCAL_QTYPE='$LOCAL_QTYPE'... will try to rely on other map files later." >&2; continue
   else
-    echo "[$(timestamp)] Error: Could not fetch initial tensors.map for LOCAL_QTYPE='$LOCAL_QTYPE'." >&2; exit 1
+    echo "[$(timestamp)] Error: Could not fetch initial tensors.map for LOCAL_QTYPE='$LOCAL_QTYPE'." >&2; [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"; exit 1
   fi
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
@@ -458,16 +506,16 @@ if ! command -v _sha256sum &>/dev/null; then
 else
     USE_SHA256=true
 fi
-if ! command -v gguf_info.py &>/dev/null; then
-    echo "Warning: gguf_info.py not found in PATH; this script does not need it directly here." >&2
-    # Not strictly required in this script
-fi
+# if ! command -v gguf_info.py &>/dev/null; then
+#     echo "Warning: gguf_info.py not found in PATH; this script does not need it directly here." >&2
+#     # Not strictly required in this script
+# fi
 
 # Baseline benchmark
 baseline_result_file="bench_result.baseline.${BASELINE_QTYPE}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
 if [[ ! -f "$baseline_result_file" ]]; then
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running baseline PPL benchmark for BASELINE_QTYPE='$BASELINE_QTYPE', chunks=$PPL_COMMAND_CHUNKS_TO_PROCESS."
-    main_model_file=$(find_main_model_file) || { echo "Error: main model file not found for baseline." >&2; exit 1; }
+    main_model_file=$(find_main_model_file) || { echo "Error: main model file not found for baseline." >&2; [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"; exit 1; }
     baseline_cmd="${PPL_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
     eval "$baseline_cmd" > "$baseline_result_file" 2>&1 < /dev/null
     estimate=$(grep "Final estimate" "$baseline_result_file" || true)
@@ -502,9 +550,26 @@ while true; do
         # Attempt to download tensors.map from remote.
         # We first remove any old local copy to ensure we detect absence properly
         rm -f "$local_tensors_map"
+        rm -f "$local_tensors_map.sig"
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] Fetching remote tensors.map..."
         if run_downloader "${qtype^^}" "0" "." "${local_tensors_map}"; then
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] Retrieved tensors.map to $local_tensors_map"
+            # Download the signature
+            if [[ "$SKIP_GPG" != "true" ]]; then
+              if ! run_downloader "${qtype^^}" -1 . "$local_tensors_map.sig"; then
+                  echo "[$(timestamp)] Error: failed to fetch map gpg signature for ${qtype^^}" >&2
+                  [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+                  exit 2
+              else
+                if gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --verify "$local_tensors_map.sig" "$local_tensors_map" > /dev/null 2>&1; then
+                    echo "[$(timestamp)] GPG signature verification successful."
+                else
+                    echo "[$(timestamp)] Error: GPG signature verification failed for '$local_tensors_map.sig'."
+                    [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+                    exit 3
+                fi
+              fi
+            fi
         else
             echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: Could not fetch tensors.map for qtype='$qtype'. Skipping this qtype." >&2
             rm -f "$local_tensors_map"
@@ -688,6 +753,7 @@ while true; do
                 # If a termination was requested, exit now
                 if [[ "$EXIT_PENDING" -eq 1 ]]; then
                   echo "[$(date '+%Y-%m-%d %H:%M:%S')] Termination flag detected; exiting after finishing current operation."
+                  [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
                   exit 0
                 fi
 

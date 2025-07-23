@@ -5,7 +5,7 @@
 #** tensor sizes for matched regex tensors.                   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-10-2025 -------------------- **#
+#** --------------- Updated: Jul-23-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -68,7 +68,36 @@ blk\.(5[7-9]|60)\.ffn_gate_exps\.weight=iq3_k
 blk\.(5[7-9]|60)\.ffn_up_exps\.weight=iq3_k
 EOF
 )
+
+SKIP_GPG=false # If true, skip the gpg signature verification of the signed files
 # =================================================
+
+# Verify gpg readiness
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ "$SKIP_GPG" != "true" ]]; then
+  if [ ! -f "$SCRIPT_DIR/trusted-keys.asc" ]; then
+    echo "Error: trusted-keys.asc not found in the script directory."
+    echo "Hint: Provide trusted-keys.asc in the same directory as this script or use the --skip-gpg option to disable gpg signature verification."
+    exit 6
+  fi
+  if command -v gpg >/dev/null 2>&1; then
+    # Create a temporary GNUPGHOME
+    GNUPG_TMPDIR=$(mktemp -d)
+    if [ -z "$GNUPG_TMPDIR" ]; then
+      echo "Error: Failed to create temporary GPG home directory." >&2
+      exit 8
+    fi
+    # Try importing the keys (silently) to check validity
+    if ! gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --import "$SCRIPT_DIR/trusted-keys.asc" > /dev/null 2>&1; then
+      echo "Error: trusted-keys.asc contains missing or invalid GPG public keys."
+      echo "Hint: Add valid public keys to this file or re-run with the --skip-gpg option to bypass signature verification."
+      [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+      exit 7
+    fi
+  else
+    echo "Warning: 'gpg' command not found. Valid GPG public keys verification skipped." >&2
+  fi
+fi
 
 # Determine if stdin provided
 RAW_MAP=""
@@ -121,6 +150,24 @@ for q in "${_QTYPES[@]}"; do
   echo "Fetching tensors.${q}.map..."
   if run_downloader "${q^^}" "0" "${TMPDIR}" "tensors.${q}.map"; then
     echo "  -> saved to $local_map"
+    # Download the signature
+    if [[ "$SKIP_GPG" != "true" ]]; then
+      if ! run_downloader "${q^^}" -1 "${TMPDIR}" "tensors.${q}.map.sig"; then
+          echo "  [Error] failed to fetch map gpg signature for ${q^^}" >&2
+          [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+          [ -n "$TMPDIR" ] && rm -rf "$TMPDIR"
+          exit 2
+      else
+        if gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --verify "$local_map.sig" "$local_map" > /dev/null 2>&1; then
+            echo "  ✓ GPG signature verification successful."
+        else
+            echo "  [Error] GPG signature verification failed for '$local_map.sig'."
+            [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+            [ -n "$TMPDIR" ] && rm -rf "$TMPDIR"
+            exit 3
+        fi
+      fi
+    fi
   else
     echo "  [Warning] failed to fetch tensors.map" >&2
     rm -f "$local_map"
@@ -172,5 +219,6 @@ echo "Total bytes matched: $total_bytes"
 echo "≈ $total_gib GiB"
 
 echo "Cleaning up..."
-rm -rf "$TMPDIR"
+[ -n "$TMPDIR" ] && rm -rf "$TMPDIR"
+[ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
 echo "Done."

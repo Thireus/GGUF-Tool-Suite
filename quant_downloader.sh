@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regexe entries.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-20-2025 -------------------- **#
+#** --------------- Updated: Jul-23-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -46,6 +46,7 @@ FORCE_REDOWNLOAD=false # Whether to redownload all files (maps, shards, first sh
 VERIFY_ONLY=false      # If true, only verify hashes and report errors
 BASE_DIR="."           # Base directory for model and download dirs
 QTYPE="BF16"           # Default quantization type used for the first shard and filenames
+SKIP_GPG=false         # If true, skip the gpg signature verification of the signed files
 
 # --------------------- USAGE & ARG PARSING -------------------
 usage() {
@@ -55,13 +56,14 @@ usage() {
   echo "      --force-redownload  Force redownload of all shards and maps, ignoring existing files" >&2
   echo "      --verify            Only verify existing shard hashes; report mismatches; skip downloads" >&2
   echo "      --qtype QUANT       Set quantization type for the first shard and filenames (default: BF16); use highest qtype of the model!" >&2
+  echo "      --skip-gpg          Do not verify the gpg signature of the downloaded files" >&2
   echo "  -d, --dest DIR          Base path for model and download dirs (default: .)" >&2
   echo "  <recipe-file>: path to recipe containing USER_REGEX lines (one per tensor; must have .recipe extension)" >&2
   exit 1
 }
 
 # Parse arguments (supports GNU long options)
-PARSED_OPTS=$(getopt -n "$0" -o j:d: -l max-jobs:,no-new-map,force-redownload,verify,qtype:,dest:,destination: -- "$@") || usage
+PARSED_OPTS=$(getopt -n "$0" -o j:d: -l max-jobs:,no-new-map,force-redownload,verify,qtype:,skip-gpg,dest:,destination: -- "$@") || usage
 eval set -- "$PARSED_OPTS"
 while true; do
   case "$1" in
@@ -84,6 +86,10 @@ while true; do
     --qtype)
       QTYPE="${2^^}"
       shift 2
+      ;;
+    --skip-gpg)
+      SKIP_GPG=true
+      shift
       ;;
     -d|--dest|--destination)
       BASE_DIR="$2"
@@ -124,7 +130,7 @@ mkdir -p "$LOCAL_DOWNLOAD_DIR"
 echo "[INFO] Using base directory: $BASE_DIR"
 echo "[INFO] Download dir: $LOCAL_DOWNLOAD_DIR"
 echo "[INFO] Model dir: $LOCAL_MODEL_DIR"
-echo "[INFO] Max jobs: $MAX_JOBS, Obtain new map: $NEW_MAP, Force redownload: $FORCE_REDOWNLOAD, Verify only: $VERIFY_ONLY"
+echo "[INFO] Max jobs: $MAX_JOBS, Obtain new map: $NEW_MAP, Force redownload: $FORCE_REDOWNLOAD, Verify only: $VERIFY_ONLY, Skip signature verification: $SKIP_GPG"
 
 # -------------------- TIMESTAMP FUNCTION ---------------------
 timestamp() { date '+%Y-%m-%d %H:%M:%S'; }
@@ -189,6 +195,33 @@ run_downloader() {
   "$TENSOR_DOWNLOADER" "$@" & CHILD_PID=$!; wait $CHILD_PID; ret=$?; set -e; return $ret
 }
 
+# ----------------- VERIFY GPG READINESS ----------------------
+
+if [[ "$SKIP_GPG" != "true" ]]; then
+  if [ ! -f "$SCRIPT_DIR/trusted-keys.asc" ]; then
+    echo "Error: trusted-keys.asc not found in the script directory."
+    echo "Hint: Provide trusted-keys.asc in the same directory as this script or use the --skip-gpg option to disable gpg signature verification."
+    exit 6
+  fi
+  if command -v gpg >/dev/null 2>&1; then
+    # Create a temporary GNUPGHOME
+    GNUPG_TMPDIR=$(mktemp -d)
+    if [ -z "$GNUPG_TMPDIR" ]; then
+      echo "Error: Failed to create temporary GPG home directory." >&2
+      exit 8
+    fi
+    # Try importing the keys (silently) to check validity
+    if ! gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --import "$SCRIPT_DIR/trusted-keys.asc" > /dev/null 2>&1; then
+      echo "Error: trusted-keys.asc contains missing or invalid GPG public keys."
+      echo "Hint: Add valid public keys to this file or re-run with the --skip-gpg option to bypass signature verification."
+      [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+      exit 7
+    fi
+  else
+    echo "Warning: 'gpg' command not found. Valid GPG public keys verification skipped." >&2
+  fi
+fi
+
 # -------------------- HASH & SHARD STORAGE -------------------
 declare -A T_HASHES SHARD_ID
 set_t_hash() { local key="${1,,}::${2,,}"; T_HASHES["$key"]="$3"; }
@@ -217,27 +250,62 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
   qtype=${_q^^}
   _qtype=$qtype
   [[ "$qtype" == "F32" ]] && _qtype="${QTYPE}"
-  echo "[$(timestamp)] Fetching ${_qtype} tensor map for ${qtype} quants"
+  echo "[$(timestamp)] Fetching ${_qtype} tensor map (and gpg signature if enabled) for ${qtype} quants"
   mapfile="tensors.${_qtype,,}.map"
   if [[ "$FORCE_REDOWNLOAD" == true ]]; then
-    echo "[$(timestamp)] Force redownload: removing existing map $mapfile"
+    echo "[$(timestamp)] Force redownload: removing existing map $mapfile and $mapfile.sig"
     rm -f "$mapfile"
+    rm -f "$mapfile.sig"
   fi
   if [[ "$NEW_MAP" == true ]]; then
       if [[ -f "$mapfile" ]]; then
           mv -f "$mapfile" "$mapfile.bak"
+          if [[ -f "$mapfile.sig" ]]; then
+            mv -f "$mapfile.sig" "$mapfile.sig.bak"
+          else
+            rm -f "$mapfile.sig.bak" # Delete the backup because now the backup may not correspond to the $mapfile.bak
+          fi
           if ! run_downloader "$_qtype" 0 . "$mapfile"; then
               echo "Warning: failed to fetch map for $_qtype. Using existing map file." >&2
               mv -f "$mapfile.bak" "$mapfile"
+              if [[ -f "$mapfile.sig.bak" ]]; then
+                mv -f "$mapfile.sig.bak" "$mapfile.sig"
+              fi
           else
               # Success: optionally remove backup or keep it
               rm -f "$mapfile.bak"
+              # Download the signature
+              if [[ "$SKIP_GPG" != "true" ]]; then
+                if ! run_downloader "$_qtype" -1 . "$mapfile.sig"; then
+                    if [[ -f "$mapfile.sig.bak" ]]; then
+                        echo "Warning: failed to fetch map gpg signature for $_qtype. Using existing map gpg signature file." >&2
+                        mv -f "$mapfile.sig.bak" "$mapfile.sig"
+                    else
+                        echo "Error: failed to fetch map gpg signature for $_qtype and no existing map gpg signature file present!" >&2
+                        [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+                        exit 3
+                    fi
+                else
+                    # Success: optionally remove backup or keep it
+                    rm -f "$mapfile.sig.bak"
+                fi
+              fi
           fi
       else
           # $mapfile does not exist; just try downloading
           if ! run_downloader "$_qtype" 0 . "$mapfile"; then
               echo "Error: failed to fetch map for $_qtype" >&2
               exit 1
+          else
+              # Download the signature
+              if [[ "$SKIP_GPG" != "true" ]]; then
+                rm -f "$LOCAL_MODEL_DIR/$mapfile.sig"
+                if ! run_downloader "$_qtype" -1 . "$mapfile.sig"; then
+                    echo "Error: failed to fetch map gpg signature for $_qtype" >&2
+                    [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+                    exit 3
+                fi
+              fi
           fi
       fi
   else
@@ -246,6 +314,39 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
           echo "Error: failed to fetch map for $_qtype" >&2
           exit 1
       fi
+      # Download the signature
+      if [[ "$SKIP_GPG" != "true" ]]; then
+        if ! run_downloader "$_qtype" -1 . "$mapfile.sig"; then
+            echo "Error: failed to fetch map gpg signature for $_qtype" >&2
+            [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+            exit 3
+        fi
+      fi
+  fi
+
+  if [[ "$SKIP_GPG" != "true" ]]; then
+    if command -v gpg >/dev/null 2>&1; then
+      if [ ! -f "$mapfile" ]; then
+          echo "Error: Map file '$mapfile' not found."
+          [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+          exit 5
+      fi
+      if [ ! -f "$mapfile.sig" ]; then
+          echo "Error: Signature file '$mapfile.sig' is missing."
+          echo "Hint: To skip GPG verification, re-run this script with the --skip-gpg option."
+          [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+          exit 5
+      fi
+      if gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --verify "$mapfile.sig" "$mapfile" > /dev/null 2>&1; then
+          echo "[$(timestamp)] GPG signature verification successful."
+      else
+          echo "Error: GPG signature verification failed for '$mapfile.sig'."
+          [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+          exit 4
+      fi
+    else
+      echo "Warning: 'gpg' command not found. Signature verification skipped." >&2
+    fi
   fi
 
   while IFS=: read -r fname hash tname _; do
@@ -370,11 +471,36 @@ if [[ "$VERIFY_ONLY" == "true" ]]; then
     gguf_first=$(basename "$(echo ${_find} | head -n1 \
       | sed "s/-[0-9]\{5\}-of-$total\.gguf$/-00001-of-$total.gguf/")")
     if [[ "$total" != "" && "$gguf_first" != "" && -f "$LOCAL_MODEL_DIR/$gguf_first" ]]; then
-      echo "[$(timestamp)] OK: $gguf_first"
       if [[ ! "$gguf_first" =~ "-BF16-" && "${QTYPE}" == "BF16" ]]; then
         echo "[$(timestamp)] VERIFY_ONLY: Error - Non-BF16 qtype detected for first shard, please re-run using the --qtype option!!!"
         kill -s TERM "$SCRIPT_PID"  # Kill parent
         exit 2
+      else
+        if [[ "$SKIP_GPG" != "true" ]]; then
+          if command -v gpg >/dev/null 2>&1; then
+            if [ ! -f "$LOCAL_MODEL_DIR/$gguf_first" ]; then
+                echo "[$(timestamp)] VERIFY_ONLY: Error - Shard file '$gguf_first' not found."
+                kill -s TERM "$SCRIPT_PID"  # Kill parent
+                exit 5
+            fi
+            if [ ! -f "$LOCAL_MODEL_DIR/$gguf_first.sig" ]; then
+                echo "[$(timestamp)] VERIFY_ONLY: Error - Signature file '$gguf_first.sig' is missing."
+                echo "Hint: To skip GPG verification, re-run this script with the --skip-gpg option."
+                kill -s TERM "$SCRIPT_PID"  # Kill parent
+                exit 5
+            fi
+            if gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --verify "$LOCAL_MODEL_DIR/$gguf_first.sig" "$LOCAL_MODEL_DIR/$gguf_first" > /dev/null 2>&1; then
+                echo "[$(timestamp)] GPG signature verification for '$gguf_first.sig' successful."
+            else
+                echo "[$(timestamp)] VERIFY_ONLY: Error - GPG signature verification failed for '$gguf_first.sig'."
+                kill -s TERM "$SCRIPT_PID"  # Kill parent
+                exit 4
+            fi
+          else
+            echo "Warning: 'gpg' command not found. Signature verification skipped." >&2
+          fi
+        fi
+        echo "[$(timestamp)] OK: $gguf_first"
       fi
     else
       echo "[$(timestamp)] MISSING: $gguf_first"
@@ -415,6 +541,13 @@ if [[ "$VERIFY_ONLY" == "true" ]]; then
   # wait for all verifications to finish
   wait
 
+  # Cleanup
+  if [[ "$SKIP_GPG" != "true" ]]; then
+    if command -v gpg >/dev/null 2>&1; then
+      [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+    fi
+  fi
+
   # summary
   if [[ -f "$FAIL_MARKER" ]]; then
     echo "[$(timestamp)] VERIFY_ONLY: some files missing or with hash mismatch"
@@ -434,25 +567,46 @@ wait
 
 _find=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-*-of-*.gguf")
 total=$(echo ${_find} | head -n1 | sed -E 's/.*-[0-9]{5}-of-([0-9]{5})\.gguf/\1/')
+gguf_first=$(basename "$(echo ${_find} | head -n1 | sed "s/-[0-9]\{5\}-of-$total\.gguf$/-00001-of-$total.gguf/")")
 
 # ------------- FINAL FIRST-SHARD FETCH (non-verify) -----
 if [[ "$VERIFY_ONLY" != true ]]; then
   echo "[$(timestamp)] Fetching first shard separately"
-  gguf_first=$(basename "$(echo ${_find} | head -n1 | sed "s/-[0-9]\{5\}-of-$total\.gguf$/-00001-of-$total.gguf/")")
   if [[ "$total" != "" ]] && [[ "$gguf_first" != "" ]]; then
     if [[ "$FORCE_REDOWNLOAD" == true ]]; then
-      echo "[$(timestamp)] Force redownload: removing existing first shard"
+      echo "[$(timestamp)] Force redownload: removing existing first shard (and gpg signature)"
       rm -f "$LOCAL_MODEL_DIR/$gguf_first" "$LOCAL_DOWNLOAD_DIR/$gguf_first" || true
+      rm -f "$LOCAL_MODEL_DIR/$gguf_first.sig" "$LOCAL_DOWNLOAD_DIR/$gguf_first.sig" || true
     fi
-    if ! [ -f "$gguf_first" ]; then
+    if ! [ -f "$LOCAL_MODEL_DIR/$gguf_first" ]; then
       until run_downloader "${QTYPE}" 1 "$LOCAL_DOWNLOAD_DIR" "$(basename "$gguf_first")"; do
         echo "[$(timestamp)] First shard download failed; retrying in 10s..."
         sleep 10
       done
       mv -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first")" "$LOCAL_MODEL_DIR/"
       echo "[$(timestamp)] First shard saved"
+      if [[ "$SKIP_GPG" != "true" ]]; then
+        until run_downloader "${QTYPE}" -2 "$LOCAL_DOWNLOAD_DIR" "$(basename "$gguf_first.sig")"; do
+          echo "[$(timestamp)] First shard signature download failed; retrying in 10s..."
+          sleep 10
+        done
+        mv -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first.sig")" "$LOCAL_MODEL_DIR/"
+        echo "[$(timestamp)] First shard gpg signature saved"
+      fi
     else
       echo "[$(timestamp)] First shard already exists"
+      if [[ "$SKIP_GPG" != "true" ]]; then
+        if ! [ -f "$LOCAL_MODEL_DIR/$gguf_first.sig" ]; then
+          until run_downloader "${QTYPE}" -2 "$LOCAL_DOWNLOAD_DIR" "$(basename "$gguf_first.sig")"; do
+            echo "[$(timestamp)] First shard gpg signature download failed; retrying in 10s..."
+            sleep 10
+          done
+          mv -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first.sig")" "$LOCAL_MODEL_DIR/"
+          echo "[$(timestamp)] First shard gpg signature saved"
+        else
+          echo "[$(timestamp)] First shard gpg signature already exists"
+        fi
+      fi
     fi
   else
     echo "Error: unable to find previous shards..." >&2
@@ -467,7 +621,7 @@ first_index=${indices[0]}
 count_expected=$((10#$last_index - 10#$first_index + 1))
 
 if [[ ${#indices[@]} -ne $count_expected ]]; then
-  echo "Error: $((count_expected - ${#indices[@]})) missing shard(s) between $first_index and $last_index. Verify recipe or rerun." >&2
+  echo "[$(timestamp)] Error - $((count_expected - ${#indices[@]})) missing shard(s) between $first_index and $last_index. Verify recipe or rerun." >&2
   echo "Missing indices:"
   # generate the full expected sequence, then filter out the ones you *have*
   seq -f "%05g" "$((10#$first_index))" "$((10#$last_index))" \
@@ -475,6 +629,32 @@ if [[ ${#indices[@]} -ne $count_expected ]]; then
   exit 1
 fi
 
-
 echo "[$(timestamp)] All shards from $first_index to $last_index are present."
+
+if [[ "$SKIP_GPG" != "true" ]]; then
+  if command -v gpg >/dev/null 2>&1; then
+    if [ ! -f "$LOCAL_MODEL_DIR/$gguf_first" ]; then
+        echo "Error: Shard file '$gguf_first' not found."
+        [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+        exit 5
+    fi
+    if [ ! -f "$LOCAL_MODEL_DIR/$gguf_first.sig" ]; then
+        echo "Error: Signature file '$gguf_first.sig' is missing."
+        echo "Hint: To skip GPG verification, re-run this script with the --skip-gpg option."
+        [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+        exit 5
+    fi
+    if gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --verify "$LOCAL_MODEL_DIR/$gguf_first.sig" "$LOCAL_MODEL_DIR/$gguf_first" > /dev/null 2>&1; then
+        echo "[$(timestamp)] GPG signature verification for '$gguf_first.sig' successful."
+    else
+        echo "Error: GPG signature verification failed for '$gguf_first.sig'."
+        [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+        exit 4
+    fi
+    [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+  else
+    echo "Warning: 'gpg' command not found. Signature verification skipped." >&2
+  fi
+fi
+
 echo "Download and verification complete. Enjoy!"
