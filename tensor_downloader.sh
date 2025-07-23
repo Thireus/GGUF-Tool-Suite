@@ -5,7 +5,7 @@
 #** downloads pre-quantised tensors/shards to cook recipes.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-20-2025 -------------------- **#
+#** --------------- Updated: Jul-23-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -33,7 +33,7 @@ set -u
 #
 # Params:
 #   QUANT           (mandatory) quantization tag, e.g. "BF16"
-#   FileID          (mandatory) integer chunk ID; 0 => "tensors.map"
+#   FileID          (mandatory) integer chunk ID; 0 => "tensors.map"; -1 => "tensors.map.sig"; -2 => "*-00001-of-*.gguf.sig"
 #   DestinationDir  (optional)  default: "."
 #   Filename        (optional)  default: same as downloaded file
 #
@@ -167,10 +167,86 @@ verify_map() {
   return 0
 }
 
+verify_asc() {
+  local f=$1
+  local begin_count end_count first_line last_line
+
+  # 1) File must exist and be readable
+  if [[ ! -r "$f" ]]; then
+    echo "Error: '$f' not found or not readable." >&2
+    return 1
+  fi
+
+  # 2) Count BEGIN / END blocks
+  begin_count=$(grep -c '^-----BEGIN PGP PUBLIC KEY BLOCK-----$' "$f")
+  end_count  =$(grep -c '^-----END PGP PUBLIC KEY BLOCK-----$'  "$f")
+
+  # 3) There must be at least one block, and counts must match
+  if (( begin_count == 0 )); then
+    echo "Error: no BEGIN PGP PUBLIC KEY BLOCK found." >&2
+    return 1
+  fi
+  if (( begin_count != end_count )); then
+    echo "Error: $begin_count BEGIN but $end_count END markers." >&2
+    return 1
+  fi
+
+  # 4) First non-empty line must be BEGIN
+  first_line=$(grep -v '^[[:space:]]*$' "$f" | head -n1)
+  if [[ "$first_line" != '-----BEGIN PGP PUBLIC KEY BLOCK-----' ]]; then
+    echo "Error: first non-empty line is not BEGIN marker." >&2
+    return 1
+  fi
+
+  # 5) Last non-empty line must be END
+  last_line=$(grep -v '^[[:space:]]*$' "$f" | tail -n1)
+  if [[ "$last_line" != '-----END PGP PUBLIC KEY BLOCK-----' ]]; then
+    echo "Error: last non-empty line is not END marker." >&2
+    return 1
+  fi
+
+  # 6) (Optional) Ensure each block contains only valid base64 or header lines
+  #    Here we check that no lines between BEGIN/END contain illegal chars:
+  if grep -v -E '^(-----BEGIN PGP PUBLIC KEY BLOCK-----|Version:|Comment:|[A-Za-z0-9+/=]+|-----END PGP PUBLIC KEY BLOCK-----)$' "$f" >/dev/null; then
+    echo "Warning: found lines that aren't headers or valid Base64 characters." >&2
+    # not fatal, you can choose to return 1 here if you want to enforce stricter checks
+  fi
+
+  return 0
+}
+
+verify_sig() {
+  local sigfile=$1
+  local size
+
+  # 1) exists & readable
+  if [[ ! -r "$sigfile" ]]; then
+    echo "Error: '$sigfile' not found or not readable." >&2
+    return 1
+  fi
+
+  # 2) non-empty
+  if [[ ! -s "$sigfile" ]]; then
+    echo "Error: '$sigfile' is empty." >&2
+    return 1
+  fi
+
+  # 3) too small (less than 20 bytes?)
+  size=$(wc -c < "$sigfile")
+  if (( size < 20 )); then
+    echo "Error: '$sigfile' is too small ($size bytes) to be a valid signature." >&2
+    return 1
+  fi
+
+  return 0
+}
+
 # Wrapper: choose which verify to run
 verify_download() {
   local file="$1"
-  if [ "$FileID" -eq 0 ]; then
+  if [ "$FileID" -lt 0 ]; then
+    verify_sig "$file"
+  elif [ "$FileID" -eq 0 ]; then
     verify_map "$file"
   else
     verify_chunk "$file"
@@ -181,6 +257,10 @@ verify_download() {
 # Build filename and prepare download
 if [ "$FileID" -eq 0 ]; then
   FILENAME="tensors.map"
+elif [ "$FileID" -eq -1 ]; then
+  FILENAME="tensors.map.sig"
+elif [ "$FileID" -eq -2 ]; then
+  FILENAME="${MODEL_NAME}-${MAINTAINER}-${QUANT_U}-SPECIAL_TENSOR-00001-of-${CHUNKS}.gguf.sig"
 else
   IDX=$(printf "%05d" "$FileID")
   FILENAME="${MODEL_NAME}-${MAINTAINER}-${QUANT_U}-SPECIAL_TENSOR-${IDX}-of-${CHUNKS}.gguf"

@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-19-2025 -------------------- **#
+#** --------------- Updated: Jul-23-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -23,7 +23,7 @@
 #**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
 #***************************************************************#
 
-# Requires: pip install pandas numpy argparse
+# Requires: pip install pandas numpy argparse pgpy
 
 # Tip: You can pipe the output of this script (as long as no warning or debug logs are present) to quants_regex_merger like so: | tee /dev/tty | ./quants_regex_merger.sh
 # python quant_assign.py ppl_results_guessed.csv --gpu-tensors 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_shexp\.weight' 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_shexp\.weight' 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_shexp\.weight' --cpu-tensors 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight' 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight' 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight' --cpu-quants iq4_ks iq3_k iq2_k iq1_m_r4 --gpu-quants q8_0 iq6_k iq5_k_r4 --cpu-tensors-max-size 230 --tolerance 0.01 --exponential-factor 8 | ./quants_regex_merger.sh --model-name DeepSeek-R1-0528
@@ -60,10 +60,23 @@ DEFAULT_REDUCE = {
      1: 0.395,
 }
 
+script_dir = os.path.dirname(os.path.realpath(__file__))
+
+SKIP_GPG = False
+ALL_GPG_SIGS_VALID = True
+KEYRING_PATH = os.path.join(script_dir, "trusted-keys.asc")
+if not SKIP_GPG:
+    try:
+        import pgpy
+        import warnings
+        warnings.filterwarnings("ignore", module="pgpy")
+    except ImportError:
+        print("[Warning] pgpy not installed; gpg signature validation skipped.", file=sys.stderr)
+        SKIP_GPG = True
+
 # Remote connection settings for tensor_downloader.sh:
 # Please edit tensor_downloader.sh!
 # Resolve script directory for locating tensor_downloader.sh
-script_dir = os.path.dirname(os.path.realpath(__file__))
 tensor_downloader = os.path.join(script_dir, 'tensor_downloader.sh')
 
 if not os.path.isfile(tensor_downloader) or not os.access(tensor_downloader, os.X_OK):
@@ -322,6 +335,7 @@ def fetch_map_for_qtype(qtype: str):
     """
     Fetch and cache tensors.{qtype}.map via tensor_downloader.sh.
     """
+    global ALL_GPG_SIGS_VALID
     if qtype in _fetched_maps:
         return True
     # If it matches q…k (any case) but not exactly q…K, warn
@@ -347,6 +361,27 @@ def fetch_map_for_qtype(qtype: str):
         else:
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if INFO: print(f"[Info] Saved map to {local_map}")
+        if not SKIP_GPG:
+            cmd_sig = [tensor_downloader, qtype.upper(), "-1", tmpdir, f"tensors.{qtype}.map.sig"]
+            if INFO: print(f"[Info] Fetching map gpg signature for {qtype}...")
+            try:
+                if DEBUG or INFO:
+                    subprocess.run(cmd_sig, check=True)
+                else:
+                    subprocess.run(cmd_sig, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                if DEBUG: print(f"[Debug] Saved map gpg signature to {local_map}.sig")
+                if not verify_detached_signature(local_map):
+                    print(f"[Error] gpg signature verification of tensors.{qtype}.map failed.", file=sys.stderr)
+                    ALL_GPG_SIGS_VALID = False
+                    return False
+                else:
+                    if INFO: print(f"[Info] gpg signature of tensors.{qtype}.map succesful.")
+            except subprocess.CalledProcessError as e:
+                print(f"[Warning] failed to fetch tensors.map.sig: {e}")
+                ALL_GPG_SIGS_VALID = False
+                return False
+        else:
+            if INFO: print(f"[Warning] gpg signature verification is disabled and won't be checked for {local_map}.sig")
         _fetched_maps.add(qtype)
         return True
     except subprocess.CalledProcessError as e:
@@ -359,7 +394,9 @@ def get_map_sizes(qtype):
     Return parsed map sizes for given qtype, caching results.
     """
     if qtype not in _quant_maps:
-        fetch_map_for_qtype(qtype)
+        if not fetch_map_for_qtype(qtype):
+            print(f"Error: Fetching valid map for qtype: {qtype} was unsuccessful.")
+            sys.exit(8)
         # parse_map_file now returns tuple
         _quant_maps[qtype] = parse_map_file(qtype)
     return _quant_maps[qtype]
@@ -649,9 +686,85 @@ def assign_qtype(default_qtype, regex_assign_list, quants, names):
         out[name] = assigned
     return out
 
+# Module-level cache for public keys
+PUB_KEYS = []
+def load_public_keys():
+    """
+    Load and cache all PGP public keys from the ASCII-armored keyring.
+    Raises if keyring is missing or invalid.
+    """
+    global PUB_KEYS
+    if PUB_KEYS:
+        return PUB_KEYS
+
+    if not os.path.isfile(KEYRING_PATH):
+        raise FileNotFoundError(f"Keyring not found: {KEYRING_PATH!r}")
+
+    blob = open(KEYRING_PATH, 'r').read()
+    # Find all ASCII-armored public key blocks
+    pattern = re.compile(
+        r"-----BEGIN PGP PUBLIC KEY BLOCK-----(?:.|\n)*?-----END PGP PUBLIC KEY BLOCK-----",
+        re.DOTALL
+    )
+    matches = pattern.findall(blob)
+
+    if not matches:
+        raise ValueError(f"[Error] No PGP public keys found in {KEYRING_PATH!r}")
+
+    for block in matches:
+        try:
+            key = pgpy.PGPKey.from_blob(block) # type: ignore
+            # pgpy.PGPKey.from_blob may return key or (key, _), handle both
+            if isinstance(key, tuple):
+                key = key[0]
+            PUB_KEYS.append(key)
+        except Exception as e:
+            # skip invalid blocks
+            continue
+
+    if not PUB_KEYS:
+        raise ValueError(f"[Error] Failed to parse any public keys from {KEYRING_PATH!r}")
+
+    return PUB_KEYS
+
+
+def verify_detached_signature(file_path):
+    """
+    Verify that file_path + ".sig" is a valid detached signature
+    by one of the loaded public keys.
+    Returns True on success, False on failure.
+    """
+    if not PUB_KEYS:
+        load_public_keys()
+
+    sig_path = file_path + ".sig"
+    if not os.path.isfile(sig_path):
+        raise FileNotFoundError(f"[Error] Signature file not found: {sig_path!r}")
+
+    # Read signature in binary mode to handle both ASCII and binary sigs
+    with open(sig_path, 'rb') as f:
+        sig_blob = f.read()
+    try:
+        signature = pgpy.PGPSignature.from_blob(sig_blob) # type: ignore
+    except Exception as e:
+        print(f"[Error] Error parsing signature: {e}", file=sys.stderr)
+        return False
+
+    # Read the signed data as binary
+    with open(file_path, 'rb') as f:
+        data = f.read()
+
+    for key in PUB_KEYS:
+        try:
+            if key.verify(data, signature):
+                return True
+        except Exception:
+            continue
+
+    return False
 
 def main():
-    global DEBUG, INFO
+    global DEBUG, INFO, SKIP_GPG, ALL_GPG_SIGS_VALID
     parser = argparse.ArgumentParser(description="Assign optimal quants per tensor based on PPL CSV.")
     parser.add_argument('--debug', action='store_true', help='Show debug logs')
     parser.add_argument('--info', action='store_true', help='Show info logs')
@@ -679,7 +792,26 @@ def main():
                              'Higher values push quantization toward extremes; default is 1.0.')
     parser.add_argument('--ignore-f32', action='store_true', help='Ignore f32 tensors (default: not ignored)')
     parser.add_argument('--tensors-from-csv', action='store_true', help='Obtains list of tensors from csv file only (default: tensors are obtained from map file)')
+    parser.add_argument('--skip-gpg', action='store_true',
+                        help='Skip gpg signature validation')
     args = parser.parse_args()
+
+    # ---- BEGIN pgpy‑based “trusted‑keys.asc” check ----
+    if not SKIP_GPG:
+        SKIP_GPG = args.skip_gpg
+    if not SKIP_GPG:
+        # Validate and load public keys
+        try:
+            load_public_keys()
+        except FileNotFoundError:
+            print("[Error] trusted-keys.asc not found in script directory.", file=sys.stderr)
+            print("[Hint] Provide trusted-keys.asc or use --skip-gpg.", file=sys.stderr)
+            sys.exit(6)
+        except ValueError as ve:
+            print(f"[Error] {ve}", file=sys.stderr)
+            print("[Hint] Add at least one valid public key or use --skip-gpg.", file=sys.stderr)
+            sys.exit(7)
+    # ---- END pgpy‑based check ----
 
     def parse_regex_assign_list(raw_list):
         parsed = []
@@ -730,7 +862,9 @@ def main():
     if INFO: print(f"[Info] Selected QTYPE: {qtype}")
 
     # Pre-fetch maps
-    fetch_map_for_qtype(qtype)
+    if not fetch_map_for_qtype(qtype):
+        print(f"Error: Fetching valid map for qtype: {qtype} was unsuccessful.")
+        sys.exit(8)
     _, items = get_map_sizes(qtype)
     _, items_bf16 = get_map_sizes('bf16')
     _items = items_bf16
@@ -1098,6 +1232,23 @@ def main():
     # Reconstruct a safely quoted command‐line
     quoted_args = [shlex.quote(arg) for arg in sys.argv]
     command_line = ' '.join(quoted_args)
+    # Compute SHA-256 of the ppl_results.csv file (if readable)
+    if os.path.isfile(args.csv_file):
+        try:
+            with open(args.csv_file, 'rb') as f:
+                sha256 = hashlib.sha256(f.read()).hexdigest()
+        except Exception:
+            sha256 = "ERROR"
+    else:
+        sha256 = "N/A"
+    print(f"# - Calibration dataset '{args.csv_file}' SHA-256: {sha256}")
+    if not SKIP_GPG:
+        if ALL_GPG_SIGS_VALID:
+            print(f"# - GPG signatures: PASSED")
+        else:
+            print(f"# - GPG signatures: FAILED")
+    else:
+        print(f"# - GPG signatures: DISABLED")
 
     # Wrap the command into lines starting with "# "
     wrapped_lines = textwrap.wrap(
