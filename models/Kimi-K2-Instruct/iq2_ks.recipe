@@ -1,0 +1,47 @@
+## Model head & embeddings
+token_embd\.weight=q8_0
+output\.weight=q8_0
+output_norm\.weight=f32
+
+## Special attention kernels — single-quant only (llama-quantize will choose a fallback qtype)
+blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=q8_0
+
+## Multi-headed attention parameters
+blk\.([0-9]|[1-5][0-9]|60)\.attn_v_b\.weight=q8_0
+blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_norm\.weight=f32
+blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_mqa\.weight=q8_0
+blk\.([0-9]|[1-5][0-9]|60)\.attn_output\.weight=q8_0
+blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a_norm\.weight=f32
+blk\.([0-9]|[1-5][0-9]|60)\.attn_q_b\.weight=q8_0
+blk\.([0-9]|[1-5][0-9]|60)\.attn_norm\.weight=f32
+blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a\.weight=q8_0
+
+## Core FFN weights
+blk\.0\.ffn_gate\.weight=q8_0
+blk\.([0-9]|[1-5][0-9]|60)\.ffn_norm\.weight=f32
+blk\.0\.ffn_down\.weight=q8_0
+blk\.0\.ffn_up\.weight=q8_0
+blk\.([1-9]|[1-5][0-9]|60)\.ffn_gate_inp\.weight=f32
+
+## Other tensors
+blk\.([1-9]|[1-5][0-9]|60)\.exp_probs_b\.bias=f32
+
+## GPU-loaded ffn_*_shexp
+# ffn_down_shexp (down-projection)
+blk\.([1-9]|[1-5][0-9]|60)\.ffn_down_shexp\.weight=iq2_ks
+
+# ffn_up_shexp (up-projection)
+blk\.([1-9]|[1-5][0-9]|60)\.ffn_up_shexp\.weight=iq2_ks
+
+# ffn_gate_shexp (gate-projection)
+blk\.([1-9]|[1-5][0-9]|60)\.ffn_gate_shexp\.weight=iq2_ks
+
+## CPU-loaded ffn_*_exps
+# ffn_down_exps (down-extraction)
+blk\.([1-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight=iq2_ks
+
+# ffn_up_exps (up-extraction)
+blk\.([1-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight=iq2_ks
+
+# ffn_gate_exps (gate-extraction)
+blk\.([1-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight=iq2_ks
