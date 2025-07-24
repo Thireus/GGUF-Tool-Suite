@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-23-2025 -------------------- **#
+#** --------------- Updated: Jul-24-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -83,6 +83,29 @@ _sha256sum() {
     # stdin‑mode: read data from pipe
     "${sha256tool[@]}" "${args[@]}" | awk '{print $1}'
   fi
+}
+
+# --- pure‑Bash shuffle replacement for `shuf` ---
+shuf() {
+  local lines=() line n i j tmp
+  # Read all stdin lines into an array
+  while IFS= read -r line; do
+    lines+=("$line")
+  done
+
+  # Fisher–Yates shuffle
+  n=${#lines[@]}
+  for (( i = n - 1; i > 0; i-- )); do
+    j=$(( RANDOM % (i + 1) ))
+    tmp=${lines[i]}
+    lines[i]=${lines[j]}
+    lines[j]=$tmp
+  done
+
+  # Print shuffled lines
+  for line in "${lines[@]}"; do
+    printf '%s\n' "$line"
+  done
 }
 
 # ================= COMMAND-LINE ARGUMENTS =================
@@ -538,6 +561,158 @@ echo "PPL command template: $PPL_COMMAND_TEMPLATE"
 echo "Main shard pattern: $MAIN_SHARD_PATTERN"
 echo "Use SHA256 verification: $USE_SHA256"
 
+shuffle_shards_by_tensor_patterns() {
+  local assoc_name=$1
+  local out_name=$2
+
+  # nameref only for the input map
+  local -n _shard_map=$assoc_name
+
+  # 1) collect & shuffle all shard keys
+  local shard_keys=("${!_shard_map[@]}")
+  local all_shards
+  mapfile -t all_shards < <(printf '%s\n' "${shard_keys[@]}" | shuf)
+
+  # 2) split into non-numeric vs all-numeric shards
+  local non_num=() all_num=()
+  for shard in "${all_shards[@]}"; do
+    IFS=' ' read -r -a tensors <<< "${_shard_map[$shard]}"
+    local has_non=0
+    for t in "${tensors[@]}"; do
+      [[ ! $t =~ [0-9] ]] && { has_non=1; break; }
+    done
+    (( has_non )) && non_num+=("$shard") || all_num+=("$shard")
+  done
+
+  # 3) bucket the all-numeric shards by pattern
+  declare -A pat_to_shards
+  for shard in "${all_num[@]}"; do
+    IFS=' ' read -r -a tensors <<< "${_shard_map[$shard]}"
+    for t in "${tensors[@]}"; do
+      local pat="^$(sed -E 's/[0-9]+/\\\.[0-9]+\\\./g' <<<"$t")\$"
+      local prev="${pat_to_shards[$pat]:-}"
+      case " $prev " in
+        *" $shard "*) ;;
+        *) pat_to_shards[$pat]="$prev $shard" ;;
+      esac
+    done
+  done
+
+  # 4) group patterns by their bucket size
+  declare -A size_to_shards
+  for pat in "${!pat_to_shards[@]}"; do
+    # count how many shards in this pattern
+    local bucket="${pat_to_shards[$pat]}"
+    local cnt=$(wc -w <<<"$bucket")
+    # collect all shards under this size
+    size_to_shards[$cnt]="${size_to_shards[$cnt]:-} $bucket"
+  done
+
+  # 5) sort sizes ascending
+  mapfile -t sizes_sorted < <(
+    for size in "${!size_to_shards[@]}"; do
+      printf '%s\n' "$size"
+    done | sort -n
+  )
+
+  # 6) for each size, dedupe, shuffle all shards in that size-group, and collect
+  local ordered_num=()
+  for size in "${sizes_sorted[@]}"; do
+    # split into array and dedupe
+    read -r -a all_bucket <<< "${size_to_shards[$size]}"
+    # use associative array to unique
+    declare -A seen=()
+    local unique_bucket=()
+    for s in "${all_bucket[@]}"; do
+      [[ -z "${seen[$s]:-}" ]] && { seen[$s]=1; unique_bucket+=("$s"); }
+    done
+    # shuffle the entire size-group at once
+    mapfile -t shuffled_bucket < <(printf '%s\n' "${unique_bucket[@]}" | shuf)
+    ordered_num+=("${shuffled_bucket[@]}")
+  done
+
+  # 7) build result: non-numeric first, then these ordered numeric shards
+  local __result=()
+  (( ${#non_num[@]} )) && __result+=("${non_num[@]}")
+  (( ${#ordered_num[@]} )) && __result+=("${ordered_num[@]}")
+
+  # write back to caller’s array
+  eval "${out_name}=(\"\${__result[@]}\")"
+}
+
+# shuffle_tensors_by_pattern:
+#   $1 = name of input array containing tensor names
+#   $2 = name of output array to populate with shuffled tensor list
+shuffle_tensors_by_pattern() {
+  local in_name=$1
+  local out_name=$2
+
+  # nameref for input tensor list
+  local -n _tensors=$in_name
+
+  # 1) split into non‑numeric vs numeric
+  local non_num=() numeric=()
+  for t in "${_tensors[@]}"; do
+    if [[ $t =~ [0-9] ]]; then
+      numeric+=("$t")
+    else
+      non_num+=("$t")
+    fi
+  done
+
+  # 2) shuffle non‑numeric group
+  local shuffled_non_num=()
+  if (( ${#non_num[@]} )); then
+    mapfile -t shuffled_non_num < <(printf '%s\n' "${non_num[@]}" | shuf)
+  fi
+
+  # 3) bucket numeric tensors by pattern (replace digit‑runs with \.[0-9]+\.)
+  declare -A pat_to_tensors
+  for t in "${numeric[@]}"; do
+    local pat="^$(sed -E 's/[0-9]+/\\\.[0-9]+\\\./g' <<<"$t")\$"
+    local prev="${pat_to_tensors[$pat]:-}"
+    case " $prev " in
+      *" $t "*) ;;
+      *) pat_to_tensors[$pat]="$prev $t" ;;
+    esac
+  done
+
+  # 4) group patterns by bucket size
+  declare -A size_to_tensors
+  for pat in "${!pat_to_tensors[@]}"; do
+    local bucket="${pat_to_tensors[$pat]}"
+    local cnt
+    cnt=$(wc -w <<<"$bucket")
+    local prev="${size_to_tensors[$cnt]:-}"
+    size_to_tensors[$cnt]="$prev $bucket"
+  done
+
+  # 5) sort sizes ascending
+  mapfile -t sizes_sorted < <(
+    for size in "${!size_to_tensors[@]}"; do
+      printf '%s\n' "$size"
+    done | sort -n
+  )
+
+  # 6) for each size, shuffle all tensors in that group and collect
+  local ordered_num=()
+  for size in "${sizes_sorted[@]}"; do
+    read -r -a bucket_all <<< "${size_to_tensors[$size]}"
+    mapfile -t bucket_shuf < <(printf '%s\n' "${bucket_all[@]}" | shuf)
+    for t in "${bucket_shuf[@]}"; do
+      ordered_num+=("$t")
+    done
+  done
+
+  # 7) combine non‑numeric first, then ordered numeric
+  local __result=()
+  (( ${#shuffled_non_num[@]} )) && __result+=("${shuffled_non_num[@]}")
+  (( ${#ordered_num[@]}    )) && __result+=("${ordered_num[@]}")
+
+  # write back to caller’s array
+  eval "${out_name}=(\"\${__result[@]}\")"
+}
+
 # Infinite loop: for each qtype and tensor, until all benchmarks exist; then sleep 60s and repeat
 while true; do
     for qtype in "${QTYPES[@]}"; do
@@ -619,17 +794,17 @@ while true; do
         }
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] Main model shard for PPL: $main_model_file"
 
-        # collect all shard keys into an array…
-        shard_keys=( "${!shard_to_tensors[@]}" )
-        # …then shuffle them
-        mapfile -t shuffled_shard_keys < <(printf '%s\n' "${shard_keys[@]}" | shuf)
+        # Organise shards so that the ones with tensors that have less layers come first because these tensors cannot be interpolated easily, so it's best to process them first
+        shuffle_shards_by_tensor_patterns shard_to_tensors shuffled_shard_keys
 
         # Loop over each shard filename and its tensor names
         for shard_fname in "${shuffled_shard_keys[@]}"; do
             # For each tensor_name in this shard
             IFS=' ' read -r -a tensor_list <<< "${shard_to_tensors[$shard_fname]}"
+            
             # shuffle that array
-            mapfile -t shuffled_tensor_list < <(printf '%s\n' "${tensor_list[@]}" | shuf)
+            shuffle_tensors_by_pattern tensor_list shuffled_tensor_list
+            
             for tensor_name in "${shuffled_tensor_list[@]}"; do
                 result_file="bench_result.${tensor_name}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
                 if [[ -f "$result_file" ]]; then
