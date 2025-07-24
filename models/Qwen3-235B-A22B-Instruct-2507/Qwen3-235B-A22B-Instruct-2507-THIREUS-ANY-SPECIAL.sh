@@ -477,11 +477,12 @@ custom=$(
 ulimit -S -s unlimited
 ulimit -n 99999
 
-# Kimi-K2-Instruct-THIREUS-TEMPLATE.gguf is too big and not worth using it because Q8_0 quanitsation is fast!
-mkdir Kimi-K2-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
+# Qwen3-235B-A22B-Instruct-2507-THIREUS-TEMPLATE.gguf is too big and not worth using it because Q8_0 quanitsation is fast!
+mkdir Qwen3-235B-A22B-Instruct-2507-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
     --custom-q "$custom" \
-    --imatrix imatrix_kimik2_ubergarm.dat \
-    Kimi-K2-Instruct-THIREUS-BF16-SPECIAL_SPLIT/Kimi-K2-Instruct-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01097.gguf \
-    Kimi-K2-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/Kimi-K2-Instruct-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
+    --imatrix imatrix_ubergarm.dat \
+    Qwen3-235B-A22B-Instruct-2507-THIREUS-BF16-SPECIAL_SPLIT/Qwen3-235B-A22B-Instruct-2507-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01132.gguf \
+    Qwen3-235B-A22B-Instruct-2507-THIREUS-${1^^}-SPECIAL_SPLIT/Qwen3-235B-A22B-Instruct-2507-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
     ${1^^} \
-    32 && chmod 444 Kimi-K2-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
+    32 && chmod 444 Qwen3-235B-A22B-Instruct-2507-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
+    

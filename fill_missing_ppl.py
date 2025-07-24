@@ -25,6 +25,7 @@
 
 # Requires: pip install pandas numpy scipy tqdm
 
+import os
 import pandas as pd
 import numpy as np
 from scipy import stats, interpolate
@@ -32,6 +33,9 @@ from tqdm import tqdm
 import argparse
 import re
 
+# Global counters
+NB_FILLED = 0
+NB_EXISTS = 0
 
 def parse_pct(val):
     """
@@ -52,35 +56,48 @@ def detect_classes_and_layers(columns):
     Scan column names to identify tensor classes and layers.
     Groups columns matching:
       blk.{layer}.ffn_{direction}_{metric}.weight
-    into classes keyed by metric, each with 'dirs': up/down/gate lists.
-    Also collects all layer numbers.
+    into classes keyed by metric, each with:
+      - 'dirs': {'up': [...], 'down': [...], 'gate': [...]}
+      - 'layers': sorted list of layer indices seen for that metric
 
     Returns:
-      classes: dict(metric -> {'dirs': {'up': [...], 'down': [...], 'gate': [...]}})
-      layers: sorted list of int layer indices
+      classes: dict(metric -> {'dirs': ..., 'layers': [...]})
+      all_layers: sorted list of all layer indices
     """
+    global NB_EXISTS
     pattern = re.compile(
-        r"^blk\.(?P<layer>\d+)\.ffn_(?P<dir>up|down|gate)_(?P<metric>\w+)\.weight$"
+        r"^blk\.(?P<layer>\d+)\.ffn_(?P<dir>up|down|gate)(?:_(?P<metric>\w+))?\.weight$"
     )
     classes = {}
-    layer_set = set()
+    all_layer_set = set()
+    
     for col in columns:
         m = pattern.match(col)
         if not m:
             print(f"Unmatched column: {col}")
+            NB_EXISTS += 1 # We'll assume these have already been computed (if not the script won't move pass the other layers because not computed either)
             continue
+
         layer = int(m.group('layer'))
         dir_ = m.group('dir')
         metric = m.group('metric')
-        layer_set.add(layer)
-        classes.setdefault(metric, {'dirs': {'up': [], 'down': [], 'gate': []}})
+        
+        all_layer_set.add(layer)
+        
+        if metric not in classes:
+            classes[metric] = {'dirs': {'up': [], 'down': [], 'gate': []}, 'layer_set': set()}
+        
         classes[metric]['dirs'][dir_].append((layer, col))
-    # Sort columns within each direction by layer index
+        classes[metric]['layer_set'].add(layer)
+    
+    # Finalize structure: sort layers and columns
     for parts in classes.values():
         for d, col_tuples in parts['dirs'].items():
             parts['dirs'][d] = [c for _, c in sorted(col_tuples, key=lambda x: x[0])]
-    layers = sorted(layer_set)
-    return classes, layers
+        parts['layers'] = sorted(parts.pop('layer_set'))
+
+    all_layers = sorted(all_layer_set)
+    return classes, all_layers
 
 
 def fit_piecewise_linear(x, y):
@@ -206,11 +223,13 @@ def process_dataframe(df):
     Ignore outliers >3x avg before fitting.
     Logs detailed diagnostics for each row/metric.
     """
+    global NB_FILLED, NB_EXISTS
+
     ppl_columns = [col for col in df.columns if not col.startswith("QTYPE")]
     contains_pct = df[ppl_columns].apply(lambda col: col.map(lambda v: isinstance(v, str) and '%' in v)).values.any()
     
     classes, layers = detect_classes_and_layers(ppl_columns)
-    x = np.array(layers)
+    # x = np.array(layers) # Not used anymore
     out = df.astype(object)
     methods = {'piecewise': fit_piecewise_linear, 'spline': fit_spline}
 
@@ -226,6 +245,7 @@ def process_dataframe(df):
         for metric, parts in classes.items():
             dirs = parts['dirs']
             print(f"  Metric '{metric}': dirs present = {[d for d in dirs if dirs[d]]}")
+            _x = parts['layers'] # Some classes can have less or more layers than others
 
             # parse and clean each direction
             arrs = {}
@@ -243,13 +263,39 @@ def process_dataframe(df):
                 print(f"    {d}: {np.count_nonzero(~np.isnan(arr))}/{len(arr)} known values")
             if not arrs:
                 continue
-
             # generate mean curves for all combinations
             combos = []  # list of (name, dirs_list, mean_curve)
             all_dirs = list(arrs.keys())
+            # Stack arrays into a 2D array: shape = (num_arrays, array_length)
+            stacked = np.stack(list(arrs.values()))
+            # Mean is used in case we face lone tensors
+            mean_ppl = []
+            for i in range(stacked.shape[1]):  # iterate over columns (positions)
+                col = stacked[:, i]
+                valid = col[~np.isnan(col)]
+                if valid.size == 0:
+                    mean_ppl.append(np.nan)
+                else:
+                    mean_ppl.append(valid.mean())
             # single individual series also considered
             for d in all_dirs:
-                best_pred = methods['piecewise'](x, arrs[d])
+                arr = np.asarray(arrs[d])
+                if arr.size > 0 and np.all(np.isnan(arr)):
+                    print(
+                        f"Warning: No value for lone tensor '{dirs[d]}', attempting to use mean value of other dirs (which is the wrong approach, but we have no other option)."
+                    )
+                    # Replace arr values with corresponding values from mean_ppl
+                    arr[:] = mean_ppl  # in-place assignment
+                    arrs[d] = arr      # update the dictionary (optional, but safe)
+                    best_pred = arrs[d]
+                    combos.append((f"ind_{d}", [d], best_pred))
+                    if arr.size > 0 and np.all(np.isnan(arr)):
+                        print(
+                            f"Error: Lone tensor '{dirs[d]}' cannot be interpolated, incomplete mean value of other dirs... Either exlude these tensors from the dataset or compute their ppl."
+                        )
+                        exit(1)
+                    continue
+                best_pred = methods['piecewise'](_x, arrs[d])
                 combos.append((f"ind_{d}", [d], best_pred))
             # combinations of 2 and all 3
             import itertools
@@ -268,13 +314,13 @@ def process_dataframe(df):
                     fitted[name] = curve
                 else:
                     # select best interpolation on mean curve
-                    _, pred = evaluate_methods(x, curve, methods)
+                    _, pred = evaluate_methods(_x, curve, methods)
                     fitted[name] = pred
                 print(f"    Combo {name}: used fitted series")
 
                         # for each direction pick best source
             for d, cols in dirs.items():
-                arr = arrs.get(d, np.full_like(x, np.nan))
+                arr = arrs.get(d, np.full_like(_x, np.nan))
                 known = ~np.isnan(arr)
                 best_name = None
                 best_err = np.inf
@@ -292,10 +338,15 @@ def process_dataframe(df):
                         best_name = name
                         best_pred = f * pred_curve
                 if best_pred is None:
-                    # fallback to zeros if nothing selected
-                    best_pred = np.zeros_like(x)
-                    print(f"      Warning: no prediction for {d}, defaulting to zero")
-                print(f"      {d}: best source {best_name}, mse={best_err:.4f}")
+                    if not np.all(np.isnan(arr)):
+                        best_pred = arr
+                        print(f"      {d}: best source origin, mse={best_err:.4f}")
+                    else:
+                        # fallback to zeros if nothing selected
+                        best_pred = np.zeros_like(_x)
+                        print(f"      Warning: no prediction for {dirs[d]}, defaulting to zero")
+                else:
+                    print(f"      {d}: best source {best_name}, mse={best_err:.4f}")
                 # fill
                 for i, c in enumerate(cols):
                     orig = parse_pct(row[c])
@@ -303,29 +354,51 @@ def process_dataframe(df):
                         val = f"{best_pred[i]:.4f}%"
                         out.at[idx, c] = val
                         print(f"        filled {c} = {val}")
+                        NB_FILLED += 1
                     else:
                         val = f"{orig:.4f}%"
                         out.at[idx, c] = val
                         print(f"        exists {c} = {val}")
+                        NB_EXISTS += 1
     return out
 
 
-def main(in_csv, out_csv):
+def main(input_csv, output_csv=None):
     """
-    Load the input CSV, process missing PPL%% entries, and write filled output CSV.
+    Load the input CSV, process missing PPL% entries,
+    and write filled output CSV. If output_csv is not provided,
+    append the interpolation percentage to the input filename.
     """
-    print(f"Loading {in_csv}")
-    df = pd.read_csv(in_csv)
+    global NB_FILLED, NB_EXISTS
+
+    print(f"Loading {input_csv}")
+    df = pd.read_csv(input_csv)
     df, contains_pct = transform_to_pct_if_needed(df)
+
     print("Processing...")
-    filled = process_dataframe(df)
-    print(f"Writing to {out_csv}")
-    filled.to_csv(out_csv, index=False)
+    filled_df = process_dataframe(df)
+
+    # Compute summary
+    total = NB_FILLED + NB_EXISTS
+    pct = (NB_FILLED / total * 100) if total > 0 else 0
+
+    # Determine output filename
+    if output_csv is None:
+        base, ext = os.path.splitext(input_csv)
+        output_csv = f"{base}_{int(round(pct)):02d}percent_interpolated{ext}"
+
+    print(f"Writing to {output_csv}")
+    filled_df.to_csv(output_csv, index=False)
+
+    # Display summary
+    print(f"Interpolated {NB_FILLED}/{total} ({pct:.1f}%)")
     print("Done.")
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('input_csv')
-    parser.add_argument('output_csv')
+    parser = argparse.ArgumentParser(description="Interpolate missing PPL% in CSV files.")
+    parser.add_argument('input_csv', help='Path to the input CSV file')
+    parser.add_argument('output_csv', nargs='?', default=None,
+                        help=('Optional path for the output CSV. '  
+                              'If omitted, will append interpolation percentage to input filename.'))
     args = parser.parse_args()
     main(args.input_csv, args.output_csv)
