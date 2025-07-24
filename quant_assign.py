@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-23-2025 -------------------- **#
+#** --------------- Updated: Jul-24-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -97,6 +97,24 @@ STRETCH_MIN = 1.0
 STRETCH_MAX = 10.0
 STRETCH_STEP = 0.01
 
+# ─── Create a unique temp‐dir at script launch ────────────────────────────────
+# This will give you something like /tmp/gguf.thireus.com.ab12cd
+TMP_DIR = tempfile.mkdtemp(prefix="gguf.thireus.com.", dir=tempfile.gettempdir())
+if DEBUG: print(f"[Debug] Using temp directory: {TMP_DIR}")
+
+# Optionally, register cleanup at exit
+import atexit
+import shutil
+
+def _cleanup_tempdir(path=TMP_DIR):
+    try:
+        shutil.rmtree(path)
+        if DEBUG: print(f"[Debug] Cleaned up temp directory: {path}")
+    except Exception:
+        pass
+
+atexit.register(_cleanup_tempdir)
+# ──────────────────────────────────────────────────────────────────────────────
 
 def extract_quant_num(qtype):
     """
@@ -351,9 +369,8 @@ def fetch_map_for_qtype(qtype: str):
             f"[Warning] qtype={qtype!r} is fully capitalized. "
             "Q‑types are case‑sensitive and there are no known quant types that are entirely uppercase."
         )
-    tmpdir = tempfile.gettempdir()
-    local_map = os.path.join(tmpdir, f"tensors.{qtype}.map")
-    cmd = [tensor_downloader, qtype.upper(), "0", tmpdir, f"tensors.{qtype}.map"]
+    local_map = os.path.join(TMP_DIR, f"tensors.{qtype}.map")
+    cmd = [tensor_downloader, qtype.upper(), "0", TMP_DIR, f"tensors.{qtype}.map"]
     if INFO: print(f"[Info] Fetching map for {qtype}...")
     try:
         if DEBUG or INFO:
@@ -362,7 +379,7 @@ def fetch_map_for_qtype(qtype: str):
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if INFO: print(f"[Info] Saved map to {local_map}")
         if not SKIP_GPG:
-            cmd_sig = [tensor_downloader, qtype.upper(), "-1", tmpdir, f"tensors.{qtype}.map.sig"]
+            cmd_sig = [tensor_downloader, qtype.upper(), "-1", TMP_DIR, f"tensors.{qtype}.map.sig"]
             if INFO: print(f"[Info] Fetching map gpg signature for {qtype}...")
             try:
                 if DEBUG or INFO:
@@ -408,8 +425,7 @@ def parse_map_file(qtype):
       - sizes: dict tensor_name -> bytes_size
       - actual_qtypes: dict tensor_name -> dtype (e.g., 'bf16', 'f32')
     """
-    tmpdir = tempfile.gettempdir()
-    path = os.path.join(tmpdir, f"tensors.{qtype}.map")
+    path = os.path.join(TMP_DIR, f"tensors.{qtype}.map")
     sizes = {}
     actual_qtypes = {}
     if not os.path.exists(path):
