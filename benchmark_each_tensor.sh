@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-24-2025 -------------------- **#
+#** --------------- Updated: Jul-26-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -249,8 +249,8 @@ BASELINE_QTYPE="iq3_xxs"
 # 8. PPL command template:
 PPL_COMMAND_TEMPLATE='CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0,2,1 ~/ik_llama-main-b3833-65dd65c-bin-win-cuda-12.8-x64/llama-perplexity \
 -m {MODEL_FILE} -mla 3 -fa -amb 1024 -fmoe -ctk f16 -c 512 -ngl 99 \
--ot "blk\.(3|4|5|6)\.ffn_.*=CUDA0" -ot "blk\.(7|8|9)\.ffn_.*=CUDA1" -ot "blk\.(10|11|12)\.ffn_.*=CUDA2" \
--ot exps=CPU -b 4096 -ub 4096 --warmup-batch --no-mmap --threads 36 --main-gpu 0 --seed 1337 \
+-ot "blk\.(3|4|5)\.ffn_.*=CUDA0" -ot "blk\.(6|7|8)\.ffn_.*=CUDA1" -ot "blk\.(9|10)\.ffn_.*=CUDA2" \
+-ot exps=CPU -b 16384 -ub 8192 --warmup-batch --no-mmap --threads 36 --main-gpu 0 --seed 1337 \
 -f ../../../wiki.test.raw --chunks ${PPL_COMMAND_CHUNKS_TO_PROCESS}'
 
 # 9. Pattern to identify the main model shard in LOCAL_MODEL_DIR.
