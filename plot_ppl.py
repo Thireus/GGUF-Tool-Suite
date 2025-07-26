@@ -5,7 +5,7 @@
 #** identify tensor quantisation sensitiveness patterns.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-10-2025 -------------------- **#
+#** --------------- Updated: Jul-26-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -37,12 +37,14 @@ from matplotlib.widgets import CheckButtons, Button
 import tkinter as tk
 from tkinter import simpledialog
 
+DEBUG = False
 
 def parse_args():
     p = argparse.ArgumentParser(
         description='Interactive PPL % bar chart with dynamic QTYPE and tensor filtering.'
     )
-    p.add_argument('csv_file', help='Path to the CSV file (OUTPUT_CSV)')
+    p.add_argument('csv_file', help='Path to the primary CSV file (OUTPUT_CSV)')
+    p.add_argument('--interp_csv', help='Path to the second CSV file with interpolated % results', default=None)
     p.add_argument('--qtypes', nargs='+', default=None,
                    help='List of QTYPEs to pre-select (default: all)')
     p.add_argument('--tensors', nargs='+', default=None,
@@ -82,12 +84,32 @@ def load_and_parse(path):
     num_df = num_df.dropna(how='all')
     return num_df, raw_strings
 
+
+def load_interp(path):
+    """Load interpolated CSV: values already in % (no normalization)."""
+    df = pd.read_csv(path)
+    if 'QTYPE' not in df.columns:
+        sys.exit("Interpolated CSV must contain 'QTYPE' header")
+    df = df.set_index('QTYPE')
+
+    def to_pct(x):
+        s = str(x).strip()
+        if pd.isna(x) or s in ('', '404', '404%'):
+            return np.nan
+        v = float(s.rstrip('%'))
+        return np.nan if v == 404 else v
+
+    interp_df = pd.DataFrame({c: df[c].apply(to_pct) for c in df.columns}, index=df.index)
+    return interp_df.dropna(how='all')
+
+
 def extract_layer(name):
     m = re.match(r'blk\.(\d+)\.', name)
     return int(m.group(1)) if m else -1
 
 
-def draw_chart(pct_df, qtypes, patterns, ax):
+def draw_chart(pct_df, interp_df, qtypes, patterns, ax):
+    # filter primary data by QTYPEs and tensor patterns
     sub = pct_df.loc[qtypes]
     cols = list(sub.columns)
     if patterns:
@@ -98,32 +120,77 @@ def draw_chart(pct_df, qtypes, patterns, ax):
         cols = [c for c in cols if c in dict.fromkeys(keep)]
     sub = sub[cols]
 
-    long = sub.reset_index().melt('QTYPE', var_name='tensor', value_name='pct')
-    long['layer'] = long['tensor'].apply(extract_layer)
-    vals = long['pct'].dropna()
+    # long-form for primary
+    long1 = sub.reset_index().melt('QTYPE', var_name='tensor', value_name='pct')
+    long1['layer'] = long1['tensor'].apply(extract_layer)
+
+    # long-form for interpolated (if provided)
+    long2 = None
+    if interp_df is not None:
+        sub2 = interp_df.reindex(index=qtypes, columns=cols)
+        long2 = sub2.reset_index().melt('QTYPE', var_name='tensor', value_name='pct')
+        long2['layer'] = long2['tensor'].apply(extract_layer)
+
     ax.clear()
+    # combine values to determine y-limits
+    vals = long1['pct'].dropna()
+    if long2 is not None:
+        vals = pd.concat([vals, long2['pct'].dropna()])
     if vals.empty:
-        ax.text(0.5,0.5,'No data to display',ha='center',va='center')
+        ax.text(0.5, 0.5, 'No data to display', ha='center', va='center')
         return
 
     ymin, ymax = vals.min(), vals.max()
     order = cols
-    long['tensor'] = pd.Categorical(long['tensor'], categories=order, ordered=True)
-    long = long.sort_values(['layer','tensor','QTYPE'])
 
+    # bar positioning
     n, m = len(order), len(qtypes)
     x = np.arange(n)
-    width = 0.8 / m
-    for i, qt in enumerate(qtypes):
-        series = []
-        for t in order:
-            v = long.loc[(long['QTYPE']==qt)&(long['tensor']==t),'pct'].values
-            series.append(v[0] if v.size else np.nan)
-        ax.bar(x + i*width, series, width=width, label=qt)
+    width = 0.8 / m  # total span 0.8 across qtypes
 
-    ax.set_xticks(x + (0.8-width)/2)
+    # pivot for faster lookup
+    primary_pivot = sub
+    interp_pivot = interp_df.reindex(index=qtypes, columns=cols) if interp_df is not None else None
+
+    # plot bars: blue for primary when present, red for interpolated only where primary missing
+    for i, qt in enumerate(qtypes):
+        heights = []
+        bar_colors = []
+        for t in order:
+            # Try to fetch the primary value
+            try:
+                primary_val = primary_pivot.at[qt, t]
+            except KeyError:
+                primary_val = np.nan
+
+            has_primary = pd.notna(primary_val)
+
+            if has_primary:
+                heights.append(primary_val)
+                bar_colors.append('blue')
+                if DEBUG: print(f"[DEBUG] QTYPE: {qt}, Tensor: {t} — primary = {primary_val:.2f} → color = blue")
+            else:
+                # Try interpolated fallback
+                if interp_pivot is not None:
+                    try:
+                        interp_val = interp_pivot.at[qt, t]
+                    except KeyError:
+                        interp_val = np.nan
+                else:
+                    interp_val = np.nan
+
+                has_interp = pd.notna(interp_val)
+                heights.append(interp_val if has_interp else np.nan)
+                bar_colors.append('red' if has_interp else 'gray')  # Optional gray for fully missing
+                interp_str = f"{interp_val:.2f}" if has_interp else "NaN"
+                if DEBUG: print(f"[DEBUG] QTYPE: {qt}, Tensor: {t} — primary = NaN, interpolated = {interp_str} → color = {'red' if has_interp else 'gray'}")
+
+        ax.bar(x + i * width, heights, width=width, color=bar_colors, label=f"{qt}")
+
+
+    ax.set_xticks(x + 0.8 / 2 - width / 2)
     ax.set_xticklabels(order, rotation=90)
-    ax.set_ylim(ymin*0.9, ymax*1.1)
+    ax.set_ylim(ymin * 0.9, ymax * 1.1)
     ax.yaxis.set_major_formatter(mticker.PercentFormatter())
     ax.set_ylabel('PPL %')
     ax.legend(title='QTYPE')
@@ -196,10 +263,10 @@ def print_summary(pct_df, raw_strings, patterns=None):
     print()
 
 
-
 def main():
     args = parse_args()
     csv_path = args.csv_file
+    interp_df = load_interp(args.interp_csv) if args.interp_csv else None
 
     pct_df, raw_strings = load_and_parse(csv_path)
     selected = args.qtypes.copy() if args.qtypes else sorted(pct_df.index).copy()
@@ -214,9 +281,9 @@ def main():
     plt.rcParams.update({'font.size': 8})
     root = tk.Tk()
     root.withdraw()
-    fig, ax = plt.subplots(figsize=(12,6))
+    fig, ax = plt.subplots(figsize=(12, 6))
     plt.subplots_adjust(left=0.217, right=0.995, top=0.971, bottom=0.217)
-    draw_chart(pct_df, selected, patterns, ax)
+    draw_chart(pct_df, interp_df, selected, patterns, ax)
 
     # QTYPE selector
     all_q = sorted(pct_df.index)
@@ -225,7 +292,7 @@ def main():
     def on_q(label):
         if label in selected: selected.remove(label)
         else: selected.append(label)
-        draw_chart(pct_df, selected, patterns, ax)
+        draw_chart(pct_df, interp_df, selected, patterns, ax)
         fig.canvas.draw_idle()
     q_checks.on_clicked(on_q)
 
@@ -233,11 +300,12 @@ def main():
     r_ax = plt.axes((0.05, 0.53, 0.10, 0.05))
     btn_reload = Button(r_ax, 'Reload CSV')
     def do_reload(event):
-        nonlocal pct_df, raw_strings
+        nonlocal pct_df, raw_strings, interp_df
         pct_df, raw_strings = load_and_parse(csv_path)
-        # Reprint diagnostics & summary with new data
+        if args.interp_csv:
+            interp_df = load_interp(args.interp_csv)
         print_summary(pct_df, raw_strings, patterns)
-        draw_chart(pct_df, selected, patterns, ax)
+        draw_chart(pct_df, interp_df, selected, patterns, ax)
         fig.canvas.draw_idle()
     btn_reload.on_clicked(do_reload)
 
@@ -257,7 +325,7 @@ def main():
         base_presets = patterns.copy()
         toggle_state = True
         update_presets()
-        draw_chart(pct_df, selected, patterns, ax)
+        draw_chart(pct_df, interp_df, selected, patterns, ax)
         fig.canvas.draw_idle()
     btn_edit.on_clicked(do_edit)
 
@@ -302,7 +370,7 @@ def main():
             btn_toggle.label.set_text(
                 'Unselect All' if toggle_state else 'Select All'
             )
-            draw_chart(pct_df, selected, patterns, ax)
+            draw_chart(pct_df, interp_df, selected, patterns, ax)
             fig.canvas.draw_idle()
 
         preset_check.on_clicked(on_preset)
@@ -318,7 +386,7 @@ def main():
             toggle_state = True
             btn_toggle.label.set_text('Unselect All')
         update_presets()
-        draw_chart(pct_df, selected, patterns, ax)
+        draw_chart(pct_df, interp_df, selected, patterns, ax)
         fig.canvas.draw_idle()
 
     btn_toggle.on_clicked(do_toggle)
