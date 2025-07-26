@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-24-2025 -------------------- **#
+#** --------------- Updated: Jul-26-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -46,7 +46,7 @@ from collections import Counter
 import textwrap
 
 # Global default quants list
-DEFAULT_QUANTS = ['q8', 'q4']
+DEFAULT_QUANTS = ['q8_0', 'q4_0']
 
 # Default reducing factors when data not available
 DEFAULT_REDUCE = {
@@ -791,7 +791,7 @@ def main():
     parser.add_argument('--gpu-irq-k', type=float, default=1.5,
                         help='IQR multiplier k for GPU outlier detection')
     parser.add_argument('csv_file', help='Input CSV file')
-    parser.add_argument('--qtype', help='Case-sensitive qtype (e.g. q3_K) to analyze (default: lowest quant)')
+    parser.add_argument('--qtype', help='Case-sensitive qtype (e.g. q3_K) to analyze from the PPL CSV file (default: lowest quant)')
     parser.add_argument('--cpu-assign-qtype', help='Case-sensitive qtype (e.g. q6_K) to assign to non-measured CPU tensors or tensors missing from csv (default: highest quant)')
     parser.add_argument('--gpu-assign-qtype', help='Case-sensitive qtype (e.g. q3_K) to assign to non-measured GPU tensors or tensors missing from csv (default: highest quant)')
     parser.add_argument('--cpu-assign-tensors', nargs='+', default=[], help="List of regex=qtype (case-sensitive, e.g. q6_K) patterns for CPU tensors to force-assign")
@@ -850,7 +850,9 @@ def main():
     if args.gpu_tensors and not args.gpu_quants:
         parser.error("--gpu-quants is required when --gpu-tensors is used")
 
-    cpu_quants = args.cpu_quants or DEFAULT_QUANTS
+    cpu_quants = args.cpu_quants
+    # if not cpu_quants and args.gpu_quants:
+    #     cpu_quants = DEFAULT_QUANTS
     # Reorder cpu_quants from highest to lowest bpw
     try:
         cpu_quants = sorted(cpu_quants, key=get_bpw, reverse=True)
@@ -858,7 +860,13 @@ def main():
     except Exception:
         pass
 
-    gpu_quants = args.gpu_quants or DEFAULT_QUANTS
+    gpu_quants = args.gpu_quants
+    # By default we assume the user wants everything on the GPU
+    if not cpu_quants and not gpu_quants:
+        if INFO: print(f"[Info] No quants selected, reverting to GPU default selection: {DEFAULT_QUANTS}")
+        gpu_quants = DEFAULT_QUANTS
+    # if not gpu_quants and args.cpu_quants:
+    #     gpu_quants = DEFAULT_QUANTS
     # Reorder gpu_quants from highest to lowest bpw
     try:
         gpu_quants = sorted(gpu_quants, key=get_bpw, reverse=True)
@@ -910,6 +918,12 @@ def main():
     pre_assignments = {}
     pre_assignments_offset = {'cpu': 0, 'gpu': 0}
     for cls in ['cpu', 'gpu']:
+        if cls == 'cpu' and not cpu_quants:
+            if INFO: print(f"[Info] CPU quants skipped because not being user-specified.")
+            continue # Skip loop if empty quants
+        if cls == 'gpu' and not gpu_quants:
+            if INFO: print(f"[Info] GPU quants skipped because not being user-specified.")
+            continue # Skip loop if empty quants
         quants = cpu_quants if cls == 'cpu' else gpu_quants
         names = classes.get(cls, [])
         if cls == 'cpu':
@@ -975,6 +989,10 @@ def main():
     if add_f32:
         f32_classes = classify_tensors(f32_names, args.cpu_tensors, args.gpu_tensors)
         for cls in ['gpu', 'cpu']:
+            if cls == 'cpu' and not cpu_quants:
+                continue # Skip loop if empty quants
+            if cls == 'gpu' and not gpu_quants:
+                continue # Skip loop if empty quants
             # if user did *not* list 'f32' in 'cls'_quants, add to cls offset
             if 'f32' not in (cpu_quants if cls=='cpu' else gpu_quants):
                 f32_offset[cls] = total_size_for_quant(f32_classes.get(cls, []), 'bf16')
@@ -986,6 +1004,10 @@ def main():
 
     # Process GPU and CPU classes
     for cls in ['gpu', 'cpu']:
+        if cls == 'cpu' and not cpu_quants:
+            continue # Skip loop if empty quants
+        if cls == 'gpu' and not gpu_quants:
+            continue # Skip loop if empty quants
         quants = cpu_quants if cls == 'cpu' else gpu_quants
         names = classes.get(cls, [])
         names_to_assign = subclasses_to_assign.get(cls, [])
@@ -1123,7 +1145,8 @@ def main():
         _pct += pct
         print(f"#{cls.upper():>4} Total: {tb/GIB:.3f} GiB ({pct:.1f}%) | {max_size:.2f} GiB max, if all were {highest_q} | {min_size:.2f} GiB min, if all were {lowest_q}")
     
-    print(f"# GPU+CPU Total: {_tb/GIB:.3f} GiB ({_pct/2:.1f}%)")
+    if cpu_quants and gpu_quants:
+        print(f"# GPU+CPU Total: {_tb/GIB:.3f} GiB ({_pct/2:.1f}%)")
 
     # Summary tensor counts and bits-per-weight per qtype
     print("\n## Summary of tensor counts and bpw per qtype")
@@ -1151,6 +1174,10 @@ def main():
     _bpw = 0
     _w = 0
     for cls in ['gpu', 'cpu']:
+        if cls == 'cpu' and not cpu_quants:
+            continue # Skip loop if empty quants
+        if cls == 'gpu' and not gpu_quants:
+            continue # Skip loop if empty quants
         quants_list = gpu_quants if cls == 'gpu' else cpu_quants
         _quants_list = quants_list
         if add_f32:
