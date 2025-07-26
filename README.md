@@ -71,6 +71,12 @@ mkdir -p kitchen && cd kitchen
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Thireus/GGUF-Tool-Suite/blob/main/quant_recipe_pipeline.ipynb)
 
 ```bash
+# Make sure to copy the relevant download.conf and ppl_results.csv for the model before running quant_assign.py
+rm -f download.conf ppl_results.csv
+# Use the download.conf and ppl_results.csv of the chosen model
+cp -f models/DeepSeek-R1-0528/download.conf .
+cp -f models/DeepSeek-R1-0528/ppl_results.csv .
+# Run the quant_assign.py script (adjust the parameters to match your configuration and target model)
 python quant_assign.py ppl_results.csv \
   --gpu-tensors '.*' \
   --cpu-tensors 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight' \
@@ -96,7 +102,7 @@ python quant_assign.py ppl_results.csv \
 
 ## 📊 About `ppl_results.csv`
 
-The file `ppl_results.csv` contains **individual tensor-level PPL benchmarks** for:
+The file `ppl_results.csv` contains **individual tensor-level PPL benchmarks**, for example for **DeepSeek-R1-0528**:
 
 - `Q8_0` (GPU tensors) + `IQ3-XXS` (CPU tensors)
 - Target model: **DeepSeek-R1-0528**
@@ -109,6 +115,7 @@ This is the **core file** used to determine optimal quant mix strategies.
 - Scripts used to generate (edit the "USER CONFIGURATION" section in the bash scripts as needed):
 
 ```bash
+# Make sure to adjust all configuration settings from both of these scripts, such as the most important USER_REGEX variable
 ./benchmark_each_tensor.sh --qtypes iq1_m_r4
 ./collect_ppl_results.sh --chunks 250 --qtypes iq1_m_r4
 ```
