@@ -130,10 +130,13 @@ Big thanks to **ubergarm** for his support and for providing the invaluable **`i
 📄 Ubergarm's `imatrix` for Kimi-K2-Instruct can be found here:  
 🔗 [imatrix_kimik2_ubergarm.dat](https://huggingface.co/ubergarm/Kimi-K2-Instruct-GGUF/blob/main/imatrix-Kimi-K2-Instruct-Q8_0.dat)
 
-📄 Ubergarm's `imatrix` for Qwen3-235B-A22B-Instruct-2507-GGUF can be found here:  
+📄 Ubergarm's `imatrix` for Qwen3-235B-A22B-Instruct-2507 can be found here:  
 🔗 [imatrix_qwen3-235_ubergarm.dat](https://huggingface.co/ubergarm/Qwen3-235B-A22B-Instruct-2507-GGUF/blob/main/imatrix-eaddario-combined-all-medium-Qwen3-235B-A22B-Instruct-2507-BF16.dat)
 
-📄 Ubergarm's `imatrix` for Qwen3-Coder-480B-A35B-Instruct-GGUF can be found here:  
+📄 Ubergarm's `imatrix` for Qwen3-235B-A22B-Thinking-2507 can be found here:  
+🔗 [imatrix_qwen3-235-thinking_ubergarm.dat](https://huggingface.co/ubergarm/Qwen3-235B-A22B-Thinking-2507-GGUF/blob/main/imatrix-Qwen3-235B-A22B-Thinking-2507-BF16.dat)
+
+📄 Ubergarm's `imatrix` for Qwen3-Coder-480B-A35B-Instruct can be found here:  
 🔗 [imatrix_qwen3-480-coder_ubergarm.dat](https://huggingface.co/ubergarm/Qwen3-Coder-480B-A35B-Instruct-GGUF/blob/main/imatrix-Qwen3-Coder-480B-A35B-Instruct-Q8_0.dat)
 
 Also sincere thanks to **ikawrakow** and all **co-authors** of `ik_llama.cpp` for making this entire toolchain possible.
