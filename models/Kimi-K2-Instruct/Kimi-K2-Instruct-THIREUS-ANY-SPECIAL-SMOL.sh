@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** Kimi-K2-Instruct-THIREUS-ANY-SPECIAL.sh used for 1-bit    **#
-#** qtypes except iq1_s*. Adjust $1 in $custom to your needs! **#
+#** Kimi-K2-Instruct-THIREUS-ANY-SPECIAL-SMOL.sh used for     **#
+#** 1-bit qtypes except iq1_s*. Adjust $1 in $custom!         **#
 #**                                                           **#
 #** ********************************************************* **#
 #** --------------- Updated: Jul-17-2025 -------------------- **#

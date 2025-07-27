@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** Kimi-K2-Instruct-THIREUS-ANY-SPECIAL.sh used for iq1_s*   **#
-#** qtypes only. Adjust $1 in $custom to your needs!          **#
+#** Kimi-K2-Instruct-THIREUS-ANY-SPECIAL-SMOLER.sh used for   **#
+#** iq1_s* qtypes only. Adjust $1 in $custom to your needs!   **#
 #**                                                           **#
 #** ********************************************************* **#
 #** --------------- Updated: Jul-17-2025 -------------------- **#

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** DeepSeek-R1-0528-THIREUS-ANY-SPECIAL.sh used for 1-bit    **#
-#** qtypes only except iq1_s*. Adjust $1 in $custom!          **#
+#** DeepSeek-R1-0528-THIREUS-ANY-SPECIAL-SMOL.sh used for     **#
+#** 1-bit qtypes only except iq1_s*. Adjust $1 in $custom!    **#
 #**                                                           **#
 #** ********************************************************* **#
 #** --------------- Updated: Jul-19-2025 -------------------- **#

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** DeepSeek-TNG-R1T2-Chimera-THIREUS-ANY-SPECIAL.sh used for **#
-#** iq1_s* qtypes only. Adjust $1 in $custom to your needs!   **#
+#** DeepSeek-TNG-R1T2-Chimera-THIREUS-ANY-SPECIAL-SMOLER.sh   **#
+#** used for iq1_s* qtypes only. Adjust $1 in $custom!        **#
 #**                                                           **#
 #** ********************************************************* **#
 #** --------------- Updated: Jul-19-2025 -------------------- **#
