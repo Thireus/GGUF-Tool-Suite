@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-26-2025 -------------------- **#
+#** --------------- Updated: Jul-27-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -49,7 +49,7 @@ trap '
 trap 'echo "[$(date "+%Y-%m-%d %H:%M:%S")] Received termination signal. Exiting immediately."; exit 1' SIGTERM
 # ----------------------------------------------------------------------------
 
-timestamp() { date '+%Y-%m-%d %H:%M:%S'; }
+timestamp() { date "+%Y-%m-%d %H:%M:%S"; }
 
 # --------------- DETECT & DEFINE SHA256 HELPER ---------------
 if command -v sha256sum >/dev/null 2>&1; then
@@ -374,17 +374,17 @@ find_main_model_file() {
 #echo $(find_main_model_file) | sed -nE 's/.*(-[0-9]{5}-of-[0-9]{5}\.gguf)$/\1/p'
 
 # Pre-flight: restore any .gguf.bak back to .gguf before starting
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Checking for .gguf.bak files to restore..."
+echo "[$(timestamp)] Checking for .gguf.bak files to restore..."
 shopt -s nullglob
 for bak in "$LOCAL_MODEL_DIR"/*.gguf.bak; do
     # Derive the target .gguf filename
     orig="${bak%.bak}"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Found backup: $(basename "$bak") -> restoring to $(basename "$orig")"
+    echo "[$(timestamp)] Found backup: $(basename "$bak") -> restoring to $(basename "$orig")"
     # Overwrite any existing .gguf
     mv -f "$bak" "$orig"
 done
 shopt -u nullglob
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Pre-flight restoration complete."
+echo "[$(timestamp)] Pre-flight restoration complete."
 
 # Initial fetch and validation for each LOCAL_QTYPE
 echo "[$(timestamp)] Starting initial validation for _LOCAL_QTYPES='${_LOCAL_QTYPES[*]}'"
@@ -422,9 +422,13 @@ for LOCAL_QTYPE in "${_LOCAL_QTYPES[@]}"; do
   fi
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
-    IFS=':' read -r fname expected_hash tensor_name _rest <<< "$line"
+    IFS=':' read -r fname expected_hash tensor_name _shape dtype _rest <<< "$line"
+    dtype="${dtype#*=}"
+    clean_dtype="${dtype%_r[0-9]}"
     for idx in "${!PATTERNS[@]}"; do
       if [[ "${PATTERN_QTYPES[$idx]}" == "$__LOCAL_QTYPE" ]] && [[ $tensor_name =~ ${PATTERNS[$idx]} ]]; then
+        clean___LOCAL_QTYPE="${__LOCAL_QTYPE%_r[0-9]}"
+        [[ "$clean_dtype" != "$clean___LOCAL_QTYPE" ]] && echo "[$(timestamp)] Error: '$local_tensors_map' cannot be used for benchmarking because not pure '$__LOCAL_QTYPE' - tensor '$tensor_name' (user-specified qtype: '$__LOCAL_QTYPE') does not match dtype='$dtype' from tensor map file. Please choose another base qtype." >&2 && exit 9
         tasks+=("$fname:$expected_hash:$__LOCAL_QTYPE")
         break
       fi
@@ -502,7 +506,7 @@ process_line() {
   done
 }
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Validating ${#tasks[@]} shards with up to $N_THREADS threads…"
+echo "[$(timestamp)] Validating ${#tasks[@]} shards with up to $N_THREADS threads…"
 
 for entry in "${tasks[@]}"; do
   # split at the colon
@@ -520,7 +524,7 @@ done
 
 wait
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Initial validation complete."
+echo "[$(timestamp)] Initial validation complete."
 
 # Check availability of required commands
 if ! command -v _sha256sum &>/dev/null; then
@@ -537,7 +541,7 @@ fi
 # Baseline benchmark
 baseline_result_file="bench_result.baseline.${BASELINE_QTYPE}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
 if [[ ! -f "$baseline_result_file" ]]; then
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running baseline PPL benchmark for BASELINE_QTYPE='$BASELINE_QTYPE', chunks=$PPL_COMMAND_CHUNKS_TO_PROCESS."
+    echo "[$(timestamp)] Running baseline PPL benchmark for BASELINE_QTYPE='$BASELINE_QTYPE', chunks=$PPL_COMMAND_CHUNKS_TO_PROCESS."
     main_model_file=$(find_main_model_file) || { echo "Error: main model file not found for baseline." >&2; [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"; exit 1; }
     baseline_cmd="${PPL_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
     eval "$baseline_cmd" > "$baseline_result_file" 2>&1 < /dev/null
@@ -549,7 +553,7 @@ else
 fi
 
 # Startup logging
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting benchmark_each_tensor loop."
+echo "[$(timestamp)] Starting benchmark_each_tensor loop."
 echo "Local download dir: $LOCAL_DOWNLOAD_DIR"
 echo "Local model dir: $LOCAL_MODEL_DIR"
 echo "QTypes: ${QTYPES[*]}"
@@ -720,15 +724,15 @@ while true; do
         qtype_up="${qtype^^}"
         local_tensors_map="tensors.${qtype}.map"
 
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Processing qtype='$qtype'."
+        echo "[$(timestamp)] Processing qtype='$qtype'."
 
         # Attempt to download tensors.map from remote.
         # We first remove any old local copy to ensure we detect absence properly
         rm -f "$local_tensors_map"
         rm -f "$local_tensors_map.sig"
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Fetching remote tensors.map..."
+        echo "[$(timestamp)] Fetching remote tensors.map..."
         if run_downloader "${qtype^^}" "0" "." "${local_tensors_map}"; then
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Retrieved tensors.map to $local_tensors_map"
+            echo "[$(timestamp)] Retrieved tensors.map to $local_tensors_map"
             # Download the signature
             if [[ "$SKIP_GPG" != "true" ]]; then
               if ! run_downloader "${qtype^^}" -1 . "$local_tensors_map.sig"; then
@@ -746,7 +750,7 @@ while true; do
               fi
             fi
         else
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: Could not fetch tensors.map for qtype='$qtype'. Skipping this qtype." >&2
+            echo "[$(timestamp)] Warning: Could not fetch tensors.map for qtype='$qtype'. Skipping this qtype." >&2
             rm -f "$local_tensors_map"
             continue
         fi
@@ -758,13 +762,17 @@ while true; do
             # Skip empty lines
             [[ -z "$line" ]] && continue
             # Split line by colon: filename:hash:tensor_name:...
-            IFS=':' read -r fname file_hash tensor_name _rest <<< "$line"
+            IFS=':' read -r fname file_hash tensor_name _shape dtype _rest <<< "$line"
+            dtype="${dtype#*=}"
+            clean_dtype="${dtype%_r[0-9]}"
             # If tensor_name matches any USER_REGEX, record it under shard fname
             for entry in "${USER_REGEX[@]}"; do
               # split on “=”: LHS is the actual regex, RHS is the qtype (which we ignore here)
               IFS='=' read -r pat _qtype locked <<< "$entry"
               [[ -n "$locked" ]] && continue # Skip locked tensors
               if [[ $tensor_name =~ $pat ]]; then
+                clean_qtype="${qtype%_r[0-9]}"
+                [[ "$clean_dtype" != "$clean_qtype" ]] && echo "[$(timestamp)] Warning: '$local_tensors_map' cannot be used for benchmarking because not pure '$qtype' - tensor '$tensor_name' (user-specified qtype: '$qtype') does not match dtype='$dtype' from tensor map file. Please choose another target qtype. Skipping this qtype." >&2 && continue
                 # Append tensor_name to shard_to_tensors["$fname"], avoiding duplicates
                 if [[ -z "${shard_to_tensors[$fname]:-}" ]]; then
                   shard_to_tensors["$fname"]="$tensor_name"
@@ -781,18 +789,18 @@ while true; do
         done < "$local_tensors_map"
 
         if [[ ${#shard_to_tensors[@]} -eq 0 ]]; then
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] No matching tensors for qtype='$qtype' in $local_tensors_map. Skipping."
+            echo "[$(timestamp)] No matching tensors for qtype='$qtype' in $local_tensors_map. Skipping."
             continue
         fi
 
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Found ${#shard_to_tensors[@]} shard(s) with matching tensors for qtype='$qtype'."
+        echo "[$(timestamp)] Found ${#shard_to_tensors[@]} shard(s) with matching tensors for qtype='$qtype'."
 
         # Find main model file once
         main_model_file=$(find_main_model_file) || {
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Error: Could not find main model shard matching '$MAIN_SHARD_PATTERN' in $LOCAL_MODEL_DIR. Skipping benchmarking." >&2
+            echo "[$(timestamp)] Error: Could not find main model shard matching '$MAIN_SHARD_PATTERN' in $LOCAL_MODEL_DIR. Skipping benchmarking." >&2
             continue
         }
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Main model shard for PPL: $main_model_file"
+        echo "[$(timestamp)] Main model shard for PPL: $main_model_file"
 
         # Organise shards so that the ones with tensors that have less layers come first because these tensors cannot be interpolated easily, so it's best to process them first
         shuffle_shards_by_tensor_patterns shard_to_tensors shuffled_shard_keys
@@ -808,11 +816,11 @@ while true; do
             for tensor_name in "${shuffled_tensor_list[@]}"; do
                 result_file="bench_result.${tensor_name}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
                 if [[ -f "$result_file" ]]; then
-                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Result already exists for tensor='$tensor_name', qtype='$qtype' -> $result_file. Skipping."
+                    echo "[$(timestamp)] Result already exists for tensor='$tensor_name', qtype='$qtype' -> $result_file. Skipping."
                     continue
                 fi
 
-                echo "[$(date '+%Y-%m-%d %H:%M:%S')] Benchmarking tensor='$tensor_name' in shard='$shard_fname' for qtype='$qtype'."
+                echo "[$(timestamp)] Benchmarking tensor='$tensor_name' in shard='$shard_fname' for qtype='$qtype'."
 
                 # Extract expected hash for this shard & tensor: find first matching line in map
                 expected_hash=""
@@ -828,9 +836,9 @@ while true; do
                     fi
                 done < "$local_tensors_map"
                 if [[ -z "$expected_hash" ]]; then
-                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: No hash found for shard='$shard_fname' in map. Will skip SHA256 check." >&2
+                    echo "[$(timestamp)] Warning: No hash found for shard='$shard_fname' in map. Will skip SHA256 check." >&2
                 else
-                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Expected SHA256 for shard='$shard_fname': $expected_hash"
+                    echo "[$(timestamp)] Expected SHA256 for shard='$shard_fname': $expected_hash"
                 fi
 
                 # Now fetch the shard from remote until SHA256 matches (if we have expected_hash)
@@ -842,11 +850,11 @@ while true; do
                 # Attempt download in a loop if SHA256 mismatch
                 fetch_success=false
                 while true; do
-                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Fetching shard from remote: $shard_fname"
+                    echo "[$(timestamp)] Fetching shard from remote: $shard_fname"
                     if run_downloader "${qtype^^}" "${chunk_id}" "${LOCAL_DOWNLOAD_DIR}" "${shard_fname}"; then
-                        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Fetched to $local_shard_tmp"
+                        echo "[$(timestamp)] Fetched to $local_shard_tmp"
                     else
-                        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: Could not fetch shard '$shard_fname' from remote. Skipping this tensor." >&2
+                        echo "[$(timestamp)] Warning: Could not fetch shard '$shard_fname' from remote. Skipping this tensor." >&2
                         break
                     fi
 
@@ -854,12 +862,12 @@ while true; do
                     if [[ -n "$expected_hash" && "$USE_SHA256" == "true" ]]; then
                         actual_hash="$(_sha256sum "$local_shard_tmp" | awk '{print $1}')"
                         if [[ "$actual_hash" == "$expected_hash" ]]; then
-                            echo "[$(date '+%Y-%m-%d %H:%M:%S')] SHA256 matches for $shard_fname."
+                            echo "[$(timestamp)] SHA256 matches for $shard_fname."
                             fetch_success=true
                             break
                         else
-                            echo "[$(date '+%Y-%m-%d %H:%M:%S')] SHA256 mismatch for $shard_fname: got $actual_hash, expected $expected_hash." >&2
-                            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Retrying fetch after 10s..."
+                            echo "[$(timestamp)] SHA256 mismatch for $shard_fname: got $actual_hash, expected $expected_hash." >&2
+                            echo "[$(timestamp)] Retrying fetch after 10s..."
                             sleep 10
                             continue
                         fi
@@ -871,7 +879,7 @@ while true; do
                 done
 
                 if [[ "$fetch_success" != true ]]; then
-                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Failed to fetch valid shard for tensor='$tensor_name'. Skipping this tensor." >&2
+                    echo "[$(timestamp)] Failed to fetch valid shard for tensor='$tensor_name'. Skipping this tensor." >&2
                     rm -f "$local_shard_tmp"
                     continue
                 fi
@@ -883,51 +891,51 @@ while true; do
                     # find local original file
                     original_file=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-${suffix}" | grep -vF "$LOCAL_DOWNLOAD_DIR/" | head -n1 || true)
                     if [[ -z "$original_file" ]]; then
-                        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: Could not find local original shard matching '*-${suffix}' in $LOCAL_MODEL_DIR. Skipping this tensor." >&2
+                        echo "[$(timestamp)] Warning: Could not find local original shard matching '*-${suffix}' in $LOCAL_MODEL_DIR. Skipping this tensor." >&2
                         rm -f "$local_shard_tmp"
                         continue
                     fi
                 else
-                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: Could not extract suffix from shard_fname='$shard_fname'. Skipping." >&2
+                    echo "[$(timestamp)] Warning: Could not extract suffix from shard_fname='$shard_fname'. Skipping." >&2
                     rm -f "$local_shard_tmp"
                     continue
                 fi
 
-                echo "[$(date '+%Y-%m-%d %H:%M:%S')] Found local original shard: $original_file"
+                echo "[$(timestamp)] Found local original shard: $original_file"
 
                 # Backup original
                 backup_file="${original_file}.bak"
                 if [[ -f "$backup_file" ]]; then
-                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Note: Backup file already exists: $backup_file. Overwriting it." >&2
+                    echo "[$(timestamp)] Note: Backup file already exists: $backup_file. Overwriting it." >&2
                     rm -f "$backup_file"
                 fi
                 mv "$original_file" "$backup_file"
-                echo "[$(date '+%Y-%m-%d %H:%M:%S')] Backed up original to $backup_file"
+                echo "[$(timestamp)] Backed up original to $backup_file"
 
                 # Move downloaded shard into place
                 mv "$local_shard_tmp" "$original_file"
-                echo "[$(date '+%Y-%m-%d %H:%M:%S')] Replaced original shard with downloaded shard."
+                echo "[$(timestamp)] Replaced original shard with downloaded shard."
 
                 # Run PPL command
                 # Replace {MODEL_FILE} in template with main_model_file
                 cmd="${PPL_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
-                echo "[$(date '+%Y-%m-%d %H:%M:%S')] Running PPL command for tensor='$tensor_name', qtype='$qtype'..."
+                echo "[$(timestamp)] Running PPL command for tensor='$tensor_name', qtype='$qtype'..."
                 # Redirect stdout and stderr into result file, prevent interactive stdin
                 eval "$cmd" > "$result_file" 2>&1 < /dev/null || {
-                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: PPL command exited with non-zero status for tensor='$tensor_name'. See $result_file for details." >&2
+                    echo "[$(timestamp)] Warning: PPL command exited with non-zero status for tensor='$tensor_name'. See $result_file for details." >&2
                 }
-                echo "[$(date '+%Y-%m-%d %H:%M:%S')] PPL output (stdout+stderr) saved to $result_file"
+                echo "[$(timestamp)] PPL output (stdout+stderr) saved to $result_file"
 
                 # Restore original shard
                 mv "$backup_file" "$original_file"
-                echo "[$(date '+%Y-%m-%d %H:%M:%S')] Restored original shard from backup."
+                echo "[$(timestamp)] Restored original shard from backup."
 
                 # Clean up any leftover in LOCAL_DOWNLOAD_DIR
                 rm -f "$local_shard_tmp"
 
                 # If a termination was requested, exit now
                 if [[ "$EXIT_PENDING" -eq 1 ]]; then
-                  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Termination flag detected; exiting after finishing current operation."
+                  echo "[$(timestamp)] Termination flag detected; exiting after finishing current operation."
                   [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
                   exit 0
                 fi
@@ -939,9 +947,9 @@ while true; do
         # Optionally remove local_tensors_map if you don't need to keep it
         # rm -f "$local_tensors_map"
 
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Finished qtype='$qtype'."
+        echo "[$(timestamp)] Finished qtype='$qtype'."
     done
 
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] All qtypes processed. Sleeping 60 seconds before next check..."
+    echo "[$(timestamp)] All qtypes processed. Sleeping 60 seconds before next check..."
     sleep 60
 done
