@@ -8,6 +8,20 @@
 
 ---
 
+### ✅ Supported models
+
+*In theory, any model supported by llama.cpp is also supported by this tool suite. However, models that are not explicitely in the models/ folder would require additional efforts such as benchmarking and quantizing the model tensors. This table provides an overview of the models officially supported.*
+
+| **Model** | **Calibration Data** | **Quantized Shards** | **Google Colabs** | **Evaluated** | **Comments** |
+|---|---|---|---|---|---|
+| [DeepSeek-R1-0528](https://huggingface.co/collections/Thireus/deepseek-r1-0528-thireus-special-split-68725429aceffbd1094bdd29) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Yes | Works like a charm. When the quant_assign settings are right, it produces recipes with better ppl than any other reputable GGUFs. |
+| [DeepSeek-TNG-R1T2-Chimera](https://huggingface.co/collections/Thireus/deepseek-tng-r1t2-chimera-thireus-special-split-68737c17e50ee1d7fb0fc474) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ⚠️ Not personally | Should not be any different than DeepSeek-R1-0528. |
+| [DeepSeek-V3-0324](https://huggingface.co/collections/Thireus/deepseek-v3-0324-thireus-special-split-6885d5fba52645afa377cc79) | ❌ Not started | ⚠️ Work in progress... | ⚠️ Untested | ⚠️ Not evaluated | Should not be any different than DeepSeek-R1-0528. |
+| [Kimi-K2-Instruct](https://huggingface.co/collections/Thireus/kimi-k2-instruct-thireus-special-split-68778e3701cf3e80574185e2) | ⚠️ Work in progres... | ✅ Complete | ✅ Tested and Working | ⚠️ Not evaluated | Partial and experimental calibration data available due to hardware limitations - regularly updated but not production-ready. Uncertainty about the quality of the recipes due to hardware limitations to produce calibrated data. |
+| [Qwen3-235B-A22B-Instruct-2507](https://huggingface.co/collections/Thireus/qwen3-235b-a22b-instruct-2507-thireus-special-split-68813c81fa03b52fe0d6f4e9) | ✅ Complete | ✅ Best effort (a few quants are still missing) | ⚠️ Untested | ⚠️ Not evaluated | All is available, but not personally tested. |
+| [Qwen3-235B-A22B-Thinking-2507](https://huggingface.co/collections/Thireus/qwen3-235b-a22b-thinking-2507-thireus-special-split-688368c416e0f03b1853b10f) | ❌ Not started | ✅ Best effort (a few quants are still missing) | ⚠️ Untested | ⚠️ Not evaluated | Work in progress... |
+| [Qwen3-Coder-480B-A35B-Instruct](https://huggingface.co/collections/Thireus/qwen3-coder-480b-a35b-instruct-thireus-special-split-68813cb65745c166d0386e91) | ❌ Not started | ✅ Best effort (a few quants are still missing) | ⚠️ Untested | ⚠️ Not evaluated | Work in progress... |
+
 ### ⚠️ Requirements
 
 - You **must compile the latest `ik_llama.cpp`** with `-DGGML_MAX_CONTEXTS=2048` - see pull requests: [#611](https://github.com/ikawrakow/ik_llama.cpp/pull/611), [#620](https://github.com/ikawrakow/ik_llama.cpp/pull/620) and [#622](https://github.com/ikawrakow/ik_llama.cpp/pull/622), and if using `llama.cpp` then make sure to apply these code changes. Note that compatibility with `llama.cpp` is **not guaranteed**.
@@ -42,6 +56,10 @@ Examples are included in the `recipe_examples` folder. Have a look at the file n
 ```bash
 git clone https://github.com/Thireus/GGUF-Tool-Suite
 cd GGUF-Tool-Suite
+# Make sure to copy the relevant download.conf for the model before running quant_assign.py
+rm -f download.conf
+# Use the download.conf of the chosen model
+cp -f models/DeepSeek-R1-0528/download.conf .
 mkdir -p kitchen && cd kitchen
 ../quant_downloader.sh ../recipe_examples/DeepSeek-R1-0528.THIREUS-3.4064bpw-3.3372ppl.242GB-GGUF_11GB-GPU_231GB-CPU.254e1cf_c044584.recipe
 ```
@@ -115,6 +133,10 @@ This is the **core file** used to determine optimal quant mix strategies.
 - Scripts used to generate (edit the "USER CONFIGURATION" section in the bash scripts as needed):
 
 ```bash
+# Make sure to copy the relevant download.conf for the model before running quant_assign.py
+rm -f download.conf
+# Use the download.conf of the chosen model
+cp -f models/DeepSeek-R1-0528/download.conf .
 # Make sure to adjust all configuration settings from both of these scripts, such as the most important USER_REGEX variable
 ./benchmark_each_tensor.sh --qtypes iq1_m_r4
 ./collect_ppl_results.sh --chunks 250 --qtypes iq1_m_r4
