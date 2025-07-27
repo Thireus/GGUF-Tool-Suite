@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** Qwen3-235B-A22B-Instruct-2507-THIREUS-ANY-SPECIAL.sh used **#
-#** for ppl bench purpose. Adjust $1 in $custom!              **#
+#** Qwen3-Coder-480B-A35B-Instruct-THIREUS-ANY-SPECIAL-SMOL.s **#
+#** h used for iq1_m only. Adjust $1 in $custom!              **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-23-2025 -------------------- **#
+#** --------------- Updated: Jul-27-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -41,27 +41,27 @@ output\.weight=$1
 output_norm\.weight=f32
 
 ## Multi-headed attention parameters — qbits: 32 16 
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_v\.weight=$1
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_output\.weight=$1
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_k_norm\.weight=f32
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_q\.weight=$1
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_norm\.weight=f32
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_k\.weight=$1
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_q_norm\.weight=f32
+blk\.([0-9]|[1-5][0-9]|6[0-1])\.attn_v\.weight=$1
+blk\.([0-9]|[1-5][0-9]|6[0-1])\.attn_output\.weight=$1
+blk\.([0-9]|[1-5][0-9]|6[0-1])\.attn_k_norm\.weight=f32
+blk\.([0-9]|[1-5][0-9]|6[0-1])\.attn_q\.weight=$1
+blk\.([0-9]|[1-5][0-9]|6[0-1])\.attn_norm\.weight=f32
+blk\.([0-9]|[1-5][0-9]|6[0-1])\.attn_k\.weight=$1
+blk\.([0-9]|[1-5][0-9]|6[0-1])\.attn_q_norm\.weight=f32
 
 ## Core FFN weights — qbits: 32 
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_norm\.weight=f32
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_gate_inp\.weight=f32
+blk\.([0-9]|[1-5][0-9]|6[0-1])\.ffn_norm\.weight=f32
+blk\.([0-9]|[1-5][0-9]|6[0-1])\.ffn_gate_inp\.weight=f32
 
 ## CPU-loaded ffn_*_exps
-# ffn_down_exps (down-extraction) — qbits: 16 
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_down_exps\.weight=$1
+# ffn_down_exps (down-extraction) — qbits: 16 - Set to iq2_ks to prevent segfaults
+blk\.([0-9]|[1-5][0-9]|6[0-1])\.ffn_down_exps\.weight=iq2_ks
 
 # ffn_up_exps (up-extraction) — qbits: 16 
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_up_exps\.weight=$1
+blk\.([0-9]|[1-5][0-9]|6[0-1])\.ffn_up_exps\.weight=$1
 
 # ffn_gate_exps (gate-extraction) — qbits: 16 
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_gate_exps\.weight=$1
+blk\.([0-9]|[1-5][0-9]|6[0-1])\.ffn_gate_exps\.weight=$1
 
 
 
@@ -477,11 +477,12 @@ custom=$(
 ulimit -S -s unlimited
 ulimit -n 99999
 
-# Qwen3-235B-A22B-Instruct-2507-THIREUS-TEMPLATE.gguf is too big and not worth using it because Q8_0 quanitsation is fast!
-mkdir Qwen3-235B-A22B-Instruct-2507-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
+# Qwen3-Coder-480B-A35B-Instruct-THIREUS-TEMPLATE.gguf is too big and not worth using it because Q8_0 quanitsation is fast!
+mkdir Qwen3-Coder-480B-A35B-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
     --custom-q "$custom" \
     --imatrix imatrix_ubergarm.dat \
-    Qwen3-235B-A22B-Instruct-2507-THIREUS-BF16-SPECIAL_SPLIT/Qwen3-235B-A22B-Instruct-2507-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01132.gguf \
-    Qwen3-235B-A22B-Instruct-2507-THIREUS-${1^^}-SPECIAL_SPLIT/Qwen3-235B-A22B-Instruct-2507-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
+    Qwen3-Coder-480B-A35B-Instruct-THIREUS-BF16-SPECIAL_SPLIT/Qwen3-Coder-480B-A35B-Instruct-THIREUS-BF16-SPECIAL_TENSOR-00001-of-00748.gguf \
+    Qwen3-Coder-480B-A35B-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/Qwen3-Coder-480B-A35B-Instruct-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
     ${1^^} \
-    32 && chmod 444 Qwen3-235B-A22B-Instruct-2507-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
+    32 && chmod 444 Qwen3-Coder-480B-A35B-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
+    

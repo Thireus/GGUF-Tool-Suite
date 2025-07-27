@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-26-2025 -------------------- **#
+#** --------------- Updated: Jul-27-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -344,7 +344,9 @@ def select_qtype(df, qtype_arg):
     df.drop(columns='__quant_num__', inplace=True)
     return sel
 
-
+# global state for fetch_map_for_qtype()
+MAP_FILE_INFO     = {}   # will hold {"tensors.<qtype>.map": [sha256, last_line], …}
+SIG_FILE_HASHES   = {}   # will hold {"tensors.<qtype>.map.sig": sha256, …}
 # “Looks like q…k” ignoring case
 _INSPECT_RE = re.compile(r'^q.*k$', re.IGNORECASE)
 # Canonical form: lower-q, anything, upper-K
@@ -353,7 +355,7 @@ def fetch_map_for_qtype(qtype: str):
     """
     Fetch and cache tensors.{qtype}.map via tensor_downloader.sh.
     """
-    global ALL_GPG_SIGS_VALID
+    global ALL_GPG_SIGS_VALID, MAP_FILE_INFO, SIG_FILE_HASHES
     if qtype in _fetched_maps:
         return True
     # If it matches q…k (any case) but not exactly q…K, warn
@@ -399,7 +401,33 @@ def fetch_map_for_qtype(qtype: str):
                 return False
         else:
             if INFO: print(f"[Warning] gpg signature verification is disabled and won't be checked for {local_map}.sig")
+
+        # Record fetch and compute hashes
         _fetched_maps.add(qtype)
+
+        # Compute and store sha256 and last_line for the map file
+        import hashlib
+        map_key = f"tensors.{qtype}.map"
+        if map_key not in MAP_FILE_INFO:
+            # Compute sha256
+            with open(local_map, 'rb') as f:
+                sha256sum = hashlib.sha256(f.read()).hexdigest()
+            # Get last line before first ':' and '.gguf'
+            with open(local_map, 'r') as f_text:
+                lines = f_text.readlines()
+            last_line = lines[-1].split(':', 1)[0] if lines else ''
+            last_line = last_line.split('.gguf', 1)[0] if last_line else ''
+            MAP_FILE_INFO[map_key] = [sha256sum, last_line]
+
+        # Compute and store sha256 for the signature file, if applicable
+        if not SKIP_GPG:
+            sig_key = f"tensors.{qtype}.map.sig"
+            sig_path = f"{local_map}.sig"
+            if sig_key not in SIG_FILE_HASHES:
+                with open(sig_path, 'rb') as f_sig:
+                    sha256sig = hashlib.sha256(f_sig.read()).hexdigest()
+                SIG_FILE_HASHES[sig_key] = sha256sig
+
         return True
     except subprocess.CalledProcessError as e:
         print(f"[Warning] failed to fetch tensors.map: {e}")
@@ -1256,7 +1284,7 @@ def main():
     
     print(f"#\n# -Average BPW: {_bytes/_w:.4f}")
 
-    print(f"#\n# -Notes:\n# - '+' means user-defined pre-assigned tensors and f32 tensors")
+    print(f"#\n# -Notes:\n# - '+' means user-defined pre-assigned tensors, or tensor missing from csv data or f32 tensors")
 
     now = datetime.now().astimezone()  # Gets local time with tzinfo if available
     current_time = now.strftime("%Y-%m-%d %H:%M:%S %Z%z")
@@ -1285,6 +1313,11 @@ def main():
     else:
         sha256 = "N/A"
     print(f"# - Calibration dataset '{args.csv_file}' SHA-256: {sha256}")
+
+    for map_filename, (sha256sum, model_name) in MAP_FILE_INFO.items():
+        print(f"# - {map_filename} SHA-256: {sha256sum}")
+        print(f"# - {map_filename} model name: {model_name}")
+
     if not SKIP_GPG:
         if ALL_GPG_SIGS_VALID:
             print(f"# - GPG signatures: PASSED")

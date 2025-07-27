@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** Kimi-K2-Instruct-THIREUS-ANY-SPECIAL.sh used for ppl      **#
-#** bench purpose. Adjust $1 in $custom to your needs!        **#
+#** Qwen3-235B-A22B-Thinking-2507-THIREUS-ANY-SPECIAL.sh used **#
+#** for ppl bench purpose. Adjust $1 in $custom!              **#
 #**                                                           **#
 #** ********************************************************* **#
 #** --------------- Updated: Jul-25-2025 -------------------- **#

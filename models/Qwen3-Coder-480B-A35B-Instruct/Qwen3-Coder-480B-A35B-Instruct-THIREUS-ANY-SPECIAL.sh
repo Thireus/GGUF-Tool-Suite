@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** Kimi-K2-Instruct-THIREUS-ANY-SPECIAL.sh used for ppl      **#
-#** bench purpose. Adjust $1 in $custom to your needs!        **#
+#** Qwen3-Coder-480B-A35B-Instruct-THIREUS-ANY-SPECIAL.sh     **#
+#** used for ppl bench purpose. Adjust $1 in $custom!         **#
 #**                                                           **#
 #** ********************************************************* **#
 #** --------------- Updated: Jul-23-2025 -------------------- **#
@@ -485,4 +485,3 @@ mkdir Qwen3-Coder-480B-A35B-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quan
     Qwen3-Coder-480B-A35B-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/Qwen3-Coder-480B-A35B-Instruct-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
     ${1^^} \
     32 && chmod 444 Qwen3-Coder-480B-A35B-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
-    

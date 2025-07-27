@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** Qwen3-235B-A22B-Instruct-2507-THIREUS-ANY-SPECIAL.sh used **#
-#** for ppl bench purpose. Adjust $1 in $custom!              **#
+#** Qwen3-235B-A22B-Thinking-2507-THIREUS-ANY-SPECIAL-SMOL.sh **#
+#** used for 1-bit qtype iq1_m only. Adjust $1 in $custom!    **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-23-2025 -------------------- **#
+#** --------------- Updated: Jul-27-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -54,8 +54,8 @@ blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_norm\.weight=f32
 blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_gate_inp\.weight=f32
 
 ## CPU-loaded ffn_*_exps
-# ffn_down_exps (down-extraction) — qbits: 16 
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_down_exps\.weight=$1
+# ffn_down_exps (down-extraction) — qbits: 16 - set to iq1_m_r4 to prevent segfaults
+blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_down_exps\.weight=iq1_m_r4
 
 # ffn_up_exps (up-extraction) — qbits: 16 
 blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_up_exps\.weight=$1
@@ -477,11 +477,12 @@ custom=$(
 ulimit -S -s unlimited
 ulimit -n 99999
 
-# Qwen3-235B-A22B-Instruct-2507-THIREUS-TEMPLATE.gguf is too big and not worth using it because Q8_0 quanitsation is fast!
-mkdir Qwen3-235B-A22B-Instruct-2507-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
+# Qwen3-235B-A22B-Thinking-2507-THIREUS-TEMPLATE.gguf is too big and not worth using it because Q8_0 quanitsation is fast!
+mkdir Qwen3-235B-A22B-Thinking-2507-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
     --custom-q "$custom" \
     --imatrix imatrix_ubergarm.dat \
-    Qwen3-235B-A22B-Instruct-2507-THIREUS-BF16-SPECIAL_SPLIT/Qwen3-235B-A22B-Instruct-2507-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01132.gguf \
-    Qwen3-235B-A22B-Instruct-2507-THIREUS-${1^^}-SPECIAL_SPLIT/Qwen3-235B-A22B-Instruct-2507-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
+    Qwen3-235B-A22B-Thinking-2507-THIREUS-BF16-SPECIAL_SPLIT/Qwen3-235B-A22B-Thinking-2507-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01132.gguf \
+    Qwen3-235B-A22B-Thinking-2507-THIREUS-${1^^}-SPECIAL_SPLIT/Qwen3-235B-A22B-Thinking-2507-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
     ${1^^} \
-    32 && chmod 444 Qwen3-235B-A22B-Instruct-2507-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
+    32 && chmod 444 Qwen3-235B-A22B-Thinking-2507-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
+    
