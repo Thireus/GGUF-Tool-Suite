@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** Qwen3-235B-A22B-Thinking-2507-THIREUS-ANY-SPECIAL-SMOL.sh **#
-#** used for 1-bit qtype iq1_m only. Adjust $1 in $custom!    **#
+#** Qwen3-235B-A22B-Thinking-2507-THIREUS-ANY-SPECIAL-q2_K.sh **#
+#** used for q2_K only. Adjust $1 in $custom!                 **#
 #**                                                           **#
 #** ********************************************************* **#
 #** --------------- Updated: Jul-28-2025 -------------------- **#
@@ -54,7 +54,7 @@ blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_norm\.weight=f32
 blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_gate_inp\.weight=f32
 
 ## CPU-loaded ffn_*_exps
-# ffn_down_exps (down-extraction) — qbits: 16 - set to q2_k_r4 to prevent segfaults
+# ffn_down_exps (down-extraction) — qbits: 16 - set to q2_k_r4 to prevent nan value
 blk\.25\.ffn_down_exps\.weight=q2_k_r4
 blk\.45\.ffn_down_exps\.weight=q2_k_r4
 blk\.59\.ffn_down_exps\.weight=q2_k_r4
