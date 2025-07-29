@@ -1,0 +1,43 @@
+## Model head & embeddings
+# note token_embd cannot be repacked quant type
+token_embd\.weight=q8_0
+output\.weight=q8_0
+output_norm\.weight=f32
+
+# GPU Only
+blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k\.bias=f32
+blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_v\.weight=q8_0
+blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_output\.weight=q8_0
+blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q\.bias=f32
+blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k_norm\.weight=f32
+blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q\.weight=q8_0
+blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_v\.bias=f32
+blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_norm\.weight=f32
+blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k\.weight=q8_0
+blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q_norm\.weight=f32
+
+# GPU Only
+blk\.[0-2]\.ffn_gate\.weight=q8_0
+blk\.([0-9]|[1-8][0-9]|9[0-2])\.ffn_norm\.weight=f32
+blk\.[0-2]\.ffn_down\.weight=q8_0
+blk\.[0-2]\.ffn_up\.weight=q8_0
+blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_inp\.bias=f32
+blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_inp\.weight=f32
+
+# GPU Only
+blk\.92\.enorm=f32
+blk\.92\.eh_proj=f32
+blk\.92\.shared_head\.head=f32
+blk\.92\.hnorm=f32
+blk\.92\.shared_head\.norm=f32
+blk\.92\.embed_tokens=f32
+
+## GPU-loaded ffn_*_shexp
+blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_down_shexp\.weight=iq3_xxs
+blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_up_shexp\.weight=iq3_xxs
+blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_shexp\.weight=iq3_xxs
+
+## CPU-loaded ffn_*_exps
+blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_down_exps\.weight=iq3_xxs
+blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_up_exps\.weight=iq3_xxs
+blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_exps\.weight=iq3_xxs
