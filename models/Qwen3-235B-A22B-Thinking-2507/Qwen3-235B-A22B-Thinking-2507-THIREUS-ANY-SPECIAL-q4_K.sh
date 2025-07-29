@@ -5,7 +5,7 @@
 #** used for q4_K only. Adjust $1 in $custom!                 **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-28-2025 -------------------- **#
+#** --------------- Updated: Jul-29-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -54,11 +54,9 @@ blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_norm\.weight=f32
 blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_gate_inp\.weight=f32
 
 ## CPU-loaded ffn_*_exps
-# ffn_down_exps (down-extraction) — qbits: 16 - set to q2_k_r4 to prevent nan value
-blk\.25\.ffn_down_exps\.weight=q2_k_r4
-blk\.45\.ffn_down_exps\.weight=q2_k_r4
-blk\.59\.ffn_down_exps\.weight=q2_k_r4
-blk\.([0-9]|1[0-9]|2[0-4]|2[6-9]|3[0-9]|4[0-4]|4[6-9]|5[0-8]|[6-8][0-9]||9[0-3])\.ffn_down_exps\.weight=$1
+# ffn_down_exps (down-extraction) — qbits: 16 - set to q4_k_r4 to prevent nan value
+blk\.79\.ffn_down_exps\.weight=q4_k_r4
+blk\.([0-9]|[1-6][0-9]|7[0-8]|8[0-9]|9[0-3])\.ffn_down_exps\.weight=$1
 
 # ffn_up_exps (up-extraction) — qbits: 16 
 blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_up_exps\.weight=$1
