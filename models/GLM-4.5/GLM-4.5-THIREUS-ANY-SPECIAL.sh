@@ -502,7 +502,7 @@ ulimit -n 99999
 mkdir GLM-4.5-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
     --custom-q "$custom" \
     --imatrix imatrix_ubergarm.dat \
-    GLM-4.5-THIREUS-BF16-SPECIAL_SPLIT/GLM-4.5-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
+    GLM-4.5-THIREUS-BF16-SPECIAL_SPLIT/GLM-4.5-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01762.gguf \
     GLM-4.5-THIREUS-${1^^}-SPECIAL_SPLIT/GLM-4.5-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
     ${1^^} \
     32 && chmod 444 GLM-4.5-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
