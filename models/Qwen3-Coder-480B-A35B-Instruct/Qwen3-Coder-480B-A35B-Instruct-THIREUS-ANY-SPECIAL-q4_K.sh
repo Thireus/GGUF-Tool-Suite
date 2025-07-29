@@ -2,10 +2,10 @@
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
 #** Qwen3-Coder-480B-A35B-Instruct-THIREUS-ANY-SPECIAL-SMOL-q **#
-#** 5_K.sh used for q5_K only. Adjust $1 in $custom!          **#
+#** 4_K.sh used for q4_K only. Adjust $1 in $custom!          **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-27-2025 -------------------- **#
+#** --------------- Updated: Jul-29-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -54,8 +54,8 @@ blk\.([0-9]|[1-5][0-9]|6[0-1])\.ffn_norm\.weight=f32
 blk\.([0-9]|[1-5][0-9]|6[0-1])\.ffn_gate_inp\.weight=f32
 
 ## CPU-loaded ffn_*_exps
-# ffn_down_exps (down-extraction) — qbits: 16 - Set to q5_k_r4 to prevent segfaults
-blk\.([0-9]|[1-5][0-9]|6[0-1])\.ffn_down_exps\.weight=q5_k_r4
+# ffn_down_exps (down-extraction) — qbits: 16 - Set to q4_k_r4 to prevent segfaults
+blk\.([0-9]|[1-5][0-9]|6[0-1])\.ffn_down_exps\.weight=q4_k_r4
 
 # ffn_up_exps (up-extraction) — qbits: 16 
 blk\.([0-9]|[1-5][0-9]|6[0-1])\.ffn_up_exps\.weight=$1
