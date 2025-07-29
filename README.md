@@ -21,6 +21,7 @@
 | [Qwen3-235B-A22B-Instruct-2507](https://huggingface.co/collections/Thireus/qwen3-235b-a22b-instruct-2507-thireus-special-split-68813c81fa03b52fe0d6f4e9) | ✅ Complete | ✅ Best effort (a few quants are still missing) | ⚠️ Untested | ⚠️ Not evaluated | All is available, but not personally tested. |
 | [Qwen3-235B-A22B-Thinking-2507](https://huggingface.co/collections/Thireus/qwen3-235b-a22b-thinking-2507-thireus-special-split-688368c416e0f03b1853b10f) | ❌ Not started | ✅ Best effort (a few quants are still missing) | ⚠️ Untested | ⚠️ Not evaluated | Work in progress... |
 | [Qwen3-Coder-480B-A35B-Instruct](https://huggingface.co/collections/Thireus/qwen3-coder-480b-a35b-instruct-thireus-special-split-68813cb65745c166d0386e91) | ❌ Not started | ✅ Best effort (a few quants are still missing) | ⚠️ Untested | ⚠️ Not evaluated | Work in progress... |
+| [GLM-4.5](https://huggingface.co/collections/Thireus/glm-45-thireus-special-split-6888e23853f18dd2d57a295b) | ❌ Not started | ⚠️ Work in progress | ⚠️ Untested | ⚠️ Not evaluated | Work in progress... |
 
 ### ⚠️ Requirements
 
