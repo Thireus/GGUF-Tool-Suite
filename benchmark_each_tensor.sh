@@ -251,7 +251,7 @@ PPL_COMMAND_TEMPLATE='CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0,2,1 ~/
 -m {MODEL_FILE} -mla 3 -fa -amb 1024 -fmoe -ctk f16 -c 512 -ngl 99 \
 -ot "blk\.(3|4|5)\.ffn_.*=CUDA0" -ot "blk\.(6|7|8)\.ffn_.*=CUDA1" -ot "blk\.(9|10)\.ffn_.*=CUDA2" \
 -ot exps=CPU -b 16384 -ub 8192 --warmup-batch --no-mmap --threads 36 --main-gpu 0 --seed 1337 \
--f ../../../wiki.test.raw --chunks ${PPL_COMMAND_CHUNKS_TO_PROCESS}'
+-f ../../wiki.test.raw --chunks ${PPL_COMMAND_CHUNKS_TO_PROCESS}'
 
 # 9. Pattern to identify the main model shard in LOCAL_MODEL_DIR.
 MAIN_SHARD_PATTERN="*-00001-of-*.gguf"
