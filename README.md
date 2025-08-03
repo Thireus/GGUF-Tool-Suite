@@ -31,6 +31,7 @@ Here's how DeepSeek-R1-0528 quantized with **Thireus' GGUF Tool Suite** compares
 | [Qwen3-235B-A22B-Thinking-2507](https://huggingface.co/collections/Thireus/qwen3-235b-a22b-thinking-2507-thireus-special-split-688368c416e0f03b1853b10f) | ✅ Complete | ✅ Best effort (a few quants are still missing) | ⚠️ Untested | ⚠️ Not evaluated | All you need is available to produce quant mixes, but not personally tested. |
 | [Qwen3-Coder-480B-A35B-Instruct](https://huggingface.co/collections/Thireus/qwen3-coder-480b-a35b-instruct-thireus-special-split-68813cb65745c166d0386e91) | ✅ Complete | ✅ Best effort (a few quants are still missing) | ⚠️ Untested | ⚠️ Not evaluated | All you need is available to produce quant mixes, but not personally tested. |
 | [GLM-4.5](https://huggingface.co/collections/Thireus/glm-45-thireus-special-split-6888e23853f18dd2d57a295b) | ❌ Not started | ⚠️ Work in progress... | ⚠️ Untested | ⚠️ Not evaluated | Support in `llama.cpp` is currently broken – see the discussion in [PR #14939](https://github.com/ggml-org/llama.cpp/pull/14939). Support in `ik_llama.cpp` is working but experimental, refer to [ikawrakow/ik_llama.cpp#668](https://github.com/ikawrakow/ik_llama.cpp/pull/668) |
+| [GLM-4.5-Air](https://huggingface.co/collections/Thireus/glm-45-air-thireus-special-split-688f9936d839ef353d92426a) | ❌ Not started | ⚠️ Work in progress... | ⚠️ Untested | ⚠️ Not evaluated | Support in `llama.cpp` is currently broken – see the discussion in [PR #14939](https://github.com/ggml-org/llama.cpp/pull/14939). Support in `ik_llama.cpp` is working but experimental, refer to [ikawrakow/ik_llama.cpp#668](https://github.com/ikawrakow/ik_llama.cpp/pull/668) |
 
 ### ⚠️ Requirements
 
@@ -183,6 +184,9 @@ Big thanks to **ubergarm** for his support and for providing the invaluable **`i
 
 📄 Ubergarm's `imatrix` for GLM-4.5 can be found here:  
 🔗 [imatrix_GLM-4.5_ubergarm.dat](https://huggingface.co/ubergarm/GLM-4.5-GGUF/blob/main/imatrix-GLM-4.5-BF16.dat)
+
+📄 Ubergarm's `imatrix` for GLM-4.5-Air can be found here:  
+🔗 [imatrix_GLM-4.5-Air_ubergarm.dat](https://huggingface.co/ubergarm/GLM-4.5-Air-GGUF/blob/main/imatrix-GLM-4.5-Air-BF16.dat)
 
 Also sincere thanks to **ikawrakow** and all **co-authors** of `ik_llama.cpp` for making this entire toolchain possible.
 
