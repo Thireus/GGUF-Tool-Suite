@@ -6,6 +6,12 @@
 - Reduce model size  
 - Preserve accuracy across different hardware and use cases
 
+## See for yourself
+
+Here's how DeepSeek-R1-0528 quantized with **Thireus' GGUF Tool Suite** compares to others (lower perplexity is better at the same or lower BPW):
+
+![PPLs Compared With Others](ppl_graphs/DeepSeek-R1-0528.svg)
+
 ---
 
 ### ✅ Supported models
