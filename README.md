@@ -13,7 +13,7 @@ Here's how DeepSeek-R1-0528 quantized with **Thireus' GGUF Tool Suite** compares
 
 ![PPLs Compared With Others](ppl_graphs/DeepSeek-R1-0528.svg)
 
-*The recipe_examples files are there to serve as examples of good recipes. Thireus' GGUF Tool Suite allows you to compute any quant mix recipe that follows the optimum ppl/bpw curve of this graph. Specify a target RAM and VRAM (and qtypes) specific to your computer specs, and the `quant_assign.py` script will automatically find the optimum quant mix recipe that achives the best ppl.*
+*The recipe_examples files are there to serve as examples of good recipes. Thireus' GGUF Tool Suite allows you to compute any quant mix recipe that follows the optimum ppl/bpw curve of this graph. Specify a target RAM and VRAM (and qtypes) specific to your computer specs, and the `quant_assign.py` script will automatically find the optimum quant mix recipe that achieves the best ppl.*
 
 ---
 
