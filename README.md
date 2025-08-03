@@ -2,6 +2,7 @@
 
 **GGUF Tool Suite** is a set of flexible utilities that enables users to experiment with and create custom GGUF quantization blends. It simplifies the process of mixing quant formats (like `iq3_xxs`, `iq4_nl`, etc.) to:
 
+- Cook GGUF recipes for any given RAM and VRAM target  
 - Optimize performance  
 - Reduce model size  
 - Preserve accuracy across different hardware and use cases
@@ -11,6 +12,8 @@
 Here's how DeepSeek-R1-0528 quantized with **Thireus' GGUF Tool Suite** compares to others (lower perplexity is better at the same or lower BPW):
 
 ![PPLs Compared With Others](ppl_graphs/DeepSeek-R1-0528.svg)
+
+*The recipe_examples files are there to serve as examples of good recipes. Thireus' GGUF Tool Suite allows you to compute any quant mix recipe that follows the optimum ppl/bpw curve of this graph. Specify a target RAM and VRAM (and qtypes) specific to your computer specs, and the `quant_assign.py` script will automatically find the optimum quant mix recipe that achives the best ppl.*
 
 ---
 
