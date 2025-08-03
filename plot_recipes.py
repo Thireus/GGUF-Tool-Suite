@@ -1,3 +1,30 @@
+#!/usr/bin/env python3
+#***************************************************************#
+#** This script is part of Thireus' GGUF Tool Suite.          **#
+#** plot_ppl.py a useful tensor ppl visualisation utility to  **#
+#** identify tensor quantisation sensitiveness patterns.      **#
+#**                                                           **#
+#** ********************************************************* **#
+#** --------------- Updated: Aug-03-2025 -------------------- **#
+#** ********************************************************* **#
+#**                                                           **#
+#** Author: Thireus <gguf@thireus.com>                        **#
+#**                                                           **#
+#** https://gguf.thireus.com/                                 **#
+#** Thireus' GGUF Tool Suite - Quantize LLMs Like a Chef       **#
+#**                                  ·     ·       ·~°          **#
+#**     Λ,,Λ             ₚₚₗ  ·° ᵍᵍᵐˡ   · ɪᴋ_ʟʟᴀᴍᴀ.ᴄᴘᴘ°   ᴮᶠ¹⁶ ·  **#
+#**    (:·ω·)       。··°      ·   ɢɢᴜғ   ·°·  ₕᵤ𝓰𝓰ᵢₙ𝓰𝒻ₐ𝒸ₑ   ·°   **#
+#**    /    o―ヽニニフ))             · · ɪǫ3_xxs      ~·°        **#
+#**    し―-J                                                   **#
+#**                                                           **#
+#** Copyright © 2025 - Thireus.         Fₐ𝒸ₜ₋𝒸ₕₑ𝒸ₖₛ? Wₕₐₜ’ₛ ₜₕₐₜ? **#
+#***************************************************************#
+#**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
+#***************************************************************#
+
+# Requires: pip install matplotlib
+
 import os
 import re
 import argparse
