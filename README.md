@@ -82,6 +82,7 @@ mkdir -p kitchen && cd kitchen
 ## 🧠 Run a Downloaded Model (Example)
 
 ```bash
+ulimit -n 99999 # Required on Linux - Also make sure you have compiled ik_llama.cpp with -DGGML_MAX_CONTEXTS=2048
 ~/ik_llama-main-b3904-41a9c8a-bin-win-cuda-12.8-x64-avx512/llama-cli \
   -m DeepSeek-R1-0528-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
   -mla 3 -fa -amb 1024 -fmoe -ctk f16 -c 16384 -ngl 99 \
