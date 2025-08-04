@@ -3,12 +3,12 @@ license: mit
 ---
 ## ⚠️ Cautionary Notice
 
-These GGUF files are **experimental** and subject to change. The code used to produce them is currently in **draft** status, as outlined in the following pull request: [ggml-org/llama.cpp#14939](https://github.com/ggml-org/llama.cpp/pull/14939).
+Due to changes in the GLM-4.5 PR the GGUF files of this repository have changed. Any older version of these GGUFs are no longer compatible with the latest version of `llama.cpp` and `ik_llama.cpp`. Please download the latest GGUF files of this repository and make sure to use the latest version of `llama.cpp` or `ik_llama.cpp`.
 
-- ⚠️ **Support in `llama.cpp` is functional but still experimental** – see the discussion in [PR #14939](https://github.com/ggml-org/llama.cpp/pull/14939).
-- ⚠️ **Support in `ik_llama.cpp` is functional but still experimental** – refer to [ikawrakow/ik_llama.cpp#668](https://github.com/ikawrakow/ik_llama.cpp/pull/668) for details.
+- **For `llama.cpp`** – see the discussion in [PR #14939](https://github.com/ggml-org/llama.cpp/pull/14939).
+- **For `ik_llama.cpp`** – refer to [ikawrakow/ik_llama.cpp#668](https://github.com/ikawrakow/ik_llama.cpp/pull/668).
 
-**Unless you are confident in what you're doing, and until support is officially confirmed,**  
+**Unless you are confident in what you're doing, and until support is officially confirmed (PR merged),**  
 > 🔒 **Do not use these quantized models for production**  
 > 🔬 **Do not use them to assess the quality of the GLM-4.5 models**
 
