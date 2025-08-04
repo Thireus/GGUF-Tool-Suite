@@ -27,7 +27,7 @@ This repository provides **GGUF-quantized tensors** for the GLM-4.5-Air model (o
 - 🛠️ Create your own recipe: https://colab.research.google.com/github/Thireus/GGUF-Tool-Suite/blob/main/quant_recipe_pipeline.ipynb  
 - 📂 Browse available quant shards: https://huggingface.co/Thireus/collections  
 
-*tl;dr:*
+*tl;dr: Expand the details section below*
 <details>
 
 ```

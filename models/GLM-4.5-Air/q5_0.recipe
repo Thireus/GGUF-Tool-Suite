@@ -23,9 +23,9 @@ blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_gate_inp\.weight=f32
 
 ## Other tensors
 blk\.46\.enorm=f32
-blk\.46\.shared_head\.head=q8_0
-blk\.46\.embed_tokens=q8_0
-blk\.46\.eh_proj=q8_0
+blk\.46\.shared_head\.head=bf16
+blk\.46\.embed_tokens=bf16
+blk\.46\.eh_proj=bf16
 blk\.46\.hnorm=f32
 blk\.46\.shared_head\.norm=f32
 
