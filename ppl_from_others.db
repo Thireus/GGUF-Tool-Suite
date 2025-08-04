@@ -25,3 +25,5 @@ Kimi-K2-Instruct|ubergarm|smol-IQ2_KL|2.758|3.4086|https://huggingface.co/uberga
 Kimi-K2-Instruct|ubergarm|IQ2_KS|2.429|3.6827|https://huggingface.co/ubergarm/Kimi-K2-Instruct-GGUF/tree/main/IQ2_KS
 Kimi-K2-Instruct|ubergarm|IQ1_KT|1.959|3.9734|https://huggingface.co/ubergarm/Kimi-K2-Instruct-GGUF/tree/main/IQ1_KT
 Kimi-K2-Instruct|ubergarm|smol-IQ1_KT|1.835|4.2187|https://huggingface.co/ubergarm/Kimi-K2-Instruct-GGUF/tree/main/smol-IQ1_KT
+GLM-4.5-Air|pure|q8_0|8.505|4.6361
+GLM-4.5-Air|ubergarm|IQ4_KSS|4.258|4.7607|https://huggingface.co/ubergarm/GLM-4.5-Air-GGUF/tree/main/IQ4_KSS
