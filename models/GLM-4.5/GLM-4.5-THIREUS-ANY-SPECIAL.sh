@@ -54,19 +54,19 @@ blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q_norm\.weight=f32
 
 ## Core FFN weights
 blk\.[0-2]\.ffn_gate\.weight=$1
-blk\.([0-9]|[1-8][0-9]|9[0-2])\.ffn_norm\.weight=f32
 blk\.[0-2]\.ffn_down\.weight=$1
 blk\.[0-2]\.ffn_up\.weight=$1
-blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_inp\.bias=f32
 blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_inp\.weight=f32
 
 ## Other tensors
-blk\.92\.enorm=f32
-blk\.92\.eh_proj=f32
-blk\.92\.shared_head\.head=f32
-blk\.92\.hnorm=f32
-blk\.92\.shared_head\.norm=f32
-blk\.92\.embed_tokens=f32
+blk\.([0-9]|[1-8][0-9]|9[0-2])\.post_attention_norm\.weight=f32
+blk\.92\.nextn\.shared_head_norm\.weight=f32
+blk\.([3-9]|[1-8][0-9]|9[0-2])\.exp_probs_b\.bias=f32
+blk\.92\.nextn\.eh_proj\.weight=$1
+blk\.92\.nextn\.embed_tokens\.weight=$1
+blk\.92\.nextn\.enorm\.weight=f32
+blk\.92\.nextn\.hnorm\.weight=f32
+blk\.92\.nextn\.shared_head_head\.weight=$1
 
 ## GPU-loaded ffn_*_shexp
 # ffn_down_shexp (down-projection)
