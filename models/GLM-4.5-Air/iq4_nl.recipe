@@ -30,11 +30,11 @@ blk\.46\.nextn\.hnorm\.weight=f32
 blk\.46\.nextn\.shared_head_head\.weight=q8_0
 
 ## GPU-loaded ffn_*_shexp
-blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_down_shexp\.weight=iq3_xxs
-blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_up_shexp\.weight=iq3_xxs
-blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_gate_shexp\.weight=iq3_xxs
+blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_down_shexp\.weight=iq4_nl
+blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_up_shexp\.weight=iq4_nl
+blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_gate_shexp\.weight=iq4_nl
 
 ## CPU-loaded ffn_*_exps
-blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_down_exps\.weight=iq3_xxs
-blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_up_exps\.weight=iq3_xxs
-blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_gate_exps\.weight=iq3_xxs
+blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_down_exps\.weight=iq4_nl
+blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_up_exps\.weight=iq4_nl
+blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_gate_exps\.weight=iq4_nl
