@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** GLM-4.5-Air-THIREUS-ANY-SPECIAL.sh used for ppl bench     **#
-#** purpose. Adjust $1 in $custom to your needs!              **#
+#** GLM-4.5-Air-THIREUS-ANY-SPECIAL_IQ1_BN.sh used for iq1_bn **#
+#** qypte only. Adjust $1 in $custom!                         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-29-2025 -------------------- **#
+#** --------------- Updated: Aug-05-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -61,7 +61,7 @@ blk\.([0-9]|[1-3][0-9]|4[0-6])\.post_attention_norm\.weight=f32
 blk\.46\.nextn\.shared_head_norm\.weight=f32
 blk\.([1-9]|[1-3][0-9]|4[0-6])\.exp_probs_b\.bias=f32
 blk\.46\.nextn\.eh_proj\.weight=$1
-blk\.46\.nextn\.embed_tokens\.weight=$1
+blk\.46\.nextn\.embed_tokens\.weight=iq2_ks
 blk\.46\.nextn\.enorm\.weight=f32
 blk\.46\.nextn\.hnorm\.weight=f32
 blk\.46\.nextn\.shared_head_head\.weight=$1

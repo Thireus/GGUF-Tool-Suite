@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** GLM-4.5-Air-THIREUS-ANY-SPECIAL.sh used for ppl bench     **#
-#** purpose. Adjust $1 in $custom to your needs!              **#
+#** GLM-4.5-Air-THIREUS-ANY-SPECIAL_SMOL.sh used for iq1_m*   **#
+#** qyptes only. Adjust $1 in $custom!                        **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-29-2025 -------------------- **#
+#** --------------- Updated: Aug-05-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -60,31 +60,37 @@ blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_gate_inp\.weight=f32
 blk\.([0-9]|[1-3][0-9]|4[0-6])\.post_attention_norm\.weight=f32
 blk\.46\.nextn\.shared_head_norm\.weight=f32
 blk\.([1-9]|[1-3][0-9]|4[0-6])\.exp_probs_b\.bias=f32
-blk\.46\.nextn\.eh_proj\.weight=$1
-blk\.46\.nextn\.embed_tokens\.weight=$1
+blk\.46\.nextn\.eh_proj\.weight=iq2_ks
+blk\.46\.nextn\.embed_tokens\.weight=iq2_ks
 blk\.46\.nextn\.enorm\.weight=f32
 blk\.46\.nextn\.hnorm\.weight=f32
-blk\.46\.nextn\.shared_head_head\.weight=$1
+blk\.46\.nextn\.shared_head_head\.weight=iq2_ks
 
 ## GPU-loaded ffn_*_shexp
 # ffn_down_shexp (down-projection)
-blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_down_shexp\.weight=$1
+blk\.([1-9]|[1-3][0-9]|4[0-5])\.ffn_down_shexp\.weight=$1
+blk\.(46)\.ffn_down_shexp\.weight=iq2_ks
 
 # ffn_up_shexp (up-projection)
-blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_up_shexp\.weight=$1
+blk\.([1-9]|[1-3][0-9]|4[0-5])\.ffn_up_shexp\.weight=$1
+blk\.(46)\.ffn_up_shexp\.weight=iq2_ks
 
 # ffn_gate_shexp (gate-projection)
-blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_gate_shexp\.weight=$1
+blk\.([1-9]|[1-3][0-9]|4[0-5])\.ffn_gate_shexp\.weight=$1
+blk\.(46)\.ffn_gate_shexp\.weight=iq2_ks
 
 ## CPU-loaded ffn_*_exps
 # ffn_down_exps (down-extraction)
-blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_down_exps\.weight=$1
+blk\.([1-9]|[1-3][0-9]|4[0-5])\.ffn_down_exps\.weight=$1
+blk\.46\.ffn_down_exps\.weight=iq2_ks
 
 # ffn_up_exps (up-extraction)
-blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_up_exps\.weight=$1
+blk\.([1-9]|[1-3][0-9]|4[0-5])\.ffn_up_exps\.weight=$1
+blk\.46\.ffn_up_exps\.weight=iq2_ks 
 
 # ffn_gate_exps (gate-extraction)
-blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_gate_exps\.weight=$1
+blk\.([1-9]|[1-3][0-9]|4[0-5])\.ffn_gate_exps\.weight=$1
+blk\.46\.ffn_gate_exps\.weight=iq2_ks
 
 
 
