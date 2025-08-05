@@ -42,13 +42,17 @@ output_norm\.weight=f32
 
 ## Multi-headed attention parameters
 blk\.([0-9]|[1-3][0-9]|4[0-6])\.attn_k\.bias=f32
-blk\.([0-9]|[1-3][0-9]|4[0-6])\.attn_v\.weight=$1
-blk\.([0-9]|[1-3][0-9]|4[0-6])\.attn_output\.weight=$1
+blk\.([0-9]|[1-3][0-9]|4[0-5])\.attn_v\.weight=$1
+blk\.(46)\.attn_v\.weight=iq2_ks
+blk\.([0-9]|[1-3][0-9]|4[0-5])\.attn_output\.weight=$1
+blk\.(46)\.attn_output\.weight=iq2_ks
 blk\.([0-9]|[1-3][0-9]|4[0-6])\.attn_q\.bias=f32
-blk\.([0-9]|[1-3][0-9]|4[0-6])\.attn_q\.weight=$1
+blk\.([0-9]|[1-3][0-9]|4[0-5])\.attn_q\.weight=$1
+blk\.(46)\.attn_q\.weight=iq2_ks
 blk\.([0-9]|[1-3][0-9]|4[0-6])\.attn_v\.bias=f32
 blk\.([0-9]|[1-3][0-9]|4[0-6])\.attn_norm\.weight=f32
-blk\.([0-9]|[1-3][0-9]|4[0-6])\.attn_k\.weight=$1
+blk\.([0-9]|[1-3][0-9]|4[0-5])\.attn_k\.weight=$1
+blk\.(46)\.attn_k\.weight=iq2_ks
 
 ## Core FFN weights
 blk\.0\.ffn_gate\.weight=$1
