@@ -1,3 +1,4 @@
+# GLM-4.5 port on llama.cpp and ik_llama.cpp has been updated with new tensor names, this recipe file is no longer valid for newer versions
 ## Quant mix recipe created using Thireus' GGUF Tool Suite - https://gguf.thireus.com/
 # Model name: GLM-4.5
 # Link to the original model: https://huggingface.co/zai-org/GLM-4.5
