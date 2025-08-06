@@ -909,11 +909,11 @@ while true; do
                     echo "[$(timestamp)] Note: Backup file already exists: $backup_file. Overwriting it." >&2
                     rm -f "$backup_file"
                 fi
-                mv "$original_file" "$backup_file"
+                mv -f "$original_file" "$backup_file"
                 echo "[$(timestamp)] Backed up original to $backup_file"
 
                 # Move downloaded shard into place
-                mv "$local_shard_tmp" "$original_file"
+                mv -f "$local_shard_tmp" "$original_file"
                 echo "[$(timestamp)] Replaced original shard with downloaded shard."
 
                 # Run PPL command
@@ -927,7 +927,7 @@ while true; do
                 echo "[$(timestamp)] PPL output (stdout+stderr) saved to $result_file"
 
                 # Restore original shard
-                mv "$backup_file" "$original_file"
+                mv -f "$backup_file" "$original_file"
                 echo "[$(timestamp)] Restored original shard from backup."
 
                 # Clean up any leftover in LOCAL_DOWNLOAD_DIR
