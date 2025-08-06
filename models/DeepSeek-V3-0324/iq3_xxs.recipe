@@ -24,7 +24,7 @@ blk\.[0-2]\.ffn_down\.weight=q8_0
 blk\.[0-2]\.ffn_up\.weight=q8_0
 blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_inp\.weight=f32
 
-## Other tensors — qbits: 32 
+## Other tensors
 blk\.([3-9]|[1-5][0-9]|60)\.exp_probs_b\.bias=f32
 
 ## GPU-loaded ffn_*_shexp
