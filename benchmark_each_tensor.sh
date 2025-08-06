@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-27-2025 -------------------- **#
+#** --------------- Updated: Aug-06-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -232,7 +232,7 @@ _LOCAL_QTYPES=( $(printf "%s\n" "${PATTERN_QTYPES[@]}" | sort -u) )
 LOCAL_QTYPES=( $(printf "%s\n" "${_LOCAL_QTYPES[@]}" | grep -v '^f32$') )
 
 # 4. Number of concurrent threads for initial fetch/validation:
-N_THREADS=18
+N_THREADS=8
 
 # 5. Number of chunks to process for PPL:
 PPL_COMMAND_CHUNKS_TO_PROCESS=${CUSTOM_CHUNKS:-250}
