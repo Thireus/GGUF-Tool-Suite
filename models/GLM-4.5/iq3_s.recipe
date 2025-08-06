@@ -1,10 +1,9 @@
 ## Model head & embeddings
-# note token_embd cannot be repacked quant type
 token_embd\.weight=q8_0
 output\.weight=q8_0
 output_norm\.weight=f32
 
-# GPU Only
+## Multi-headed attention parameters
 blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k\.bias=f32
 blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_v\.weight=q8_0
 blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_output\.weight=q8_0
@@ -16,13 +15,13 @@ blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_norm\.weight=f32
 blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k\.weight=q8_0
 blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q_norm\.weight=f32
 
-# GPU Only
+## Core FFN weights
 blk\.[0-2]\.ffn_gate\.weight=q8_0
 blk\.[0-2]\.ffn_down\.weight=q8_0
 blk\.[0-2]\.ffn_up\.weight=q8_0
 blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_inp\.weight=f32
 
-# GPU Only
+## Other tensors
 blk\.([0-9]|[1-8][0-9]|9[0-2])\.post_attention_norm\.weight=f32
 blk\.92\.nextn\.shared_head_norm\.weight=f32
 blk\.([3-9]|[1-8][0-9]|9[0-2])\.exp_probs_b\.bias=f32
@@ -33,11 +32,11 @@ blk\.92\.nextn\.hnorm\.weight=f32
 blk\.92\.nextn\.shared_head_head\.weight=q8_0
 
 ## GPU-loaded ffn_*_shexp
-blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_down_shexp\.weight=iq3_xxs
-blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_up_shexp\.weight=iq3_xxs
-blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_shexp\.weight=iq3_xxs
+blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_down_shexp\.weight=iq3_s
+blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_up_shexp\.weight=iq3_s
+blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_shexp\.weight=iq3_s
 
 ## CPU-loaded ffn_*_exps
-blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_down_exps\.weight=iq3_xxs
-blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_up_exps\.weight=iq3_xxs
-blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_exps\.weight=iq3_xxs
+blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_down_exps\.weight=iq3_s
+blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_up_exps\.weight=iq3_s
+blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_exps\.weight=iq3_s
