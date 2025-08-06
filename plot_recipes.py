@@ -5,7 +5,7 @@
 #** identify tensor quantisation sensitiveness patterns.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-03-2025 -------------------- **#
+#** --------------- Updated: Aug-06-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -30,10 +30,29 @@ import re
 import argparse
 import matplotlib
 
+def extract_model_name(base: str) -> str:
+    """
+    Extracts the model name from a filename of the form:
+      <model>.<USERID>-<bpw>bpw-... 
+
+    Examples:
+      >>> extract_model_name("GLM-4.5-Air.ROOT-3.9070bpw-xyz")
+      "GLM-4.5-Air"
+      >>> extract_model_name("GLM-4.5.4.ROOT-1.2345bpw-...")
+      "GLM-4.5.4"
+    """
+    # 1) chop off everything from 'bpw' onward
+    head, *_ = base.partition('bpw')
+    # 2) drop the trailing "-<number>" before the 'bpw'
+    head = head.rsplit('-', 1)[0]
+    # 3) drop the trailing ".<USERID>"
+    model = head.rsplit('.', 1)[0]
+    return model
+
 def parse_filename(filename):
     # Extract model name, bpw, ppl from recipe filename
     base = os.path.basename(filename)
-    model_name = base.split('.', 1)[0]
+    model_name = extract_model_name(base)
     m_bpw = re.search(r"([0-9]+\.?[0-9]*)bpw", base)
     m_ppl = re.search(r"([0-9]+\.?[0-9]*)ppl", base)
     bpw = float(m_bpw.group(1)) if m_bpw else None
