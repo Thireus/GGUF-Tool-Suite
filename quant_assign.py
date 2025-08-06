@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-27-2025 -------------------- **#
+#** --------------- Updated: Aug-06-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -302,14 +302,16 @@ def classify_tensors(columns, cpu_patterns, gpu_patterns):
     for name in columns:
         assigned = False
         for pat in cpu_patterns:
-            if re.fullmatch(pat, name):
+            _pat = pat.split('=')[0]
+            if re.fullmatch(_pat, name):
                 classes['cpu'].append(name)
                 assigned = True
                 break
         if assigned:
             continue
         for pat in gpu_patterns:
-            if re.fullmatch(pat, name):
+            _pat = pat.split('=')[0]
+            if re.fullmatch(_pat, name):
                 classes['gpu'].append(name)
                 assigned = True
                 break
@@ -362,14 +364,14 @@ def fetch_map_for_qtype(qtype: str):
     if _INSPECT_RE.match(qtype) and not _CANONICAL_RE.match(qtype):
         print(
             f"[Warning] qtype={qtype!r} does not match the canonical pattern r'^q.*K$'. "
-            "Q‑types are case‑sensitive and there are specific ones that start with lowercase 'q' and end with uppercase 'K' "
+            "Q-types are case-sensitive and there are specific ones that start with lowercase 'q' and end with uppercase 'K' "
             "(e.g. 'q3_K')."
         )
     # Warn if it's fully capitalized
     if qtype.isupper():
         print(
             f"[Warning] qtype={qtype!r} is fully capitalized. "
-            "Q‑types are case‑sensitive and there are no known quant types that are entirely uppercase."
+            "Q-types are case-sensitive and there are no known quant types that are entirely uppercase."
         )
     local_map = os.path.join(TMP_DIR, f"tensors.{qtype}.map")
     cmd = [tensor_downloader, qtype.upper(), "0", TMP_DIR, f"tensors.{qtype}.map"]
@@ -709,7 +711,7 @@ def assign_qtype(default_qtype, regex_assign_list, quants, names):
     """
     Build a dict mapping each tensor in `names` to a QTYPE.
     - If regex_assign_list is non-empty, scan in order, first match wins.
-    - Otherwise fall back to default_qtype (or highest‑bpw if default_qtype is None).
+    - Otherwise fall back to default_qtype (or highest-bpw if default_qtype is None).
     """
     # Resolve ultimate default
     if default_qtype:
@@ -840,7 +842,7 @@ def main():
                         help='Skip gpg signature validation')
     args = parser.parse_args()
 
-    # ---- BEGIN pgpy‑based “trusted‑keys.asc” check ----
+    # ---- BEGIN pgpy-based “trusted-keys.asc” check ----
     if not SKIP_GPG:
         SKIP_GPG = args.skip_gpg
     if not SKIP_GPG:
@@ -855,7 +857,7 @@ def main():
             print(f"[Error] {ve}", file=sys.stderr)
             print("[Hint] Add at least one valid public key or use --skip-gpg.", file=sys.stderr)
             sys.exit(7)
-    # ---- END pgpy‑based check ----
+    # ---- END pgpy-based check ----
 
     def parse_regex_assign_list(raw_list):
         parsed = []
@@ -863,7 +865,7 @@ def main():
             try:
                 pat, qt = item.split('=', 1)
             except ValueError:
-                parser.error(f"Invalid regex‑assign spec: {item}. Must be PATTERN=QTYPE")
+                parser.error(f"Invalid regex-assign spec: {item}. Must be PATTERN=QTYPE")
             parsed.append((re.compile(pat), qt))
         return parsed
 
@@ -936,7 +938,7 @@ def main():
     f32_names = [n for n,d in _items.items() if d == 'f32']
 
     # Classify tensors
-    classes = classify_tensors(tensor_names, args.cpu_tensors, args.gpu_tensors)
+    classes = classify_tensors(tensor_names, args.cpu_tensors + args.cpu_assign_tensors, args.gpu_tensors + args.gpu_assign_tensors)
 
     subclasses_to_assign = {'cpu': [], 'gpu': []}
     subclasses_assigned = {'cpu': [], 'gpu': []}
@@ -953,6 +955,7 @@ def main():
             if INFO: print(f"[Info] GPU quants skipped because not being user-specified.")
             continue # Skip loop if empty quants
         quants = cpu_quants if cls == 'cpu' else gpu_quants
+        pat_assign_tensors = [pat.split('=')[0] for pat in args.cpu_assign_tensors] if cls == 'cpu' else [pat.split('=')[0] for pat in args.gpu_assign_tensors]
         names = classes.get(cls, [])
         if cls == 'cpu':
             _assign_qtype = assign_qtype(args.cpu_assign_qtype, cpu_regex_assign, quants, names)
@@ -964,8 +967,17 @@ def main():
             continue
 
         for name in names:
-            # missing measurement → pre‑assign
-            if name not in row or pd.isna(row.at[name]):
+            # when specifically mentioned in --cpu/gpu-assign-tensors param → pre-assign
+            if any(re.fullmatch(pattern, name) for pattern in pat_assign_tensors):
+                pre_assignments[name] = _assign_qtype[name]
+
+                subclasses_assigned[cls].append(name)
+                if INFO: print(f"[Info] Assigning {name!r} → {pre_assignments[name]!r} (in --cpu/gpu-assign-tensors parameter)")
+
+                # jump to next tensor
+                continue
+            # missing measurement → pre-assign
+            elif name not in row or pd.isna(row.at[name]):
                 if name in f32_names:
                     # This is a f32 tensor which we must skip
                     continue
@@ -987,10 +999,10 @@ def main():
             values[name] = conv
             subclasses_to_assign[cls].append(name)
 
-        # 1. Get all unique q‑types
+        # 1. Get all unique q-types
         _assign_qtype_qtypes = set(_assign_qtype.values())
 
-        # 2. Loop over each q‑type
+        # 2. Loop over each q-type
         for _qtype in _assign_qtype_qtypes:
             # 2a. Collect all tensor names that were assigned this qtype
             _tensor_subgroup_names = [
@@ -1015,7 +1027,7 @@ def main():
     f32_classes = {}
     add_f32 = not args.ignore_f32
     if add_f32:
-        f32_classes = classify_tensors(f32_names, args.cpu_tensors, args.gpu_tensors)
+        f32_classes = classify_tensors(f32_names, args.cpu_tensors + args.cpu_assign_tensors, args.gpu_tensors + args.gpu_assign_tensors)
         for cls in ['gpu', 'cpu']:
             if cls == 'cpu' and not cpu_quants:
                 continue # Skip loop if empty quants
@@ -1132,9 +1144,9 @@ def main():
         if max_arg_bytes:
             print(f"# Optimized sub-total {cls.upper()} size excluding outliers and f32: {total_bytes/GIB:.3f} GiB")
 
-        # List any auto‑added f32 tensors in the output
+        # List any auto-added f32 tensors in the output
         if add_f32 and f32_offset.get(cls,0) > 0:
-            print(f"# Auto‑included f32 tensors for {cls.upper()}:")
+            print(f"# Auto-included f32 tensors for {cls.upper()}:")
             for n in sorted(f32_names):
                 # _size = total_size_for_quant([n], 'bf16')
                 # if _size == 0:
