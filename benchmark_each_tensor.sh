@@ -262,7 +262,7 @@ MAIN_SHARD_PATTERN="*-00001-of-*.gguf"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [[ "$SKIP_GPG" != "true" ]]; then
   if [ ! -f "$SCRIPT_DIR/trusted-keys.asc" ]; then
-    echo "[$(timestamp)] Error: trusted-keys.asc not found in the script directory."
+    echo "[$(timestamp)] ❌ Error: trusted-keys.asc not found in the script directory."
     echo "Hint: Provide trusted-keys.asc in the same directory as this script or use the --skip-gpg option to disable gpg signature verification."
     exit 6
   fi
@@ -270,18 +270,18 @@ if [[ "$SKIP_GPG" != "true" ]]; then
     # Create a temporary GNUPGHOME
     GNUPG_TMPDIR=$(mktemp -d)
     if [ -z "$GNUPG_TMPDIR" ]; then
-      echo "[$(timestamp)] Error: Failed to create temporary GPG home directory." >&2
+      echo "[$(timestamp)] ❌ Error: Failed to create temporary GPG home directory." >&2
       exit 8
     fi
     # Try importing the keys (silently) to check validity
     if ! gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --import "$SCRIPT_DIR/trusted-keys.asc" > /dev/null 2>&1; then
-      echo "[$(timestamp)] Error: trusted-keys.asc contains missing or invalid GPG public keys."
+      echo "[$(timestamp)] ❌ Error: trusted-keys.asc contains missing or invalid GPG public keys."
       echo "Hint: Add valid public keys to this file or re-run with the --skip-gpg option to bypass signature verification."
       [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
       exit 7
     fi
   else
-    echo "[$(timestamp)] Warning: 'gpg' command not found. GPG signature verification skipped." >&2
+    echo "[$(timestamp)] ⚠️ Warning: 'gpg' command not found. GPG signature verification skipped." >&2
   fi
 fi
 
@@ -289,13 +289,13 @@ fi
 if [[ -n "$BENCH_CSV" ]]; then
   echo "[$(timestamp)] Starting worst-tensor selection from CSV: $BENCH_CSV (from qtype=$BENCH_FROM_QTYPE)"
   if [[ ! -f "$BENCH_CSV" ]]; then
-    echo "[$(timestamp)] Error: CSV file '$BENCH_CSV' not found." >&2; exit 1
+    echo "[$(timestamp)] ❌ Error: CSV file '$BENCH_CSV' not found." >&2; exit 1
   fi
 
   # Read headers and values
   IFS=',' read -r -a hdrs < <(head -n1 "$BENCH_CSV")
   echo "[$(timestamp)] Read ${#hdrs[@]} columns (first is qtype, rest are tensor names)."
-  row=$(grep -P "^${BENCH_FROM_QTYPE}," "$BENCH_CSV") || { echo "[$(timestamp)] Error: qtype '$BENCH_FROM_QTYPE' not in CSV." >&2; exit 1; }
+  row=$(grep -P "^${BENCH_FROM_QTYPE}," "$BENCH_CSV") || { echo "[$(timestamp)] ❌ Error: qtype '$BENCH_FROM_QTYPE' not in CSV." >&2; exit 1; }
   IFS=',' read -r -a vals <<< "$row"
   echo "[$(timestamp)] Retrieved row for qtype '$BENCH_FROM_QTYPE'."
 
@@ -332,7 +332,7 @@ if [[ -n "$BENCH_CSV" ]]; then
       SELECTED_TENSORS+=("$selected_name")
       SELECTED_QTYPES+=("$pat_qtype")
     else
-      echo "[$(timestamp)] Warning: no tensors matching pattern '$pat_regex' found in CSV; skipping." >&2
+      echo "[$(timestamp)] ⚠️ Warning: no tensors matching pattern '$pat_regex' found in CSV; skipping." >&2
     fi
   done
 
@@ -402,23 +402,23 @@ for LOCAL_QTYPE in "${_LOCAL_QTYPES[@]}"; do
     # Download the signature
     if [[ "$SKIP_GPG" != "true" ]]; then
       if ! run_downloader "${LOCAL_QTYPE^^}" -1 . "$local_tensors_map.sig"; then
-          echo "[$(timestamp)] Error: failed to fetch map gpg signature for ${LOCAL_QTYPE^^}" >&2
+          echo "[$(timestamp)] ❌ Error: failed to fetch map gpg signature for ${LOCAL_QTYPE^^}" >&2
           [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
           exit 2
       else
         if gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --verify "$local_tensors_map.sig" "$local_tensors_map" > /dev/null 2>&1; then
             echo "[$(timestamp)] GPG signature verification successful."
         else
-            echo "[$(timestamp)] Error: GPG signature verification failed for '$local_tensors_map.sig'."
+            echo "[$(timestamp)] ❌ Error: GPG signature verification failed for '$local_tensors_map.sig'."
             [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
             exit 3
         fi
       fi
     fi
   elif [[ $__LOCAL_QTYPE == "f32" ]]; then
-    echo "[$(timestamp)] Warning: Could not fetch BF16 tensors.map for LOCAL_QTYPE='$LOCAL_QTYPE'... will try to rely on other map files later." >&2; continue
+    echo "[$(timestamp)] ⚠️ Warning: Could not fetch BF16 tensors.map for LOCAL_QTYPE='$LOCAL_QTYPE'... will try to rely on other map files later." >&2; continue
   else
-    echo "[$(timestamp)] Error: Could not fetch initial tensors.map for LOCAL_QTYPE='$LOCAL_QTYPE'." >&2; [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"; exit 1
+    echo "[$(timestamp)] ❌ Error: Could not fetch initial tensors.map for LOCAL_QTYPE='$LOCAL_QTYPE'." >&2; [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"; exit 1
   fi
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
@@ -428,7 +428,7 @@ for LOCAL_QTYPE in "${_LOCAL_QTYPES[@]}"; do
     for idx in "${!PATTERNS[@]}"; do
       if [[ "${PATTERN_QTYPES[$idx]}" == "$__LOCAL_QTYPE" ]] && [[ $tensor_name =~ ${PATTERNS[$idx]} ]]; then
         clean___LOCAL_QTYPE="${__LOCAL_QTYPE%_r[0-9]}"
-        [[ "$clean_dtype" != "$clean___LOCAL_QTYPE" ]] && echo "[$(timestamp)] Error: '$local_tensors_map' cannot be used for benchmarking because not pure '$__LOCAL_QTYPE' - tensor '$tensor_name' (user-specified qtype: '$__LOCAL_QTYPE') does not match dtype='$dtype' from tensor map file. Please choose another base qtype." >&2 && exit 9
+        [[ "$clean_dtype" != "$clean___LOCAL_QTYPE" ]] && echo "[$(timestamp)] ❌ Error: '$local_tensors_map' cannot be used for benchmarking because not pure '$__LOCAL_QTYPE' - tensor '$tensor_name' (user-specified qtype: '$__LOCAL_QTYPE') does not match dtype='$dtype' from tensor map file. Please choose another base qtype." >&2 && exit 9
         tasks+=("$fname:$expected_hash:$__LOCAL_QTYPE")
         break
       fi
@@ -736,21 +736,21 @@ while true; do
             # Download the signature
             if [[ "$SKIP_GPG" != "true" ]]; then
               if ! run_downloader "${qtype^^}" -1 . "$local_tensors_map.sig"; then
-                  echo "[$(timestamp)] Error: failed to fetch map gpg signature for ${qtype^^}" >&2
+                  echo "[$(timestamp)] ❌ Error: failed to fetch map gpg signature for ${qtype^^}" >&2
                   [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
                   exit 2
               else
                 if gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --verify "$local_tensors_map.sig" "$local_tensors_map" > /dev/null 2>&1; then
                     echo "[$(timestamp)] GPG signature verification successful."
                 else
-                    echo "[$(timestamp)] Error: GPG signature verification failed for '$local_tensors_map.sig'."
+                    echo "[$(timestamp)] ❌ Error: GPG signature verification failed for '$local_tensors_map.sig'."
                     [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
                     exit 3
                 fi
               fi
             fi
         else
-            echo "[$(timestamp)] Warning: Could not fetch tensors.map for qtype='$qtype'. Skipping this qtype." >&2
+            echo "[$(timestamp)] ⚠️ Warning: Could not fetch tensors.map for qtype='$qtype'. Skipping this qtype." >&2
             rm -f "$local_tensors_map"
             continue
         fi
@@ -772,7 +772,7 @@ while true; do
               [[ -n "$locked" ]] && continue # Skip locked tensors
               if [[ $tensor_name =~ $pat ]]; then
                 clean_qtype="${qtype%_r[0-9]}"
-                [[ "$clean_dtype" != "$clean_qtype" ]] && echo "[$(timestamp)] Warning: '$local_tensors_map' cannot be used for benchmarking because not pure '$qtype' - tensor '$tensor_name' (user-specified qtype: '$qtype') does not match dtype='$dtype' from tensor map file. Please choose another target qtype. Skipping this qtype." >&2 && continue
+                [[ "$clean_dtype" != "$clean_qtype" ]] && echo "[$(timestamp)] ⚠️ Warning: '$local_tensors_map' cannot be used for benchmarking because not pure '$qtype' - tensor '$tensor_name' (user-specified qtype: '$qtype') does not match dtype='$dtype' from tensor map file. Please choose another target qtype or exclude this tensor. Skipping this qtype." >&2 && exit 10
                 # Append tensor_name to shard_to_tensors["$fname"], avoiding duplicates
                 if [[ -z "${shard_to_tensors[$fname]:-}" ]]; then
                   shard_to_tensors["$fname"]="$tensor_name"
@@ -797,7 +797,7 @@ while true; do
 
         # Find main model file once
         main_model_file=$(find_main_model_file) || {
-            echo "[$(timestamp)] Error: Could not find main model shard matching '$MAIN_SHARD_PATTERN' in $LOCAL_MODEL_DIR. Skipping benchmarking." >&2
+            echo "[$(timestamp)] ❌ Error: Could not find main model shard matching '$MAIN_SHARD_PATTERN' in $LOCAL_MODEL_DIR. Skipping benchmarking." >&2
             continue
         }
         echo "[$(timestamp)] Main model shard for PPL: $main_model_file"
@@ -836,7 +836,7 @@ while true; do
                     fi
                 done < "$local_tensors_map"
                 if [[ -z "$expected_hash" ]]; then
-                    echo "[$(timestamp)] Warning: No hash found for shard='$shard_fname' in map. Will skip SHA256 check." >&2
+                    echo "[$(timestamp)] ⚠️ Warning: No hash found for shard='$shard_fname' in map. Will skip SHA256 check." >&2
                 else
                     echo "[$(timestamp)] Expected SHA256 for shard='$shard_fname': $expected_hash"
                 fi
@@ -854,7 +854,7 @@ while true; do
                     if run_downloader "${qtype^^}" "${chunk_id}" "${LOCAL_DOWNLOAD_DIR}" "${shard_fname}"; then
                         echo "[$(timestamp)] Fetched to $local_shard_tmp"
                     else
-                        echo "[$(timestamp)] Warning: Could not fetch shard '$shard_fname' from remote. Skipping this tensor." >&2
+                        echo "[$(timestamp)] ⚠️ Warning: Could not fetch shard '$shard_fname' from remote. Skipping this tensor." >&2
                         break
                     fi
 
@@ -891,12 +891,12 @@ while true; do
                     # find local original file
                     original_file=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-${suffix}" | grep -vF "$LOCAL_DOWNLOAD_DIR/" | head -n1 || true)
                     if [[ -z "$original_file" ]]; then
-                        echo "[$(timestamp)] Warning: Could not find local original shard matching '*-${suffix}' in $LOCAL_MODEL_DIR. Skipping this tensor." >&2
+                        echo "[$(timestamp)] ⚠️ Warning: Could not find local original shard matching '*-${suffix}' in $LOCAL_MODEL_DIR. Skipping this tensor." >&2
                         rm -f "$local_shard_tmp"
                         continue
                     fi
                 else
-                    echo "[$(timestamp)] Warning: Could not extract suffix from shard_fname='$shard_fname'. Skipping." >&2
+                    echo "[$(timestamp)] ⚠️ Warning: Could not extract suffix from shard_fname='$shard_fname'. Skipping." >&2
                     rm -f "$local_shard_tmp"
                     continue
                 fi
@@ -922,9 +922,9 @@ while true; do
                 echo "[$(timestamp)] Running PPL command for tensor='$tensor_name', qtype='$qtype'..."
                 # Redirect stdout and stderr into result file, prevent interactive stdin
                 eval "$cmd" > "$result_file" 2>&1 < /dev/null || {
-                    echo "[$(timestamp)] Warning: PPL command exited with non-zero status for tensor='$tensor_name'. See $result_file for details." >&2
+                    echo "[$(timestamp)] ⚠️ Warning: PPL command exited with non-zero status for tensor='$tensor_name'. See $result_file for details." >&2
                 }
-                echo "[$(timestamp)] PPL output (stdout+stderr) saved to $result_file"
+                echo "[$(timestamp)] 👀 PPL output (stdout+stderr) saved to $result_file"
 
                 # Restore original shard
                 mv -f "$backup_file" "$original_file"
@@ -935,7 +935,7 @@ while true; do
 
                 # If a termination was requested, exit now
                 if [[ "$EXIT_PENDING" -eq 1 ]]; then
-                  echo "[$(timestamp)] Termination flag detected; exiting after finishing current operation."
+                  echo "[$(timestamp)] 💀 Termination flag detected; exiting after finishing current operation."
                   [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
                   exit 0
                 fi
@@ -947,9 +947,9 @@ while true; do
         # Optionally remove local_tensors_map if you don't need to keep it
         # rm -f "$local_tensors_map"
 
-        echo "[$(timestamp)] Finished qtype='$qtype'."
+        echo "[$(timestamp)] 🎉 Finished qtype='$qtype'."
     done
 
-    echo "[$(timestamp)] All qtypes processed. Sleeping 60 seconds before next check..."
+    echo "[$(timestamp)] ✅ All qtypes processed. Sleeping 60 seconds before next check..."
     sleep 60
 done
