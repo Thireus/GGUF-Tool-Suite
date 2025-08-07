@@ -40,6 +40,8 @@ cp -f models/DeepSeek-R1-0528/download.conf . # Use the download.conf of the cho
 mkdir -p kitchen && cd kitchen
 ../quant_downloader.sh ../recipe_examples/DeepSeek-R1-0528.THIREUS-1.9364bpw-4.3533ppl.151GB-GGUF_11GB-GPU_140GB-CPU.3c88ec6_9fd615d.recipe
 
+# Other recipe examples can be found at https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples
+
 # Launch ik_llama's llama-cli:
 ulimit -n 99999 # Lifts "too many open files" limitation on Linux
 ~/ik_llama.cpp/build/bin/llama-cli \
