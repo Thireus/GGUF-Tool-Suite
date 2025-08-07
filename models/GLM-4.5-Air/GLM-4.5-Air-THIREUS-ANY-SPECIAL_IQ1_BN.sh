@@ -5,7 +5,7 @@
 #** qypte only. Adjust $1 in $custom!                         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-05-2025 -------------------- **#
+#** --------------- Updated: Aug-07-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -22,6 +22,11 @@
 #***************************************************************#
 #**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
 #***************************************************************#
+
+echo "NEW METHOD! Comment the line below in your ik_llama.cpp version - file: src/llama.cpp"
+echo "throw std::runtime_error(format("Missing importance matrix for tensor %s in a very low-bit quantization", tensor->name));"
+echo "Benchmarking results may be affected, so it is not advisable to use this quant for producing the calibration data."
+exit
 
 set -euo pipefail
 
