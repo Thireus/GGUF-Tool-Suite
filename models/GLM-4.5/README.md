@@ -1,18 +1,12 @@
 ---
 license: mit
 ---
-## ⚠️ Cautionary Notice
+## ⚠️ Compatibility Notice
 
-Due to changes in the GLM-4.5 PR the GGUF files of this repository have changed. Any older version of these GGUFs are no longer compatible with the latest version of `llama.cpp` and `ik_llama.cpp`. Please download the latest GGUF files of this repository and make sure to use the latest version of `llama.cpp` or `ik_llama.cpp`.
+Support for the GLM-4.5 family was recently merged into both [**llama.cpp**](https://github.com/ggml-org/llama.cpp) and [**ik_llama.cpp**](https://github.com/ikawrakow/ik_llama.cpp), so you must update to their latest versions before using any GGUF files from this repo. Older GGUF files and older versions of either codebase will be incompatible.
 
-- **For `llama.cpp`** – see the discussion in [PR #14939](https://github.com/ggml-org/llama.cpp/pull/14939).
-- **For `ik_llama.cpp`** – refer to [ikawrakow/ik_llama.cpp#668](https://github.com/ikawrakow/ik_llama.cpp/pull/668).
-
-**Unless you are confident in what you're doing, and until support is officially confirmed (PR merged),**  
-> 🔒 **Do not use these quantized models for production**  
-> 🔬 **Do not use them to assess the quality of the GLM-4.5 models**
-
-Proceed with caution and keep an eye on the upstream PRs for any updates that could affect compatibility or performance.
+- [**llama.cpp**](https://github.com/ggml-org/llama.cpp) — see merged PR [ggml-org/llama.cpp#14939](https://github.com/ggml-org/llama.cpp/pull/14939)  
+- [**ik_llama.cpp**](https://github.com/ikawrakow/ik_llama.cpp) — see merged PR [ikawrakow/ik_llama.cpp#668](https://github.com/ikawrakow/ik_llama.cpp/pull/668)
 
 ---
 
@@ -51,15 +45,15 @@ git clone https://github.com/Thireus/GGUF-Tool-Suite
 # Download model quant mix from recipe file:
 cd GGUF-Tool-Suite
 rm -f download.conf # Make sure to copy the relevant download.conf for the model before running quant_assign.py
-cp -f models/GLM-4.5/download.conf . # Use the download.conf of the chosen model
+cp -f models/DeepSeek-R1-0528/download.conf . # Use the download.conf of the chosen model
 mkdir -p kitchen && cd kitchen
-../quant_downloader.sh ../recipe_examples/GLM-4.5.ROOT-3.6910bpw-3.2785ppl.153GB-GGUF_19GB-GPU_134GB-CPU.68f915c_9c7682b.recipe
+../quant_downloader.sh ../recipe_examples/DeepSeek-R1-0528.THIREUS-1.9364bpw-4.3533ppl.151GB-GGUF_11GB-GPU_140GB-CPU.3c88ec6_9fd615d.recipe
 
 # Launch ik_llama's llama-cli:
 ulimit -n 99999 # Lifts "too many open files" limitation on Linux
 ~/ik_llama.cpp/build/bin/llama-cli \
-  -m GLM-4.5-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
-  -fa -amb 512 -fmoe -ctk f16 -c 4096 -ngl 99 \
+  -m DeepSeek-R1-0528-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
+  -mla 3 -fa -amb 512 -fmoe -ctk f16 -c 4096 -ngl 99 \
   -ot "blk\.(3|4|5|6)\.ffn_.*=CUDA0" \
   -ot "blk\.(7|8|9|10)\.ffn_.*=CUDA1" \
   -ot exps=CPU -b 2048 -ub 1024 --warmup-batch --no-mmap --threads 36 \
