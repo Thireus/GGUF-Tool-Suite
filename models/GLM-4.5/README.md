@@ -49,16 +49,17 @@ cp -f models/DeepSeek-R1-0528/download.conf . # Use the download.conf of the cho
 mkdir -p kitchen && cd kitchen
 ../quant_downloader.sh ../recipe_examples/DeepSeek-R1-0528.THIREUS-1.9364bpw-4.3533ppl.151GB-GGUF_11GB-GPU_140GB-CPU.3c88ec6_9fd615d.recipe
 
-# Launch ik_llama's llama-cli:
+# Other recipe examples can be found at https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples
+
+# Launch ik_llama's llama-server:
 ulimit -n 99999 # Lifts "too many open files" limitation on Linux
-~/ik_llama.cpp/build/bin/llama-cli \
+~/ik_llama.cpp/build/bin/llama-server \
   -m DeepSeek-R1-0528-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
   -mla 3 -fa -amb 512 -fmoe -ctk f16 -c 4096 -ngl 99 \
   -ot "blk\.(3|4|5|6)\.ffn_.*=CUDA0" \
   -ot "blk\.(7|8|9|10)\.ffn_.*=CUDA1" \
   -ot exps=CPU -b 2048 -ub 1024 --warmup-batch --no-mmap --threads 36 \
-  --main-gpu 0 \
-  -p '<｜begin▁of▁sentence｜><｜User｜>What is the solution of x+5=-2?<｜Assistant｜><think>\n'
+  --main-gpu 0
 ```
 
 </details>
