@@ -70,7 +70,7 @@ ulimit -n 99999 # Lifts "too many open files" limitation on Linux
 
 1. **Compatibility & Speed** – [unsloth](https://huggingface.co/unsloth)’s dynamic quants may not always work optimally with `ik_llama.cpp`.  
 2. **Custom Rig Fit** – No off-the-shelf GGUF model perfectly matched my VRAM/RAM setup, so I built a way to tailor models and leverage extra VRAM/RAM to reduce perplexity.  
-3. **Automated PPL-Optimal Quantization** – To my knowledge, there was no flexible, automated method to minimize perplexity for any bits-per-weight (bpw) target—so I created one with excellent results!  
+3. **Automated PPL-Optimal Quantization** – To my knowledge, there was no open source flexible, automated method to minimize perplexity for any bits-per-weight (bpw) target—so I created one with excellent results!  
 
 ---
 
@@ -95,7 +95,7 @@ Check out the [GGUF Tool Suite README](https://github.com/Thireus/GGUF-Tool-Suit
 2. 📥 **Download Model Shards** – Use `quant_downloader.sh` to fetch GGUF shards from any recipe.  
    - Recipe examples: https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples  
 3. 🧠 **Run a Downloaded Model** – Sample usage with `llama-cli`.  
-4. 🛠️ **Generate a Custom Recipe** – Produce recipes tailored to your rig for optimal perplexity.  
+4. 🛠️ **Generate a Custom Recipe** – Produce recipes tailored to your VRAM/RAM target usage for optimum perplexity.  
 
 ---
 
@@ -105,11 +105,11 @@ Supported models are listed under `models/` in the [Tool Suite Github repo](http
 
 ---
 
-## 🤷‍♂️ Will I release pre-cooked GGUF files?
+## 🤷‍♂️ Will I release baked dynamic quant GGUFs?
 
-No, because I believe in **tailored quantization** for each user’s hardware. If you prefer ready-made shards, you are welcome to merge them via `llama-gguf-split --merge`, or request someone to publish them.
+No, because I believe in **tailored quantization** for each user’s hardware. If you prefer ready-made shards, you are welcome to merge them via `llama-gguf-split --merge`, or request someone to publish them, or rely on generic GGUF dynamic quants such as [unsloth](https://huggingface.co/unsloth)'s.
 
-Instead, I prefer to share examples of recipes so users can see exactly how they were produced (command included inside these recipe files) and tweak them for their own rigs. The `quant_downloader.sh` script handles automatic fetching and verification of each shard. Recipes provided by [Ubergarm](https://huggingface.co/ubergarm) on his model cards are also compatible with `quant_downloader.sh`.
+Instead, I prefer to share examples of recipes so users can see exactly how they were produced (command included inside these recipe files) and tweak them for their own rigs. The `quant_downloader.sh` script handles automatic fetching and verification of each shard. Note that recipes provided by [Ubergarm](https://huggingface.co/ubergarm) on his model cards are also compatible with `quant_downloader.sh`.
 
 Users who don’t trust the GGUF shards on HuggingFace can also quantize their own by passing recipe lines to `llama-quantize --custom-q` ([see example](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/models/DeepSeek-R1-0528/DeepSeek-R1-0528-THIREUS-ANY-SPECIAL.sh#L482-L486)). Run `llama-quantize --help` to list compatible quants for `quant_assign.py`. This approach is especially useful if you prefer `llama.cpp` over `ik_llama.cpp`.  
 
@@ -126,7 +126,7 @@ Users who don’t trust the GGUF shards on HuggingFace can also quantize their o
 
 ## 💡 Pro Tips
 
-You can download the BF16 model version to quantize your own shards:
+You can easily download the BF16 model version to quantize your own shards:
 
 ```
 mkdir kitchen  
