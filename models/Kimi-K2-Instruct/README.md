@@ -36,16 +36,16 @@ git clone https://github.com/Thireus/GGUF-Tool-Suite
 # Download model quant mix from recipe file:
 cd GGUF-Tool-Suite
 rm -f download.conf # Make sure to copy the relevant download.conf for the model before running quant_assign.py
-cp -f models/DeepSeek-TNG-R1T2-Chimera/download.conf . # Use the download.conf of the chosen model
+cp -f models/Kimi-K2-Instruct/download.conf . # Use the download.conf of the chosen model
 mkdir -p kitchen && cd kitchen
-../quant_downloader.sh ../recipe_examples/DeepSeek-TNG-R1T2-Chimera.ROOT-3.0624bpw-3.3657ppl.238GB-GGUF_11GB-GPU_227GB-CPU.13549e6_1ac857a.recipe
+../quant_downloader.sh ../recipe_examples/Kimi-K2-Instruct.ROOT-2.0216bpw-3.7224ppl.241GB-GGUF_10GB-GPU_231GB-CPU.68f915c_cc271ff.recipe
 
 # Other recipe examples can be found at https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples
 
 # Launch ik_llama's llama-cli:
 ulimit -n 99999 # Lifts "too many open files" limitation on Linux
 ~/ik_llama.cpp/build/bin/llama-cli \
-  -m DeepSeek-TNG-R1T2-Chimera-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
+  -m Kimi-K2-Instruct-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
   -mla 3 -fa -amb 512 -fmoe -ctk f16 -c 4096 -ngl 99 \
   -ot "blk\.(3|4|5|6)\.ffn_.*=CUDA0" \
   -ot "blk\.(7|8|9|10)\.ffn_.*=CUDA1" \
