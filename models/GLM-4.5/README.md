@@ -80,7 +80,7 @@ ulimit -n 99999 # Lifts "too many open files" limitation on Linux
 
 Here’s how GLM-4.5 quantized with **Thireus’ GGUF Tool Suite** stacks up against other quantizers (lower perplexity = better at equal or lower bpw):
 
-![PPLs Compared With Others](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/ppl_graphs/GLM-4.5.svg)
+![PPLs Compared With Others](https://github.com/Thireus/GGUF-Tool-Suite/raw/main/ppl_graphs/GLM-4.5.svg)
 
 > _Note: The `recipe_examples` files illustrate good recipes. The Tool Suite computes the optimal ppl/bpw curve for you — just specify your target RAM, VRAM, and quant types, and `quant_assign.py` finds the best mix._  
 
