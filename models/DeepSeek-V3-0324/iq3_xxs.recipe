@@ -28,21 +28,11 @@ blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_inp\.weight=f32
 blk\.([3-9]|[1-5][0-9]|60)\.exp_probs_b\.bias=f32
 
 ## GPU-loaded ffn_*_shexp
-# ffn_down_shexp (down-projection)
 blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_shexp\.weight=q8_0
-
-# ffn_up_shexp (up-projection)
 blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_shexp\.weight=q8_0
-
-# ffn_gate_shexp (gate-projection)
 blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_shexp\.weight=q8_0
 
 ## CPU-loaded ffn_*_exps
-# ffn_down_exps (down-extraction)
 blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight=iq3_xxs
-
-# ffn_up_exps (up-extraction)
 blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight=iq3_xxs
-
-# ffn_gate_exps (gate-extraction)
 blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight=iq3_xxs
