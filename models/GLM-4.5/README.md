@@ -55,7 +55,7 @@ mkdir -p kitchen && cd kitchen
 ulimit -n 99999 # Lifts "too many open files" limitation on Linux
 ~/ik_llama.cpp/build/bin/llama-server \
   -m GLM-4.5-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01762.gguf \
-  -fa -amb 512 -fmoe -ctk f16 -c 4096 -ngl 99 \
+  -fa -fmoe -ctk f16 -c 4096 -ngl 99 \
   -ot "blk\.([0-9]|[1-2][0-9]|3[0-6])\.ffn_.*=CUDA0" \
   -ot "blk\.(37|38|39|[4-6][0-9]|7[0-2])\.ffn_.*=CUDA1" \
   -ot "blk\.(7[3-9])\.ffn_.*=CUDA2" \
@@ -78,9 +78,9 @@ ulimit -n 99999 # Lifts "too many open files" limitation on Linux
 
 ## 📊 How does it compare to other GGUFs?
 
-Here’s how DeepSeek-R1-0528 quantized with **Thireus’ GGUF Tool Suite** stacks up against other quantizers (lower perplexity = better at equal or lower bpw):
+Here’s how GLM-4.5 quantized with **Thireus’ GGUF Tool Suite** stacks up against other quantizers (lower perplexity = better at equal or lower bpw):
 
-![PPLs Compared With Others](https://github.com/Thireus/GGUF-Tool-Suite/raw/main/ppl_graphs/DeepSeek-R1-0528.svg)
+![PPLs Compared With Others](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/ppl_graphs/GLM-4.5.svg)
 
 > _Note: The `recipe_examples` files illustrate good recipes. The Tool Suite computes the optimal ppl/bpw curve for you — just specify your target RAM, VRAM, and quant types, and `quant_assign.py` finds the best mix._  
 
