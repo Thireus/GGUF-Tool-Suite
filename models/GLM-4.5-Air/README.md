@@ -56,8 +56,8 @@ ulimit -n 99999 # Lifts "too many open files" limitation on Linux
 ~/ik_llama.cpp/build/bin/llama-server \
   -m GLM-4.5-Air-THIREUS-BF16-SPECIAL_TENSOR-00001-of-00804.gguf \
   -fa -amb 512 -fmoe -ctk f16 -c 4096 -ngl 99 \
-  -ot "blk\.(3|4|5|6)\.ffn_.*=CUDA0" \
-  -ot "blk\.(7|8|9|10)\.ffn_.*=CUDA1" \
+  -ot "blk\.([0-9]|1[0-9]|2[0-4])\.ffn_.*=CUDA0" \
+  -ot "blk\.(2[5-9]|3[0-9]|4[0-6])\.ffn_.*=CPU" \
   -ot exps=CPU -b 2048 -ub 1024 --warmup-batch --no-mmap --threads 36 \
   --main-gpu 0
 ```

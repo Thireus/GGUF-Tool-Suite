@@ -45,19 +45,21 @@ git clone https://github.com/Thireus/GGUF-Tool-Suite
 # Download model quant mix from recipe file:
 cd GGUF-Tool-Suite
 rm -f download.conf # Make sure to copy the relevant download.conf for the model before running quant_assign.py
-cp -f models/DeepSeek-R1-0528/download.conf . # Use the download.conf of the chosen model
+cp -f models/GLM-4.5/download.conf . # Use the download.conf of the chosen model
 mkdir -p kitchen && cd kitchen
-../quant_downloader.sh ../recipe_examples/DeepSeek-R1-0528.THIREUS-1.9364bpw-4.3533ppl.151GB-GGUF_11GB-GPU_140GB-CPU.3c88ec6_9fd615d.recipe
+../quant_downloader.sh ../recipe_examples/GLM-4.5.ROOT-2.0085bpw-5.2486ppl.83GB-GGUF_7GB-GPU_76GB-CPU.a02563d_cdb0394.recipe
 
 # Other recipe examples can be found at https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples
 
 # Launch ik_llama's llama-server:
 ulimit -n 99999 # Lifts "too many open files" limitation on Linux
 ~/ik_llama.cpp/build/bin/llama-server \
-  -m DeepSeek-R1-0528-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
-  -mla 3 -fa -amb 512 -fmoe -ctk f16 -c 4096 -ngl 99 \
-  -ot "blk\.(3|4|5|6)\.ffn_.*=CUDA0" \
-  -ot "blk\.(7|8|9|10)\.ffn_.*=CUDA1" \
+  -m GLM-4.5-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01762.gguf \
+  -fa -amb 512 -fmoe -ctk f16 -c 4096 -ngl 99 \
+  -ot "blk\.([0-9]|[1-2][0-9]|3[0-6])\.ffn_.*=CUDA0" \
+  -ot "blk\.(37|38|39|[4-6][0-9]|7[0-2])\.ffn_.*=CUDA1" \
+  -ot "blk\.(7[3-9])\.ffn_.*=CUDA2" \
+  -ot "blk\.(8[0-9]|90|91|92)\.ffn_.*=CPU" \
   -ot exps=CPU -b 2048 -ub 1024 --warmup-batch --no-mmap --threads 36 \
   --main-gpu 0
 ```
