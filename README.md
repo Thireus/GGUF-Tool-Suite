@@ -35,14 +35,28 @@ Here's how DeepSeek-R1-0528 quantized with **Thireus' GGUF Tool Suite** compares
 
 ### ⚠️ Requirements
 
-- You **must compile the latest `ik_llama.cpp`** with `-DGGML_MAX_CONTEXTS=2048` - see pull requests: [#611](https://github.com/ikawrakow/ik_llama.cpp/pull/611), [#620](https://github.com/ikawrakow/ik_llama.cpp/pull/620) and [#622](https://github.com/ikawrakow/ik_llama.cpp/pull/622), and if using `llama.cpp` then make sure to apply these code changes. Note that compatibility with `llama.cpp` is **not guaranteed**.
-- If you are on Windows, you will also need [this patch](https://github.com/ikawrakow/ik_llama.cpp/pull/620).
-- Source code and Windows builds of `ik_llama.cpp` with pre-patched `GGML_MAX_CONTEXTS` and `ulimit` are available at:  
-  👉 https://github.com/Thireus/ik_llama.cpp  
-- Official repo:  
-  👉 https://github.com/ikawrakow/ik_llama.cpp  
+You have **three options** for using \`ik_llama.cpp\` or \`llama.cpp\`:
 
-### 🧠 Important: Linux `ulimit` Patch
+1. **Use the Thireus fork of \`ik_llama.cpp\` (recommended)**  
+   - **Windows builds available**.  
+   - **Linux**: compile as usual.  
+   - Source code and builds:  
+     👉 https://github.com/Thireus/ik_llama.cpp  
+
+2. **Use the official \`ik_llama.cpp\` repo**  
+   - You must compile with: `-DGGML_MAX_CONTEXTS=2048`  
+   - Official repo:  
+     👉 https://github.com/ikawrakow/ik_llama.cpp  
+
+3. **Use \`llama.cpp\` from ggml-org**  
+   - Repo: https://github.com/ggml-org/llama.cpp  
+   - You must port and apply **these patches** from these PRs:  
+     - [#611](https://github.com/ikawrakow/ik_llama.cpp/pull/611)  
+     - [#622](https://github.com/ikawrakow/ik_llama.cpp/pull/622)  
+   - **Windows users** must also apply: [PR #620](https://github.com/ikawrakow/ik_llama.cpp/pull/620)  
+   - **Compatibility with GGUF shards produced by Thireus is not guaranteed or tested**.  
+
+### 🧠 Important: Linux `ulimit` command
 
 Split models with a large number of files may **fail to load** unless you increase file descriptor limits.  
 Run the following command on Linux/macOS **before launching llama binaries**:
