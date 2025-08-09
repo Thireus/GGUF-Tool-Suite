@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regexe entries.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-05-2025 -------------------- **#
+#** --------------- Updated: Aug-08-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -657,4 +657,5 @@ if [[ "$SKIP_GPG" != "true" ]]; then
   fi
 fi
 
+echo
 echo "✅ Download and verification complete. Enjoy!"

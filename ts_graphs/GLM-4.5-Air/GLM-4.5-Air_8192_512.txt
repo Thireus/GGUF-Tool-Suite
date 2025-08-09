@@ -1,0 +1,299 @@
+llama_model_loader: max stdio successfully set to 2048
+llama_model_loader: additional 803 GGUFs metadata loaded.
+llama_model_loader: loaded meta data with 44 key-value pairs and 803 tensors from GLM-4.5-Air-THIREUS-BF16-SPECIAL_TENSOR-00001-of-00804.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = glm4moe
+llama_model_loader: - kv   1:                               general.type str              = model
+llama_model_loader: - kv   2:                               general.name str              = GLM 4.5 Air
+llama_model_loader: - kv   3:                         general.size_label str              = 128x9.4B
+llama_model_loader: - kv   4:                            general.license str              = mit
+llama_model_loader: - kv   5:                               general.tags arr[str,1]       = ["text-generation"]
+llama_model_loader: - kv   6:                          general.languages arr[str,2]       = ["en", "zh"]
+llama_model_loader: - kv   7:                        glm4moe.block_count u32              = 47
+llama_model_loader: - kv   8:                     glm4moe.context_length u32              = 131072
+llama_model_loader: - kv   9:                   glm4moe.embedding_length u32              = 4096
+llama_model_loader: - kv  10:                glm4moe.feed_forward_length u32              = 10944
+llama_model_loader: - kv  11:               glm4moe.attention.head_count u32              = 96
+llama_model_loader: - kv  12:            glm4moe.attention.head_count_kv u32              = 8
+llama_model_loader: - kv  13:                     glm4moe.rope.freq_base f32              = 1000000.000000
+llama_model_loader: - kv  14:   glm4moe.attention.layer_norm_rms_epsilon f32              = 0.000010
+llama_model_loader: - kv  15:                  glm4moe.expert_used_count u32              = 8
+llama_model_loader: - kv  16:               glm4moe.attention.key_length u32              = 128
+llama_model_loader: - kv  17:             glm4moe.attention.value_length u32              = 128
+llama_model_loader: - kv  18:                          general.file_type u32              = 24
+llama_model_loader: - kv  19:               glm4moe.rope.dimension_count u32              = 64
+llama_model_loader: - kv  20:                       glm4moe.expert_count u32              = 128
+llama_model_loader: - kv  21:         glm4moe.expert_feed_forward_length u32              = 1408
+llama_model_loader: - kv  22:                glm4moe.expert_shared_count u32              = 1
+llama_model_loader: - kv  23:          glm4moe.leading_dense_block_count u32              = 1
+llama_model_loader: - kv  24:                 glm4moe.expert_gating_func u32              = 2
+llama_model_loader: - kv  25:               glm4moe.expert_weights_scale f32              = 1.000000
+llama_model_loader: - kv  26:                glm4moe.expert_weights_norm bool             = true
+llama_model_loader: - kv  27:               glm4moe.nextn_predict_layers u32              = 1
+llama_model_loader: - kv  28:                       tokenizer.ggml.model str              = gpt2
+llama_model_loader: - kv  29:                         tokenizer.ggml.pre str              = glm4
+llama_model_loader: - kv  30:                      tokenizer.ggml.tokens arr[str,151552]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+llama_model_loader: - kv  31:                  tokenizer.ggml.token_type arr[i32,151552]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  32:                      tokenizer.ggml.merges arr[str,318088]  = ["Ġ Ġ", "Ġ ĠĠĠ", "ĠĠ ĠĠ", "...
+llama_model_loader: - kv  33:                tokenizer.ggml.eos_token_id u32              = 151329
+llama_model_loader: - kv  34:            tokenizer.ggml.padding_token_id u32              = 151329
+llama_model_loader: - kv  35:                tokenizer.ggml.bos_token_id u32              = 151331
+llama_model_loader: - kv  36:                tokenizer.ggml.eot_token_id u32              = 151336
+llama_model_loader: - kv  37:            tokenizer.ggml.unknown_token_id u32              = 151329
+llama_model_loader: - kv  38:                tokenizer.ggml.eom_token_id u32              = 151338
+llama_model_loader: - kv  39:                    tokenizer.chat_template str              = [gMASK]<sop>\n{%- if tools -%}\n<|syste...
+llama_model_loader: - kv  40:               general.quantization_version u32              = 2
+llama_model_loader: - kv  41:                                   split.no u16              = 0
+llama_model_loader: - kv  42:                                split.count u16              = 804
+llama_model_loader: - kv  43:                        split.tensors.count i32              = 803
+llama_model_loader: - type  f32:  331 tensors
+llama_model_loader: - type q8_0:  105 tensors
+llama_model_loader: - type iq4_nl:   92 tensors
+llama_model_loader: - type iq4_xs:  144 tensors
+llama_model_loader: - type iq3_k:   43 tensors
+llama_model_loader: - type iq5_k:    1 tensors
+llama_model_loader: - type iq6_k:   31 tensors
+llama_model_loader: - type iq4_ks:   28 tensors
+llama_model_loader: - type iq2_ks:   19 tensors
+llama_model_loader: - type iq5_k_r4:    9 tensors
+llm_load_vocab: special tokens cache size = 36
+llm_load_vocab: token to piece cache size = 0.9713 MB
+llm_load_print_meta: format           = GGUF V3 (latest)
+llm_load_print_meta: arch             = glm4moe
+llm_load_print_meta: vocab type       = BPE
+llm_load_print_meta: n_vocab          = 151552
+llm_load_print_meta: n_merges         = 318088
+llm_load_print_meta: vocab_only       = 0
+llm_load_print_meta: n_ctx_train      = 131072
+llm_load_print_meta: n_embd           = 4096
+llm_load_print_meta: n_layer          = 47
+llm_load_print_meta: n_head           = 96
+llm_load_print_meta: n_head_kv        = 8
+llm_load_print_meta: n_rot            = 64
+llm_load_print_meta: n_swa            = 0
+llm_load_print_meta: n_swa_pattern    = 1
+llm_load_print_meta: n_embd_head_k    = 128
+llm_load_print_meta: n_embd_head_v    = 128
+llm_load_print_meta: n_gqa            = 12
+llm_load_print_meta: n_embd_k_gqa     = 1024
+llm_load_print_meta: n_embd_v_gqa     = 1024
+llm_load_print_meta: f_norm_eps       = 0.0e+00
+llm_load_print_meta: f_norm_rms_eps   = 1.0e-05
+llm_load_print_meta: f_clamp_kqv      = 0.0e+00
+llm_load_print_meta: f_max_alibi_bias = 0.0e+00
+llm_load_print_meta: f_logit_scale    = 0.0e+00
+llm_load_print_meta: n_ff             = 10944
+llm_load_print_meta: n_expert         = 128
+llm_load_print_meta: n_expert_used    = 8
+llm_load_print_meta: causal attn      = 1
+llm_load_print_meta: pooling type     = 0
+llm_load_print_meta: rope type        = 2
+llm_load_print_meta: rope scaling     = linear
+llm_load_print_meta: freq_base_train  = 1000000.0
+llm_load_print_meta: freq_scale_train = 1
+llm_load_print_meta: n_ctx_orig_yarn  = 131072
+llm_load_print_meta: rope_finetuned   = unknown
+llm_load_print_meta: ssm_d_conv       = 0
+llm_load_print_meta: ssm_d_inner      = 0
+llm_load_print_meta: ssm_d_state      = 0
+llm_load_print_meta: ssm_dt_rank      = 0
+llm_load_print_meta: model type       = 106B.A12B
+llm_load_print_meta: model ftype      = IQ1_S - 1.5625 bpw
+llm_load_print_meta: model params     = 110.469 B
+llm_load_print_meta: model size       = 51.447 GiB (4.000 BPW) 
+llm_load_print_meta: repeating layers = 50.436 GiB (3.966 BPW, 109.227 B parameters)
+llm_load_print_meta: general.name     = GLM 4.5 Air
+llm_load_print_meta: BOS token        = 151331 '[gMASK]'
+llm_load_print_meta: EOS token        = 151329 '<|endoftext|>'
+llm_load_print_meta: UNK token        = 151329 '<|endoftext|>'
+llm_load_print_meta: PAD token        = 151329 '<|endoftext|>'
+llm_load_print_meta: LF token         = 128 'Ä'
+llm_load_print_meta: FIM PRE token    = 151347 '<|code_prefix|>'
+llm_load_print_meta: FIM SUF token    = 151349 '<|code_suffix|>'
+llm_load_print_meta: FIM MID token    = 151348 '<|code_middle|>'
+llm_load_print_meta: EOT token        = 151336 '<|user|>'
+llm_load_print_meta: max token length = 1024
+ggml_cuda_init: GGML_CUDA_FORCE_MMQ:    no
+ggml_cuda_init: GGML_CUDA_FORCE_CUBLAS: no
+ggml_cuda_init: found 1 CUDA devices:
+  Device 0: NVIDIA RTX PRO 6000 Blackwell Workstation Edition, compute capability 12.0, VMM: yes
+llm_load_tensors: ggml ctx size =    0.66 MiB
+model has unused tensor blk.46.attn_norm.weight (size = 16384 bytes) -- ignoring
+model has unused tensor blk.46.attn_q.weight (size = 26738688 bytes) -- ignoring
+model has unused tensor blk.46.attn_k.weight (size = 2228224 bytes) -- ignoring
+model has unused tensor blk.46.attn_v.weight (size = 2228224 bytes) -- ignoring
+model has unused tensor blk.46.attn_q.bias (size = 49152 bytes) -- ignoring
+model has unused tensor blk.46.attn_k.bias (size = 4096 bytes) -- ignoring
+model has unused tensor blk.46.attn_v.bias (size = 4096 bytes) -- ignoring
+model has unused tensor blk.46.attn_output.weight (size = 53477376 bytes) -- ignoring
+model has unused tensor blk.46.post_attention_norm.weight (size = 16384 bytes) -- ignoring
+model has unused tensor blk.46.ffn_gate_inp.weight (size = 2097152 bytes) -- ignoring
+model has unused tensor blk.46.exp_probs_b.bias (size = 512 bytes) -- ignoring
+model has unused tensor blk.46.ffn_gate_exps.weight (size = 507510784 bytes) -- ignoring
+model has unused tensor blk.46.ffn_down_exps.weight (size = 415236096 bytes) -- ignoring
+model has unused tensor blk.46.ffn_up_exps.weight (size = 507510784 bytes) -- ignoring
+model has unused tensor blk.46.ffn_gate_shexp.weight (size = 4775936 bytes) -- ignoring
+model has unused tensor blk.46.ffn_down_shexp.weight (size = 3244032 bytes) -- ignoring
+model has unused tensor blk.46.ffn_up_shexp.weight (size = 4775936 bytes) -- ignoring
+model has unused tensor blk.46.nextn.eh_proj.weight (size = 17825792 bytes) -- ignoring
+model has unused tensor blk.46.nextn.embed_tokens.weight (size = 329777152 bytes) -- ignoring
+model has unused tensor blk.46.nextn.enorm.weight (size = 16384 bytes) -- ignoring
+model has unused tensor blk.46.nextn.hnorm.weight (size = 16384 bytes) -- ignoring
+model has unused tensor blk.46.nextn.shared_head_head.weight (size = 329777152 bytes) -- ignoring
+model has unused tensor blk.46.nextn.shared_head_norm.weight (size = 16384 bytes) -- ignoring
+llm_load_tensors: offloading 47 repeating layers to GPU
+llm_load_tensors: offloading non-repeating layers to GPU
+llm_load_tensors: offloaded 48/48 layers to GPU
+llm_load_tensors:  CUDA_Host buffer size =   407.00 MiB
+llm_load_tensors:      CUDA0 buffer size = 50169.88 MiB
+...................................................................................................
+llama_new_context_with_model: n_ctx      = 65536
+llama_new_context_with_model: n_batch    = 8192
+llama_new_context_with_model: n_ubatch   = 512
+llama_new_context_with_model: flash_attn = 1
+llama_new_context_with_model: mla_attn   = 0
+llama_new_context_with_model: attn_max_b = 0
+llama_new_context_with_model: fused_moe  = 1
+llama_new_context_with_model: ser        = -1, 0
+llama_new_context_with_model: freq_base  = 1000000.0
+llama_new_context_with_model: freq_scale = 1
+llama_kv_cache_init:      CUDA0 KV buffer size = 12032.00 MiB
+llama_new_context_with_model: KV self size  = 12032.00 MiB, K (f16): 6016.00 MiB, V (f16): 6016.00 MiB
+llama_new_context_with_model:  CUDA_Host  output buffer size =     0.58 MiB
+llama_new_context_with_model:      CUDA0 compute buffer size =   304.00 MiB
+llama_new_context_with_model:  CUDA_Host compute buffer size =   136.01 MiB
+llama_new_context_with_model: graph nodes  = 2175
+llama_new_context_with_model: graph splits = 2
+
+main: n_kv_max = 65536, n_batch = 8192, n_ubatch = 512, flash_attn = 1, n_gpu_layers = 99, n_threads = 36, n_threads_batch = 36
+
+|    PP |     TG |   N_KV |   T_PP s | S_PP t/s |   T_TG s | S_TG t/s |
+|-------|--------|--------|----------|----------|----------|----------|
+|   512 |    128 |      0 |    0.613 |   835.50 |    3.245 |    39.45 |
+|   512 |    128 |    512 |    0.600 |   853.39 |    3.211 |    39.86 |
+|   512 |    128 |   1024 |    0.607 |   843.10 |    3.217 |    39.79 |
+|   512 |    128 |   1536 |    0.639 |   801.70 |    3.258 |    39.29 |
+|   512 |    128 |   2048 |    0.617 |   830.18 |    3.266 |    39.20 |
+|   512 |    128 |   2560 |    0.625 |   819.41 |    3.274 |    39.09 |
+|   512 |    128 |   3072 |    0.626 |   817.34 |    3.381 |    37.86 |
+|   512 |    128 |   3584 |    0.632 |   810.61 |    3.339 |    38.34 |
+|   512 |    128 |   4096 |    0.640 |   800.01 |    3.382 |    37.85 |
+|   512 |    128 |   4608 |    0.633 |   809.31 |    3.463 |    36.96 |
+|   512 |    128 |   5120 |    0.646 |   793.12 |    3.459 |    37.00 |
+|   512 |    128 |   5632 |    0.644 |   795.13 |    3.471 |    36.88 |
+|   512 |    128 |   6144 |    0.651 |   786.28 |    3.589 |    35.66 |
+|   512 |    128 |   6656 |    0.652 |   784.95 |    3.546 |    36.10 |
+|   512 |    128 |   7168 |    0.665 |   770.04 |    3.642 |    35.14 |
+|   512 |    128 |   7680 |    0.666 |   768.76 |    3.613 |    35.42 |
+|   512 |    128 |   8192 |    0.673 |   760.69 |    3.652 |    35.05 |
+|   512 |    128 |   8704 |    0.675 |   758.15 |    3.737 |    34.25 |
+|   512 |    128 |   9216 |    0.688 |   743.70 |    3.725 |    34.36 |
+|   512 |    128 |   9728 |    0.700 |   731.36 |    3.783 |    33.84 |
+|   512 |    128 |  10240 |    0.695 |   736.17 |    3.782 |    33.84 |
+|   512 |    128 |  10752 |    0.698 |   733.03 |    3.799 |    33.70 |
+|   512 |    128 |  11264 |    0.703 |   728.70 |    3.895 |    32.87 |
+|   512 |    128 |  11776 |    0.709 |   722.05 |    3.856 |    33.19 |
+|   512 |    128 |  12288 |    0.712 |   718.66 |    3.959 |    32.33 |
+|   512 |    128 |  12800 |    0.713 |   718.23 |    3.936 |    32.52 |
+|   512 |    128 |  13312 |    0.761 |   673.05 |    3.968 |    32.26 |
+|   512 |    128 |  13824 |    0.723 |   708.49 |    4.007 |    31.95 |
+|   512 |    128 |  14336 |    0.728 |   703.01 |    4.023 |    31.82 |
+|   512 |    128 |  14848 |    0.725 |   706.20 |    4.130 |    31.00 |
+|   512 |    128 |  15360 |    0.739 |   692.53 |    4.073 |    31.43 |
+|   512 |    128 |  15872 |    0.742 |   689.78 |    4.172 |    30.68 |
+|   512 |    128 |  16384 |    0.749 |   683.82 |    4.135 |    30.96 |
+|   512 |    128 |  16896 |    0.754 |   678.82 |    4.234 |    30.23 |
+|   512 |    128 |  17408 |    0.756 |   677.30 |    4.204 |    30.45 |
+|   512 |    128 |  17920 |    0.793 |   645.57 |    4.263 |    30.03 |
+|   512 |    128 |  18432 |    0.766 |   668.01 |    4.279 |    29.91 |
+|   512 |    128 |  18944 |    0.772 |   663.63 |    4.317 |    29.65 |
+|   512 |    128 |  19456 |    0.770 |   664.73 |    4.399 |    29.09 |
+|   512 |    128 |  19968 |    0.774 |   661.69 |    4.395 |    29.12 |
+|   512 |    128 |  20480 |    0.782 |   654.53 |    4.472 |    28.62 |
+|   512 |    128 |  20992 |    0.777 |   658.82 |    4.452 |    28.75 |
+|   512 |    128 |  21504 |    0.792 |   646.81 |    4.538 |    28.21 |
+|   512 |    128 |  22016 |    0.796 |   643.38 |    4.528 |    28.27 |
+|   512 |    128 |  22528 |    0.794 |   644.56 |    4.603 |    27.81 |
+|   512 |    128 |  23040 |    0.801 |   638.97 |    4.591 |    27.88 |
+|   512 |    128 |  23552 |    0.803 |   637.70 |    4.668 |    27.42 |
+|   512 |    128 |  24064 |    0.812 |   630.87 |    4.665 |    27.44 |
+|   512 |    128 |  24576 |    0.816 |   627.49 |    4.740 |    27.00 |
+|   512 |    128 |  25088 |    0.827 |   619.00 |    4.723 |    27.10 |
+|   512 |    128 |  25600 |    0.824 |   621.32 |    4.795 |    26.69 |
+|   512 |    128 |  26112 |    0.834 |   613.80 |    4.789 |    26.73 |
+|   512 |    128 |  26624 |    0.841 |   608.77 |    4.846 |    26.42 |
+|   512 |    128 |  27136 |    0.850 |   602.59 |    4.859 |    26.34 |
+|   512 |    128 |  27648 |    0.853 |   600.05 |    4.923 |    26.00 |
+|   512 |    128 |  28160 |    0.856 |   598.23 |    4.910 |    26.07 |
+|   512 |    128 |  28672 |    0.869 |   589.37 |    4.984 |    25.68 |
+|   512 |    128 |  29184 |    0.874 |   585.56 |    4.979 |    25.71 |
+|   512 |    128 |  29696 |    0.887 |   576.91 |    5.058 |    25.31 |
+|   512 |    128 |  30208 |    0.904 |   566.36 |    5.069 |    25.25 |
+|   512 |    128 |  30720 |    0.894 |   572.62 |    5.111 |    25.04 |
+|   512 |    128 |  31232 |    0.939 |   545.44 |    5.139 |    24.91 |
+|   512 |    128 |  31744 |    0.906 |   564.97 |    5.173 |    24.74 |
+|   512 |    128 |  32256 |    0.915 |   559.63 |    5.279 |    24.25 |
+|   512 |    128 |  32768 |    0.920 |   556.40 |    5.336 |    23.99 |
+|   512 |    128 |  33280 |    0.931 |   549.86 |    5.417 |    23.63 |
+|   512 |    128 |  33792 |    0.928 |   551.68 |    5.447 |    23.50 |
+|   512 |    128 |  34304 |    0.933 |   548.58 |    5.560 |    23.02 |
+|   512 |    128 |  34816 |    0.976 |   524.51 |    5.640 |    22.70 |
+|   512 |    128 |  35328 |    0.951 |   538.66 |    5.895 |    21.71 |
+|   512 |    128 |  35840 |    0.956 |   535.82 |    6.226 |    20.56 |
+|   512 |    128 |  36352 |    0.963 |   531.58 |    6.262 |    20.44 |
+|   512 |    128 |  36864 |    0.974 |   525.59 |    6.369 |    20.10 |
+|   512 |    128 |  37376 |    0.971 |   527.04 |    6.375 |    20.08 |
+|   512 |    128 |  37888 |    1.002 |   511.16 |    6.499 |    19.70 |
+|   512 |    128 |  38400 |    0.986 |   519.10 |    6.440 |    19.88 |
+|   512 |    128 |  38912 |    0.990 |   517.09 |    6.536 |    19.59 |
+|   512 |    128 |  39424 |    1.034 |   495.37 |    6.572 |    19.48 |
+|   512 |    128 |  39936 |    1.007 |   508.28 |    6.671 |    19.19 |
+|   512 |    128 |  40448 |    1.009 |   507.41 |    6.769 |    18.91 |
+|   512 |    128 |  40960 |    1.030 |   497.27 |    6.829 |    18.74 |
+|   512 |    128 |  41472 |    1.023 |   500.43 |    7.008 |    18.26 |
+|   512 |    128 |  41984 |    1.033 |   495.56 |    7.192 |    17.80 |
+|   512 |    128 |  42496 |    1.031 |   496.78 |    7.305 |    17.52 |
+|   512 |    128 |  43008 |    1.048 |   488.38 |    7.292 |    17.55 |
+|   512 |    128 |  43520 |    1.045 |   489.91 |    7.357 |    17.40 |
+|   512 |    128 |  44032 |    1.050 |   487.53 |    7.627 |    16.78 |
+|   512 |    128 |  44544 |    1.059 |   483.61 |    7.984 |    16.03 |
+|   512 |    128 |  45056 |    1.065 |   480.53 |    8.520 |    15.02 |
+|   512 |    128 |  45568 |    1.069 |   478.82 |    8.943 |    14.31 |
+|   512 |    128 |  46080 |    1.081 |   473.72 |    9.668 |    13.24 |
+|   512 |    128 |  46592 |    1.077 |   475.57 |   10.312 |    12.41 |
+|   512 |    128 |  47104 |    1.083 |   472.80 |   10.878 |    11.77 |
+|   512 |    128 |  47616 |    1.099 |   465.80 |   11.388 |    11.24 |
+|   512 |    128 |  48128 |    1.100 |   465.53 |   11.665 |    10.97 |
+|   512 |    128 |  48640 |    1.108 |   462.13 |   11.752 |    10.89 |
+|   512 |    128 |  49152 |    1.116 |   458.88 |   11.811 |    10.84 |
+|   512 |    128 |  49664 |    1.157 |   442.71 |   11.918 |    10.74 |
+|   512 |    128 |  50176 |    1.128 |   454.02 |   12.062 |    10.61 |
+|   512 |    128 |  50688 |    1.137 |   450.48 |   12.095 |    10.58 |
+|   512 |    128 |  51200 |    1.143 |   447.84 |   12.141 |    10.54 |
+|   512 |    128 |  51712 |    1.146 |   446.67 |   12.306 |    10.40 |
+|   512 |    128 |  52224 |    1.191 |   430.00 |   12.416 |    10.31 |
+|   512 |    128 |  52736 |    1.163 |   440.38 |   12.437 |    10.29 |
+|   512 |    128 |  53248 |    1.163 |   440.37 |   12.594 |    10.16 |
+|   512 |    128 |  53760 |    1.184 |   432.37 |   12.639 |    10.13 |
+|   512 |    128 |  54272 |    1.179 |   434.30 |   12.744 |    10.04 |
+|   512 |    128 |  54784 |    1.184 |   432.36 |   12.852 |     9.96 |
+|   512 |    128 |  55296 |    1.188 |   431.08 |   12.890 |     9.93 |
+|   512 |    128 |  55808 |    1.193 |   429.12 |   13.059 |     9.80 |
+|   512 |    128 |  56320 |    1.223 |   418.58 |   13.202 |     9.70 |
+|   512 |    128 |  56832 |    1.264 |   404.96 |   13.236 |     9.67 |
+|   512 |    128 |  57344 |    1.270 |   403.19 |   13.492 |     9.49 |
+|   512 |    128 |  57856 |    1.268 |   403.92 |   13.522 |     9.47 |
+|   512 |    128 |  58368 |    1.240 |   413.01 |   13.574 |     9.43 |
+|   512 |    128 |  58880 |    1.255 |   408.00 |   13.737 |     9.32 |
+|   512 |    128 |  59392 |    1.292 |   396.18 |   13.913 |     9.20 |
+|   512 |    128 |  59904 |    1.269 |   403.32 |   14.007 |     9.14 |
+|   512 |    128 |  60416 |    1.278 |   400.54 |   14.089 |     9.08 |
+|   512 |    128 |  60928 |    1.276 |   401.22 |   14.196 |     9.02 |
+|   512 |    128 |  61440 |    1.297 |   394.68 |   14.311 |     8.94 |
+|   512 |    128 |  61952 |    1.287 |   397.76 |   14.390 |     8.89 |
+|   512 |    128 |  62464 |    1.297 |   394.78 |   14.492 |     8.83 |
+|   512 |    128 |  62976 |    1.337 |   383.06 |   14.598 |     8.77 |
+|   512 |    128 |  63488 |    1.331 |   384.74 |   14.678 |     8.72 |
+|   512 |    128 |  64000 |    1.336 |   383.27 |   14.754 |     8.68 |
+|   512 |    128 |  64512 |    1.328 |   385.67 |   14.858 |     8.62 |
+|   512 |    128 |  65024 |    1.343 |   381.32 |   14.962 |     8.55 |

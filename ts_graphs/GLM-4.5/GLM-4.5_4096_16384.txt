@@ -1,0 +1,822 @@
+ggml_cuda_init: GGML_CUDA_FORCE_MMQ:    no
+ggml_cuda_init: GGML_CUDA_FORCE_CUBLAS: no
+ggml_cuda_init: found 3 CUDA devices:
+  Device 0: NVIDIA RTX PRO 6000 Blackwell Workstation Edition, compute capability 12.0, VMM: yes
+  Device 1: NVIDIA RTX PRO 6000 Blackwell Workstation Edition, compute capability 12.0, VMM: yes
+  Device 2: NVIDIA GeForce RTX 5090, compute capability 12.0, VMM: yes
+llama_model_loader: max stdio successfully set to 2048
+llama_model_loader: additional 1761 GGUFs metadata loaded.
+llama_model_loader: loaded meta data with 46 key-value pairs and 1761 tensors from GLM-4.5-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01762.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = glm4moe
+llama_model_loader: - kv   1:                               general.type str              = model
+llama_model_loader: - kv   2:                               general.name str              = GLM 4.5
+llama_model_loader: - kv   3:                            general.version str              = 4.5
+llama_model_loader: - kv   4:                           general.basename str              = GLM
+llama_model_loader: - kv   5:                         general.size_label str              = 160x21B
+llama_model_loader: - kv   6:                            general.license str              = mit
+llama_model_loader: - kv   7:                               general.tags arr[str,1]       = ["text-generation"]
+llama_model_loader: - kv   8:                          general.languages arr[str,2]       = ["en", "zh"]
+llama_model_loader: - kv   9:                        glm4moe.block_count u32              = 93
+llama_model_loader: - kv  10:                     glm4moe.context_length u32              = 131072
+llama_model_loader: - kv  11:                   glm4moe.embedding_length u32              = 5120
+llama_model_loader: - kv  12:                glm4moe.feed_forward_length u32              = 12288
+llama_model_loader: - kv  13:               glm4moe.attention.head_count u32              = 96
+llama_model_loader: - kv  14:            glm4moe.attention.head_count_kv u32              = 8
+llama_model_loader: - kv  15:                     glm4moe.rope.freq_base f32              = 1000000.000000
+llama_model_loader: - kv  16:   glm4moe.attention.layer_norm_rms_epsilon f32              = 0.000010
+llama_model_loader: - kv  17:                  glm4moe.expert_used_count u32              = 8
+llama_model_loader: - kv  18:               glm4moe.attention.key_length u32              = 128
+llama_model_loader: - kv  19:             glm4moe.attention.value_length u32              = 128
+llama_model_loader: - kv  20:                          general.file_type u32              = 24
+llama_model_loader: - kv  21:               glm4moe.rope.dimension_count u32              = 64
+llama_model_loader: - kv  22:                       glm4moe.expert_count u32              = 160
+llama_model_loader: - kv  23:         glm4moe.expert_feed_forward_length u32              = 1536
+llama_model_loader: - kv  24:                glm4moe.expert_shared_count u32              = 1
+llama_model_loader: - kv  25:          glm4moe.leading_dense_block_count u32              = 3
+llama_model_loader: - kv  26:                 glm4moe.expert_gating_func u32              = 2
+llama_model_loader: - kv  27:               glm4moe.expert_weights_scale f32              = 2.500000
+llama_model_loader: - kv  28:                glm4moe.expert_weights_norm bool             = true
+llama_model_loader: - kv  29:               glm4moe.nextn_predict_layers u32              = 1
+llama_model_loader: - kv  30:                       tokenizer.ggml.model str              = gpt2
+llama_model_loader: - kv  31:                         tokenizer.ggml.pre str              = glm4
+llama_model_loader: - kv  32:                      tokenizer.ggml.tokens arr[str,151552]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+llama_model_loader: - kv  33:                  tokenizer.ggml.token_type arr[i32,151552]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  34:                      tokenizer.ggml.merges arr[str,318088]  = ["Ġ Ġ", "Ġ ĠĠĠ", "ĠĠ ĠĠ", "...
+llama_model_loader: - kv  35:                tokenizer.ggml.eos_token_id u32              = 151329
+llama_model_loader: - kv  36:            tokenizer.ggml.padding_token_id u32              = 151329
+llama_model_loader: - kv  37:                tokenizer.ggml.bos_token_id u32              = 151331
+llama_model_loader: - kv  38:                tokenizer.ggml.eot_token_id u32              = 151336
+llama_model_loader: - kv  39:            tokenizer.ggml.unknown_token_id u32              = 151329
+llama_model_loader: - kv  40:                tokenizer.ggml.eom_token_id u32              = 151338
+llama_model_loader: - kv  41:                    tokenizer.chat_template str              = [gMASK]<sop>\n{%- if tools -%}\n<|syste...
+llama_model_loader: - kv  42:               general.quantization_version u32              = 2
+llama_model_loader: - kv  43:                                   split.no u16              = 0
+llama_model_loader: - kv  44:                                split.count u16              = 1762
+llama_model_loader: - kv  45:                        split.tensors.count i32              = 1761
+llama_model_loader: - type  f32:  835 tensors
+llama_model_loader: - type q8_0:  144 tensors
+llama_model_loader: - type iq4_xs:  282 tensors
+llama_model_loader: - type iq3_k:  135 tensors
+llama_model_loader: - type iq6_k:  170 tensors
+llama_model_loader: - type iq4_ks:   27 tensors
+llama_model_loader: - type iq2_ks:  105 tensors
+llama_model_loader: - type iq5_k_r4:   63 tensors
+llm_load_vocab: special tokens cache size = 36
+llm_load_vocab: token to piece cache size = 0.9713 MB
+llm_load_print_meta: format           = GGUF V3 (latest)
+llm_load_print_meta: arch             = glm4moe
+llm_load_print_meta: vocab type       = BPE
+llm_load_print_meta: n_vocab          = 151552
+llm_load_print_meta: n_merges         = 318088
+llm_load_print_meta: vocab_only       = 0
+llm_load_print_meta: n_ctx_train      = 131072
+llm_load_print_meta: n_embd           = 5120
+llm_load_print_meta: n_layer          = 93
+llm_load_print_meta: n_head           = 96
+llm_load_print_meta: n_head_kv        = 8
+llm_load_print_meta: n_rot            = 64
+llm_load_print_meta: n_swa            = 0
+llm_load_print_meta: n_swa_pattern    = 1
+llm_load_print_meta: n_embd_head_k    = 128
+llm_load_print_meta: n_embd_head_v    = 128
+llm_load_print_meta: n_gqa            = 12
+llm_load_print_meta: n_embd_k_gqa     = 1024
+llm_load_print_meta: n_embd_v_gqa     = 1024
+llm_load_print_meta: f_norm_eps       = 0.0e+00
+llm_load_print_meta: f_norm_rms_eps   = 1.0e-05
+llm_load_print_meta: f_clamp_kqv      = 0.0e+00
+llm_load_print_meta: f_max_alibi_bias = 0.0e+00
+llm_load_print_meta: f_logit_scale    = 0.0e+00
+llm_load_print_meta: n_ff             = 12288
+llm_load_print_meta: n_expert         = 160
+llm_load_print_meta: n_expert_used    = 8
+llm_load_print_meta: causal attn      = 1
+llm_load_print_meta: pooling type     = 0
+llm_load_print_meta: rope type        = 2
+llm_load_print_meta: rope scaling     = linear
+llm_load_print_meta: freq_base_train  = 1000000.0
+llm_load_print_meta: freq_scale_train = 1
+llm_load_print_meta: n_ctx_orig_yarn  = 131072
+llm_load_print_meta: rope_finetuned   = unknown
+llm_load_print_meta: ssm_d_conv       = 0
+llm_load_print_meta: ssm_d_inner      = 0
+llm_load_print_meta: ssm_d_state      = 0
+llm_load_print_meta: ssm_dt_rank      = 0
+llm_load_print_meta: model type       = 355B.A32B
+llm_load_print_meta: model ftype      = IQ1_S - 1.5625 bpw
+llm_load_print_meta: model params     = 358.338 B
+llm_load_print_meta: model size       = 134.858 GiB (3.233 BPW) 
+llm_load_print_meta: repeating layers = 133.322 GiB (3.210 BPW, 356.786 B parameters)
+llm_load_print_meta: general.name     = GLM 4.5
+llm_load_print_meta: BOS token        = 151331 '[gMASK]'
+llm_load_print_meta: EOS token        = 151329 '<|endoftext|>'
+llm_load_print_meta: UNK token        = 151329 '<|endoftext|>'
+llm_load_print_meta: PAD token        = 151329 '<|endoftext|>'
+llm_load_print_meta: LF token         = 128 'Ä'
+llm_load_print_meta: FIM PRE token    = 151347 '<|code_prefix|>'
+llm_load_print_meta: FIM SUF token    = 151349 '<|code_suffix|>'
+llm_load_print_meta: FIM MID token    = 151348 '<|code_middle|>'
+llm_load_print_meta: EOT token        = 151336 '<|user|>'
+llm_load_print_meta: max token length = 1024
+llm_load_tensors: ggml ctx size =    2.87 MiB
+Tensor blk.0.ffn_gate.weight buffer type overriden to CUDA0
+Tensor blk.0.ffn_down.weight buffer type overriden to CUDA0
+Tensor blk.0.ffn_up.weight buffer type overriden to CUDA0
+Tensor blk.1.ffn_gate.weight buffer type overriden to CUDA0
+Tensor blk.1.ffn_down.weight buffer type overriden to CUDA0
+Tensor blk.1.ffn_up.weight buffer type overriden to CUDA0
+Tensor blk.2.ffn_gate.weight buffer type overriden to CUDA0
+Tensor blk.2.ffn_down.weight buffer type overriden to CUDA0
+Tensor blk.2.ffn_up.weight buffer type overriden to CUDA0
+Tensor blk.3.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.3.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.3.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.3.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.3.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.3.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.3.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.4.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.4.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.4.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.4.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.4.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.4.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.4.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.5.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.5.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.5.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.5.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.5.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.5.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.5.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.6.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.6.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.6.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.6.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.6.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.6.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.6.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.7.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.7.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.7.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.7.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.7.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.7.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.7.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.8.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.8.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.8.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.8.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.8.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.8.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.8.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.9.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.9.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.9.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.9.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.9.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.9.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.9.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.10.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.10.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.10.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.10.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.10.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.10.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.10.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.11.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.11.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.11.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.11.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.11.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.11.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.11.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.12.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.12.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.12.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.12.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.12.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.12.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.12.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.13.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.13.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.13.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.13.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.13.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.13.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.13.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.14.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.14.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.14.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.14.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.14.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.14.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.14.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.15.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.15.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.15.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.15.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.15.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.15.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.15.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.16.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.16.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.16.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.16.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.16.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.16.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.16.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.17.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.17.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.17.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.17.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.17.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.17.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.17.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.18.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.18.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.18.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.18.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.18.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.18.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.18.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.19.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.19.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.19.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.19.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.19.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.19.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.19.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.20.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.20.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.20.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.20.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.20.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.20.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.20.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.21.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.21.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.21.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.21.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.21.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.21.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.21.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.22.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.22.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.22.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.22.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.22.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.22.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.22.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.23.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.23.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.23.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.23.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.23.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.23.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.23.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.24.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.24.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.24.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.24.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.24.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.24.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.24.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.25.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.25.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.25.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.25.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.25.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.25.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.25.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.26.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.26.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.26.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.26.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.26.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.26.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.26.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.27.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.27.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.27.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.27.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.27.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.27.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.27.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.28.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.28.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.28.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.28.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.28.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.28.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.28.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.29.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.29.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.29.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.29.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.29.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.29.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.29.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.30.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.30.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.30.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.30.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.30.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.30.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.30.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.31.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.31.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.31.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.31.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.31.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.31.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.31.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.32.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.32.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.32.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.32.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.32.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.32.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.32.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.33.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.33.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.33.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.33.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.33.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.33.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.33.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.34.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.34.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.34.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.34.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.34.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.34.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.34.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.35.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.35.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.35.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.35.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.35.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.35.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.35.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.36.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.36.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.36.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.36.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.36.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.36.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.36.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.37.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.37.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.37.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.37.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.37.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.37.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.37.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.38.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.38.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.38.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.38.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.38.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.38.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.38.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.39.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.39.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.39.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.39.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.39.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.39.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.39.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.40.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.40.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.40.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.40.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.40.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.40.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.40.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.41.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.41.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.41.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.41.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.41.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.41.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.41.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.42.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.42.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.42.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.42.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.42.ffn_gate_shexp.weight buffer type overriden to CUDA0
+Tensor blk.42.ffn_down_shexp.weight buffer type overriden to CUDA0
+Tensor blk.42.ffn_up_shexp.weight buffer type overriden to CUDA0
+Tensor blk.43.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.43.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.43.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.43.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.43.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.43.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.43.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.44.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.44.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.44.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.44.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.44.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.44.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.44.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.45.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.45.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.45.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.45.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.45.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.45.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.45.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.46.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.46.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.46.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.46.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.46.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.46.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.46.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.47.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.47.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.47.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.47.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.47.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.47.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.47.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.48.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.48.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.48.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.48.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.48.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.48.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.48.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.49.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.49.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.49.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.49.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.49.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.49.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.49.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.50.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.50.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.50.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.50.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.50.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.50.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.50.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.51.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.51.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.51.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.51.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.51.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.51.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.51.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.52.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.52.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.52.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.52.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.52.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.52.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.52.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.53.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.53.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.53.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.53.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.53.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.53.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.53.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.54.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.54.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.54.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.54.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.54.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.54.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.54.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.55.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.55.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.55.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.55.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.55.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.55.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.55.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.56.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.56.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.56.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.56.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.56.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.56.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.56.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.57.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.57.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.57.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.57.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.57.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.57.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.57.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.58.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.58.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.58.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.58.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.58.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.58.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.58.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.59.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.59.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.59.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.59.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.59.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.59.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.59.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.60.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.60.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.60.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.60.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.60.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.60.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.60.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.61.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.61.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.61.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.61.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.61.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.61.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.61.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.62.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.62.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.62.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.62.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.62.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.62.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.62.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.63.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.63.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.63.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.63.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.63.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.63.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.63.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.64.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.64.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.64.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.64.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.64.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.64.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.64.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.65.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.65.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.65.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.65.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.65.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.65.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.65.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.66.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.66.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.66.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.66.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.66.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.66.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.66.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.67.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.67.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.67.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.67.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.67.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.67.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.67.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.68.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.68.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.68.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.68.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.68.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.68.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.68.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.69.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.69.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.69.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.69.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.69.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.69.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.69.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.70.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.70.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.70.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.70.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.70.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.70.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.70.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.71.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.71.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.71.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.71.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.71.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.71.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.71.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.72.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.72.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.72.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.72.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.72.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.72.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.72.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.73.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.73.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.73.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.73.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.73.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.73.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.73.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.74.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.74.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.74.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.74.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.74.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.74.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.74.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.75.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.75.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.75.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.75.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.75.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.75.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.75.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.76.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.76.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.76.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.76.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.76.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.76.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.76.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.77.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.77.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.77.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.77.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.77.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.77.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.77.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.78.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.78.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.78.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.78.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.78.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.78.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.78.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.79.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.79.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.79.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.79.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.79.ffn_gate_shexp.weight buffer type overriden to CUDA1
+Tensor blk.79.ffn_down_shexp.weight buffer type overriden to CUDA1
+Tensor blk.79.ffn_up_shexp.weight buffer type overriden to CUDA1
+Tensor blk.80.ffn_gate_inp.weight buffer type overriden to CUDA2
+Tensor blk.80.ffn_gate_exps.weight buffer type overriden to CUDA2
+Tensor blk.80.ffn_down_exps.weight buffer type overriden to CUDA2
+Tensor blk.80.ffn_up_exps.weight buffer type overriden to CUDA2
+Tensor blk.80.ffn_gate_shexp.weight buffer type overriden to CUDA2
+Tensor blk.80.ffn_down_shexp.weight buffer type overriden to CUDA2
+Tensor blk.80.ffn_up_shexp.weight buffer type overriden to CUDA2
+Tensor blk.81.ffn_gate_inp.weight buffer type overriden to CUDA2
+Tensor blk.81.ffn_gate_exps.weight buffer type overriden to CUDA2
+Tensor blk.81.ffn_down_exps.weight buffer type overriden to CUDA2
+Tensor blk.81.ffn_up_exps.weight buffer type overriden to CUDA2
+Tensor blk.81.ffn_gate_shexp.weight buffer type overriden to CUDA2
+Tensor blk.81.ffn_down_shexp.weight buffer type overriden to CUDA2
+Tensor blk.81.ffn_up_shexp.weight buffer type overriden to CUDA2
+Tensor blk.82.ffn_gate_inp.weight buffer type overriden to CUDA2
+Tensor blk.82.ffn_gate_exps.weight buffer type overriden to CUDA2
+Tensor blk.82.ffn_down_exps.weight buffer type overriden to CUDA2
+Tensor blk.82.ffn_up_exps.weight buffer type overriden to CUDA2
+Tensor blk.82.ffn_gate_shexp.weight buffer type overriden to CUDA2
+Tensor blk.82.ffn_down_shexp.weight buffer type overriden to CUDA2
+Tensor blk.82.ffn_up_shexp.weight buffer type overriden to CUDA2
+Tensor blk.83.ffn_gate_inp.weight buffer type overriden to CUDA2
+Tensor blk.83.ffn_gate_exps.weight buffer type overriden to CUDA2
+Tensor blk.83.ffn_down_exps.weight buffer type overriden to CUDA2
+Tensor blk.83.ffn_up_exps.weight buffer type overriden to CUDA2
+Tensor blk.83.ffn_gate_shexp.weight buffer type overriden to CUDA2
+Tensor blk.83.ffn_down_shexp.weight buffer type overriden to CUDA2
+Tensor blk.83.ffn_up_shexp.weight buffer type overriden to CUDA2
+Tensor blk.84.ffn_gate_inp.weight buffer type overriden to CUDA2
+Tensor blk.84.ffn_gate_exps.weight buffer type overriden to CUDA2
+Tensor blk.84.ffn_down_exps.weight buffer type overriden to CUDA2
+Tensor blk.84.ffn_up_exps.weight buffer type overriden to CUDA2
+Tensor blk.84.ffn_gate_shexp.weight buffer type overriden to CUDA2
+Tensor blk.84.ffn_down_shexp.weight buffer type overriden to CUDA2
+Tensor blk.84.ffn_up_shexp.weight buffer type overriden to CUDA2
+Tensor blk.85.ffn_gate_inp.weight buffer type overriden to CUDA2
+Tensor blk.85.ffn_gate_exps.weight buffer type overriden to CUDA2
+Tensor blk.85.ffn_down_exps.weight buffer type overriden to CUDA2
+Tensor blk.85.ffn_up_exps.weight buffer type overriden to CUDA2
+Tensor blk.85.ffn_gate_shexp.weight buffer type overriden to CUDA2
+Tensor blk.85.ffn_down_shexp.weight buffer type overriden to CUDA2
+Tensor blk.85.ffn_up_shexp.weight buffer type overriden to CUDA2
+Tensor blk.86.ffn_gate_inp.weight buffer type overriden to CUDA2
+Tensor blk.86.ffn_gate_exps.weight buffer type overriden to CUDA2
+Tensor blk.86.ffn_down_exps.weight buffer type overriden to CUDA2
+Tensor blk.86.ffn_up_exps.weight buffer type overriden to CUDA2
+Tensor blk.86.ffn_gate_shexp.weight buffer type overriden to CUDA2
+Tensor blk.86.ffn_down_shexp.weight buffer type overriden to CUDA2
+Tensor blk.86.ffn_up_shexp.weight buffer type overriden to CUDA2
+Tensor blk.87.ffn_gate_inp.weight buffer type overriden to CUDA2
+Tensor blk.87.ffn_gate_exps.weight buffer type overriden to CUDA2
+Tensor blk.87.ffn_down_exps.weight buffer type overriden to CUDA2
+Tensor blk.87.ffn_up_exps.weight buffer type overriden to CUDA2
+Tensor blk.87.ffn_gate_shexp.weight buffer type overriden to CUDA2
+Tensor blk.87.ffn_down_shexp.weight buffer type overriden to CUDA2
+Tensor blk.87.ffn_up_shexp.weight buffer type overriden to CUDA2
+Tensor blk.88.ffn_gate_inp.weight buffer type overriden to CUDA2
+Tensor blk.88.ffn_gate_exps.weight buffer type overriden to CUDA2
+Tensor blk.88.ffn_down_exps.weight buffer type overriden to CUDA2
+Tensor blk.88.ffn_up_exps.weight buffer type overriden to CUDA2
+Tensor blk.88.ffn_gate_shexp.weight buffer type overriden to CUDA2
+Tensor blk.88.ffn_down_shexp.weight buffer type overriden to CUDA2
+Tensor blk.88.ffn_up_shexp.weight buffer type overriden to CUDA2
+Tensor blk.89.ffn_gate_inp.weight buffer type overriden to CUDA2
+Tensor blk.89.ffn_gate_exps.weight buffer type overriden to CUDA2
+Tensor blk.89.ffn_down_exps.weight buffer type overriden to CUDA2
+Tensor blk.89.ffn_up_exps.weight buffer type overriden to CUDA2
+Tensor blk.89.ffn_gate_shexp.weight buffer type overriden to CUDA2
+Tensor blk.89.ffn_down_shexp.weight buffer type overriden to CUDA2
+Tensor blk.89.ffn_up_shexp.weight buffer type overriden to CUDA2
+Tensor blk.90.ffn_gate_inp.weight buffer type overriden to CUDA2
+Tensor blk.90.ffn_gate_exps.weight buffer type overriden to CUDA2
+Tensor blk.90.ffn_down_exps.weight buffer type overriden to CUDA2
+Tensor blk.90.ffn_up_exps.weight buffer type overriden to CUDA2
+Tensor blk.90.ffn_gate_shexp.weight buffer type overriden to CUDA2
+Tensor blk.90.ffn_down_shexp.weight buffer type overriden to CUDA2
+Tensor blk.90.ffn_up_shexp.weight buffer type overriden to CUDA2
+Tensor blk.91.ffn_gate_inp.weight buffer type overriden to CUDA2
+Tensor blk.91.ffn_gate_exps.weight buffer type overriden to CUDA2
+Tensor blk.91.ffn_down_exps.weight buffer type overriden to CUDA2
+Tensor blk.91.ffn_up_exps.weight buffer type overriden to CUDA2
+Tensor blk.91.ffn_gate_shexp.weight buffer type overriden to CUDA2
+Tensor blk.91.ffn_down_shexp.weight buffer type overriden to CUDA2
+Tensor blk.91.ffn_up_shexp.weight buffer type overriden to CUDA2
+model has unused tensor blk.92.attn_norm.weight (size = 20480 bytes) -- ignoring
+model has unused tensor blk.92.attn_q.weight (size = 33423360 bytes) -- ignoring
+model has unused tensor blk.92.attn_k.weight (size = 2785280 bytes) -- ignoring
+model has unused tensor blk.92.attn_v.weight (size = 2785280 bytes) -- ignoring
+model has unused tensor blk.92.attn_q.bias (size = 49152 bytes) -- ignoring
+model has unused tensor blk.92.attn_k.bias (size = 4096 bytes) -- ignoring
+model has unused tensor blk.92.attn_v.bias (size = 4096 bytes) -- ignoring
+model has unused tensor blk.92.attn_output.weight (size = 66846720 bytes) -- ignoring
+model has unused tensor blk.92.attn_q_norm.weight (size = 512 bytes) -- ignoring
+model has unused tensor blk.92.attn_k_norm.weight (size = 512 bytes) -- ignoring
+model has unused tensor blk.92.post_attention_norm.weight (size = 20480 bytes) -- ignoring
+Tensor blk.92.ffn_gate_inp.weight buffer type overriden to CUDA2
+model has unused tensor blk.92.ffn_gate_inp.weight (size = 3276800 bytes) -- ignoring
+model has unused tensor blk.92.exp_probs_b.bias (size = 640 bytes) -- ignoring
+Tensor blk.92.ffn_gate_exps.weight buffer type overriden to CUDA2
+model has unused tensor blk.92.ffn_gate_exps.weight (size = 865075200 bytes) -- ignoring
+Tensor blk.92.ffn_down_exps.weight buffer type overriden to CUDA2
+model has unused tensor blk.92.ffn_down_exps.weight (size = 865075200 bytes) -- ignoring
+Tensor blk.92.ffn_up_exps.weight buffer type overriden to CUDA2
+model has unused tensor blk.92.ffn_up_exps.weight (size = 865075200 bytes) -- ignoring
+Tensor blk.92.ffn_gate_shexp.weight buffer type overriden to CUDA2
+model has unused tensor blk.92.ffn_gate_shexp.weight (size = 6512640 bytes) -- ignoring
+Tensor blk.92.ffn_down_shexp.weight buffer type overriden to CUDA2
+model has unused tensor blk.92.ffn_down_shexp.weight (size = 6512640 bytes) -- ignoring
+Tensor blk.92.ffn_up_shexp.weight buffer type overriden to CUDA2
+model has unused tensor blk.92.ffn_up_shexp.weight (size = 6512640 bytes) -- ignoring
+model has unused tensor blk.92.nextn.eh_proj.weight (size = 27852800 bytes) -- ignoring
+model has unused tensor blk.92.nextn.embed_tokens.weight (size = 412221440 bytes) -- ignoring
+model has unused tensor blk.92.nextn.enorm.weight (size = 20480 bytes) -- ignoring
+model has unused tensor blk.92.nextn.hnorm.weight (size = 20480 bytes) -- ignoring
+model has unused tensor blk.92.nextn.shared_head_head.weight (size = 412221440 bytes) -- ignoring
+model has unused tensor blk.92.nextn.shared_head_norm.weight (size = 20480 bytes) -- ignoring
+llm_load_tensors: offloading 93 repeating layers to GPU
+llm_load_tensors: offloading non-repeating layers to GPU
+llm_load_tensors: offloaded 94/94 layers to GPU
+llm_load_tensors:  CUDA_Host buffer size =   786.25 MiB
+llm_load_tensors:      CUDA0 buffer size = 58636.49 MiB
+llm_load_tensors:      CUDA1 buffer size = 59197.64 MiB
+llm_load_tensors:      CUDA2 buffer size = 16063.06 MiB
+....................................................................................................
+llama_new_context_with_model: n_ctx      = 65536
+llama_new_context_with_model: n_batch    = 4096
+llama_new_context_with_model: n_ubatch   = 4096
+llama_new_context_with_model: flash_attn = 1
+llama_new_context_with_model: mla_attn   = 0
+llama_new_context_with_model: attn_max_b = 1024
+llama_new_context_with_model: fused_moe  = 1
+llama_new_context_with_model: ser        = -1, 0
+llama_new_context_with_model: freq_base  = 1000000.0
+llama_new_context_with_model: freq_scale = 1
+llama_kv_cache_init:      CUDA0 KV buffer size = 10496.00 MiB
+llama_kv_cache_init:      CUDA1 KV buffer size = 10240.00 MiB
+llama_kv_cache_init:      CUDA2 KV buffer size =  3072.00 MiB
+llama_new_context_with_model: KV self size  = 23808.00 MiB, K (f16): 11904.00 MiB, V (f16): 11904.00 MiB
+llama_new_context_with_model:  CUDA_Host  output buffer size =     0.58 MiB
+llama_new_context_with_model: pipeline parallelism enabled (n_copies=1)
+llama_new_context_with_model:      CUDA0 compute buffer size =  2080.02 MiB
+llama_new_context_with_model:      CUDA1 compute buffer size =  2080.02 MiB
+llama_new_context_with_model:      CUDA2 compute buffer size =  2448.00 MiB
+llama_new_context_with_model:  CUDA_Host compute buffer size =  1104.05 MiB
+llama_new_context_with_model: graph nodes  = 4523
+llama_new_context_with_model: graph splits = 14
+
+main: n_kv_max = 65536, n_batch = 4096, n_ubatch = 16384, flash_attn = 1, n_gpu_layers = 99, n_threads = 36, n_threads_batch = 36
+
+|    PP |     TG |   N_KV |   T_PP s | S_PP t/s |   T_TG s | S_TG t/s |
+|-------|--------|--------|----------|----------|----------|----------|
+D:\a\ik_llama.cpp\ik_llama.cpp\src\llama.cpp:18851: GGML_ASSERT(n_tokens_all <= cparams.n_batch) failed
