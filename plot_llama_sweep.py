@@ -23,6 +23,8 @@
 #**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
 #***************************************************************#
 
+# type: ignore 
+
 """
 Parse grep-style lines like:
 GLM-4.5-Air_1024_512.txt:|   512 |    128 |   8192 |    0.675 |   758.07 |    3.754 |    34.10 |
@@ -44,6 +46,47 @@ Features:
 - Series annotated with bold labels and arrow to last point.
 - Interpolates metrics on a common grid and computes means for ranking.
 - Choose BEST candidate within per-metric margins using combined dimension tie-breaker.
+
+Example of script that produces the llama-sweep-bench log files:
+
+#!/usr/bin/env bash
+
+BATCH_SIZES=(512 1024 2048 4096 8192 16384)
+
+CUDA_DEVICE_ORDER=PCI_BUS_ID
+CUDA_VISIBLE_DEVICES=0,1,2
+MODEL="GLM-4.5-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01762.gguf"
+BENCH_PATH="$HOME/ik_llama-main-b4065-a09bed8-bin-win-cuda-12.8-x64-avx512/llama-sweep-bench"
+
+for i in "${BATCH_SIZES[@]}"; do
+    for j in "${BATCH_SIZES[@]}"; do
+        # Skip cases where i < j
+        if (( i < j )); then
+            continue
+        fi
+
+        OUTPUT_FILE="GLM-4.5_${i}_${j}.txt"
+
+        "$BENCH_PATH" \
+            -m "$MODEL" \
+            -fa \
+            -amb 1024 \
+            -fmoe \
+            -ctk f16 \
+            -c 65536 \
+            -ngl 99 \
+            -ot "blk\.([0-9]|[1-3][0-9]|4[0-2])\.ffn_.*=CUDA0" \
+            -ot "blk\.(4[3-9]|[5-7][0-9])\.ffn_.*=CUDA1" \
+            -ot "blk\.(8[0-9]|90|91|92)\.ffn_.*=CUDA2" \
+            -b "$i" \
+            -ub "$j" \
+            --warmup-batch \
+            --no-mmap \
+            --threads 36 \
+            --main-gpu 0 \
+            > "$OUTPUT_FILE" 2>&1
+    done
+done
 """
 
 import sys
