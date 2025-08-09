@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** normalised_ppl.py just some a useful math model, too long **#
-#** to explain...                                             **#
+#** normalised_ppl.py just a useful math model, too long to   **#
+#** explain...                                                **#
 #**                                                           **#
 #** ********************************************************* **#
 #** --------------- Updated: Jul-10-2025 -------------------- **#
