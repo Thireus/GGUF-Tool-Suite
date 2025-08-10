@@ -1,0 +1,746 @@
+ggml_cuda_init: GGML_CUDA_FORCE_MMQ:    no
+ggml_cuda_init: GGML_CUDA_FORCE_CUBLAS: no
+ggml_cuda_init: found 3 CUDA devices:
+  Device 0: NVIDIA RTX PRO 6000 Blackwell Workstation Edition, compute capability 12.0, VMM: yes
+  Device 1: NVIDIA RTX PRO 6000 Blackwell Workstation Edition, compute capability 12.0, VMM: yes
+  Device 2: NVIDIA GeForce RTX 5090, compute capability 12.0, VMM: yes
+llama_model_loader: max stdio successfully set to 2048
+llama_model_loader: additional 1131 GGUFs metadata loaded.
+llama_model_loader: loaded meta data with 38 key-value pairs and 1131 tensors from Qwen3-235B-A22B-Thinking-2507-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01132.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = qwen3moe
+llama_model_loader: - kv   1:                               general.type str              = model
+llama_model_loader: - kv   2:                               general.name str              = Qwen3 235B A22B Thinking 2507
+llama_model_loader: - kv   3:                            general.version str              = 2507
+llama_model_loader: - kv   4:                           general.finetune str              = Thinking
+llama_model_loader: - kv   5:                           general.basename str              = Qwen3
+llama_model_loader: - kv   6:                         general.size_label str              = 235B-A22B
+llama_model_loader: - kv   7:                            general.license str              = apache-2.0
+llama_model_loader: - kv   8:                       general.license.link str              = https://huggingface.co/Qwen/Qwen3-235...
+llama_model_loader: - kv   9:                               general.tags arr[str,1]       = ["text-generation"]
+llama_model_loader: - kv  10:                       qwen3moe.block_count u32              = 94
+llama_model_loader: - kv  11:                    qwen3moe.context_length u32              = 262144
+llama_model_loader: - kv  12:                  qwen3moe.embedding_length u32              = 4096
+llama_model_loader: - kv  13:               qwen3moe.feed_forward_length u32              = 12288
+llama_model_loader: - kv  14:              qwen3moe.attention.head_count u32              = 64
+llama_model_loader: - kv  15:           qwen3moe.attention.head_count_kv u32              = 4
+llama_model_loader: - kv  16:                    qwen3moe.rope.freq_base f32              = 5000000.000000
+llama_model_loader: - kv  17:  qwen3moe.attention.layer_norm_rms_epsilon f32              = 0.000001
+llama_model_loader: - kv  18:                 qwen3moe.expert_used_count u32              = 8
+llama_model_loader: - kv  19:              qwen3moe.attention.key_length u32              = 128
+llama_model_loader: - kv  20:            qwen3moe.attention.value_length u32              = 128
+llama_model_loader: - kv  21:                          general.file_type u32              = 32
+llama_model_loader: - kv  22:                      qwen3moe.expert_count u32              = 128
+llama_model_loader: - kv  23:        qwen3moe.expert_feed_forward_length u32              = 1536
+llama_model_loader: - kv  24:               general.quantization_version u32              = 2
+llama_model_loader: - kv  25:                       tokenizer.ggml.model str              = gpt2
+llama_model_loader: - kv  26:                         tokenizer.ggml.pre str              = qwen2
+llama_model_loader: - kv  27:                      tokenizer.ggml.tokens arr[str,151936]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+llama_model_loader: - kv  28:                  tokenizer.ggml.token_type arr[i32,151936]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  29:                      tokenizer.ggml.merges arr[str,151387]  = ["Ġ Ġ", "ĠĠ ĠĠ", "i n", "Ġ t",...
+llama_model_loader: - kv  30:                tokenizer.ggml.eos_token_id u32              = 151645
+llama_model_loader: - kv  31:            tokenizer.ggml.padding_token_id u32              = 151643
+llama_model_loader: - kv  32:                tokenizer.ggml.bos_token_id u32              = 151643
+llama_model_loader: - kv  33:               tokenizer.ggml.add_bos_token bool             = false
+llama_model_loader: - kv  34:                    tokenizer.chat_template str              = {%- if tools %}\n    {{- '<|im_start|>...
+llama_model_loader: - kv  35:                                   split.no u16              = 0
+llama_model_loader: - kv  36:                                split.count u16              = 1132
+llama_model_loader: - kv  37:                        split.tensors.count i32              = 1131
+llama_model_loader: - type  f32:  471 tensors
+llama_model_loader: - type q8_0:   96 tensors
+llama_model_loader: - type iq6_k:   40 tensors
+llama_model_loader: - type iq5_k_r4:  524 tensors
+llm_load_vocab: special tokens cache size = 26
+llm_load_vocab: token to piece cache size = 0.9311 MB
+llm_load_print_meta: format           = GGUF V3 (latest)
+llm_load_print_meta: arch             = qwen3moe
+llm_load_print_meta: vocab type       = BPE
+llm_load_print_meta: n_vocab          = 151936
+llm_load_print_meta: n_merges         = 151387
+llm_load_print_meta: vocab_only       = 0
+llm_load_print_meta: n_ctx_train      = 262144
+llm_load_print_meta: n_embd           = 4096
+llm_load_print_meta: n_layer          = 94
+llm_load_print_meta: n_head           = 64
+llm_load_print_meta: n_head_kv        = 4
+llm_load_print_meta: n_rot            = 128
+llm_load_print_meta: n_swa            = 0
+llm_load_print_meta: n_swa_pattern    = 1
+llm_load_print_meta: n_embd_head_k    = 128
+llm_load_print_meta: n_embd_head_v    = 128
+llm_load_print_meta: n_gqa            = 16
+llm_load_print_meta: n_embd_k_gqa     = 512
+llm_load_print_meta: n_embd_v_gqa     = 512
+llm_load_print_meta: f_norm_eps       = 0.0e+00
+llm_load_print_meta: f_norm_rms_eps   = 1.0e-06
+llm_load_print_meta: f_clamp_kqv      = 0.0e+00
+llm_load_print_meta: f_max_alibi_bias = 0.0e+00
+llm_load_print_meta: f_logit_scale    = 0.0e+00
+llm_load_print_meta: n_ff             = 12288
+llm_load_print_meta: n_expert         = 128
+llm_load_print_meta: n_expert_used    = 8
+llm_load_print_meta: causal attn      = 1
+llm_load_print_meta: pooling type     = 0
+llm_load_print_meta: rope type        = 2
+llm_load_print_meta: rope scaling     = linear
+llm_load_print_meta: freq_base_train  = 5000000.0
+llm_load_print_meta: freq_scale_train = 1
+llm_load_print_meta: n_ctx_orig_yarn  = 262144
+llm_load_print_meta: rope_finetuned   = unknown
+llm_load_print_meta: ssm_d_conv       = 0
+llm_load_print_meta: ssm_d_inner      = 0
+llm_load_print_meta: ssm_d_state      = 0
+llm_load_print_meta: ssm_dt_rank      = 0
+llm_load_print_meta: model type       = ?B
+llm_load_print_meta: model ftype      = BF16
+llm_load_print_meta: model params     = 235.094 B
+llm_load_print_meta: model size       = 156.436 GiB (5.716 BPW) 
+llm_load_print_meta: repeating layers = 155.205 GiB (5.701 BPW, 233.849 B parameters)
+llm_load_print_meta: general.name     = Qwen3 235B A22B Thinking 2507
+llm_load_print_meta: BOS token        = 151643 '<|endoftext|>'
+llm_load_print_meta: EOS token        = 151645 '<|im_end|>'
+llm_load_print_meta: PAD token        = 151643 '<|endoftext|>'
+llm_load_print_meta: LF token         = 148848 'ÄĬ'
+llm_load_print_meta: FIM PRE token    = 151659 '<|fim_prefix|>'
+llm_load_print_meta: FIM SUF token    = 151661 '<|fim_suffix|>'
+llm_load_print_meta: FIM MID token    = 151660 '<|fim_middle|>'
+llm_load_print_meta: FIM PAD token    = 151662 '<|fim_pad|>'
+llm_load_print_meta: FIM REP token    = 151663 '<|repo_name|>'
+llm_load_print_meta: FIM SEP token    = 151664 '<|file_sep|>'
+llm_load_print_meta: EOT token        = 151645 '<|im_end|>'
+llm_load_print_meta: max token length = 256
+llm_load_print_meta: n_ff_exp         = 1536
+llm_load_tensors: ggml ctx size =    1.98 MiB
+Tensor blk.0.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.0.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.0.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.0.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.0.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.1.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.1.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.1.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.1.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.1.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.2.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.2.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.2.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.2.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.2.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.3.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.3.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.3.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.3.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.3.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.4.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.4.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.4.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.4.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.4.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.5.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.5.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.5.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.5.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.5.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.6.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.6.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.6.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.6.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.6.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.7.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.7.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.7.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.7.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.7.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.8.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.8.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.8.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.8.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.8.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.9.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.9.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.9.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.9.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.9.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.10.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.10.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.10.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.10.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.10.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.11.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.11.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.11.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.11.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.11.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.12.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.12.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.12.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.12.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.12.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.13.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.13.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.13.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.13.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.13.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.14.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.14.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.14.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.14.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.14.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.15.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.15.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.15.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.15.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.15.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.16.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.16.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.16.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.16.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.16.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.17.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.17.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.17.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.17.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.17.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.18.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.18.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.18.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.18.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.18.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.19.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.19.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.19.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.19.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.19.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.20.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.20.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.20.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.20.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.20.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.21.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.21.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.21.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.21.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.21.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.22.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.22.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.22.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.22.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.22.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.23.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.23.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.23.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.23.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.23.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.24.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.24.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.24.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.24.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.24.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.25.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.25.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.25.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.25.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.25.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.26.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.26.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.26.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.26.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.26.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.27.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.27.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.27.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.27.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.27.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.28.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.28.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.28.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.28.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.28.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.29.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.29.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.29.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.29.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.29.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.30.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.30.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.30.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.30.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.30.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.31.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.31.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.31.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.31.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.31.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.32.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.32.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.32.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.32.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.32.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.33.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.33.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.33.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.33.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.33.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.34.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.34.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.34.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.34.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.34.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.35.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.35.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.35.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.35.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.35.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.36.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.36.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.36.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.36.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.36.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.37.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.37.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.37.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.37.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.37.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.38.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.38.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.38.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.38.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.38.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.39.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.39.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.39.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.39.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.39.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.40.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.40.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.40.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.40.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.40.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.41.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.41.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.41.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.41.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.41.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.42.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.42.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.42.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.42.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.42.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.43.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.43.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.43.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.43.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.43.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.44.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.44.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.44.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.44.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.44.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.45.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.45.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.45.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.45.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.45.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.46.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.46.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.46.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.46.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.46.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.47.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.47.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.47.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.47.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.47.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.48.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.48.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.48.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.48.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.48.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.49.ffn_norm.weight buffer type overriden to CUDA0
+Tensor blk.49.ffn_gate_inp.weight buffer type overriden to CUDA0
+Tensor blk.49.ffn_gate_exps.weight buffer type overriden to CUDA0
+Tensor blk.49.ffn_down_exps.weight buffer type overriden to CUDA0
+Tensor blk.49.ffn_up_exps.weight buffer type overriden to CUDA0
+Tensor blk.50.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.50.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.50.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.50.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.50.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.51.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.51.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.51.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.51.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.51.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.52.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.52.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.52.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.52.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.52.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.53.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.53.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.53.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.53.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.53.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.54.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.54.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.54.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.54.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.54.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.55.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.55.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.55.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.55.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.55.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.56.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.56.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.56.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.56.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.56.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.57.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.57.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.57.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.57.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.57.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.58.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.58.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.58.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.58.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.58.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.59.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.59.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.59.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.59.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.59.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.60.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.60.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.60.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.60.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.60.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.61.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.61.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.61.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.61.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.61.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.62.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.62.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.62.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.62.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.62.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.63.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.63.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.63.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.63.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.63.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.64.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.64.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.64.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.64.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.64.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.65.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.65.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.65.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.65.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.65.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.66.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.66.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.66.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.66.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.66.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.67.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.67.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.67.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.67.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.67.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.68.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.68.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.68.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.68.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.68.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.69.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.69.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.69.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.69.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.69.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.70.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.70.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.70.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.70.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.70.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.71.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.71.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.71.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.71.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.71.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.72.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.72.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.72.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.72.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.72.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.73.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.73.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.73.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.73.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.73.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.74.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.74.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.74.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.74.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.74.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.75.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.75.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.75.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.75.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.75.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.76.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.76.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.76.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.76.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.76.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.77.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.77.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.77.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.77.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.77.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.78.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.78.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.78.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.78.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.78.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.79.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.79.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.79.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.79.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.79.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.80.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.80.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.80.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.80.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.80.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.81.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.81.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.81.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.81.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.81.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.82.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.82.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.82.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.82.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.82.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.83.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.83.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.83.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.83.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.83.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.84.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.84.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.84.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.84.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.84.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.85.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.85.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.85.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.85.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.85.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.86.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.86.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.86.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.86.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.86.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.87.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.87.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.87.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.87.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.87.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.88.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.88.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.88.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.88.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.88.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.89.ffn_norm.weight buffer type overriden to CUDA1
+Tensor blk.89.ffn_gate_inp.weight buffer type overriden to CUDA1
+Tensor blk.89.ffn_gate_exps.weight buffer type overriden to CUDA1
+Tensor blk.89.ffn_down_exps.weight buffer type overriden to CUDA1
+Tensor blk.89.ffn_up_exps.weight buffer type overriden to CUDA1
+Tensor blk.90.ffn_norm.weight buffer type overriden to CUDA2
+Tensor blk.90.ffn_gate_inp.weight buffer type overriden to CUDA2
+Tensor blk.90.ffn_gate_exps.weight buffer type overriden to CUDA2
+Tensor blk.90.ffn_down_exps.weight buffer type overriden to CUDA2
+Tensor blk.90.ffn_up_exps.weight buffer type overriden to CUDA2
+Tensor blk.91.ffn_norm.weight buffer type overriden to CUDA2
+Tensor blk.91.ffn_gate_inp.weight buffer type overriden to CUDA2
+Tensor blk.91.ffn_gate_exps.weight buffer type overriden to CUDA2
+Tensor blk.91.ffn_down_exps.weight buffer type overriden to CUDA2
+Tensor blk.91.ffn_up_exps.weight buffer type overriden to CUDA2
+Tensor blk.92.ffn_norm.weight buffer type overriden to CUDA2
+Tensor blk.92.ffn_gate_inp.weight buffer type overriden to CUDA2
+Tensor blk.92.ffn_gate_exps.weight buffer type overriden to CUDA2
+Tensor blk.92.ffn_down_exps.weight buffer type overriden to CUDA2
+Tensor blk.92.ffn_up_exps.weight buffer type overriden to CUDA2
+Tensor blk.93.ffn_norm.weight buffer type overriden to CUDA2
+Tensor blk.93.ffn_gate_inp.weight buffer type overriden to CUDA2
+Tensor blk.93.ffn_gate_exps.weight buffer type overriden to CUDA2
+Tensor blk.93.ffn_down_exps.weight buffer type overriden to CUDA2
+Tensor blk.93.ffn_up_exps.weight buffer type overriden to CUDA2
+llm_load_tensors: offloading 94 repeating layers to GPU
+llm_load_tensors: offloading non-repeating layers to GPU
+llm_load_tensors: offloaded 95/95 layers to GPU
+llm_load_tensors:  CUDA_Host buffer size =   630.59 MiB
+llm_load_tensors:      CUDA0 buffer size = 81710.21 MiB
+llm_load_tensors:      CUDA1 buffer size = 68874.06 MiB
+llm_load_tensors:      CUDA2 buffer size =  8975.87 MiB
+....................................................................................................
+llama_new_context_with_model: n_ctx      = 65536
+llama_new_context_with_model: n_batch    = 512
+llama_new_context_with_model: n_ubatch   = 512
+llama_new_context_with_model: flash_attn = 1
+llama_new_context_with_model: mla_attn   = 0
+llama_new_context_with_model: attn_max_b = 1024
+llama_new_context_with_model: fused_moe  = 1
+llama_new_context_with_model: ser        = -1, 0
+llama_new_context_with_model: freq_base  = 5000000.0
+llama_new_context_with_model: freq_scale = 1
+llama_kv_cache_init:      CUDA0 KV buffer size =  5248.00 MiB
+llama_kv_cache_init:      CUDA1 KV buffer size =  5248.00 MiB
+llama_kv_cache_init:      CUDA2 KV buffer size =  1536.00 MiB
+llama_new_context_with_model: KV self size  = 12032.00 MiB, K (f16): 6016.00 MiB, V (f16): 6016.00 MiB
+llama_new_context_with_model:  CUDA_Host  output buffer size =     0.58 MiB
+llama_new_context_with_model: pipeline parallelism enabled (n_copies=1)
+llama_new_context_with_model:      CUDA0 compute buffer size =   240.00 MiB
+llama_new_context_with_model:      CUDA1 compute buffer size =   232.00 MiB
+llama_new_context_with_model:      CUDA2 compute buffer size =   312.75 MiB
+llama_new_context_with_model:  CUDA_Host compute buffer size =   136.01 MiB
+llama_new_context_with_model: graph nodes  = 3674
+llama_new_context_with_model: graph splits = 38
+
+main: n_kv_max = 65536, n_batch = 512, n_ubatch = 512, flash_attn = 1, n_gpu_layers = 99, n_threads = 36, n_threads_batch = 36
+
+|    PP |     TG |   N_KV |   T_PP s | S_PP t/s |   T_TG s | S_TG t/s |
+|-------|--------|--------|----------|----------|----------|----------|
+|   512 |    128 |      0 |    0.991 |   516.69 |    5.175 |    24.74 |
+|   512 |    128 |    512 |    0.924 |   554.21 |    5.227 |    24.49 |
+|   512 |    128 |   1024 |    0.929 |   551.39 |    5.261 |    24.33 |
+|   512 |    128 |   1536 |    0.930 |   550.48 |    5.288 |    24.21 |
+|   512 |    128 |   2048 |    0.939 |   545.14 |    5.301 |    24.15 |
+|   512 |    128 |   2560 |    0.925 |   553.51 |    5.304 |    24.13 |
+|   512 |    128 |   3072 |    0.949 |   539.69 |    5.329 |    24.02 |
+|   512 |    128 |   3584 |    0.944 |   542.32 |    5.336 |    23.99 |
+|   512 |    128 |   4096 |    0.952 |   537.73 |    5.358 |    23.89 |
+|   512 |    128 |   4608 |    0.951 |   538.20 |    5.368 |    23.84 |
+|   512 |    128 |   5120 |    0.957 |   534.81 |    5.387 |    23.76 |
+|   512 |    128 |   5632 |    0.971 |   527.48 |    5.405 |    23.68 |
+|   512 |    128 |   6144 |    0.963 |   531.57 |    5.423 |    23.60 |
+|   512 |    128 |   6656 |    0.976 |   524.62 |    5.439 |    23.53 |
+|   512 |    128 |   7168 |    0.991 |   516.39 |    5.444 |    23.51 |
+|   512 |    128 |   7680 |    0.993 |   515.40 |    5.457 |    23.46 |
+|   512 |    128 |   8192 |    1.007 |   508.62 |    5.474 |    23.38 |
+|   512 |    128 |   8704 |    0.986 |   519.28 |    5.479 |    23.36 |
+|   512 |    128 |   9216 |    1.007 |   508.53 |    5.472 |    23.39 |
+|   512 |    128 |   9728 |    1.015 |   504.28 |    5.491 |    23.31 |
+|   512 |    128 |  10240 |    1.021 |   501.38 |    5.499 |    23.28 |
+|   512 |    128 |  10752 |    1.035 |   494.55 |    5.522 |    23.18 |
+|   512 |    128 |  11264 |    1.057 |   484.28 |    5.534 |    23.13 |
+|   512 |    128 |  11776 |    1.041 |   491.60 |    5.555 |    23.04 |
+|   512 |    128 |  12288 |    1.037 |   493.84 |    5.600 |    22.86 |
+|   512 |    128 |  12800 |    1.048 |   488.63 |    5.602 |    22.85 |
+|   512 |    128 |  13312 |    1.046 |   489.47 |    5.611 |    22.81 |
+|   512 |    128 |  13824 |    1.061 |   482.56 |    5.621 |    22.77 |
+|   512 |    128 |  14336 |    1.064 |   481.04 |    5.621 |    22.77 |
+|   512 |    128 |  14848 |    1.091 |   469.40 |    5.639 |    22.70 |
+|   512 |    128 |  15360 |    1.088 |   470.39 |    5.646 |    22.67 |
+|   512 |    128 |  15872 |    1.067 |   480.02 |    5.663 |    22.60 |
+|   512 |    128 |  16384 |    1.084 |   472.30 |    5.679 |    22.54 |
+|   512 |    128 |  16896 |    1.092 |   468.88 |    5.687 |    22.51 |
+|   512 |    128 |  17408 |    1.100 |   465.40 |    5.697 |    22.47 |
+|   512 |    128 |  17920 |    1.098 |   466.30 |    5.708 |    22.43 |
+|   512 |    128 |  18432 |    1.098 |   466.22 |    5.721 |    22.37 |
+|   512 |    128 |  18944 |    1.113 |   460.04 |    5.742 |    22.29 |
+|   512 |    128 |  19456 |    1.124 |   455.44 |    5.748 |    22.27 |
+|   512 |    128 |  19968 |    1.115 |   459.28 |    5.764 |    22.21 |
+|   512 |    128 |  20480 |    1.125 |   454.96 |    5.786 |    22.12 |
+|   512 |    128 |  20992 |    1.113 |   460.13 |    5.801 |    22.06 |
+|   512 |    128 |  21504 |    1.139 |   449.50 |    5.817 |    22.01 |
+|   512 |    128 |  22016 |    1.148 |   446.03 |    5.838 |    21.93 |
+|   512 |    128 |  22528 |    1.140 |   448.95 |    5.856 |    21.86 |
+|   512 |    128 |  23040 |    1.150 |   445.16 |    5.868 |    21.81 |
+|   512 |    128 |  23552 |    1.153 |   443.95 |    5.874 |    21.79 |
+|   512 |    128 |  24064 |    1.152 |   444.39 |    5.948 |    21.52 |
+|   512 |    128 |  24576 |    1.164 |   439.79 |    5.956 |    21.49 |
+|   512 |    128 |  25088 |    1.170 |   437.53 |    5.962 |    21.47 |
+|   512 |    128 |  25600 |    1.188 |   431.08 |    5.971 |    21.44 |
+|   512 |    128 |  26112 |    1.171 |   437.09 |    5.997 |    21.34 |
+|   512 |    128 |  26624 |    1.205 |   424.92 |    6.002 |    21.33 |
+|   512 |    128 |  27136 |    1.178 |   434.65 |    5.998 |    21.34 |
+|   512 |    128 |  27648 |    1.191 |   429.96 |    6.010 |    21.30 |
+|   512 |    128 |  28160 |    1.222 |   419.15 |    6.015 |    21.28 |
+|   512 |    128 |  28672 |    1.217 |   420.80 |    6.035 |    21.21 |
+|   512 |    128 |  29184 |    1.215 |   421.39 |    6.043 |    21.18 |
+|   512 |    128 |  29696 |    1.230 |   416.16 |    6.058 |    21.13 |
+|   512 |    128 |  30208 |    1.214 |   421.67 |    6.072 |    21.08 |
+|   512 |    128 |  30720 |    1.247 |   410.69 |    6.082 |    21.05 |
+|   512 |    128 |  31232 |    1.251 |   409.31 |    6.090 |    21.02 |
+|   512 |    128 |  31744 |    1.239 |   413.32 |    6.114 |    20.93 |
+|   512 |    128 |  32256 |    1.235 |   414.51 |    6.124 |    20.90 |
+|   512 |    128 |  32768 |    1.247 |   410.43 |    6.139 |    20.85 |
+|   512 |    128 |  33280 |    1.247 |   410.73 |    6.162 |    20.77 |
+|   512 |    128 |  33792 |    1.244 |   411.55 |    6.174 |    20.73 |
+|   512 |    128 |  34304 |    1.252 |   408.98 |    6.184 |    20.70 |
+|   512 |    128 |  34816 |    1.263 |   405.45 |    6.202 |    20.64 |
+|   512 |    128 |  35328 |    1.266 |   404.41 |    6.224 |    20.57 |
+|   512 |    128 |  35840 |    1.279 |   400.25 |    6.240 |    20.51 |
+|   512 |    128 |  36352 |    1.282 |   399.25 |    6.308 |    20.29 |
+|   512 |    128 |  36864 |    1.292 |   396.19 |    6.315 |    20.27 |
+|   512 |    128 |  37376 |    1.296 |   395.12 |    6.329 |    20.22 |
+|   512 |    128 |  37888 |    1.313 |   390.07 |    6.341 |    20.19 |
+|   512 |    128 |  38400 |    1.294 |   395.66 |    6.349 |    20.16 |
+|   512 |    128 |  38912 |    1.306 |   391.98 |    6.372 |    20.09 |
+|   512 |    128 |  39424 |    1.317 |   388.62 |    6.369 |    20.10 |
+|   512 |    128 |  39936 |    1.317 |   388.71 |    6.388 |    20.04 |
+|   512 |    128 |  40448 |    1.328 |   385.53 |    6.396 |    20.01 |
+|   512 |    128 |  40960 |    1.326 |   386.25 |    6.408 |    19.98 |
+|   512 |    128 |  41472 |    1.336 |   383.31 |    6.421 |    19.94 |
+|   512 |    128 |  41984 |    1.335 |   383.61 |    6.432 |    19.90 |
+|   512 |    128 |  42496 |    1.349 |   379.58 |    6.446 |    19.86 |
+|   512 |    128 |  43008 |    1.337 |   382.92 |    6.463 |    19.80 |
+|   512 |    128 |  43520 |    1.363 |   375.62 |    6.482 |    19.75 |
+|   512 |    128 |  44032 |    1.354 |   378.24 |    6.494 |    19.71 |
+|   512 |    128 |  44544 |    1.388 |   368.96 |    6.510 |    19.66 |
+|   512 |    128 |  45056 |    1.373 |   372.92 |    6.523 |    19.62 |
+|   512 |    128 |  45568 |    1.378 |   371.66 |    6.534 |    19.59 |
+|   512 |    128 |  46080 |    1.364 |   375.42 |    6.553 |    19.53 |
+|   512 |    128 |  46592 |    1.386 |   369.28 |    6.569 |    19.49 |
+|   512 |    128 |  47104 |    1.404 |   364.65 |    6.659 |    19.22 |
+|   512 |    128 |  47616 |    1.408 |   363.63 |    6.682 |    19.16 |
+|   512 |    128 |  48128 |    1.399 |   365.98 |    6.781 |    18.88 |
+|   512 |    128 |  48640 |    1.394 |   367.41 |    6.734 |    19.01 |
+|   512 |    128 |  49152 |    1.426 |   359.14 |    6.748 |    18.97 |
+|   512 |    128 |  49664 |    1.439 |   355.84 |    6.765 |    18.92 |
+|   512 |    128 |  50176 |    1.441 |   355.41 |    6.813 |    18.79 |
+|   512 |    128 |  50688 |    1.454 |   352.05 |    6.894 |    18.57 |
+|   512 |    128 |  51200 |    1.449 |   353.40 |    6.882 |    18.60 |
+|   512 |    128 |  51712 |    1.454 |   352.20 |    6.811 |    18.79 |
+|   512 |    128 |  52224 |    1.434 |   357.16 |    6.872 |    18.63 |
+|   512 |    128 |  52736 |    1.470 |   348.33 |    6.835 |    18.73 |
+|   512 |    128 |  53248 |    1.458 |   351.23 |    6.837 |    18.72 |
+|   512 |    128 |  53760 |    1.459 |   350.82 |    6.889 |    18.58 |
+|   512 |    128 |  54272 |    1.479 |   346.16 |    6.948 |    18.42 |
+|   512 |    128 |  54784 |    1.486 |   344.46 |    6.948 |    18.42 |
+|   512 |    128 |  55296 |    1.484 |   344.90 |    6.948 |    18.42 |
+|   512 |    128 |  55808 |    1.500 |   341.29 |    6.913 |    18.52 |
+|   512 |    128 |  56320 |    1.499 |   341.55 |    6.985 |    18.32 |
+|   512 |    128 |  56832 |    1.509 |   339.40 |    7.025 |    18.22 |
+|   512 |    128 |  57344 |    1.508 |   339.50 |    7.045 |    18.17 |
+|   512 |    128 |  57856 |    1.513 |   338.47 |    6.970 |    18.36 |
+|   512 |    128 |  58368 |    1.528 |   335.00 |    7.127 |    17.96 |
+|   512 |    128 |  58880 |    1.527 |   335.24 |    7.133 |    17.94 |
+|   512 |    128 |  59392 |    1.552 |   329.87 |    6.988 |    18.32 |
+|   512 |    128 |  59904 |    1.538 |   332.88 |    7.095 |    18.04 |
+|   512 |    128 |  60416 |    1.547 |   331.06 |    7.155 |    17.89 |
+|   512 |    128 |  60928 |    1.556 |   329.09 |    7.173 |    17.85 |
+|   512 |    128 |  61440 |    1.576 |   324.92 |    7.108 |    18.01 |
+|   512 |    128 |  61952 |    1.553 |   329.69 |    7.204 |    17.77 |
+|   512 |    128 |  62464 |    1.566 |   327.04 |    7.218 |    17.73 |
+|   512 |    128 |  62976 |    1.566 |   326.94 |    7.160 |    17.88 |
+|   512 |    128 |  63488 |    1.579 |   324.16 |    7.173 |    17.84 |
+|   512 |    128 |  64000 |    1.587 |   322.67 |    7.270 |    17.61 |
+|   512 |    128 |  64512 |    1.603 |   319.33 |    7.210 |    17.75 |
+|   512 |    128 |  65024 |    1.610 |   318.05 |    7.216 |    17.74 |

@@ -29,32 +29,36 @@ Here's how DeepSeek-R1-0528 quantized with **Thireus' GGUF Tool Suite** compares
 | [Kimi-K2-Instruct](https://huggingface.co/collections/Thireus/kimi-k2-instruct-thireus-special-split-68778e3701cf3e80574185e2) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Tested and Working | Examples provided. It would appear that it does really well on _kt quants, likely because this is the target quant that was used for the calibration data. I may need to redo the calibration data using iq1_s_r4 to verify this theory. |
 | [Qwen3-235B-A22B-Instruct-2507](https://huggingface.co/collections/Thireus/qwen3-235b-a22b-instruct-2507-thireus-special-split-68813c81fa03b52fe0d6f4e9) | ✅ Complete | ✅ Best effort (a few quants are still missing) | ⚠️ Untested | ⚠️ Not evaluated | All you need is available to produce quant mixes, but not personally tested. |
 | [Qwen3-235B-A22B-Thinking-2507](https://huggingface.co/collections/Thireus/qwen3-235b-a22b-thinking-2507-thireus-special-split-688368c416e0f03b1853b10f) | ✅ Complete | ✅ Best effort (a few quants are still missing) | ✅ Tested and Working | ✅ Tested and Working | Best to use at most two tensors for `quant_assign` to choose from per tensor group. |
-| [Qwen3-Coder-480B-A35B-Instruct](https://huggingface.co/collections/Thireus/qwen3-coder-480b-a35b-instruct-thireus-special-split-68813cb65745c166d0386e91) | ✅ Complete | ✅ Best effort (a few quants are still missing) | ⚠️ Untested | ⚠️ Not evaluated | All you need is available to produce quant mixes, but not personally tested. |
+| [Qwen3-Coder-480B-A35B-Instruct](https://huggingface.co/collections/Thireus/qwen3-coder-480b-a35b-instruct-thireus-special-split-68813cb65745c166d0386e91) | ✅ Complete | ✅ Best effort (a few quants are still missing) | ⚠️ Untested | ⚠️ Not evaluated | Looks like [iq3_k is faulty](https://huggingface.co/Thireus/Qwen3-Coder-480B-A35B-Instruct-THIREUS-IQ3_K-SPECIAL_SPLIT/discussions/1) - avoid using it. |
 | [GLM-4.5](https://huggingface.co/collections/Thireus/glm-45-thireus-special-split-6888e23853f18dd2d57a295b) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Yes | GGUF format has changed as per last llama.cpp/ik_llama.cpp PR. Shards and calibration data needs to be redone. Supported in `llama.cpp` – see the discussion in [PR #14939](https://github.com/ggml-org/llama.cpp/pull/14939). You must use the latest version of `llama.cpp`/`ik_llama.cpp`. Support in `ik_llama.cpp` – see the discussion in [ikawrakow/ik_llama.cpp#668](https://github.com/ikawrakow/ik_llama.cpp/pull/668) |
 | [GLM-4.5-Air](https://huggingface.co/collections/Thireus/glm-45-air-thireus-special-split-688f9936d839ef353d92426a) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Yes | You must use the latest version of `llama.cpp`/`ik_llama.cpp`. Support in `llama.cpp` – see the discussion in [PR #14939](https://github.com/ggml-org/llama.cpp/pull/14939). Support in `ik_llama.cpp` – see the discussion in [ikawrakow/ik_llama.cpp#668](https://github.com/ikawrakow/ik_llama.cpp/pull/668) |
 
 ### ⚠️ Requirements
 
-You have **three options** for using \`ik_llama.cpp\` or \`llama.cpp\`:
+You have **four options** for using `ik_llama.cpp` or `llama.cpp`:
 
-1. **Use the Thireus fork of \`ik_llama.cpp\` (recommended)**  
+1. **Use the Thireus fork of `ik_llama.cpp` (recommended)**  
    - **Windows builds available**.  
    - **Linux**: compile as usual.  
    - Source code and builds:  
-     👉 https://github.com/Thireus/ik_llama.cpp  
+     👉 https://github.com/Thireus/ik_llama.cpp/releases  
 
-2. **Use the official \`ik_llama.cpp\` repo**  
+2. **Use the official `ik_llama.cpp` repo**  
    - You must compile with: `-DGGML_MAX_CONTEXTS=2048`  
    - Official repo:  
      👉 https://github.com/ikawrakow/ik_llama.cpp  
 
-3. **Use \`llama.cpp\` from ggml-org**  
-   - Repo: https://github.com/ggml-org/llama.cpp  
-   - You must port and apply **these patches** from these PRs:  
-     - [#611](https://github.com/ikawrakow/ik_llama.cpp/pull/611)  
-     - [#622](https://github.com/ikawrakow/ik_llama.cpp/pull/622)  
+3. **Use the Thireus fork of `llama.cpp`**  
+   - **Compatibility with GGUF shards produced by Thireus is not guaranteed or always tested**.  
+   - **Windows builds available**.  
+   - Source code and builds:  
+     👉 https://github.com/Thireus/llama.cpp/releases  
+
+4. **Use `llama.cpp` from ggml-org**   
+   - **Compatibility with GGUF shards produced by Thireus is not guaranteed or always tested**.  
    - **Windows users** must also apply: [PR #620](https://github.com/ikawrakow/ik_llama.cpp/pull/620)  
-   - **Compatibility with GGUF shards produced by Thireus is not guaranteed or tested**.  
+   - Source code and builds:  
+     👉 https://github.com/ggml-org/llama.cpp/releases  
 
 ### 🧠 Important: Linux `ulimit` command
 
@@ -70,7 +74,7 @@ ulimit -n 99999
 
 ## 📁 Recipe Examples
 
-Examples are included in the `recipe_examples` folder. Have a look at the file name or inside the recipe files to see the VRAM and RAM requirements of each.
+Examples of ik_llama.cpp-compatible recipes are included in the `recipe_examples` folder. Have a look at the file name or inside the recipe files to see the VRAM and RAM requirements of each.
 
 > ⚠️ You’re encouraged to build your own recipes tailored to your setup rather than relying on others'.
 
@@ -141,6 +145,16 @@ python quant_assign.py ppl_results.csv \
 ```
 
 > 🔧 **Adjust parameters** such as `--cpu-tensors-max-size` or `--gpu-quants` as needed for your specific hardware.
+
+> ⚠️ q\*_K quants must be used with a capital "K" letter at the end of their name. All other quants are lowercase.
+
+- List of quants compatible with `ik_llama.cpp`:
+
+> iq1_bn iq1_kt iq1_m iq1_s iq1_s_r4 iq2_bn iq2_bn_r4 iq2_k iq2_k_r4 iq2_kl iq2_ks iq2_kt iq2_m iq2_m_r4 iq2_s iq2_xs iq2_xs_r4 iq2_xxs iq2_xxs_r4 iq3_k iq3_k_r4 iq3_kl iq3_ks iq3_kt iq3_m iq3_s iq3_s_r4 iq3_xs iq3_xxs iq3_xxs_r4 iq4_k iq4_k_r4 iq4_ks iq4_ks_r4 iq4_kss iq4_kt iq4_nl iq4_nl_r4 iq4_xs iq4_xs_r8 iq5_k iq5_k_r4 iq5_ks iq5_ks_r4 iq6_k q1_m_r4 q2_K q2_k_r4 q2_k_s q3_K q3_k_l q3_k_m q3_k_r4 q3_k_s q4_0 q4_0_4_4 q4_0_4_8 q4_0_8_8 q4_0_r8 q4_1 q4_K q4_k_m q4_k_r4 q4_k_s q5_0 q5_0_r4 q5_1 q5_K q5_k_m q5_k_r4 q5_k_s q6_0 q6_0_r4 q6_K q6_k_r4 q8_0 q8_0_r8 q8_k_r8 q8_kv q8_kv_r8
+
+- List of quants compatible with `llama.cpp`:
+
+> iq1_m iq1_s iq2_m iq2_s iq2_xs iq2_xxs iq3_m iq3_s iq3_xs iq3_xxs iq4_nl iq4_xs mxfp4_moe tq1_0 tq2_0 q2_K q2_k_s q3_K q3_k_l q3_k_m q3_k_s q4_0 q4_1 q4_K q4_k_m q4_k_s q5_0 q5_1 q5_K q5_k_m q5_k_s q6_K q8_0
 
 ---
 
