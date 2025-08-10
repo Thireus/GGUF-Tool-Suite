@@ -148,8 +148,8 @@ llm_load_tensors:  CUDA_Host buffer size =   407.00 MiB
 llm_load_tensors:      CUDA0 buffer size = 50169.88 MiB
 ...................................................................................................
 llama_new_context_with_model: n_ctx      = 65536
-llama_new_context_with_model: n_batch    = 16384
-llama_new_context_with_model: n_ubatch   = 4096
+llama_new_context_with_model: n_batch    = 8192
+llama_new_context_with_model: n_ubatch   = 8192
 llama_new_context_with_model: flash_attn = 1
 llama_new_context_with_model: mla_attn   = 0
 llama_new_context_with_model: attn_max_b = 0
@@ -160,28 +160,20 @@ llama_new_context_with_model: freq_scale = 1
 llama_kv_cache_init:      CUDA0 KV buffer size = 12032.00 MiB
 llama_new_context_with_model: KV self size  = 12032.00 MiB, K (f16): 6016.00 MiB, V (f16): 6016.00 MiB
 llama_new_context_with_model:  CUDA_Host  output buffer size =     0.58 MiB
-llama_new_context_with_model:      CUDA0 compute buffer size =  2432.00 MiB
-llama_new_context_with_model:  CUDA_Host compute buffer size =  1088.05 MiB
+llama_new_context_with_model:      CUDA0 compute buffer size =  4864.00 MiB
+llama_new_context_with_model:  CUDA_Host compute buffer size =  2176.09 MiB
 llama_new_context_with_model: graph nodes  = 2175
 llama_new_context_with_model: graph splits = 2
 
-main: n_kv_max = 65536, n_batch = 16384, n_ubatch = 4096, flash_attn = 1, n_gpu_layers = 99, n_threads = 36, n_threads_batch = 36
+main: n_kv_max = 65536, n_batch = 8192, n_ubatch = 8192, flash_attn = 1, n_gpu_layers = 99, n_threads = 36, n_threads_batch = 36
 
 |    PP |     TG |   N_KV |   T_PP s | S_PP t/s |   T_TG s | S_TG t/s |
 |-------|--------|--------|----------|----------|----------|----------|
-|  4096 |   1024 |      0 |    2.043 |  2005.12 |   58.277 |    17.57 |
-|  4096 |   1024 |   4096 |    2.324 |  1762.16 |   57.589 |    17.78 |
-|  4096 |   1024 |   8192 |    3.313 |  1236.24 |   59.877 |    17.10 |
-|  4096 |   1024 |  12288 |    3.222 |  1271.13 |   62.742 |    16.32 |
-|  4096 |   1024 |  16384 |    3.638 |  1125.90 |   55.446 |    18.47 |
-|  4096 |   1024 |  20480 |    4.485 |   913.24 |   59.618 |    17.18 |
-|  4096 |   1024 |  24576 |    4.359 |   939.73 |   58.136 |    17.61 |
-|  4096 |   1024 |  28672 |    4.656 |   879.76 |   54.446 |    18.81 |
-|  4096 |   1024 |  32768 |    4.966 |   824.89 |   56.570 |    18.10 |
-|  4096 |   1024 |  36864 |    5.370 |   762.70 |   62.117 |    16.49 |
-|  4096 |   1024 |  40960 |    7.621 |   537.47 |   82.278 |    12.45 |
-|  4096 |   1024 |  45056 |    7.212 |   567.98 |   97.864 |    10.46 |
-|  4096 |   1024 |  49152 |    7.907 |   518.04 |  124.357 |     8.23 |
-|  4096 |   1024 |  53248 |    9.925 |   412.70 |  125.087 |     8.19 |
-|  4096 |   1024 |  57344 |    9.368 |   437.23 |  133.401 |     7.68 |
-|  4096 |   1024 |  61440 |   10.142 |   403.88 |  141.609 |     7.23 |
+|  8192 |   2048 |      0 |    3.871 |  2116.13 |   89.967 |    22.76 |
+|  8192 |   2048 |   8192 |    5.524 |  1483.12 |   93.961 |    21.80 |
+|  8192 |   2048 |  16384 |    7.137 |  1147.85 |   98.057 |    20.89 |
+|  8192 |   2048 |  24576 |    8.847 |   925.97 |  126.716 |    16.16 |
+|  8192 |   2048 |  32768 |   10.667 |   767.95 |  128.925 |    15.89 |
+|  8192 |   2048 |  40960 |   13.434 |   609.80 |  148.887 |    13.76 |
+|  8192 |   2048 |  49152 |   14.894 |   550.01 |  217.025 |     9.44 |
+|  8192 |   2048 |  57344 |   19.459 |   420.99 |  278.069 |     7.37 |
