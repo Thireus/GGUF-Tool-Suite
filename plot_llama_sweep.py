@@ -5,7 +5,7 @@
 #** as files into graphs and finds the best -u/-ub combo.     **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-09-2025 -------------------- **#
+#** --------------- Updated: Aug-10-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -100,6 +100,7 @@ import glob
 
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import cm
 
 DEFAULT_HEADERS = ['PP', 'TG', 'N_KV', 'T_PP s', 'S_PP t/s', 'T_TG s', 'S_TG t/s']
 
@@ -115,7 +116,7 @@ METRIC_TABLE = [
 
 GRID_POINTS = 300  # number of interpolation points between 0 and cutoff
 
-# clean, simple markers (no letters/numbers)
+# simple markers (no letters/numbers)
 MARKERS = ['o', 's', '^', 'v', 'D', 'P', 'X', '<', '>', '+', '*', 'x']
 
 def print_metric_help():
@@ -427,7 +428,51 @@ def print_means_summary_with_best(means_dict, cutoff, min_nkv, margin_pp_percent
             print(f"  {label} (model: {model}) {dims} -> S_PP mean = {s_pp:.6g} over {npts} grid points{best_marker}")
     print()
 
-def annotate_series(ax, xs, ys, label, color):
+def make_color_list(n):
+    """
+    Build a visually diverse color list of length >= n.
+    Try to combine tab20/tab20b/tab20c (qualitative) first; otherwise sample a continuous cmap.
+    """
+    colors = []
+    try:
+        c1 = plt.get_cmap('tab20')
+        if hasattr(c1, 'colors'):
+            colors.extend(list(c1.colors))
+        else:
+            colors.extend([c1(i) for i in range(c1.N)])
+    except Exception:
+        pass
+    # try tab20b and tab20c (may not exist on older matplotlib)
+    try:
+        c2 = plt.get_cmap('tab20b')
+        if hasattr(c2, 'colors'):
+            colors.extend(list(c2.colors))
+        else:
+            colors.extend([c2(i) for i in range(c2.N)])
+    except Exception:
+        pass
+    try:
+        c3 = plt.get_cmap('tab20c')
+        if hasattr(c3, 'colors'):
+            colors.extend(list(c3.colors))
+        else:
+            colors.extend([c3(i) for i in range(c3.N)])
+    except Exception:
+        pass
+
+    if len(colors) >= n:
+        return colors[:n]
+    # fallback: sample a continuous but colorful cmap
+    cmap = cm.get_cmap('nipy_spectral')
+    sampled = [cmap(i) for i in np.linspace(0, 1, n)]
+    return sampled
+
+def annotate_series(ax, xs, ys, label, color, square_box=True, alpha=0.75):
+    """
+    Annotate series on axis `ax` near the last non-NaN point.
+    Annotation uses bold font and a square bbox if requested.
+    Now semi-transparent according to `alpha` (0..1).
+    """
     if not xs or not ys:
         return
     for i in range(len(xs)-1, -1, -1):
@@ -438,31 +483,36 @@ def annotate_series(ax, xs, ys, label, color):
             continue
         x = xs[i]
         try:
-            ax.annotate(label,
-                        xy=(x, y),
-                        xytext=(6, 2),
-                        textcoords='offset points',
-                        fontsize=8,
-                        fontweight='bold',
-                        color=color,
-                        arrowprops=dict(arrowstyle='->', lw=0.4, color=color, shrinkA=2, shrinkB=2))
+            # use an RGBA white fill so bbox is semi-transparent
+            bbox_fc = (1.0, 1.0, 1.0, alpha)
+            bbox = dict(boxstyle='square,pad=0.25') if square_box else dict(boxstyle='round,pad=0.2')
+            ax.annotate(
+                label,
+                xy=(x, y),
+                xytext=(6, 2),
+                textcoords='offset points',
+                fontsize=8,
+                fontweight='bold',
+                color=color,
+                alpha=alpha,  # makes the text semi-transparent too
+                bbox=dict(boxstyle='square,pad=0.25', fc=bbox_fc, ec=color, lw=0.6),
+                arrowprops=dict(arrowstyle='->', lw=0.5, color=color, shrinkA=2, shrinkB=2, alpha=alpha)
+            )
         except Exception:
             pass
         break
 
-def plot_two_figures(series_data, means_dict, title_stg=None, title_spp=None, save_prefix=None):
+def plot_two_figures(series_data, means_dict, title_stg=None, title_spp=None, save_prefix=None, min_nkv=60000):
     """
-    Reorders the default legend entries: for ax1 (S_TG) the legend lists
-    eligible series in S_TG best->worst order first, then remaining series;
-    for ax2 (S_PP) similarly but using S_PP ordering.
+    Plot two figures (S_TG and S_PP). Legend placed on the right (outside).
+    Only annotate series that do NOT reach min_nkv.
     """
     nseries = len(series_data)
-    cmap = plt.get_cmap('tab20' if nseries <= 20 else 'hsv')
-    colors = [cmap(i % cmap.N) for i in range(nseries)]
+    colors = make_color_list(max(nseries, 1))
     markers = MARKERS
 
-    fig1, ax1 = plt.subplots(figsize=(8, 5))  # N_KV vs S_TG
-    fig2, ax2 = plt.subplots(figsize=(8, 5))  # N_KV vs S_PP
+    fig1, ax1 = plt.subplots(figsize=(9, 6))  # N_KV vs S_TG
+    fig2, ax2 = plt.subplots(figsize=(9, 6))  # N_KV vs S_PP
 
     # keep handles so we can reorder legend later
     handles_by_fn = {}
@@ -486,13 +536,19 @@ def plot_two_figures(series_data, means_dict, title_stg=None, title_spp=None, sa
         ys_stg = d['s_tg']
         ys_spp = d['s_pp']
         label = make_label_from_filename(fn)
-        color = colors[i]
+        color = colors[i % len(colors)]
         marker = markers[i % len(markers)]
-        l1, = ax1.plot(xs, ys_stg, marker=marker, markersize=3, markeredgewidth=0.4, linestyle='-', label=label, color=color)
-        l2, = ax2.plot(xs, ys_spp, marker=markers[(i+1) % len(markers)], markersize=3, markeredgewidth=0.4, linestyle='--', label=label, color=color)
+        l1, = ax1.plot(xs, ys_stg, marker=marker, markersize=3, markeredgewidth=0.35,
+                       linestyle='-', label=label, color=color, linewidth=0.8, alpha=0.95)
+        l2, = ax2.plot(xs, ys_spp, marker=markers[(i+1) % len(markers)], markersize=3, markeredgewidth=0.35,
+                       linestyle='--', label=label, color=color, linewidth=0.8, alpha=0.95)
         handles_by_fn[fn] = (l1, l2)
-        annotate_series(ax1, xs, ys_stg, label, color)
-        annotate_series(ax2, xs, ys_spp, label, color)
+
+        # annotate only if this series does NOT reach min_nkv
+        max_nkv = max(d.get('nkv', [0]))
+        if max_nkv < min_nkv:
+            annotate_series(ax1, xs, ys_stg, label, color, square_box=True)
+            annotate_series(ax2, xs, ys_spp, label, color, square_box=True)
 
     # build ordered legend for ax1 (S_TG): eligible best->worst first, then others
     ordered_fns_tg = [r[0] for r in rows_s_tg]
@@ -501,7 +557,9 @@ def plot_two_figures(series_data, means_dict, title_stg=None, title_spp=None, sa
     handles_tg = [handles_by_fn[fn][0] for fn in legend_order_tg if fn in handles_by_fn]
     labels_tg = [make_label_from_filename(fn) for fn in legend_order_tg if fn in handles_by_fn]
     if handles_tg:
-        ax1.legend(handles=handles_tg, labels=labels_tg, title="Series (best to worst)", loc='best', fontsize='small')
+        # place legend outside to the right
+        ax1.legend(handles=handles_tg, labels=labels_tg, title="Series (best to worst)",
+                   loc='center left', bbox_to_anchor=(1.02, 0.5), fontsize='small', frameon=True)
 
     # build ordered legend for ax2 (S_PP)
     ordered_fns_pp = [r[0] for r in rows_s_pp]
@@ -510,34 +568,38 @@ def plot_two_figures(series_data, means_dict, title_stg=None, title_spp=None, sa
     handles_pp = [handles_by_fn[fn][1] for fn in legend_order_pp if fn in handles_by_fn]
     labels_pp = [make_label_from_filename(fn) for fn in legend_order_pp if fn in handles_by_fn]
     if handles_pp:
-        ax2.legend(handles=handles_pp, labels=labels_pp, title="Series (best to worst)", loc='best', fontsize='small')
+        ax2.legend(handles=handles_pp, labels=labels_pp, title="Series (best to worst)",
+                   loc='center left', bbox_to_anchor=(1.02, 0.5), fontsize='small', frameon=True)
+
+    # make room on the right for the legends
+    fig1.subplots_adjust(right=0.72)
+    fig2.subplots_adjust(right=0.72)
 
     ax1.set_xlabel("N_KV")
     ax1.set_ylabel("S_TG t/s")
     ax1.set_title(title_stg or "N_KV vs S_TG (t/s)")
-    ax1.grid(True, linestyle=':', linewidth=0.5)
+    ax1.grid(True, linestyle=':', linewidth=0.4)
 
     ax2.set_xlabel("N_KV")
     ax2.set_ylabel("S_PP t/s")
     ax2.set_title(title_spp or "N_KV vs S_PP (t/s)")
-    ax2.grid(True, linestyle=':', linewidth=0.5)
+    ax2.grid(True, linestyle=':', linewidth=0.4)
 
     plt.tight_layout()
     plt.show(block=False)
 
     if save_prefix:
-        fig1.savefig(f"{save_prefix}_stg.png", dpi=200)
-        fig2.savefig(f"{save_prefix}_spp.png", dpi=200)
+        fig1.savefig(f"{save_prefix}_stg.png", dpi=200, bbox_inches='tight')
+        fig2.savefig(f"{save_prefix}_spp.png", dpi=200, bbox_inches='tight')
         print(f"Saved {save_prefix}_stg.png and {save_prefix}_spp.png")
 
 def collect_lines_from_directory(directory, pattern):
     """
     Scan `directory` for files matching `pattern` (glob), read each file,
-    and for every line that starts with '|' (ignoring leading spaces) return a
+    and for every line that starts with '|' (ignoring leading whitespace) return a
     synthetic line 'basename:| ...' to match the parser expectation.
     """
     lines = []
-    # join directory and pattern; support either pattern contains wildcards or user provided exact filename
     glob_pattern = os.path.join(directory, pattern)
     files = sorted(glob.glob(glob_pattern))
     for path in files:
@@ -547,12 +609,11 @@ def collect_lines_from_directory(directory, pattern):
         try:
             with open(path, 'r', encoding='utf-8', errors='ignore') as fh:
                 for raw in fh:
-                    # match lines that begin with '|' possibly after leading whitespace
                     if raw.lstrip().startswith('|'):
-                        # strip only trailing newline, preserve leading '|' spacing for parser splitting
+                        # avoid backslash in f-string expression: use concatenation
                         lines.append(basename + ':' + raw.rstrip('\n'))
         except Exception:
-            # if a file can't be read, skip it silently
+            # skip files we can't read
             continue
     return lines
 
@@ -580,7 +641,6 @@ def main():
     elif args.infile and os.path.isdir(args.infile):
         lines = collect_lines_from_directory(args.infile, args.pattern)
     elif args.infile:
-        # treat infile as a single file containing grep output
         try:
             with open(args.infile, 'r', encoding='utf-8') as f:
                 lines = [L.rstrip("\n") for L in f]
@@ -588,7 +648,6 @@ def main():
             print(f"Failed to open infile {args.infile}: {e}")
             sys.exit(1)
     else:
-        # read stdin (pipe)
         if sys.stdin.isatty():
             print("Reading from stdin but stdin is a TTY and no input provided. Use --dir or --infile or pipe data in.")
             sys.exit(1)
@@ -621,7 +680,7 @@ def main():
     signal.signal(signal.SIGINT, sigint_handler)
 
     # pass means_dict into plotting so we can order the default legend
-    plot_two_figures(series_data, means_dict, title_stg=title_stg, title_spp=title_spp, save_prefix=args.outprefix)
+    plot_two_figures(series_data, means_dict, title_stg=title_stg, title_spp=title_spp, save_prefix=args.outprefix, min_nkv=args.min_nkv)
 
     try:
         while plt.get_fignums():
