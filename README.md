@@ -35,28 +35,75 @@ Here's how DeepSeek-R1-0528 quantized with **Thireus' GGUF Tool Suite** compares
 
 ### ⚠️ Requirements
 
-You have **four options** for using `ik_llama.cpp` or `llama.cpp`:
+You have **four options** for using `ik_llama.cpp` or `llama.cpp` - You are strongly encouraged to use Linux for best perfs with `ik_llama.cpp`:
 
 1. **Use the Thireus fork of `ik_llama.cpp` (recommended)**  
-   - **Windows builds available**.  
    - **Linux**: compile as usual.  
+   - **Windows builds available** but not recommended since [TG t/s perfs are halved due to missing CUDA Graphs MoE implementation](https://huggingface.co/ubergarm/GLM-4.5-Air-GGUF/discussions/2#689916c972f9ea17ff768e4b) compared to Linux builds (`llama.cpp` mainline not affected by the issue). Windows users can also use [WSL2](https://documentation.ubuntu.com/wsl/stable/tutorials/develop-with-ubuntu-wsl/), see compilation instructions below, but will result in the same performance degradation outcome:  
+        <details>
+
+        ```
+        # Install CUDA Toolkit on WSL
+        https://developer.nvidia.com/cuda-downloads?target_os=Linux&target_arch=x86_64&Distribution=WSL-Ubuntu&target_version=2.0&target_type=deb_network
+
+        # Install dependencies
+        pip install uv # or "apt-get install pipx", then "pipx install uv" as user # On Debian 13, or try "pipx install uv --python python3.10"
+
+        # Not sure if all are needed (use su -)
+        apt-get install libfftw3-dev ocl-icd-opencl-dev git
+        apt-get install build-essential libgmp-dev libmpfr-dev libmpc-dev flex bison # Used to build gcc-14
+
+        # Prepare env
+        mkdir -p ~/AI/
+        cd ~/AI/
+        uv venv ./venv --python 3.12 --python-preference=only-managed
+
+        # Activate env
+        source venv/bin/activate
+
+        # Install dependencies
+        pip3 install cmake # If that fails, do: "pip3 install cmake --only-binary :all:"
+
+        # Clone ik_llama.cpp
+        git clone https://github.com/Thireus/ik_llama.cpp --recursive
+        cd ik_llama.cpp
+
+        # Build ik_llama.cpp
+        # WSL with CUDA
+        cmake -B build -DGGML_NATIVE=OFF  \
+        -DGGML_OPENMP=ON  \
+        -DGGML_AVX2=ON  \
+        -DGGML_CUDA=ON  \
+        -DGGML_SCHED_MAX_COPIES=1  \
+        -DGGML_CUDA_IQK_FORCE_BF16=1  \
+        -DGGML_MAX_CONTEXTS=2048  \
+        -DLLAMA_CURL=OFF
+        cmake --build build --config Release -j16 # Adjust j to your number of CPU cores
+
+        # (Optional) Add to PATH
+        export PATH=~/AI/ik_llama.cpp/build/bin/:$PATH
+        ```
+
+        </details>
+
    - Source code and builds:  
      👉 https://github.com/Thireus/ik_llama.cpp/releases  
 
 2. **Use the official `ik_llama.cpp` repo**  
    - You must compile with: `-DGGML_MAX_CONTEXTS=2048`  
+   - Windows users are encouraged to switch to Linux due to performance degradation for MoE models, see notes in Option 1.  
    - Official repo:  
      👉 https://github.com/ikawrakow/ik_llama.cpp  
 
 3. **Use the Thireus fork of `llama.cpp`**  
    - **Compatibility with GGUF shards produced by Thireus is not guaranteed or always tested**.  
-   - **Windows builds available**.  
+   - **Windows builds available** (not affected by the MoE performance issue).  
    - Source code and builds:  
      👉 https://github.com/Thireus/llama.cpp/releases  
 
 4. **Use `llama.cpp` from ggml-org**   
    - **Compatibility with GGUF shards produced by Thireus is not guaranteed or always tested**.  
-   - **Windows users** must also apply: [PR #620](https://github.com/ikawrakow/ik_llama.cpp/pull/620)  
+   - **Windows users** (not affected by the MoE performance issue) must also apply: [PR #620](https://github.com/ikawrakow/ik_llama.cpp/pull/620)  
    - Source code and builds:  
      👉 https://github.com/ggml-org/llama.cpp/releases  
 
