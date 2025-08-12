@@ -47,7 +47,7 @@ cd GGUF-Tool-Suite
 rm -f download.conf # Make sure to copy the relevant download.conf for the model before running quant_assign.py
 cp -f models/GLM-4.5-Air/download.conf . # Use the download.conf of the chosen model
 mkdir -p kitchen && cd kitchen
-../quant_downloader.sh ../recipe_examples/GLM-4.5-Air.ROOT-3.9070bpw-4.6903ppl.50GB-GGUF_5GB-GPU_45GB-CPU.a02563d_270bea7.recipe
+../quant_downloader.sh ../recipe_examples/ik_llama.cpp_recipes/GLM-4.5-Air.ROOT-3.9070bpw-4.6903ppl.50GB-GGUF_5GB-GPU_45GB-CPU.a02563d_270bea7.recipe
 
 # Other recipe examples can be found at https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples
 
