@@ -124,7 +124,7 @@ ulimit -n 99999
 
 ## 📁 Recipe Examples
 
-Examples of ik_llama.cpp-compatible recipes are included in the `recipe_examples` folder. Have a look at the file name or inside the recipe files to see the VRAM and RAM requirements of each.
+Examples of recipes are included in the `recipe_examples` folder. Have a look at the file name or inside the recipe files to see the VRAM and RAM requirements of each.
 
 > ⚠️ You’re encouraged to build your own recipes tailored to your setup rather than relying on others'.
 
@@ -140,7 +140,7 @@ rm -f download.conf
 # Use the download.conf of the chosen model
 cp -f models/DeepSeek-R1-0528/download.conf .
 mkdir -p kitchen && cd kitchen
-../quant_downloader.sh ../recipe_examples/DeepSeek-R1-0528.THIREUS-3.4064bpw-3.3372ppl.242GB-GGUF_11GB-GPU_231GB-CPU.254e1cf_c044584.recipe
+../quant_downloader.sh ../recipe_examples/ik_llama.cpp_recipes/DeepSeek-R1-0528.THIREUS-1.9364bpw-4.3533ppl.151GB-GGUF_11GB-GPU_140GB-CPU.3c88ec6_9fd615d.recipe
 ```
 
 > 💡 **Pro tip**: Re-running `quant_downloader.sh` in the same directory will only download the **missing/different shards** from your current quant mix.
@@ -189,7 +189,7 @@ python quant_assign.py ppl_results.csv \
   --gpu-assign-qtype iq4_xs \
   --gpu-assign-tensors 'blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=q8_0' \
   | ./quants_regex_merger.sh \
-    --model-name "recipe_examples/DeepSeek-R1-0528" \
+    --model-name "recipe_examples/ik_llama.cpp_recipes/DeepSeek-R1-0528" \
     --add-ppl 0 \
     --model-link "https://huggingface.co/deepseek-ai/DeepSeek-R1-0528"
 ```

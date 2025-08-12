@@ -5,7 +5,7 @@
 #** identify tensor quantisation sensitiveness patterns.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-06-2025 -------------------- **#
+#** --------------- Updated: Aug-12-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -60,14 +60,50 @@ def parse_filename(filename):
     return model_name, bpw, ppl
 
 def collect_recipe_data(recipe_dir):
+    """
+    Collect recipe data from recipe_dir and its immediate subdirectories.
+
+    Returns:
+      data: dict mapping model -> dict mapping source_label -> list of (bpw, ppl)
+        - source_label is '' (empty string) for recipes directly under recipe_dir (root series)
+          or '<subdir>' for recipes inside an immediate subdirectory.
+    """
     data = {}
-    for fname in os.listdir(recipe_dir):
-        if not fname.endswith('.recipe'):
-            continue
-        model, bpw, ppl = parse_filename(fname)
-        if None in (bpw, ppl):
-            continue
-        data.setdefault(model, []).append((bpw, ppl))
+    dir_name = os.path.basename(os.path.normpath(recipe_dir))
+
+    # 1) Collect files directly in recipe_dir (root series labeled by empty string)
+    try:
+        with os.scandir(recipe_dir) as it:
+            for entry in it:
+                if entry.is_file() and entry.name.endswith('.recipe'):
+                    model, bpw, ppl = parse_filename(entry.name)
+                    if None in (bpw, ppl):
+                        continue
+                    # root-level series: use empty string as source label
+                    data.setdefault(model, {}).setdefault('', []).append((bpw, ppl))
+    except FileNotFoundError:
+        # If the provided recipe_dir does not exist, return empty data
+        return data
+
+    # 2) Collect files in immediate subdirectories (each subdir becomes its own series labeled by subdir name)
+    try:
+        for entry in os.scandir(recipe_dir):
+            if entry.is_dir():
+                subdir = entry.name
+                subpath = entry.path
+                label = subdir  # only subdir name (no dir_name prefix)
+                for fname in os.listdir(subpath):
+                    if not fname.endswith('.recipe'):
+                        continue
+                    model, bpw, ppl = parse_filename(fname)
+                    if None in (bpw, ppl):
+                        continue
+                    data.setdefault(model, {}).setdefault(label, []).append((bpw, ppl))
+                # If subdir had no recipes, nothing was added — that's handled by above logic
+    except FileNotFoundError:
+        # already handled; no further action
+        pass
+
     return data
 
 def collect_imported_data(import_file):
@@ -101,27 +137,49 @@ def plot_data(recipe_data, recipe_dir, imported_data=None, export=False, out_dir
     import matplotlib.pyplot as plt
 
     dir_name = os.path.basename(os.path.normpath(recipe_dir))
-    main_label = f"Thireus' GGUF Tool Suite {dir_name}"
-    markers = ['o', 's', '^', 'D', 'v', '*', 'p', 'h', '<', '>']
+    # recipe markers now only use: '+', 'x', '*'
+    recipe_markers = ['+', 'x', '*']
+    # imported markers remain as requested
+    imported_markers = ['o', 's', '^', 'D', 'v', 'p', 'h', '<', '>']
 
     if not export:
         plt.ion()
 
-    for model, vals in recipe_data.items():
-        xs_main, ys_main = zip(*sorted(vals))
+    # recipe_data is expected to be: { model: { source_label: [(bpw,ppl), ...], ... }, ... }
+    for model, sources in recipe_data.items():
+        # If a model has no sources (shouldn't happen), skip
+        if not sources:
+            continue
+
         fig = plt.figure()
-        plt.plot(xs_main, ys_main, marker='x', linestyle='', label=main_label)
+        # plot each source series (root and each subdir) for this model
+        for idx, (source_label, vals) in enumerate(sorted(sources.items())):
+            if not vals:
+                continue
+            xs, ys = zip(*sorted(vals))
+            # series_label: omit dir_name; empty source_label -> no suffix, subdir -> use subdir only
+            if source_label:
+                series_label = f"Thireus' GGUF Tool Suite {source_label}"
+            else:
+                series_label = "Thireus' GGUF Tool Suite"
+            # Use recipe-specific markers: '+', 'x', '*'
+            marker = recipe_markers[idx % len(recipe_markers)]
+            plt.plot(xs, ys, marker=marker, linestyle='', label=series_label)
+
         # Plot any imported series for this model
         if imported_data and model in imported_data:
             for idx, (author, series_vals) in enumerate(imported_data[model].items()):
+                if not series_vals:
+                    continue
                 xs_imp, ys_imp = zip(*sorted(series_vals))
-                marker = markers[idx % len(markers)]
+                marker = imported_markers[idx % len(imported_markers)]
                 plt.plot(xs_imp, ys_imp, marker=marker, linestyle='', label=author)
 
         plt.xlabel('Bits per word (bpw)')
         plt.ylabel('Perplexity (ppl)')
         plt.title(f'{model}: ppl vs bpw')
-        plt.legend()
+        # Make legend/label text smaller
+        plt.legend(fontsize='small')
 
         if export:
             filename = f"{model}.svg"
