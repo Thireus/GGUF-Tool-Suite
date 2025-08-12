@@ -37,8 +37,8 @@ Here's how DeepSeek-R1-0528 quantized with **Thireus' GGUF Tool Suite** compares
 
 You have **four options** for using `ik_llama.cpp` or `llama.cpp`:
 
-- You are strongly encouraged to use Linux for best results with `ik_llama.cpp`.
-- 
+- You are strongly encouraged to use Linux for best results with `ik_llama.cpp` (optimum speed and ppl per model size).
+- Windows users (including when using WSL2) should use `llama.cpp` instead.
 
 1. **Use the Thireus fork of `ik_llama.cpp` (recommended)**  
    - **Linux**: compile as usual.  
