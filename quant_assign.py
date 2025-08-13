@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-06-2025 -------------------- **#
+#** --------------- Updated: Aug-13-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -29,6 +29,7 @@
 # python quant_assign.py ppl_results_guessed.csv --gpu-tensors 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_shexp\.weight' 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_shexp\.weight' 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_shexp\.weight' --cpu-tensors 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight' 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight' 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight' --cpu-quants iq4_ks iq3_k iq2_k iq1_m_r4 --gpu-quants q8_0 iq6_k iq5_k_r4 --cpu-tensors-max-size 230 --tolerance 0.01 --exponential-factor 8 | ./quants_regex_merger.sh --model-name DeepSeek-R1-0528
 # python quant_assign.py 'ppl_results.csv' --gpu-tensors '.*' --cpu-tensors 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight' 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight' 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight' --cpu-quants iq4_ks iq3_k iq2_k iq1_m_r4 --gpu-quants q8_0 iq5_k_r4 iq6_k --cpu-tensors-max-size 230 --gpu-tensors-max-size 90% --tolerance 0.01 --exponential-factor 8 | ./quants_regex_merger.sh --model-name DeepSeek-R1-0528
 
+import ast
 from datetime import datetime
 import time
 import os
@@ -44,6 +45,7 @@ import subprocess
 import tempfile
 from collections import Counter
 import textwrap
+from typing import cast
 
 # Global default quants list
 DEFAULT_QUANTS = ['q8_0', 'q4_0']
@@ -560,9 +562,14 @@ def compute_quant_intervals(quants, stretch=1.0):
     return intervals
 
 
-def assign_quants(quants, _, class_values, forced_mid=None, stretch=1.0):
+def assign_quants(quants, _, class_values, forced_mid=None, stretch=1.0, harmonize_groups=None):
     """
     Assign quants based on spread intervals and fetch correct tensor sizes.
+
+    harmonize_groups: optional list-of-lists of regex strings. Matching is done
+    *only* against tensors present in class_values (i.e. class_values.keys()).
+    If the per-pattern match-lists (restricted to class_values) have differing
+    lengths, harmonization for that group/quant is skipped with an [Info] warning.
     """
     if INFO:
         print(f"[Info] Performing spread-based quant assignment (stretch={stretch:.2f})...")
@@ -570,7 +577,23 @@ def assign_quants(quants, _, class_values, forced_mid=None, stretch=1.0):
     intervals = compute_quant_intervals(quants, stretch)
     assignment = {}
     sizes = {}
-    for name in class_values:
+
+    # Pre-compile harmonize regexes for speed (if provided)
+    compiled_groups = None
+    if harmonize_groups:
+        if not isinstance(harmonize_groups, list):
+            raise ValueError("--harmonize-quants must be a list-of-lists (or None to disable).")
+        compiled_groups = []
+        for g in harmonize_groups:
+            if not isinstance(g, list) or len(g) < 2:
+                raise ValueError("Each inner group in --harmonize-quants must be a list with >= 2 regex strings.")
+            compiled_groups.append([re.compile(p) for p in g])
+
+    # Use the names present in class_values only
+    class_names = list(class_values.keys())
+
+    # 1) Determine quant assignment (same behaviour as before)
+    for name in class_names:
         spread = spreads[name]
         for q, top, bottom in intervals:
             if bottom < spread <= top:
@@ -578,12 +601,73 @@ def assign_quants(quants, _, class_values, forced_mid=None, stretch=1.0):
                 break
         else:
             assignment[name] = quants[-1]
-        sizes[name], _ = get_map_sizes(assignment[name])
-        sizes[name] = sizes[name].get(name, 0)
-        if INFO:
-            print(f"[Info] Assigned {assignment[name]} to {name} (spread={spread:.4f}) size={sizes[name]}")
-    return assignment, sizes
 
+    # 2) Compute sizes and apply index-wise harmonization when applicable
+    for name in class_names:
+        q_assigned = assignment[name]
+        sizes_map, _ = get_map_sizes(q_assigned)  # sizes_map: {tensor_name: size_in_bytes}
+        base_size = sizes_map.get(name, 0)
+        final_size = base_size
+
+        if compiled_groups:
+            matched_group = None
+            matched_pattern_idx = -1
+            matched_group_idx = -1
+
+            # find which group & which pattern within that group matched this name
+            for gi, compiled in enumerate(compiled_groups):
+                for pi, cre in enumerate(compiled):
+                    if cre.search(name):
+                        matched_group = compiled
+                        matched_pattern_idx = pi
+                        matched_group_idx = gi
+                        break
+                if matched_group is not None:
+                    break
+
+            if matched_group is not None and matched_pattern_idx >= 0:
+                # build candidate lists from class_names (NOT the full sizes_map keys)
+                candidate_lists = []
+                for cre in matched_group:
+                    cands = [n for n in class_names if cre.search(n)]
+                    candidate_lists.append(sorted(cands))
+
+                lengths = [len(lst) for lst in candidate_lists]
+                if len(set(lengths)) != 1:
+                    # User split tensors across CPU/GPU (or other reason) — skip harmonization for this group
+                    if INFO:
+                        print(f"[Warning] skipping harmonization for group {matched_group_idx} quant {q_assigned} because pattern match counts differ (counts={lengths}); using per-tensor sizes.")
+                else:
+                    group_n = lengths[0]
+                    if group_n == 0:
+                        # nothing to do
+                        pass
+                    else:
+                        # find index of this name in the pattern-list it matched
+                        my_list = candidate_lists[matched_pattern_idx]
+                        if name not in my_list:
+                            # shouldn't normally happen but be safe: skip harmonization
+                            if INFO:
+                                print(f"[Warning] {name!r} not found among pattern matches for harmonize group {matched_group_idx}; skipping harmonization for this tensor.")
+                        else:
+                            idx_in = my_list.index(name)
+                            # pair index-wise across all lists
+                            matched_names = [lst[idx_in] for lst in candidate_lists]
+                            # compute harmonized size using sizes_map for the assigned quant
+                            group_sizes = [float(sizes_map.get(nm, 0)) for nm in matched_names]
+                            if len(group_sizes) >= 2:
+                                size_harmonized = float(sum(group_sizes)) / len(group_sizes)
+                                final_size = size_harmonized
+                                if INFO:
+                                    details = ", ".join(f"{nm}={sizes_map.get(nm,0)}" for nm in matched_names)
+                                    print(f"[Info] Size-harmonized group {matched_group_idx} quant {q_assigned} index {idx_in}: {details} -> harmonized={size_harmonized}")
+
+        sizes[name] = final_size
+
+        if INFO:
+            print(f"[Info] Assigned {assignment[name]} to {name} (spread={spreads[name]:.4f}) size={sizes[name]}")
+
+    return assignment, sizes
 
 def total_size_for_quant(names, qtype):
     """
@@ -594,7 +678,7 @@ def total_size_for_quant(names, qtype):
 
 
 def optimize_midpoint_and_assign(quants, _, class_values,
-                                 max_bytes, tolerance=0.05, exp_factor=1.0):
+                                 max_bytes, tolerance=0.05, exp_factor=1.0, harmonize_groups=None):
     """
     Loop over stretch factors and perform midpoint optimization using class mean with dichotomy.
     exp_factor controls exponent in stretch calculation: higher = more aggressive extremes.
@@ -629,7 +713,7 @@ def optimize_midpoint_and_assign(quants, _, class_values,
                 print(f"[Info] Evaluating midpoint={mid:.6f}, stretch={stretch:.2f}...")
             assignment, sizes = assign_quants(quants, None,
                                              class_values,
-                                             forced_mid=mid, stretch=stretch)
+                                             forced_mid=mid, stretch=stretch, harmonize_groups=harmonize_groups)
             size = sum(sizes.values())
             # tolerance check
             if abs(size - max_bytes) / max_bytes <= tolerance:
@@ -691,7 +775,6 @@ def scale_for_size(assignment, sizes, quants, max_size_bytes):
             if INFO: print("[Warning] Cannot reduce size further via fallback scaling.")
             break
     return assignment, total
-
 
 def _convert_value(v):
     """
@@ -809,6 +892,137 @@ def verify_detached_signature(file_path):
 
     return False
 
+def harmonize_row(row: pd.Series, cols: list, harmonize_groups: list, technique: int = 1) -> pd.Series:
+    """
+    Harmonize values inside `row` according to harmonize_groups.
+    Pairing rules:
+      - For each inner group, collect matches for each regex.
+      - All match-lists must have the same length (or ValueError).
+      - Extract layer id via 'blk.<ID>' (preferred), fallback to first numeric token.
+        * If every matched name across all lists has an ID -> sort each list by ID and pair index-wise.
+        * If none have IDs -> sort by name deterministically and pair index-wise.
+        * If mixed (some lists/entries have IDs and some don't) -> raise ValueError.
+      - For each paired tuple, ensure IDs match (or None in no-ID case) then harmonize the numeric values
+        (technique 1=max, 2=mean, 3=min) and write the number back into `row` for all paired names.
+    """
+    if not harmonize_groups:
+        return row
+
+    if not isinstance(harmonize_groups, list):
+        raise ValueError("--harmonize-tensors must be a list-of-lists (or '[]' to disable).")
+
+    # validate shape
+    for g in harmonize_groups:
+        if not isinstance(g, list) or len(g) < 2:
+            raise ValueError("Each inner group in --harmonize-tensors must be a list containing at least 2 regex strings.")
+        for p in g:
+            if not isinstance(p, str):
+                raise ValueError("Each pattern in --harmonize-tensors must be a string (regex).")
+
+    for gi, group in enumerate(harmonize_groups):
+        compiled = [re.compile(p) for p in group]
+
+        # collect matches for each pattern
+        matches_per_pattern = [[name for name in cols if compiled[i].search(name)] for i in range(len(compiled))]
+
+        # ensure same length across patterns
+        lengths = [len(l) for l in matches_per_pattern]
+        if len(set(lengths)) != 1:
+            raise ValueError(f"Harmonize group {gi}: matched lists have different lengths: {lengths}. All patterns must match the same number of tensors.")
+
+        n = lengths[0]
+        if n == 0:
+            # nothing to do for this group
+            continue
+
+        # build (name, id_or_none) lists
+        def extract_id(name: str):
+            m = re.search(r"blk\.(\d+)", name)
+            if m:
+                return int(m.group(1))
+            m2 = re.search(r"(\d+)", name)
+            if m2:
+                return int(m2.group(1))
+            return None
+
+        lists_with_ids = []
+        for lst in matches_per_pattern:
+            lists_with_ids.append([(name, extract_id(name)) for name in lst])
+
+        # decide sorting strategy:
+        # - if all entries across all lists have non-None id -> sort by id
+        # - elif all entries across all lists have None id -> sort by name
+        # - else -> ambiguous -> raise
+        all_ids = [id for lst in lists_with_ids for (_, id) in lst]
+        any_id = any(id is not None for id in all_ids)
+        all_have_id = all(id is not None for id in all_ids)
+
+        if all_have_id:
+            # sort each list by id
+            for i in range(len(lists_with_ids)):
+                lists_with_ids[i].sort(key=lambda t: t[1])
+        elif not any_id:
+            # no ids anywhere -> deterministic sort by name
+            for i in range(len(lists_with_ids)):
+                lists_with_ids[i].sort(key=lambda t: t[0])
+        else:
+            raise ValueError(f"Harmonize group {gi}: inconsistent layer id presence across matched tensors (some have IDs, some don't).")
+
+        # now pair index-wise and verify IDs match
+        for idx in range(n):
+            tuple_names = []
+            tuple_ids = []
+            for lst in lists_with_ids:
+                name, lid = lst[idx]
+                tuple_names.append(name)
+                tuple_ids.append(lid)
+
+            # check ids: either all equal (and not None), or all None
+            if all(x is None for x in tuple_ids):
+                # ok (no ids case)
+                pass
+            else:
+                # require all equal and not None
+                if not all((x == tuple_ids[0]) and (x is not None) for x in tuple_ids):
+                    raise ValueError(f"Harmonize group {gi} index {idx}: mismatched layer ids for pair {tuple_names} -> ids {tuple_ids}")
+
+            # collect numeric values for each name
+            numeric_vals = []
+            for nm in tuple_names:
+                raw = row.get(nm, np.nan)
+                try:
+                    val = _convert_value(raw)
+                except Exception:
+                    try:
+                        val = float(raw)
+                    except Exception:
+                        val = float("nan")
+                numeric_vals.append(val)
+
+            valid_vals = [v for v in numeric_vals if not np.isnan(v)]
+            if not valid_vals:
+                # nothing numeric to harmonize
+                continue
+
+            if technique == 1:
+                new_val = max(valid_vals)
+            elif technique == 2:
+                new_val = float(sum(valid_vals)) / len(valid_vals)
+            elif technique == 3:
+                new_val = min(valid_vals)
+            else:
+                raise ValueError("--harmonization-technique must be 1, 2 or 3")
+
+            # write back
+            for nm in tuple_names:
+                row.at[nm] = new_val
+
+            if INFO:
+                lid_str = tuple_ids[0] if tuple_ids and tuple_ids[0] is not None else "no-id"
+                print(f"[Info] Harmonized group {gi} layer {lid_str}: {tuple_names} -> {new_val}")
+
+    return row
+
 def main():
     global DEBUG, INFO, SKIP_GPG, ALL_GPG_SIGS_VALID
     parser = argparse.ArgumentParser(description="Assign optimal quants per tensor based on PPL CSV.")
@@ -831,8 +1045,8 @@ def main():
     parser.add_argument('--gpu-tensors', nargs='+', default=[], help='Regex patterns for GPU tensors')
     parser.add_argument('--cpu-quants', nargs='+', help='Ordered list of CPU case-sensitive quants (e.g. q6_K)')
     parser.add_argument('--gpu-quants', nargs='+', help='Ordered list of GPU case-sensitive quants (e.g. q3_K)')
-    parser.add_argument('--cpu-tensors-max-size', type=str, help='Max CPU tensors size in GiB or percent (e.g., 80%)')
-    parser.add_argument('--gpu-tensors-max-size', type=str, help='Max GPU tensors size in GiB or percent (e.g., 80%)')
+    parser.add_argument('--cpu-tensors-max-size', type=str, help='Max CPU tensors size in GiB or percent (e.g., 80%%)')
+    parser.add_argument('--gpu-tensors-max-size', type=str, help='Max GPU tensors size in GiB or percent (e.g., 80%%)')
     parser.add_argument('--exponential-factor', type=float, default=1.0,
                         help='Exponent controlling midpoint adjustment aggressiveness during stretch sweeps. '
                              'Higher values push quantization toward extremes; default is 1.0.')
@@ -840,6 +1054,18 @@ def main():
     parser.add_argument('--tensors-from-csv', action='store_true', help='Obtains list of tensors from csv file only (default: tensors are obtained from map file)')
     parser.add_argument('--skip-gpg', action='store_true',
                         help='Skip gpg signature validation')
+    parser.add_argument('--harmonize-tensors', type=str,
+                    default='[["blk\\..*\\.ffn_up_exps.*","blk\\..*\\.ffn_gate_exps.*"]]',
+                    help=('A Python literal list-of-lists of regex patterns. Each inner list declares a group of regexes whose matching tensors will be qtype harmonized **per layer**. Example: ' 
+                          "'[[\"blk\\..*\\.ffn_up_exps.*\", \"blk\\..*\\.ffn_gate_exps.*\"]]' "
+                          "Use '[]' to disable harmonization if no fused tensors are used (e.g. with llama.cpp). "
+                          "Note: harmonising tensors to allow for fused ffn_up_exps and ffn_gate_exps can improve computation speed, but may restrict dynamic quantization options and slightly degrade PPL vs model size. "
+                          "It is highly recommended to leave this parameter value default when using ik_llama.cpp for significant speed improvements (can be as high as +20%% speed gain) with MoE models - when using ik_llama.cpp with -fmoe 1 these tensors are fused, which can only happen if they are of the same qtype. " 
+                          "Future versions of ik_llama.cpp may also take advantage of fused ffn_up_shexp and ffn_gate_shexp tensors. " ) )
+    parser.add_argument('--harmonization-technique', type=int, default=1, choices=[1,2,3],
+                        help=('Harmonization technique to use when --harmonize-tensors is set: 1=max (default), 2=mean, 3=min. ' 
+                              'Values are applied element-wise per layer across the matched tensors.'
+                              'Max ensures calibration data ppl measurement is not negatively degraded. Min will degrade calibration data accuracy and isn\'t recommended. Mean is a compromise in-between.'))
     args = parser.parse_args()
 
     # ---- BEGIN pgpy-based “trusted-keys.asc” check ----
@@ -914,6 +1140,43 @@ def main():
     row = select_qtype(df, args.qtype)
     qtype = row['QTYPE']
     if INFO: print(f"[Info] Selected QTYPE: {qtype}")
+
+    #print(row.to_string(max_rows=None))
+    # ---- NEW: Harmonize matching tensor rows ----
+    try:
+        harmonize_groups = ast.literal_eval(args.harmonize_tensors)
+    except Exception:
+        parser.error("Invalid --harmonize-tensors: must be a Python literal list-of-lists, e.g. [['pat1','pat2'], ['p3','p4']].")
+
+    try:
+        # Provide df columns (excluding QTYPE) so the helper can match against available tensor names
+        harmonize_row(row, [c for c in df.columns if c != 'QTYPE'], harmonize_groups, args.harmonization_technique)
+    except ValueError as ve:
+        parser.error(str(ve))
+
+    # Which columns we actually want to update
+    cols_to_update = [c for c in row.index if c != "QTYPE" and c in df.columns]
+
+    # Determine the df index to update
+    if hasattr(row, "name") and row.name is not None and row.name in df.index:
+        idx = row.name
+    else:
+        mask = (df["QTYPE"] == row["QTYPE"])
+        matches = df.index[mask].tolist()
+        if len(matches) == 0:
+            raise ValueError(f"Could not find any row in df with QTYPE == {row['QTYPE']!r} to update.")
+        if len(matches) > 1:
+            # warning; choose first. Adjust if you prefer to update all matches.
+            print(f"[Warning] Multiple rows with QTYPE == {row['QTYPE']!r}; updating the first match.")
+        idx = matches[0]
+
+    # Update columns one-by-one (avoids type-checker issues and is explicit)
+    for col in cols_to_update:
+        # row[col] might be a numpy scalar or python scalar — both are fine
+        df.at[idx, col] = row[col]
+
+    # ---- END harmonization ----
+    #print(row.to_string(max_rows=None))
 
     # Pre-fetch maps
     if not fetch_map_for_qtype(qtype):
@@ -1069,17 +1332,117 @@ def main():
 
         # Assign extremes and compute outlier size deduction
         outlier_bytes = 0
-        for n in out_low:
-            assignments[cls][n] = quants[-1]
-            size = total_size_for_quant([n], quants[-1])
-            outlier_bytes += size
-            if INFO: print(f"[Info] Assigned lowest quant {quants[-1]} to low outlier {n}, size={size/GIB:.3f} GiB")
-        for n in out_high:
-            assignments[cls][n] = quants[0]
-            size = total_size_for_quant([n], quants[0])
-            outlier_bytes += size
-            if INFO: print(f"[Info] Assigned highest quant {quants[0]} to high outlier {n}, size={size/GIB:.3f} GiB")
-        for n in out_low + out_high:
+
+        # Parse/compile harmonize groups (safe: if args.harmonize_quants is invalid, treat as disabled)
+        try:
+            _harm_groups = ast.literal_eval(args.harmonize_quants)
+        except Exception:
+            _harm_groups = []
+        compiled_groups = []
+        if _harm_groups:
+            for g in _harm_groups:
+                try:
+                    compiled_groups.append([re.compile(p) for p in g])
+                except Exception:
+                    # If a user provided an invalid regex, just skip harmonization for safety
+                    compiled_groups = []
+                    break
+
+        # Only consider names from class_vals for harmonization (index-wise matching)
+        class_names = sorted(list(class_vals.keys()))
+
+        processed_outliers = set()
+
+        def _find_harmony_partners_and_mean(name, extreme_q, group_idx_hint=None):
+            """
+            Try to find index-wise partners for 'name' within compiled_groups,
+            restricted to class_names. If successful returns (matched_names_list, mean_size, group_idx).
+            Otherwise returns None.
+            """
+            if not compiled_groups:
+                return None
+
+            for gi, compiled in enumerate(compiled_groups):
+                # see if any pattern in this group matches `name`
+                matched_pi = None
+                for pi, cre in enumerate(compiled):
+                    if cre.search(name):
+                        matched_pi = pi
+                        break
+                if matched_pi is None:
+                    continue  # this group doesn't include 'name'
+
+                # build candidate lists from class_names (NOT sizes_map/full map)
+                candidate_lists = []
+                for cre in compiled:
+                    lst = [n for n in class_names if cre.search(n)]
+                    candidate_lists.append(sorted(lst))
+
+                lengths = [len(l) for l in candidate_lists]
+                if len(set(lengths)) != 1:
+                    # counts differ => user likely split tensors across CPU/GPU or similar.
+                    if INFO:
+                        print(f"[Info] Warning: skipping harmonization for group {gi} quant {extreme_q} because pattern match counts differ (counts={lengths}); using per-tensor sizes.")
+                    return None
+
+                if lengths[0] == 0:
+                    return None
+
+                # find index of name in its pattern list
+                my_list = candidate_lists[matched_pi]
+                if name not in my_list:
+                    # safety: unexpected
+                    if INFO:
+                        print(f"[Info] Warning: {name!r} not present in pattern list for harmonization group {gi}; skipping harmonization for this tensor.")
+                    return None
+                idx_in = my_list.index(name)
+
+                # partner names = same index from all candidate_lists
+                matched_names = [lst[idx_in] for lst in candidate_lists]
+
+                # compute per-tensor sizes for the assigned extreme quant and take mean
+                partner_sizes = [total_size_for_quant([nm], extreme_q) for nm in matched_names]
+                mean_size = float(sum(partner_sizes)) / len(partner_sizes)
+
+                return matched_names, mean_size, gi
+
+            return None
+
+        # helper to process a list of outliers (either out_low or out_high)
+        def _process_outliers_list(out_list, assigned_q, desc):
+            nonlocal outlier_bytes, processed_outliers
+            for n in out_list:
+                if n in processed_outliers:
+                    continue
+
+                # try to find harmonized partners (only among class_names)
+                found = _find_harmony_partners_and_mean(n, assigned_q)
+                if not found:
+                    # no harmonization applies -> normal single-tensor assignment
+                    assignments[cls][n] = assigned_q
+                    size = total_size_for_quant([n], assigned_q)
+                    outlier_bytes += size
+                    processed_outliers.add(n)
+                    if INFO:
+                        print(f"[Info] Assigned {desc} quant {assigned_q} to outlier {n}, size={size/GIB:.3f} GiB")
+                else:
+                    matched_names, size_harmonized, group_idx = found
+                    # assign same extreme quant and harmonized size to each matched partner
+                    for nm in matched_names:
+                        if nm in processed_outliers:
+                            continue
+                        assignments[cls][nm] = assigned_q
+                        outlier_bytes += size_harmonized
+                        processed_outliers.add(nm)
+                        if INFO:
+                            print(f"[Info] Assigned {desc} quant {assigned_q} to outlier {nm}, size={size_harmonized/GIB:.3f} GiB (harmonized group {group_idx})")
+
+        # process low and high outliers (lowest quant = quants[-1], highest quant = quants[0])
+        _process_outliers_list(out_low, quants[-1], "lowest")
+        _process_outliers_list(out_high, quants[0], "highest")
+
+        # remove processed outliers from class_vals so they are not considered in normal assignment
+        for n in list(processed_outliers):
             class_vals.pop(n, None)
 
         # Normal assignment on remaining
@@ -1126,11 +1489,11 @@ def main():
         elif max_arg_bytes:
             assignment, total_bytes = optimize_midpoint_and_assign(
                 quants, None, class_vals,
-                max_arg_bytes, args.tolerance, args.exponential_factor)
+                max_arg_bytes, args.tolerance, args.exponential_factor, harmonize_groups=harmonize_groups)
             #print(f"# Optimized sub-total {cls.upper()} size excluding outliers and f32: {total_bytes/GIB:.3f} GiB")
         else:
             assignment, sizes = assign_quants(
-                quants, None, class_vals)
+                quants, None, class_vals, harmonize_groups=harmonize_groups)
             total_bytes = sum(sizes.values())
 
         assignments[cls].update(assignment)  # Store per-class assignments
