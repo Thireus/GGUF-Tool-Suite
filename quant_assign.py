@@ -1054,18 +1054,17 @@ def main():
     parser.add_argument('--tensors-from-csv', action='store_true', help='Obtains list of tensors from csv file only (default: tensors are obtained from map file)')
     parser.add_argument('--skip-gpg', action='store_true',
                         help='Skip gpg signature validation')
-    parser.add_argument('--harmonize-tensors', type=str,
-                    default='[["blk\\..*\\.ffn_up_exps.*","blk\\..*\\.ffn_gate_exps.*"]]',
-                    help=('A Python literal list-of-lists of regex patterns. Each inner list declares a group of regexes whose matching tensors will be qtype harmonized **per layer**. Example: ' 
-                          "'[[\"blk\\..*\\.ffn_up_exps.*\", \"blk\\..*\\.ffn_gate_exps.*\"]]' "
-                          "Use '[]' to disable harmonization if no fused tensors are used (e.g. with llama.cpp). "
-                          "Note: harmonising tensors to allow for fused ffn_up_exps and ffn_gate_exps can improve computation speed, but may restrict dynamic quantization options and slightly degrade PPL vs model size. "
-                          "It is highly recommended to leave this parameter value default when using ik_llama.cpp for significant speed improvements (can be as high as +20%% speed gain) with MoE models - when using ik_llama.cpp with -fmoe 1 these tensors are fused, which can only happen if they are of the same qtype. " 
-                          "Future versions of ik_llama.cpp may also take advantage of fused ffn_up_shexp and ffn_gate_shexp tensors. " ) )
+    parser.add_argument('--harmonize-tensors', nargs='+', default=[["blk\\..*\\.ffn_up_exps.*","blk\\..*\\.ffn_gate_exps.*"]],
+                        help=('A Python literal list-of-lists of regex patterns. Each inner list declares a group of regexes whose matching tensors will be qtype harmonized **per layer**. ' 
+                            "Example: --harmonize-tensors blk\\..\\*\\.ffn_up_exps.\\*,blk\\..\\*\\.ffn_gate_exps.\\* ... 'another_pat1,another_pat2'. "
+                            "Use --harmonize-tensors "" to disable harmonization. "
+                            "Note: harmonizing tensors to allow for fused ffn_up_exps and ffn_gate_exps can improve PP and TG speed, at the cost of slim restrictive dynamic quantization flexibility. "
+                            "It is highly recommended to leave this parameter value default when using ik_llama.cpp for significant speed improvements (can be as high as +20%% speed gain) with MoE models - when using ik_llama.cpp with -fmoe 1 these tensors are fused, which can only happen if they are of the same qtype. " 
+                            "Future versions of ik_llama.cpp may also take advantage of fused ffn_up_shexp and ffn_gate_shexp tensors. " ) )
     parser.add_argument('--harmonization-technique', type=int, default=1, choices=[1,2,3],
                         help=('Harmonization technique to use when --harmonize-tensors is set: 1=max (default), 2=mean, 3=min. ' 
-                              'Values are applied element-wise per layer across the matched tensors.'
-                              'Max ensures calibration data ppl measurement is not negatively degraded. Min will degrade calibration data accuracy and isn\'t recommended. Mean is a compromise in-between.'))
+                            'Values are applied element-wise per layer across the matched tensors.'
+                            'Max ensures calibration data ppl measurement is not negatively degraded. Min will degrade calibration data accuracy and isn\'t recommended. Mean is a compromise in-between.'))
     args = parser.parse_args()
 
     # ---- BEGIN pgpy-based “trusted-keys.asc” check ----
@@ -1143,10 +1142,38 @@ def main():
 
     #print(row.to_string(max_rows=None))
     # ---- NEW: Harmonize matching tensor rows ----
-    try:
-        harmonize_groups = ast.literal_eval(args.harmonize_tensors)
-    except Exception:
-        parser.error("Invalid --harmonize-tensors: must be a Python literal list-of-lists, e.g. [['pat1','pat2'], ['p3','p4']].")
+    # Convert nargs='+' form (list of comma-separated strings) into list-of-lists
+    harmonize_groups = []
+    ht = args.harmonize_tensors
+
+    if isinstance(ht, str):
+        # old behaviour: user passed a Python literal string like '[["p1","p2"],["p3","p4"]]'
+        try:
+            harmonize_groups = ast.literal_eval(ht)
+            if not isinstance(harmonize_groups, list):
+                raise ValueError("not a list")
+        except Exception:
+            parser.error("Invalid --harmonize-tensors: must be a Python literal list-of-lists, e.g. [['pat1','pat2'], ['p3','p4']].")
+    elif isinstance(ht, list):
+        # Could be:
+        #  - a list-of-lists already (default left as list-of-lists), or
+        #  - a list of strings from nargs='+' where each string is "pat1,pat2"
+        # Normalize both into list-of-lists of strings.
+        if all(isinstance(elem, list) for elem in ht):
+            harmonize_groups = ht
+        else:
+            for elem in ht:
+                if isinstance(elem, str):
+                    # split on commas allowing whitespace; empty elements removed
+                    parts = [p for p in re.split(r'\s*,\s*', elem.strip()) if p != '']
+                    if parts:
+                        harmonize_groups.append(parts)
+                else:
+                    parser.error("Invalid --harmonize-tensors element: expected string or list")
+    else:
+        parser.error("Invalid --harmonize-tensors: expected string or list")
+
+    # harmonize_groups is now a list-of-lists of regex strings (or empty list to disable)
 
     try:
         # Provide df columns (excluding QTYPE) so the helper can match against available tensor names
