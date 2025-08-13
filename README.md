@@ -1,4 +1,4 @@
-# GGUF Tool Suite
+# GGUF Tool Suite - [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Thireus/GGUF-Tool-Suite/blob/main/quant_recipe_pipeline.ipynb)
 
 **GGUF Tool Suite** is a set of flexible utilities that enables users to experiment with and create custom GGUF quantization blends. It simplifies the process of mixing quant formats (like `iq3_xxs`, `iq4_nl`, etc.) to:
 
@@ -166,7 +166,11 @@ ulimit -n 99999 # Required on Linux - Also make sure you have compiled ik_llama.
 
 ## 🛠️ Generate a Custom Recipe for Your Config
 
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Thireus/GGUF-Tool-Suite/blob/main/quant_recipe_pipeline.ipynb)
+> Recipe files can also be turned back into Google Colab pipeline parameters - [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Thireus/GGUF-Tool-Suite/blob/main/recipe_to_colab_params.ipynb) or locally with `recipe_to_colab_params.py`.
+
+[Open the quant recipe pipeline notebook in Colab to create your own recipes → ](https://colab.research.google.com/github/Thireus/GGUF-Tool-Suite/blob/main/quant_recipe_pipeline.ipynb) [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Thireus/GGUF-Tool-Suite/blob/main/quant_recipe_pipeline.ipynb)
+
+... or use `quant_assign.py` as shown below.
 
 ```bash
 # Make sure to copy the relevant download.conf and ppl_results.csv for the model before running quant_assign.py
