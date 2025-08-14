@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-13-2025 -------------------- **#
+#** --------------- Updated: Aug-14-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -27,7 +27,12 @@
 recipe_to_colab_params.py
 
 Read a .recipe file and emit a Python snippet containing Google Colab pipeline parameters.
-If a parameter is not present in the recipe, it is omitted.
+
+This version:
+- Replaces occurrences of https://gguf.thireus.com with the GitHub URL.
+- Conservatively extracts the "# - Command used:" block.
+- Ensures a complete default parameter set is present when missing, while preserving any
+  values discovered in the recipe.
 """
 
 from __future__ import annotations
@@ -35,14 +40,45 @@ import argparse
 import pathlib
 import re
 import shlex
-import json
 from typing import List, Dict, Any, Optional
 
 REPLACE_FROM = "https://gguf.thireus.com"
 REPLACE_TO = "https://github.com/Thireus/GGUF-Tool-Suite/"
 
+# Complete defaults requested
+DEFAULTS: Dict[str, Any] = {
+    "repo_url": "https://github.com/Thireus/GGUF-Tool-Suite.git",
+    "model_name": "DeepSeek-R1-0528",
+    "model_link": "https://huggingface.co/deepseek-ai/DeepSeek-R1-0528",
+    "gpu_tensors": [r".*"],
+    "cpu_tensors": [],
+    "cpu_quants": ["iq4_ks", "iq3_k", "iq2_ks", "iq1_m_r4"],
+    "gpu_quants": ["q8_0", "iq5_k_r4", "iq6_k"],
+    "cpu_tensors_max_size": "230",
+    "gpu_tensors_max_size": "95%",
+    "tolerance": 0.01,
+    "exponential_factor": 8,
+    "gpu_assign_qtype": "iq4_xs",
+    "gpu_assign_tensors": [r"blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=q8_0"],
+    "cpu_assign_qtype": "",
+    "cpu_assign_tensors": [],
+    "harmonize_tensors": [[r"blk\..*\.ffn_up_exps.*", r"blk\..*\.ffn_gate_exps.*"]],
+    "harmonization_technique": 1,
+    "qtype": "",
+    "debug": False,
+    "info": False,
+    "ignore_f32": False,
+    "tensors_from_csv": False,
+    "cpu_irq_k": 1.5,
+    "gpu_irq_k": 1.5,
+    "skip_gpg": False,
+    "display_graphs": True,
+}
+
+
 def error(msg: str) -> None:
     raise SystemExit(msg)
+
 
 def load_recipe(path: pathlib.Path) -> str:
     if not path.exists():
@@ -55,17 +91,18 @@ def load_recipe(path: pathlib.Path) -> str:
         text = text.replace(REPLACE_FROM, REPLACE_TO)
     return text
 
+
 def find_first(pattern: str, text: str, flags=0) -> Optional[str]:
     m = re.search(pattern, text, flags | re.MULTILINE)
     return m.group(1).strip() if m else None
 
+
 def extract_command_used_block(text: str) -> Optional[str]:
     """
-    Fetch the multi-line command used block that follows a recipe comment header like:
-    # - Command used:
-    # ../../quant_assign.py ... \
-    # ... \
-    This function is conservative: it only collects comment lines that look like shell command parts.
+    Conservative extraction of the '# - Command used:' comment block.
+    Only collects comment lines that look like parts of a shell command
+    (contain --, =, .py, ./ or ../, or end with a backslash).
+    Stops when encountering blank or narrative trailing comments like 'THE END'.
     """
     marker = re.search(r"^#\s*-?\s*Command used:\s*$", text, re.MULTILINE)
     if not marker:
@@ -74,11 +111,10 @@ def extract_command_used_block(text: str) -> Optional[str]:
         return None
     start = marker.end()
     lines: List[str] = []
-    # iterate over following comment lines
     for m in re.finditer(r"^#(.*)$", text[start:], re.MULTILINE):
         content = m.group(1).rstrip()
         stripped = content.strip()
-        # stop on blank comment or explicit THE END marker
+        # stop on blank comment or explicit THE END marker (narrative)
         if stripped == "" or stripped.upper().startswith("THE END"):
             break
 
@@ -86,13 +122,14 @@ def extract_command_used_block(text: str) -> Optional[str]:
         # contains a flag (--), an assignment (=), a python/script reference (.py), a path (./ or ../),
         # or ends with a backslash continuation "\".
         if not re.search(r'(--|=|\.py|(^\./)|(^\.\./)|\\\s*$)', content):
-            # If we've already collected some command-lines, stop collecting (this is likely trailing commentary).
             if lines:
+                # we've started collecting command-lines but this line doesn't look like command => stop
                 break
-            # if we haven't collected anything yet, skip this non-command-looking line and continue searching
-            continue
+            else:
+                # haven't seen a real command-like line yet, continue (skip noise)
+                continue
 
-        # remove trailing backslash for safe joining, but keep it if regex needs it escaped
+        # store trimmed line without trailing backslash (we'll join safely)
         lines.append(content.rstrip("\\").strip())
 
     if not lines:
@@ -100,31 +137,33 @@ def extract_command_used_block(text: str) -> Optional[str]:
     joined = " ".join(lines)
     return joined.strip()
 
+
 def tokenize_command(cmd: str) -> List[str]:
-    """Use shlex to split the command string into tokens (handles quoted tokens)."""
+    """Split the command string into tokens and filter common noisy/trailer tokens."""
     try:
         tokens = shlex.split(cmd)
     except Exception:
         tokens = cmd.split()
 
-    # Filter out noisy tokens that might slip through:
-    filtered = []
+    filtered: List[str] = []
     for t in tokens:
+        # ignore lone comment markers
         if t == "#":
             continue
-        # remove tokens that are purely punctuation (e.g. '---', '***')
+        # ignore pure punctuation tokens
         if re.fullmatch(r'^[\W_]+$', t):
             continue
-        # remove short all-caps tokens commonly found in narrative endings ("THE", "END", "END!")
+        # ignore short narrative ALL-CAPS tokens like THE, END, NOTE, etc.
         if re.fullmatch(r'^[A-Z]{2,10}\W*$', t):
             continue
         filtered.append(t)
     return filtered
 
+
 def collect_flag_values(tokens: List[str], flag: str) -> List[str]:
     """
-    Return all tokens that belong to the given flag.
-    For flags that accept multiple values, the values appear after the flag until next --something or end.
+    Return tokens belonging to the given flag.
+    Values are all tokens after the flag until the next token beginning with '--' or end.
     """
     vals: List[str] = []
     i = 0
@@ -135,13 +174,13 @@ def collect_flag_values(tokens: List[str], flag: str) -> List[str]:
             while i < len(tokens) and not tokens[i].startswith("--"):
                 vals.append(tokens[i])
                 i += 1
-            # Continue searching (there might be repeated flags)
         else:
             i += 1
     return vals
 
+
 def pretty_py_list(items: List[str]) -> str:
-    """Format a list of regex strings as Python raw-string list, preserving backslashes."""
+    """Format a list of strings as a Python raw-string list literal."""
     if not items:
         return "[]"
     elems = []
@@ -151,101 +190,66 @@ def pretty_py_list(items: List[str]) -> str:
         elems.append(f'r"{s_escaped}"')
     return "[{}]".format(", ".join(elems))
 
+
 def emit_parameters(params: Dict[str, Any]) -> str:
-    """Generate the Python snippet string from extracted params."""
+    """Generate the Python snippet string from extracted params (including defaults)."""
+    # Use values from params which already have defaults applied in parse step
     lines: List[str] = []
+
     lines.append('# @title ⚙️ Pipeline Parameters')
-    if 'repo_url' in params:
-        lines.append(f'repo_url = "{params["repo_url"]}"         #@param {{type:"string"}}')
-    if 'model_name' in params:
-        lines.append(f'model_name = "{params["model_name"]}"                                     #@param {{type:"string"}}')
-    if 'model_link' in params:
-        lines.append(f'model_link = "{params["model_link"]}"  #@param {{type:"string"}}')
-
-    if any(k in params for k in ['gpu_tensors', 'cpu_tensors']):
-        lines.append("")
-        lines.append("# regex lists as Python lists of strings - Tensor names can be found in *.recipe file of the model directory")
-        if 'gpu_tensors' in params:
-            lines.append(f'gpu_tensors = {pretty_py_list(params["gpu_tensors"])}    #@param {{type:"raw"}}')
-        if 'cpu_tensors' in params:
-            lines.append(f'cpu_tensors = {pretty_py_list(params["cpu_tensors"])}   #@param {{type:"raw"}}')
-
-    if 'cpu_quants' in params or 'gpu_quants' in params:
-        lines.append("")
-        lines.append("# quant types")
-        if 'cpu_quants' in params:
-            qlist = ", ".join(f'"{q}"' for q in params['cpu_quants'])
-            lines.append(f'cpu_quants = [{qlist}]   #@param {{type:"raw"}}')
-        if 'gpu_quants' in params:
-            qlist = ", ".join(f'"{q}"' for q in params['gpu_quants'])
-            lines.append(f'gpu_quants = [{qlist}]              #@param {{type:"raw"}}')
-
-    if any(k in params for k in ['cpu_tensors_max_size', 'gpu_tensors_max_size', 'tolerance', 'exponential_factor']):
-        lines.append("")
-        lines.append("# sizes & tuning")
-        if 'cpu_tensors_max_size' in params:
-            lines.append(f'cpu_tensors_max_size = "{params["cpu_tensors_max_size"]}"    #@param {{type:"string"}}')
-        if 'gpu_tensors_max_size' in params:
-            lines.append(f'gpu_tensors_max_size = "{params["gpu_tensors_max_size"]}"    #@param {{type:"string"}}')
-        if 'tolerance' in params:
-            lines.append(f'tolerance = {params["tolerance"]}                #@param {{type:"number"}}')
-        if 'exponential_factor' in params:
-            lines.append(f'exponential_factor = {params["exponential_factor"]}          #@param {{type:"integer"}}')
-
-    if any(k in params for k in ['gpu_assign_qtype', 'gpu_assign_tensors', 'cpu_assign_qtype', 'cpu_assign_tensors']):
-        lines.append("")
-        lines.append("# assignment override")
-        if 'gpu_assign_qtype' in params:
-            lines.append(f'gpu_assign_qtype = "{params["gpu_assign_qtype"]}"    #@param {{type:"string"}}')
-        if 'gpu_assign_tensors' in params:
-            lines.append(f'gpu_assign_tensors = {pretty_py_list(params["gpu_assign_tensors"])} #@param {{type:"raw"}}')
-        if 'cpu_assign_qtype' in params:
-            lines.append(f'cpu_assign_qtype = "{params["cpu_assign_qtype"]}"        #@param {{type:"string"}}')
-        if 'cpu_assign_tensors' in params:
-            lines.append(f'cpu_assign_tensors = {pretty_py_list(params["cpu_assign_tensors"])}        #@param {{type:"raw"}}')
-
-    if 'harmonize_tensors' in params or 'harmonization_technique' in params:
-        lines.append("")
-        lines.append("# harmonization options (optional)")
-        if 'harmonize_tensors' in params:
-            inner = []
-            for group in params['harmonize_tensors']:
-                inner.append(pretty_py_list(group))
-            groups_str = "[" + ", ".join(group for group in inner) + "]"
-            lines.append(f'harmonize_tensors = {groups_str}   #@param {{type:"raw"}}')
-        if 'harmonization_technique' in params:
-            lines.append(f'harmonization_technique = {params["harmonization_technique"]}    #@param {{type:"integer"}}')
-
-    if any(k in params for k in ['qtype', 'debug', 'info', 'ignore_f32', 'tensors_from_csv', 'cpu_irq_k', 'gpu_irq_k', 'skip_gpg']):
-        lines.append("")
-        lines.append("# additional flags (advanced and optional)")
-        if 'qtype' in params:
-            lines.append(f'qtype = "{params["qtype"]}"                  #@param {{type:"string"}}')
-        if 'debug' in params:
-            lines.append(f'debug = {params["debug"]}               #@param {{type:"boolean"}}')
-        if 'info' in params:
-            lines.append(f'info = {params["info"]}                #@param {{type:"boolean"}}')
-        if 'ignore_f32' in params:
-            lines.append(f'ignore_f32 = {params["ignore_f32"]}          #@param {{type:"boolean"}}')
-        if 'tensors_from_csv' in params:
-            lines.append(f'tensors_from_csv = {params["tensors_from_csv"]}    #@param {{type:"boolean"}}')
-        if 'cpu_irq_k' in params:
-            lines.append(f'cpu_irq_k = {params["cpu_irq_k"]}             #@param {{type:"number"}}')
-        if 'gpu_irq_k' in params:
-            lines.append(f'gpu_irq_k = {params["gpu_irq_k"]}             #@param {{type:"number"}}')
-        if 'skip_gpg' in params:
-            lines.append(f'skip_gpg = {params["skip_gpg"]}            #@param {{type:"boolean"}}')
-
-    if 'display_graphs' in params:
-        lines.append("")
-        lines.append("# other pipeline parameters (optional)")
-        lines.append(f'display_graphs = {params["display_graphs"]}       #@param {{type:"boolean"}}')
+    lines.append(f'repo_url = "{params["repo_url"]}"         #@param {{type:"string"}}')
+    lines.append(f'model_name = "{params["model_name"]}"                                     #@param {{type:"string"}}')
+    lines.append(f'model_link = "{params["model_link"]}"  #@param {{type:"string"}}')
+    lines.append("")
+    lines.append("# regex lists as Python lists of strings - Tensor names can be found in *.recipe file of the model directory")
+    lines.append(f'gpu_tensors = {pretty_py_list(params["gpu_tensors"])}    #@param {{type:"raw"}}')
+    lines.append(f'cpu_tensors = {pretty_py_list(params["cpu_tensors"])}   #@param {{type:"raw"}}')
+    lines.append("")
+    lines.append("# quant types")
+    lines.append('cpu_quants = [{}]   #@param {{type:"raw"}}'.format(", ".join('"{}"'.format(q) for q in params["cpu_quants"])))
+    lines.append('gpu_quants = [{}]              #@param {{type:"raw"}}'.format(", ".join('"{}"'.format(q) for q in params["gpu_quants"])))
+    lines.append("")
+    lines.append("# sizes & tuning")
+    lines.append(f'cpu_tensors_max_size = "{params["cpu_tensors_max_size"]}"    #@param {{type:"string"}}')
+    lines.append(f'gpu_tensors_max_size = "{params["gpu_tensors_max_size"]}"    #@param {{type:"string"}}')
+    lines.append(f'tolerance = {params["tolerance"]}                #@param {{type:"number"}}')
+    lines.append(f'exponential_factor = {params["exponential_factor"]}          #@param {{type:"integer"}}')
+    lines.append("")
+    lines.append("# assignment override")
+    lines.append(f'gpu_assign_qtype = "{params["gpu_assign_qtype"]}"    #@param {{type:"string"}}')
+    lines.append(f'gpu_assign_tensors = {pretty_py_list(params["gpu_assign_tensors"])} #@param {{type:"raw"}}')
+    lines.append(f'cpu_assign_qtype = "{params["cpu_assign_qtype"]}"        #@param {{type:"string"}}')
+    lines.append(f'cpu_assign_tensors = {pretty_py_list(params["cpu_assign_tensors"])}        #@param {{type:"raw"}}')
+    lines.append("")
+    lines.append("# harmonization options (optional)")
+    lines.append("# harmonize_tensors: list-of-lists of regex strings; each inner list declares a group whose matching tensors (within a class) will be qtype harmonized layer-wise.")
+    lines.append("# Default harmonizes ffn_up_exps and ffn_gate_exps fused pairs used by ik_llama.cpp (speed boost ~15%).")
+    # harmonize_tensors nested list printing
+    ht = "[" + ", ".join(pretty_py_list(group) for group in params["harmonize_tensors"]) + "]"
+    lines.append(f'harmonize_tensors = {ht}   #@param {{type:"raw"}}')
+    lines.append("# harmonization_technique: 1=max (default), 2=mean, 3=min")
+    lines.append(f'harmonization_technique = {params["harmonization_technique"]}    #@param {{type:"integer"}}')
+    lines.append("")
+    lines.append("# additional flags (advanced and optional)")
+    lines.append(f'qtype = "{params["qtype"]}"                  #@param {{type:"string"}}')
+    lines.append(f'debug = {params["debug"]}               #@param {{type:"boolean"}}')
+    lines.append(f'info = {params["info"]}                #@param {{type:"boolean"}}')
+    lines.append(f'ignore_f32 = {params["ignore_f32"]}          #@param {{type:"boolean"}}')
+    lines.append(f'tensors_from_csv = {params["tensors_from_csv"]}    #@param {{type:"boolean"}}')
+    lines.append(f'cpu_irq_k = {params["cpu_irq_k"]}             #@param {{type:"number"}}')
+    lines.append(f'gpu_irq_k = {params["gpu_irq_k"]}             #@param {{type:"number"}}')
+    lines.append(f'skip_gpg = {params["skip_gpg"]}            #@param {{type:"boolean"}}')
+    lines.append("")
+    lines.append("# other pipeline parameters (optional)")
+    lines.append(f'display_graphs = {params["display_graphs"]}       #@param {{type:"boolean"}}')
 
     return "\n".join(lines)
+
 
 def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
     params: Dict[str, Any] = {}
 
+    # basic metadata
     mn = find_first(r"^#\s*Model name:\s*(.+)$", recipe_text, flags=re.MULTILINE)
     if mn:
         params['model_name'] = mn
@@ -261,7 +265,7 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
     if repo_candidate:
         params['repo_url'] = repo_candidate.rstrip("/")
 
-    # Try to extract summary "GPU-loaded quants" and "CPU-loaded quants" tables as fallback for quants
+    # Parse GPU/CPU quants from the summary sections if present
     if "GPU-loaded quants" in recipe_text:
         m = re.search(r"##\s*GPU-loaded quants:([\s\S]*?)(?:\n##|\n#\s*CPU-loaded quants|\n## Summary|\n$)", recipe_text)
         if m:
@@ -294,7 +298,7 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
             if cpu_qs:
                 params['cpu_quants'] = cpu_qs
 
-    # Extract command-used block and parse flags (preferred)
+    # Preferred: extract "Command used" block and parse flags from there
     cmd = extract_command_used_block(recipe_text)
     if cmd:
         tokens = tokenize_command(cmd)
@@ -319,6 +323,7 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
                 else:
                     items: List[str] = []
                     for v in vals:
+                        # keep tokens like 'blk\...=q8_0' intact; if comma-separated, split
                         if "," in v and not v.startswith("blk\\."):
                             for part in v.split(","):
                                 part = part.strip()
@@ -362,6 +367,7 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
                         params[out] = val
             i += 1
 
+        # harmonize groups
         hvals = collect_flag_values(tokens, '--harmonize-tensors')
         if hvals:
             groups: List[List[str]] = []
@@ -372,12 +378,13 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
             if groups:
                 params['harmonize_tensors'] = groups
 
-    # Fallback heuristics if necessary
+    # Fallback heuristics for gpu_quants if still missing
     if 'gpu_quants' not in params:
         qtypes = sorted(set(re.findall(r"\b(iq[0-9]_[a-z0-9_]+|q[0-9]_[a-z0-9_]+|[+]?f32|[+]?q8_0)\b", recipe_text)))
         if qtypes:
             params['gpu_quants'] = qtypes[:3]
 
+    # Tidy numeric values
     if 'tolerance' in params:
         try:
             params['tolerance'] = float(params['tolerance'])
@@ -394,7 +401,14 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
         except Exception:
             pass
 
+    # -----------------------------
+    # Apply complete set of defaults for any missing keys (preserve any discovered values)
+    # -----------------------------
+    for k, v in DEFAULTS.items():
+        params.setdefault(k, v)
+
     return params
+
 
 def main():
     parser = argparse.ArgumentParser(description="Convert a .recipe file to Google Colab pipeline parameters")
@@ -414,6 +428,7 @@ def main():
         print(f"Wrote parameters snippet to {args.out}")
     else:
         print(snippet)
+
 
 if __name__ == "__main__":
     main()
