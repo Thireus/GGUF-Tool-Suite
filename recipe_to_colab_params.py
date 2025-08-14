@@ -63,7 +63,7 @@ DEFAULTS: Dict[str, Any] = {
     "cpu_assign_qtype": "",
     "cpu_assign_tensors": [],
     "harmonize_tensors": [[r"blk\..*\.ffn_up_exps.*", r"blk\..*\.ffn_gate_exps.*"]],
-    "harmonization_technique": 1,
+    "harmonization_technique": 3,
     "qtype": "",
     "debug": False,
     "info": False,
@@ -227,7 +227,7 @@ def emit_parameters(params: Dict[str, Any]) -> str:
     # harmonize_tensors nested list printing
     ht = "[" + ", ".join(pretty_py_list(group) for group in params["harmonize_tensors"]) + "]"
     lines.append(f'harmonize_tensors = {ht}   #@param {{type:"raw"}}')
-    lines.append("# harmonization_technique: 1=max (default), 2=mean, 3=min")
+    lines.append("# harmonization_technique: 1=max, 2=mean, 3=min (default)")
     lines.append(f'harmonization_technique = {params["harmonization_technique"]}    #@param {{type:"integer"}}')
     lines.append("")
     lines.append("# additional flags (advanced and optional)")
