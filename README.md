@@ -38,11 +38,11 @@ Here's how DeepSeek-R1-0528 quantized with **Thireus' GGUF Tool Suite** compares
 You have **four options** for using `ik_llama.cpp` or `llama.cpp`:
 
 - You are strongly encouraged to use Linux for best results with `ik_llama.cpp` (optimum speed and ppl per model size).
-- Windows users (including when using WSL2) should use `llama.cpp` instead.
+- Windows users (including when using WSL2) can experiment `ik_llama.cpp` with [PR #689](https://github.com/ikawrakow/ik_llama.cpp/pull/689) which brings support to CUDA graphs for MoE models and restores similar TG speed observed with `llama.cpp`.
 
 1. **Use the Thireus fork of `ik_llama.cpp` (recommended)**  
    - **Linux**: compile as usual.  
-   - **Windows builds available** but not recommended since [TG t/s perfs are halved due to missing CUDA Graphs MoE implementation](https://huggingface.co/ubergarm/GLM-4.5-Air-GGUF/discussions/2#689916c972f9ea17ff768e4b) compared to Linux builds (`llama.cpp` mainline not affected by the issue). Windows users can also use [WSL2](https://documentation.ubuntu.com/wsl/stable/tutorials/develop-with-ubuntu-wsl/), see compilation instructions below, but will result in the same performance degradation outcome:  
+   - **Windows builds available** but recommended to use `ik_llama.cpp` with [PR #689](https://github.com/ikawrakow/ik_llama.cpp/pull/689) or [TG t/s perfs will be halved due to missing CUDA Graphs MoE implementation](https://huggingface.co/ubergarm/GLM-4.5-Air-GGUF/discussions/2#689916c972f9ea17ff768e4b) compared to Linux builds (`llama.cpp` mainline not affected by the issue). Windows users can also use [WSL2](https://documentation.ubuntu.com/wsl/stable/tutorials/develop-with-ubuntu-wsl/), see compilation instructions below, but will result in the same performance degradation outcome if not using [PR #689](https://github.com/ikawrakow/ik_llama.cpp/pull/689):  
         <details>
 
         ```
@@ -70,6 +70,7 @@ You have **four options** for using `ik_llama.cpp` or `llama.cpp`:
         # Clone ik_llama.cpp
         git clone https://github.com/Thireus/ik_llama.cpp --recursive
         cd ik_llama.cpp
+        git checkout ik/try_cuda_graphs # https://github.com/ikawrakow/ik_llama.cpp/pull/689
 
         # Build ik_llama.cpp
         # WSL with CUDA
@@ -94,7 +95,7 @@ You have **four options** for using `ik_llama.cpp` or `llama.cpp`:
 
 2. **Use the official `ik_llama.cpp` repo**  
    - You must compile with: `-DGGML_MAX_CONTEXTS=2048`  
-   - Windows users are encouraged to switch to Linux due to performance degradation for MoE models, see notes in Option 1.  
+   - Windows users should use [PR #689](https://github.com/ikawrakow/ik_llama.cpp/pull/689) to restore performance for MoE models, see notes in Option 1.  
    - Official repo:  
      👉 https://github.com/ikawrakow/ik_llama.cpp  
 
