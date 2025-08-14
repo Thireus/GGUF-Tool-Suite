@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** quant_assign.py the recipe maker tool of choice! Use it   **#
-#** to produce recipes that can be cooked and used by others. **#
+#** recipe_to_colab_params.py turns recipe files into Google  **#
+#** Colab pipeline parameters for quant_recipe_pipeline.ipynb **#
 #**                                                           **#
 #** ********************************************************* **#
 #** --------------- Updated: Aug-14-2025 -------------------- **#
