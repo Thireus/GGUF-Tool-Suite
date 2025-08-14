@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-13-2025 -------------------- **#
+#** --------------- Updated: Aug-14-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -1061,10 +1061,10 @@ def main():
                             "Note: harmonizing tensors to allow for fused ffn_up_exps and ffn_gate_exps can improve PP and TG speed, at the cost of slim restrictive dynamic quantization flexibility. "
                             "It is highly recommended to leave this parameter value default when using ik_llama.cpp for significant speed improvements (can be as high as +20%% speed gain) with MoE models - when using ik_llama.cpp with -fmoe 1 these tensors are fused, which can only happen if they are of the same qtype. " 
                             "Future versions of ik_llama.cpp may also take advantage of fused ffn_up_shexp and ffn_gate_shexp tensors. " ) )
-    parser.add_argument('--harmonization-technique', type=int, default=1, choices=[1,2,3],
-                        help=('Harmonization technique to use when --harmonize-tensors is set: 1=max (default), 2=mean, 3=min. ' 
+    parser.add_argument('--harmonization-technique', type=int, default=3, choices=[1,2,3],
+                        help=('Harmonization technique to use when --harmonize-tensors is set: 1=max, 2=mean, 3=min (default). ' 
                             'Values are applied element-wise per layer across the matched tensors.'
-                            'Max ensures calibration data ppl measurement is not negatively degraded. Min will degrade calibration data accuracy and isn\'t recommended. Mean is a compromise in-between.'))
+                            'Max ensures calibration data ppl measurement is not negatively degraded. Min will degrade calibration data accuracy but appears to give the best PPL results. Mean is a compromise in-between.'))
     args = parser.parse_args()
 
     # ---- BEGIN pgpy-based “trusted-keys.asc” check ----
