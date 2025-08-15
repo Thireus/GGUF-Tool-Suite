@@ -41,7 +41,7 @@ mkdir -p kitchen && cd kitchen
 ../quant_downloader.sh ../recipe_examples/ik_llama.cpp_recipes/DeepSeek-TNG-R1T2-Chimera.ROOT-3.0624bpw-3.3657ppl.238GB-GGUF_11GB-GPU_227GB-CPU.13549e6_1ac857a.recipe
 
 # Launch ik_llama's llama-cli:
-ulimit -n 99999 # Lifts "too many open files" limitation on Linux
+ulimit -n 9999 # Lifts "too many open files" limitation on Linux
 ~/ik_llama.cpp/build/bin/llama-cli \
   -m DeepSeek-TNG-R1T2-Chimera-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
   -mla 3 -fa -amb 512 -fmoe -ctk f16 -c 4096 -ngl 99 \
