@@ -5,7 +5,7 @@
 #** as files into graphs and finds the best -u/-ub combo.     **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-10-2025 -------------------- **#
+#** --------------- Updated: Aug-15-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -65,7 +65,7 @@ for i in "${BATCH_SIZES[@]}"; do
             continue
         fi
 
-        OUTPUT_FILE="GLM-4.5_${i}_${j}.txt"
+        OUTPUT_FILE="GLM-4.5_${i}_${j}_ik_llama.cpp-main-b4065-a09bed8.txt"
 
         "$BENCH_PATH" \
             -m "$MODEL" \
@@ -155,6 +155,13 @@ def try_number(x):
             return None
 
 def make_label_from_filename(fn):
+    # Try to extract b, ub and optional framework; if present include framework in label
+    b, ub, fw = extract_b_ub_from_filename(fn)
+    if b is not None and ub is not None:
+        if fw:
+            return f"{fw} -b {b} -ub {ub}"
+        return f"-b {b} -ub {ub}"
+    # fallback: try to find two trailing numbers
     m = re.search(r'_(\d+)[^_]*_(\d+)\.txt$', fn)
     if m:
         a, b = m.group(1), m.group(2)
@@ -165,24 +172,38 @@ def make_label_from_filename(fn):
     return os.path.basename(fn)
 
 def extract_b_ub_from_filename(fn):
+    """
+    Extract b, ub and optional framework from filenames of the form:
+      ..._<b>_<ub>_FRAMEWORK.txt  (FRAMEWORK may include dots/underscores)
+    or the legacy:
+      ..._<b>_<ub>.txt
+
+    Returns (b, ub, framework_or_None)
+    """
     bn = os.path.basename(fn)
-    m = re.search(r'_(\d+)[^_]*_(\d+)\.txt$', bn)
+    # match b, ub and optional framework (non-greedy for framework)
+    m = re.search(r'_(\d+)[^_]*_(\d+)(?:_(.+?))?\.txt$', bn)
     if m:
         try:
-            return int(m.group(1)), int(m.group(2))
+            b = int(m.group(1))
+            ub = int(m.group(2))
+            fw = m.group(3) if m.group(3) else None
+            return b, ub, fw
         except Exception:
-            return None, None
+            return None, None, None
+    # fallback: find last two numbers in filename (legacy support)
     nums = re.findall(r'(\d+)', bn)
     if len(nums) >= 2:
         try:
-            return int(nums[-2]), int(nums[-1])
+            return int(nums[-2]), int(nums[-1]), None
         except Exception:
-            return None, None
-    return None, None
+            return None, None, None
+    return None, None, None
 
 def extract_model_from_filename(fn):
     bn = os.path.basename(fn)
-    m = re.match(r'(?P<model>.+?)_(\d+)[^_]*_(\d+)\.txt$', bn)
+    # accept optional framework after the ub number
+    m = re.match(r'(?P<model>.+?)_(\d+)[^_]*_(\d+)(?:_.+?)?\.txt$', bn)
     if m:
         return m.group('model')
     return os.path.splitext(bn)[0]
@@ -353,7 +374,7 @@ def compute_means_for_eligible(series_data, min_nkv):
             continue
         s_pp_mean = float(np.nanmean(s_pp_interp)) if s_pp_interp is not None else None
         s_tg_mean = float(np.nanmean(s_tg_interp)) if s_tg_interp is not None else None
-        b, ub = extract_b_ub_from_filename(fn)
+        b, ub, fw = extract_b_ub_from_filename(fn)
         results[fn] = {'s_pp_mean': s_pp_mean, 's_tg_mean': s_tg_mean, 'n_pts': GRID_POINTS, 'b': b, 'ub': ub}
     return cutoff, results
 
@@ -559,7 +580,7 @@ def plot_two_figures(series_data, means_dict, title_stg=None, title_spp=None, sa
     if handles_tg:
         # place legend outside to the right
         ax1.legend(handles=handles_tg, labels=labels_tg, title="Series (best to worst)",
-                   loc='center left', bbox_to_anchor=(1.02, 0.5), fontsize='small', frameon=True)
+                   loc='center left', bbox_to_anchor=(1.02, 0.5), fontsize=6, title_fontsize=7, frameon=True)
 
     # build ordered legend for ax2 (S_PP)
     ordered_fns_pp = [r[0] for r in rows_s_pp]
@@ -569,7 +590,7 @@ def plot_two_figures(series_data, means_dict, title_stg=None, title_spp=None, sa
     labels_pp = [make_label_from_filename(fn) for fn in legend_order_pp if fn in handles_by_fn]
     if handles_pp:
         ax2.legend(handles=handles_pp, labels=labels_pp, title="Series (best to worst)",
-                   loc='center left', bbox_to_anchor=(1.02, 0.5), fontsize='small', frameon=True)
+                   loc='center left', bbox_to_anchor=(1.02, 0.5), fontsize=6, title_fontsize=7, frameon=True)
 
     # make room on the right for the legends
     fig1.subplots_adjust(right=0.72)
