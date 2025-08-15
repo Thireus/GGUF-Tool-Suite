@@ -43,7 +43,7 @@ mkdir -p kitchen && cd kitchen
 # Other recipe examples can be found at https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples
 
 # Launch ik_llama's llama-cli:
-ulimit -n 99999 # Lifts "too many open files" limitation on Linux
+ulimit -n 9999 # Lifts "too many open files" limitation on Linux
 ~/ik_llama.cpp/build/bin/llama-cli \
   -m Kimi-K2-Instruct-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
   -mla 3 -fa -amb 512 -fmoe -ctk f16 -c 4096 -ngl 99 \
