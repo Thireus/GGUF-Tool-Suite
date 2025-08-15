@@ -40,7 +40,7 @@ You have **four options** for using `ik_llama.cpp` or `llama.cpp`:
 - You are strongly encouraged to use Linux for best results with `ik_llama.cpp` (optimum speed and ppl per model size).
 - Windows users (including when using WSL2) can experiment `ik_llama.cpp` with [PR #689](https://github.com/ikawrakow/ik_llama.cpp/pull/689) which brings support to CUDA graphs for MoE models and somewhat restores high TG speed for MoE models (still lower TG speed than `llama.cpp`).
 
-I would strongly encourage users to assess the TG and PP speed of both `ik_llama.cpp` and `llama.cpp` for their use cases, as seen [here](https://github.com/ikawrakow/ik_llama.cpp/pull/689#issuecomment-3191092917). `llama.cpp` can perform better than `ik_llama.cpp` in some use-cases!
+I would strongly encourage users to assess the TG and PP speed of both `ik_llama.cpp` and `llama.cpp` for their use cases, as seen [here](https://github.com/ikawrakow/ik_llama.cpp/pull/689#issuecomment-3191092917). `llama.cpp` can perform better than `ik_llama.cpp` for some use-cases!
 
 1. **Use the Thireus fork of `ik_llama.cpp` (recommended)**  
    - **Linux**: compile as usual.  
