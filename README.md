@@ -44,7 +44,7 @@ I would strongly encourage users to assess the TG and PP speed of both `ik_llama
 
 1. **Use the Thireus fork of `ik_llama.cpp` (recommended)**  
    - **Linux**: compile as usual.  
-   - **Windows builds available** but recommended to use `llama.cpp` for high context >30k and `ik_llama.cpp` for context <30k for performance reasons on MoE models. Windows users can also use [WSL2](https://documentation.ubuntu.com/wsl/stable/tutorials/develop-with-ubuntu-wsl/), see compilation instructions below, but will result in the same performance discrepencies observed:  
+   - **Windows builds available** but recommended to use `llama.cpp` for high context >30k and `ik_llama.cpp` for context <30k for performance reasons on MoE models. Windows users can also use [WSL2](https://documentation.ubuntu.com/wsl/stable/tutorials/develop-with-ubuntu-wsl/), see compilation instructions below, but will result in the same performance discrepencies observed. Step-by-step instructions to compile ik_llama.cpp on WSL2:  
         <details>
 
         ```
