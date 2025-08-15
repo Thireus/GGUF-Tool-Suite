@@ -47,23 +47,47 @@ llama_model_loader: - kv  41:                                   split.no u16    
 llama_model_loader: - kv  42:                                split.count u16              = 804
 llama_model_loader: - kv  43:                        split.tensors.count i32              = 803
 llama_model_loader: - type  f32:  331 tensors
-llama_model_loader: - type q8_0:  105 tensors
-llama_model_loader: - type iq4_nl:   92 tensors
+llama_model_loader: - type q8_0:   48 tensors
+llama_model_loader: - type q5_K:    1 tensors
+llama_model_loader: - type iq3_xxs:  186 tensors
+llama_model_loader: - type iq4_nl:   93 tensors
 llama_model_loader: - type iq4_xs:  144 tensors
-llama_model_loader: - type iq3_k:   43 tensors
-llama_model_loader: - type iq5_k:    1 tensors
-llama_model_loader: - type iq6_k:   31 tensors
-llama_model_loader: - type iq4_ks:   28 tensors
-llama_model_loader: - type iq2_ks:   19 tensors
-llama_model_loader: - type iq5_k_r4:    9 tensors
-llm_load_vocab: special tokens cache size = 36
-llm_load_vocab: token to piece cache size = 0.9713 MB
+init_tokenizer: initializing tokenizer for type 2
+load: control token: 151334 '<eop>' is not marked as EOG
+load: control token: 151331 '[gMASK]' is not marked as EOG
+load: control token: 151362 '<|end_of_box|>' is not marked as EOG
+load: control token: 151343 '<|begin_of_audio|>' is not marked as EOG
+load: control token: 151335 '<|system|>' is not marked as EOG
+load: control token: 151345 '<|begin_of_transcription|>' is not marked as EOG
+load: control token: 151344 '<|end_of_audio|>' is not marked as EOG
+load: control token: 151336 '<|user|>' is not marked as EOG
+load: control token: 151332 '[sMASK]' is not marked as EOG
+load: control token: 151346 '<|end_of_transcription|>' is not marked as EOG
+load: control token: 151330 '[MASK]' is not marked as EOG
+load: control token: 151333 '<sop>' is not marked as EOG
+load: control token: 151337 '<|assistant|>' is not marked as EOG
+load: control token: 151338 '<|observation|>' is not marked as EOG
+load: control token: 151339 '<|begin_of_image|>' is not marked as EOG
+load: control token: 151340 '<|end_of_image|>' is not marked as EOG
+load: control token: 151341 '<|begin_of_video|>' is not marked as EOG
+load: control token: 151342 '<|end_of_video|>' is not marked as EOG
+load: control token: 151347 '<|code_prefix|>' is not marked as EOG
+load: control token: 151348 '<|code_middle|>' is not marked as EOG
+load: control token: 151349 '<|code_suffix|>' is not marked as EOG
+load: control token: 151360 '/nothink' is not marked as EOG
+load: control token: 151361 '<|begin_of_box|>' is not marked as EOG
+load: control token: 151363 '<|image|>' is not marked as EOG
+load: control token: 151364 '<|video|>' is not marked as EOG
+load: special_eot_id is not in special_eog_ids - the tokenizer config may be incorrect
+load: special_eom_id is not in special_eog_ids - the tokenizer config may be incorrect
+load: printing all EOG tokens:
+load:   - 151329 ('<|endoftext|>')
+load:   - 151336 ('<|user|>')
+load:   - 151338 ('<|observation|>')
+load: special tokens cache size = 36
+load: token to piece cache size = 0.9713 MB
 llm_load_print_meta: format           = GGUF V3 (latest)
 llm_load_print_meta: arch             = glm4moe
-llm_load_print_meta: vocab type       = BPE
-llm_load_print_meta: n_vocab          = 151552
-llm_load_print_meta: n_merges         = 318088
-llm_load_print_meta: vocab_only       = 0
 llm_load_print_meta: n_ctx_train      = 131072
 llm_load_print_meta: n_embd           = 4096
 llm_load_print_meta: n_layer          = 47
@@ -100,19 +124,26 @@ llm_load_print_meta: ssm_dt_rank      = 0
 llm_load_print_meta: model type       = 106B.A12B
 llm_load_print_meta: model ftype      = IQ1_S - 1.5625 bpw
 llm_load_print_meta: model params     = 110.469 B
-llm_load_print_meta: model size       = 51.447 GiB (4.000 BPW) 
-llm_load_print_meta: repeating layers = 50.436 GiB (3.966 BPW, 109.227 B parameters)
+llm_load_print_meta: model size       = 47.828 GiB (3.719 BPW) 
+llm_load_print_meta: repeating layers = 46.817 GiB (3.682 BPW, 109.227 B parameters)
 llm_load_print_meta: general.name     = GLM 4.5 Air
-llm_load_print_meta: BOS token        = 151331 '[gMASK]'
-llm_load_print_meta: EOS token        = 151329 '<|endoftext|>'
-llm_load_print_meta: UNK token        = 151329 '<|endoftext|>'
-llm_load_print_meta: PAD token        = 151329 '<|endoftext|>'
-llm_load_print_meta: LF token         = 128 'Ä'
-llm_load_print_meta: FIM PRE token    = 151347 '<|code_prefix|>'
-llm_load_print_meta: FIM SUF token    = 151349 '<|code_suffix|>'
-llm_load_print_meta: FIM MID token    = 151348 '<|code_middle|>'
-llm_load_print_meta: EOT token        = 151336 '<|user|>'
-llm_load_print_meta: max token length = 1024
+print_info: vocab type       = BPE
+print_info: n_vocab          = 151552
+print_info: n_merges         = 318088
+print_info: BOS token        = 151331 '[gMASK]'
+print_info: EOS token        = 151329 '<|endoftext|>'
+print_info: EOT token        = 151336 '<|user|>'
+print_info: EOM token        = 151338 '<|observation|>'
+print_info: UNK token        = 151329 '<|endoftext|>'
+print_info: PAD token        = 151329 '<|endoftext|>'
+print_info: LF token         = 198 'Ċ'
+print_info: FIM PRE token    = 151347 '<|code_prefix|>'
+print_info: FIM SUF token    = 151349 '<|code_suffix|>'
+print_info: FIM MID token    = 151348 '<|code_middle|>'
+print_info: EOG token        = 151329 '<|endoftext|>'
+print_info: EOG token        = 151336 '<|user|>'
+print_info: EOG token        = 151338 '<|observation|>'
+print_info: max token length = 1024
 ggml_cuda_init: GGML_CUDA_FORCE_MMQ:    no
 ggml_cuda_init: GGML_CUDA_FORCE_CUBLAS: no
 ggml_cuda_init: found 1 CUDA devices:
@@ -129,12 +160,12 @@ model has unused tensor blk.46.attn_output.weight (size = 53477376 bytes) -- ign
 model has unused tensor blk.46.post_attention_norm.weight (size = 16384 bytes) -- ignoring
 model has unused tensor blk.46.ffn_gate_inp.weight (size = 2097152 bytes) -- ignoring
 model has unused tensor blk.46.exp_probs_b.bias (size = 512 bytes) -- ignoring
-model has unused tensor blk.46.ffn_gate_exps.weight (size = 507510784 bytes) -- ignoring
+model has unused tensor blk.46.ffn_gate_exps.weight (size = 282591232 bytes) -- ignoring
 model has unused tensor blk.46.ffn_down_exps.weight (size = 415236096 bytes) -- ignoring
-model has unused tensor blk.46.ffn_up_exps.weight (size = 507510784 bytes) -- ignoring
-model has unused tensor blk.46.ffn_gate_shexp.weight (size = 4775936 bytes) -- ignoring
+model has unused tensor blk.46.ffn_up_exps.weight (size = 282591232 bytes) -- ignoring
+model has unused tensor blk.46.ffn_gate_shexp.weight (size = 2207744 bytes) -- ignoring
 model has unused tensor blk.46.ffn_down_shexp.weight (size = 3244032 bytes) -- ignoring
-model has unused tensor blk.46.ffn_up_shexp.weight (size = 4775936 bytes) -- ignoring
+model has unused tensor blk.46.ffn_up_shexp.weight (size = 2207744 bytes) -- ignoring
 model has unused tensor blk.46.nextn.eh_proj.weight (size = 17825792 bytes) -- ignoring
 model has unused tensor blk.46.nextn.embed_tokens.weight (size = 329777152 bytes) -- ignoring
 model has unused tensor blk.46.nextn.enorm.weight (size = 16384 bytes) -- ignoring
@@ -145,10 +176,10 @@ llm_load_tensors: offloading 47 repeating layers to GPU
 llm_load_tensors: offloading non-repeating layers to GPU
 llm_load_tensors: offloaded 48/48 layers to GPU
 llm_load_tensors:  CUDA_Host buffer size =   407.00 MiB
-llm_load_tensors:      CUDA0 buffer size = 50169.88 MiB
+llm_load_tensors:      CUDA0 buffer size = 46897.99 MiB
 ...................................................................................................
 llama_new_context_with_model: n_ctx      = 65536
-llama_new_context_with_model: n_batch    = 8192
+llama_new_context_with_model: n_batch    = 4096
 llama_new_context_with_model: n_ubatch   = 1024
 llama_new_context_with_model: flash_attn = 1
 llama_new_context_with_model: mla_attn   = 0
@@ -162,74 +193,74 @@ llama_new_context_with_model: KV self size  = 12032.00 MiB, K (f16): 6016.00 MiB
 llama_new_context_with_model:  CUDA_Host  output buffer size =     0.58 MiB
 llama_new_context_with_model:      CUDA0 compute buffer size =   608.00 MiB
 llama_new_context_with_model:  CUDA_Host compute buffer size =   272.01 MiB
-llama_new_context_with_model: graph nodes  = 2175
+llama_new_context_with_model: graph nodes  = 2149
 llama_new_context_with_model: graph splits = 2
 
-main: n_kv_max = 65536, n_batch = 8192, n_ubatch = 1024, flash_attn = 1, n_gpu_layers = 99, n_threads = 36, n_threads_batch = 36
+main: n_kv_max = 65536, n_batch = 4096, n_ubatch = 1024, flash_attn = 1, n_gpu_layers = 99, n_threads = 36, n_threads_batch = 36
 
 |    PP |     TG |   N_KV |   T_PP s | S_PP t/s |   T_TG s | S_TG t/s |
 |-------|--------|--------|----------|----------|----------|----------|
-|  1024 |    256 |      0 |    0.728 |  1405.83 |    6.407 |    39.96 |
-|  1024 |    256 |   1024 |    0.758 |  1351.24 |    6.400 |    40.00 |
-|  1024 |    256 |   2048 |    0.758 |  1350.60 |    6.545 |    39.11 |
-|  1024 |    256 |   3072 |    0.784 |  1305.59 |    6.703 |    38.19 |
-|  1024 |    256 |   4096 |    0.806 |  1271.04 |    6.714 |    38.13 |
-|  1024 |    256 |   5120 |    0.822 |  1245.04 |    6.894 |    37.14 |
-|  1024 |    256 |   6144 |    0.835 |  1226.52 |    7.100 |    36.06 |
-|  1024 |    256 |   7168 |    0.846 |  1210.87 |    7.281 |    35.16 |
-|  1024 |    256 |   8192 |    0.871 |  1175.30 |    7.268 |    35.22 |
-|  1024 |    256 |   9216 |    0.892 |  1147.54 |    7.429 |    34.46 |
-|  1024 |    256 |  10240 |    0.919 |  1114.40 |    7.545 |    33.93 |
-|  1024 |    256 |  11264 |    0.933 |  1097.79 |    7.749 |    33.04 |
-|  1024 |    256 |  12288 |    0.950 |  1077.35 |    7.785 |    32.89 |
-|  1024 |    256 |  13312 |    0.975 |  1049.79 |    7.959 |    32.16 |
-|  1024 |    256 |  14336 |    0.996 |  1027.92 |    8.197 |    31.23 |
-|  1024 |    256 |  15360 |    1.014 |  1009.87 |    8.383 |    30.54 |
-|  1024 |    256 |  16384 |    1.024 |   999.88 |    8.460 |    30.26 |
-|  1024 |    256 |  17408 |    1.070 |   956.64 |    8.525 |    30.03 |
-|  1024 |    256 |  18432 |    1.058 |   967.73 |    8.653 |    29.59 |
-|  1024 |    256 |  19456 |    1.075 |   952.55 |    8.838 |    28.97 |
-|  1024 |    256 |  20480 |    1.113 |   919.65 |    9.076 |    28.21 |
-|  1024 |    256 |  21504 |    1.103 |   928.18 |    9.088 |    28.17 |
-|  1024 |    256 |  22528 |    1.125 |   910.54 |    9.219 |    27.77 |
-|  1024 |    256 |  23552 |    1.147 |   893.03 |    9.469 |    27.04 |
-|  1024 |    256 |  24576 |    1.169 |   876.10 |    9.482 |    27.00 |
-|  1024 |    256 |  25600 |    1.186 |   863.05 |    9.598 |    26.67 |
-|  1024 |    256 |  26624 |    1.211 |   845.55 |    9.706 |    26.37 |
-|  1024 |    256 |  27648 |    1.231 |   831.83 |    9.832 |    26.04 |
-|  1024 |    256 |  28672 |    1.257 |   814.33 |    9.977 |    25.66 |
-|  1024 |    256 |  29696 |    1.275 |   802.88 |   10.127 |    25.28 |
-|  1024 |    256 |  30720 |    1.302 |   786.64 |   10.284 |    24.89 |
-|  1024 |    256 |  31744 |    1.323 |   773.75 |   10.519 |    24.34 |
-|  1024 |    256 |  32768 |    1.353 |   756.74 |   10.701 |    23.92 |
-|  1024 |    256 |  33792 |    1.375 |   744.93 |   10.931 |    23.42 |
-|  1024 |    256 |  34816 |    1.388 |   737.63 |   11.244 |    22.77 |
-|  1024 |    256 |  35840 |    1.414 |   723.97 |   12.061 |    21.23 |
-|  1024 |    256 |  36864 |    1.429 |   716.48 |   12.418 |    20.62 |
-|  1024 |    256 |  37888 |    1.467 |   697.85 |   12.776 |    20.04 |
-|  1024 |    256 |  38912 |    1.476 |   693.56 |   12.994 |    19.70 |
-|  1024 |    256 |  39936 |    1.492 |   686.39 |   13.187 |    19.41 |
-|  1024 |    256 |  40960 |    1.516 |   675.64 |   13.768 |    18.59 |
-|  1024 |    256 |  41984 |    1.536 |   666.54 |   14.334 |    17.86 |
-|  1024 |    256 |  43008 |    1.554 |   658.99 |   14.529 |    17.62 |
-|  1024 |    256 |  44032 |    1.582 |   647.32 |   14.892 |    17.19 |
-|  1024 |    256 |  45056 |    1.619 |   632.49 |   17.121 |    14.95 |
-|  1024 |    256 |  46080 |    1.622 |   631.14 |   18.498 |    13.84 |
-|  1024 |    256 |  47104 |    1.661 |   616.38 |   21.254 |    12.04 |
-|  1024 |    256 |  48128 |    1.661 |   616.43 |   22.902 |    11.18 |
-|  1024 |    256 |  49152 |    1.684 |   608.25 |   23.160 |    11.05 |
-|  1024 |    256 |  50176 |    1.704 |   601.05 |   23.568 |    10.86 |
-|  1024 |    256 |  51200 |    1.736 |   589.78 |   24.101 |    10.62 |
-|  1024 |    256 |  52224 |    1.754 |   583.72 |   24.357 |    10.51 |
-|  1024 |    256 |  53248 |    1.777 |   576.22 |   24.674 |    10.38 |
-|  1024 |    256 |  54272 |    1.800 |   568.97 |   25.090 |    10.20 |
-|  1024 |    256 |  55296 |    1.818 |   563.30 |   25.582 |    10.01 |
-|  1024 |    256 |  56320 |    1.852 |   553.06 |   25.909 |     9.88 |
-|  1024 |    256 |  57344 |    1.870 |   547.61 |   26.528 |     9.65 |
-|  1024 |    256 |  58368 |    1.896 |   540.16 |   26.830 |     9.54 |
-|  1024 |    256 |  59392 |    1.927 |   531.45 |   27.498 |     9.31 |
-|  1024 |    256 |  60416 |    1.966 |   520.97 |   27.925 |     9.17 |
-|  1024 |    256 |  61440 |    1.956 |   523.63 |   28.295 |     9.05 |
-|  1024 |    256 |  62464 |    2.015 |   508.13 |   28.737 |     8.91 |
-|  1024 |    256 |  63488 |    2.000 |   512.12 |   29.129 |     8.79 |
-|  1024 |    256 |  64512 |    2.045 |   500.65 |   29.459 |     8.69 |
+|  1024 |    256 |      0 |    0.669 |  1529.76 |    2.786 |    91.90 |
+|  1024 |    256 |   1024 |    0.674 |  1520.14 |    2.918 |    87.72 |
+|  1024 |    256 |   2048 |    0.678 |  1509.36 |    3.040 |    84.22 |
+|  1024 |    256 |   3072 |    0.695 |  1473.92 |    3.168 |    80.82 |
+|  1024 |    256 |   4096 |    0.751 |  1364.12 |    3.308 |    77.38 |
+|  1024 |    256 |   5120 |    0.729 |  1403.97 |    3.457 |    74.06 |
+|  1024 |    256 |   6144 |    0.739 |  1385.82 |    3.603 |    71.04 |
+|  1024 |    256 |   7168 |    0.776 |  1319.80 |    3.762 |    68.05 |
+|  1024 |    256 |   8192 |    0.798 |  1283.80 |    3.912 |    65.45 |
+|  1024 |    256 |   9216 |    0.815 |  1256.94 |    4.061 |    63.04 |
+|  1024 |    256 |  10240 |    0.835 |  1226.02 |    4.227 |    60.57 |
+|  1024 |    256 |  11264 |    0.845 |  1212.16 |    4.376 |    58.50 |
+|  1024 |    256 |  12288 |    0.865 |  1183.20 |    4.520 |    56.63 |
+|  1024 |    256 |  13312 |    0.871 |  1175.07 |    4.633 |    55.26 |
+|  1024 |    256 |  14336 |    0.887 |  1153.87 |    4.756 |    53.83 |
+|  1024 |    256 |  15360 |    0.909 |  1126.27 |    4.874 |    52.52 |
+|  1024 |    256 |  16384 |    0.937 |  1092.68 |    5.057 |    50.62 |
+|  1024 |    256 |  17408 |    0.956 |  1071.58 |    5.225 |    49.00 |
+|  1024 |    256 |  18432 |    0.972 |  1053.01 |    5.392 |    47.48 |
+|  1024 |    256 |  19456 |    1.023 |  1001.30 |    5.536 |    46.24 |
+|  1024 |    256 |  20480 |    1.006 |  1017.56 |    5.671 |    45.14 |
+|  1024 |    256 |  21504 |    1.031 |   992.75 |    5.794 |    44.18 |
+|  1024 |    256 |  22528 |    1.040 |   984.18 |    5.938 |    43.11 |
+|  1024 |    256 |  23552 |    1.063 |   963.60 |    6.088 |    42.05 |
+|  1024 |    256 |  24576 |    1.082 |   946.29 |    6.225 |    41.12 |
+|  1024 |    256 |  25600 |    1.105 |   926.70 |    6.335 |    40.41 |
+|  1024 |    256 |  26624 |    1.122 |   912.56 |    6.481 |    39.50 |
+|  1024 |    256 |  27648 |    1.162 |   881.56 |    6.609 |    38.73 |
+|  1024 |    256 |  28672 |    1.169 |   876.19 |    6.739 |    37.99 |
+|  1024 |    256 |  29696 |    1.190 |   860.56 |    6.892 |    37.14 |
+|  1024 |    256 |  30720 |    1.232 |   830.99 |    7.075 |    36.19 |
+|  1024 |    256 |  31744 |    1.266 |   808.73 |    7.242 |    35.35 |
+|  1024 |    256 |  32768 |    1.259 |   813.52 |    7.455 |    34.34 |
+|  1024 |    256 |  33792 |    1.296 |   789.88 |    7.736 |    33.09 |
+|  1024 |    256 |  34816 |    1.312 |   780.31 |    8.216 |    31.16 |
+|  1024 |    256 |  35840 |    1.338 |   765.14 |    9.218 |    27.77 |
+|  1024 |    256 |  36864 |    1.352 |   757.31 |    9.371 |    27.32 |
+|  1024 |    256 |  37888 |    1.374 |   745.24 |    9.698 |    26.40 |
+|  1024 |    256 |  38912 |    1.411 |   725.69 |    9.941 |    25.75 |
+|  1024 |    256 |  39936 |    1.419 |   721.77 |   10.257 |    24.96 |
+|  1024 |    256 |  40960 |    1.445 |   708.61 |   10.503 |    24.37 |
+|  1024 |    256 |  41984 |    1.465 |   698.76 |   11.113 |    23.04 |
+|  1024 |    256 |  43008 |    1.474 |   694.55 |   11.427 |    22.40 |
+|  1024 |    256 |  44032 |    1.518 |   674.44 |   12.146 |    21.08 |
+|  1024 |    256 |  45056 |    1.530 |   669.11 |   13.744 |    18.63 |
+|  1024 |    256 |  46080 |    1.544 |   663.26 |   15.743 |    16.26 |
+|  1024 |    256 |  47104 |    1.577 |   649.40 |   17.970 |    14.25 |
+|  1024 |    256 |  48128 |    1.595 |   642.15 |   19.305 |    13.26 |
+|  1024 |    256 |  49152 |    1.596 |   641.72 |   19.792 |    12.93 |
+|  1024 |    256 |  50176 |    1.663 |   615.94 |   19.838 |    12.90 |
+|  1024 |    256 |  51200 |    1.648 |   621.24 |   20.656 |    12.39 |
+|  1024 |    256 |  52224 |    1.661 |   616.35 |   20.824 |    12.29 |
+|  1024 |    256 |  53248 |    1.699 |   602.57 |   21.322 |    12.01 |
+|  1024 |    256 |  54272 |    1.731 |   591.61 |   21.483 |    11.92 |
+|  1024 |    256 |  55296 |    1.729 |   592.37 |   22.047 |    11.61 |
+|  1024 |    256 |  56320 |    1.770 |   578.40 |   22.459 |    11.40 |
+|  1024 |    256 |  57344 |    1.782 |   574.54 |   22.909 |    11.17 |
+|  1024 |    256 |  58368 |    1.810 |   565.86 |   23.542 |    10.87 |
+|  1024 |    256 |  59392 |    1.847 |   554.40 |   24.012 |    10.66 |
+|  1024 |    256 |  60416 |    1.877 |   545.49 |   24.393 |    10.49 |
+|  1024 |    256 |  61440 |    1.879 |   545.01 |   24.962 |    10.26 |
+|  1024 |    256 |  62464 |    1.929 |   530.86 |   25.319 |    10.11 |
+|  1024 |    256 |  63488 |    1.918 |   534.00 |   25.699 |     9.96 |
+|  1024 |    256 |  64512 |    1.956 |   523.61 |   25.860 |     9.90 |
