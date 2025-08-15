@@ -5,7 +5,7 @@
 #** identify tensor quantisation sensitiveness patterns.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-12-2025 -------------------- **#
+#** --------------- Updated: Aug-15-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -175,7 +175,7 @@ def plot_data(recipe_data, recipe_dir, imported_data=None, export=False, out_dir
                 marker = imported_markers[idx % len(imported_markers)]
                 plt.plot(xs_imp, ys_imp, marker=marker, linestyle='', label=author)
 
-        plt.xlabel('Bits per word (bpw)')
+        plt.xlabel('Bits per weight (bpw)')
         plt.ylabel('Perplexity (ppl)')
         plt.title(f'{model}: ppl vs bpw')
         # Make legend/label text smaller
