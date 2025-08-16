@@ -38,13 +38,13 @@ Here's how DeepSeek-R1-0528 quantized with **Thireus' GGUF Tool Suite** compares
 You have **four options** for using `ik_llama.cpp` or `llama.cpp`:
 
 - You are strongly encouraged to use Linux for best results with `ik_llama.cpp` (optimum speed and ppl per model size).
-- Windows users (including when using WSL2) can experiment `ik_llama.cpp` with [PR #689](https://github.com/ikawrakow/ik_llama.cpp/pull/689) which brings support to CUDA graphs for MoE models and somewhat restores high TG speed for MoE models (still lower TG speed than `llama.cpp`).
+- Windows users (including when using WSL2) can experiment `ik_llama.cpp` with [PR #689](https://github.com/ikawrakow/ik_llama.cpp/pull/689) which brings support to CUDA graphs for MoE models and restores high TG speed for MoE models (still lower TG speed than `llama.cpp`).
 
-I would strongly encourage users to assess the TG and PP speed of both `ik_llama.cpp` and `llama.cpp` for their use cases, as seen [here](https://github.com/ikawrakow/ik_llama.cpp/pull/689#issuecomment-3191092917). `llama.cpp` can perform better than `ik_llama.cpp` for some use-cases!
+I would strongly encourage users to assess the TG and PP speed of both `ik_llama.cpp` and `llama.cpp` for their use cases, as seen [here](https://github.com/ikawrakow/ik_llama.cpp/pull/689#issuecomment-3191092917). `llama.cpp` can sometimes achieve better speeds than `ik_llama.cpp` for some models and use-cases(especially when all layers are offloaded to the GPU)!
 
 1. **Use the Thireus fork of `ik_llama.cpp` (recommended)**  
    - **Linux**: compile as usual.  
-   - **Windows builds available** but recommended to use `llama.cpp` for high context >30k and `ik_llama.cpp` for context <30k for performance reasons on MoE models. Windows users can also use [WSL2](https://documentation.ubuntu.com/wsl/stable/tutorials/develop-with-ubuntu-wsl/), see compilation instructions below, but will result in the same performance discrepencies observed. Step-by-step instructions to compile ik_llama.cpp on WSL2:  
+   - **Windows builds available** but recommended to use `llama.cpp` for MoE models for better performance. Windows users can also use [WSL2](https://documentation.ubuntu.com/wsl/stable/tutorials/develop-with-ubuntu-wsl/), see compilation instructions below, but will result in the same performance discrepencies observed. Step-by-step instructions to compile ik_llama.cpp on WSL2:  
         <details>
 
         ```
@@ -91,6 +91,8 @@ I would strongly encourage users to assess the TG and PP speed of both `ik_llama
         ```
 
         </details>
+    
+      > Did you know? Windows binaries can be executed from WSL2, that includes `llama.cpp` and `ik_llama.cpp` Windows binaries. Which should give better model loading time and improved perfs. For example: `/mnt/c/Users/Thireus/Desktop/llama-server.exe -m "d:models/GLM-4.5-Air/GLM-4.5-Air.gguf" -fa -ctk f16 -c 4096 -ngl 99 --no-mmap --threads 8 --main-gpu 0` - Loads model stored in `D:\models\GLM-4.5-Air\GLM-4.5-Air.gguf` using the `llama-server.exe` Windows binary located on `C:\Users\Thireus\Desktop`.
 
    - Source code and builds:  
      👉 https://github.com/Thireus/ik_llama.cpp/releases  
