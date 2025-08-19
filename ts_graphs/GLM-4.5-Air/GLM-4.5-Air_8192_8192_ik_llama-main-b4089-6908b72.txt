@@ -179,7 +179,7 @@ llm_load_tensors:  CUDA_Host buffer size =   407.00 MiB
 llm_load_tensors:      CUDA0 buffer size = 46897.99 MiB
 ...................................................................................................
 llama_new_context_with_model: n_ctx      = 65536
-llama_new_context_with_model: n_batch    = 16384
+llama_new_context_with_model: n_batch    = 8192
 llama_new_context_with_model: n_ubatch   = 8192
 llama_new_context_with_model: flash_attn = 1
 llama_new_context_with_model: mla_attn   = 0
@@ -196,15 +196,15 @@ llama_new_context_with_model:  CUDA_Host compute buffer size =  2176.09 MiB
 llama_new_context_with_model: graph nodes  = 2149
 llama_new_context_with_model: graph splits = 2
 
-main: n_kv_max = 65536, n_batch = 16384, n_ubatch = 8192, flash_attn = 1, n_gpu_layers = 99, n_threads = 36, n_threads_batch = 36
+main: n_kv_max = 65536, n_batch = 8192, n_ubatch = 8192, flash_attn = 1, n_gpu_layers = 99, n_threads = 36, n_threads_batch = 36
 
 |    PP |     TG |   N_KV |   T_PP s | S_PP t/s |   T_TG s | S_TG t/s |
 |-------|--------|--------|----------|----------|----------|----------|
-|  8192 |   2048 |      0 |    2.645 |  3096.92 |   23.351 |    87.70 |
-|  8192 |   2048 |   8192 |    3.981 |  2057.53 |   32.473 |    63.07 |
-|  8192 |   2048 |  16384 |    5.292 |  1547.90 |   41.433 |    49.43 |
-|  8192 |   2048 |  24576 |    6.713 |  1220.36 |   50.891 |    40.24 |
-|  8192 |   2048 |  32768 |    8.156 |  1004.37 |   61.985 |    33.04 |
-|  8192 |   2048 |  40960 |    9.474 |   864.69 |   89.685 |    22.84 |
-|  8192 |   2048 |  49152 |   10.826 |   756.67 |  163.008 |    12.56 |
-D:\a\ik_llama.cpp\ik_llama.cpp\ggml\src\ggml-cuda\cpy.cu:332: GGML_ASSERT(ggml_nbytes(src0) <= INT_MAX) failed
+|  8192 |   2048 |      0 |    2.671 |  3067.25 |   22.704 |    90.20 |
+|  8192 |   2048 |   8192 |    3.873 |  2114.92 |   27.169 |    75.38 |
+|  8192 |   2048 |  16384 |    5.000 |  1638.47 |   31.053 |    65.95 |
+|  8192 |   2048 |  24576 |    6.296 |  1301.05 |   35.315 |    57.99 |
+|  8192 |   2048 |  32768 |    7.704 |  1063.40 |   40.681 |    50.34 |
+|  8192 |   2048 |  40960 |    9.035 |   906.73 |   52.981 |    38.66 |
+|  8192 |   2048 |  49152 |   10.263 |   798.21 |   64.238 |    31.88 |
+D:\a\ik_llama.cpp\ik_llama.cpp\ggml\src\ggml-cuda\cpy.cu:380: GGML_ASSERT(ggml_nbytes(src0) <= INT_MAX) failed
