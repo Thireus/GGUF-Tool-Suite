@@ -179,8 +179,8 @@ llm_load_tensors:  CUDA_Host buffer size =   407.00 MiB
 llm_load_tensors:      CUDA0 buffer size = 46897.99 MiB
 ...................................................................................................
 llama_new_context_with_model: n_ctx      = 65536
-llama_new_context_with_model: n_batch    = 8192
-llama_new_context_with_model: n_ubatch   = 4096
+llama_new_context_with_model: n_batch    = 16384
+llama_new_context_with_model: n_ubatch   = 8192
 llama_new_context_with_model: flash_attn = 1
 llama_new_context_with_model: mla_attn   = 0
 llama_new_context_with_model: attn_max_b = 0
@@ -191,28 +191,20 @@ llama_new_context_with_model: freq_scale = 1
 llama_kv_cache_init:      CUDA0 KV buffer size = 12032.00 MiB
 llama_new_context_with_model: KV self size  = 12032.00 MiB, K (f16): 6016.00 MiB, V (f16): 6016.00 MiB
 llama_new_context_with_model:  CUDA_Host  output buffer size =     0.58 MiB
-llama_new_context_with_model:      CUDA0 compute buffer size =  2432.00 MiB
-llama_new_context_with_model:  CUDA_Host compute buffer size =  1088.05 MiB
+llama_new_context_with_model:      CUDA0 compute buffer size =  4864.00 MiB
+llama_new_context_with_model:  CUDA_Host compute buffer size =  2176.09 MiB
 llama_new_context_with_model: graph nodes  = 2149
 llama_new_context_with_model: graph splits = 2
 
-main: n_kv_max = 65536, n_batch = 8192, n_ubatch = 4096, flash_attn = 1, n_gpu_layers = 99, n_threads = 36, n_threads_batch = 36
+main: n_kv_max = 65536, n_batch = 16384, n_ubatch = 8192, flash_attn = 1, n_gpu_layers = 99, n_threads = 36, n_threads_batch = 36
 
 |    PP |     TG |   N_KV |   T_PP s | S_PP t/s |   T_TG s | S_TG t/s |
 |-------|--------|--------|----------|----------|----------|----------|
-|  4096 |   1024 |      0 |    1.279 |  3203.57 |   11.288 |    90.72 |
-|  4096 |   1024 |   4096 |    1.529 |  2678.19 |   13.422 |    76.29 |
-|  4096 |   1024 |   8192 |    1.867 |  2194.32 |   15.851 |    64.60 |
-|  4096 |   1024 |  12288 |    2.151 |  1904.23 |   18.209 |    56.24 |
-|  4096 |   1024 |  16384 |    2.436 |  1681.70 |   20.289 |    50.47 |
-|  4096 |   1024 |  20480 |    2.745 |  1492.42 |   22.733 |    45.04 |
-|  4096 |   1024 |  24576 |    3.107 |  1318.37 |   25.078 |    40.83 |
-|  4096 |   1024 |  28672 |    3.451 |  1186.84 |   27.219 |    37.62 |
-|  4096 |   1024 |  32768 |    3.780 |  1083.53 |   30.249 |    33.85 |
-|  4096 |   1024 |  36864 |    4.237 |   966.83 |   37.989 |    26.96 |
-|  4096 |   1024 |  40960 |    4.438 |   923.03 |   43.300 |    23.65 |
-|  4096 |   1024 |  45056 |    4.806 |   852.21 |   58.115 |    17.62 |
-|  4096 |   1024 |  49152 |    5.098 |   803.43 |   78.758 |    13.00 |
-|  4096 |   1024 |  53248 |    5.442 |   752.71 |   85.156 |    12.02 |
-|  4096 |   1024 |  57344 |    5.747 |   712.78 |   91.918 |    11.14 |
-|  4096 |   1024 |  61440 |    6.083 |   673.41 |   99.326 |    10.31 |
+|  8192 |   2048 |      0 |    2.656 |  3084.49 |   22.724 |    90.13 |
+|  8192 |   2048 |   8192 |    3.800 |  2155.60 |   27.141 |    75.46 |
+|  8192 |   2048 |  16384 |    4.932 |  1661.11 |   31.032 |    66.00 |
+|  8192 |   2048 |  24576 |    6.263 |  1308.00 |   35.334 |    57.96 |
+|  8192 |   2048 |  32768 |    7.623 |  1074.63 |   40.673 |    50.35 |
+|  8192 |   2048 |  40960 |    8.971 |   913.16 |   52.941 |    38.68 |
+|  8192 |   2048 |  49152 |   10.232 |   800.64 |   64.271 |    31.87 |
+D:\a\ik_llama.cpp\ik_llama.cpp\ggml\src\ggml-cuda\cpy.cu:380: GGML_ASSERT(ggml_nbytes(src0) <= INT_MAX) failed
