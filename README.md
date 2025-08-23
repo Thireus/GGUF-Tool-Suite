@@ -26,6 +26,7 @@ Here's how DeepSeek-R1-0528 quantized with **Thireus' GGUF Tool Suite** compares
 | [DeepSeek-R1-0528](https://huggingface.co/collections/Thireus/deepseek-r1-0528-thireus-special-split-68725429aceffbd1094bdd29) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Yes | Works like a charm. When the quant_assign settings are right, it produces recipes with better ppl than any other reputable GGUFs. |
 | [DeepSeek-TNG-R1T2-Chimera](https://huggingface.co/collections/Thireus/deepseek-tng-r1t2-chimera-thireus-special-split-68737c17e50ee1d7fb0fc474) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ⚠️ Not personally | Should not be any different than DeepSeek-R1-0528. |
 | [DeepSeek-V3-0324](https://huggingface.co/collections/Thireus/deepseek-v3-0324-thireus-special-split-6885d5fba52645afa377cc79) | ✅ Complete | ✅ Complete  | ✅ Tested and Working | ⚠️ Not evaluated | Should not be any different than DeepSeek-R1-0528. Calibration data produced by @ewhacc. |
+| [DeepSeek-V3.1](https://huggingface.co/collections/Thireus/deepseek-v31-thireus-special-split-68a8ad64125b2c6c7e8ce91d) | ⚠️ Not started | ⚠️ Work in progress...  | ⚠️ Untested | ⚠️ Not evaluated | Should not be any different than DeepSeek-R1-0528. |
 | [Kimi-K2-Instruct](https://huggingface.co/collections/Thireus/kimi-k2-instruct-thireus-special-split-68778e3701cf3e80574185e2) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Tested and Working | Examples provided. It would appear that it does really well on _kt quants, likely because this is the target quant that was used for the calibration data. I may need to redo the calibration data using iq1_s_r4 to verify this theory. |
 | [Qwen3-235B-A22B-Instruct-2507](https://huggingface.co/collections/Thireus/qwen3-235b-a22b-instruct-2507-thireus-special-split-68813c81fa03b52fe0d6f4e9) | ✅ Complete | ✅ Best effort (a few quants are still missing) | ⚠️ Untested | ⚠️ Not evaluated | All you need is available to produce quant mixes, but not personally tested. |
 | [Qwen3-235B-A22B-Thinking-2507](https://huggingface.co/collections/Thireus/qwen3-235b-a22b-thinking-2507-thireus-special-split-688368c416e0f03b1853b10f) | ✅ Complete | ✅ Best effort (a few quants are still missing) | ✅ Tested and Working | ✅ Tested and Working | Best to use at most two quant types for `quant_assign` to choose from per tensor group. |
@@ -254,6 +255,12 @@ Big thanks to **ubergarm** for his support and for providing the invaluable **`i
 📄 Ubergarm's `imatrix` for DeepSeek-TNG-R1T2-Chimera can be found here:  
 🔗 [imatrix_DeepSeek-TNG-R1T2-Chimera_r1t2_ubergarm.dat](https://huggingface.co/ubergarm/DeepSeek-TNG-R1T2-Chimera-GGUF/blob/main/imatrix-DeepSeek-TNG-R1T2-Chimera-Q8_0.dat)
 
+📄 Ubergarm's `imatrix` for DeepSeek-V3-0324 can be found here:  
+🔗 [imatrix_DeepSeek-V3-0324_ubergarm.dat](https://huggingface.co/ubergarm/DeepSeek-V3-0324-GGUF/blob/main/DeepSeek-V3-0324.imatrix)
+
+📄 Ubergarm's `imatrix` for DeepSeek-V3.1 can be found here:  
+🔗 [imatrix_DeepSeek-V3.1_ubergarm.dat](https://huggingface.co/ubergarm/DeepSeek-V3.1-GGUF/blob/main/imatrix-DeepSeek-V3.1-Q8_0.dat)
+
 📄 Ubergarm's `imatrix` for Kimi-K2-Instruct can be found here:  
 🔗 [imatrix_Kimi-K2-Instruct_ubergarm.dat](https://huggingface.co/ubergarm/Kimi-K2-Instruct-GGUF/blob/main/imatrix-Kimi-K2-Instruct-Q8_0.dat)
 
@@ -265,9 +272,6 @@ Big thanks to **ubergarm** for his support and for providing the invaluable **`i
 
 📄 Ubergarm's `imatrix` for Qwen3-Coder-480B-A35B-Instruct can be found here:  
 🔗 [imatrix_Qwen3-Coder-480B-A35B-Instruct_ubergarm.dat](https://huggingface.co/ubergarm/Qwen3-Coder-480B-A35B-Instruct-GGUF/blob/main/imatrix-Qwen3-Coder-480B-A35B-Instruct-Q8_0.dat)
-
-📄 Ubergarm's `imatrix` for DeepSeek-V3-0324 can be found here:  
-🔗 [imatrix_DeepSeek-V3-0324_ubergarm.dat](https://huggingface.co/ubergarm/DeepSeek-V3-0324-GGUF/blob/main/DeepSeek-V3-0324.imatrix)
 
 📄 Ubergarm's `imatrix` for GLM-4.5 can be found here:  
 🔗 [imatrix_GLM-4.5_ubergarm.dat](https://huggingface.co/ubergarm/GLM-4.5-GGUF/blob/main/imatrix-GLM-4.5-BF16.dat)
