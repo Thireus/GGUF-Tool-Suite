@@ -33,8 +33,6 @@ _debug() {
 
 # echo "$(for f in `ls DeepSeek-V3.1-DQ4_K_R4-*.gguf`; do gguf_info.py "$f"; done)" | grep 'dtype=' | awk -F $'\t' '{print $1 "=" $3}' | sed 's/=dtype=/=/g' | sed 's/\./\\./g'
 custom="
-## Quant mix recipe created using Thireus' GGUF Tool Suite - https://gguf.thireus.com/
-
 ## Model head & embeddings
 token_embd\.weight=$1
 output\.weight=$1
@@ -50,7 +48,6 @@ blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_mqa\.weight=$1
 blk\.([0-9]|[1-5][0-9]|60)\.attn_output\.weight=$1
 blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a_norm\.weight=f32
 blk\.([0-9]|[1-5][0-9]|60)\.attn_q_b\.weight=$1
-blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_b\.weight=$1
 blk\.([0-9]|[1-5][0-9]|60)\.attn_norm\.weight=f32
 blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a\.weight=$1
 
@@ -61,7 +58,7 @@ blk\.[0-2]\.ffn_down\.weight=$1
 blk\.[0-2]\.ffn_up\.weight=$1
 blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_inp\.weight=f32
 
-## Other tensors — qbits: 32 
+## Other tensors
 blk\.([3-9]|[1-5][0-9]|60)\.exp_probs_b\.bias=f32
 
 ## GPU-loaded ffn_*_shexp
@@ -83,10 +80,6 @@ blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight=$1
 
 # ffn_gate_exps (gate-extraction)
 blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight=$1
-
-
-
-## THE END!
 "
 
 #custom="
