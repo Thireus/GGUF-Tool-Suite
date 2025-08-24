@@ -38,6 +38,7 @@ GLM-4.5|pure|BF16|16.003|3.1788
 GLM-4.5|ubergarm|IQ5_K|6.000|3.1690|https://huggingface.co/ubergarm/GLM-4.5-GGUF/tree/main/IQ5_K
 GLM-4.5|ubergarm|IQ4_K|4.932|3.2189|https://huggingface.co/ubergarm/GLM-4.5-GGUF/tree/main/IQ4_K
 GLM-4.5|ubergarm|IQ4_KSS|4.164|3.3261|https://huggingface.co/ubergarm/GLM-4.5-GGUF/tree/main/IQ4_KSS
+GLM-4.5|ubergarm|IQ3_KT|3.537|3.4369|https://huggingface.co/ubergarm/GLM-4.5-GGUF/tree/main/IQ3_KT
 GLM-4.5|ubergarm|IQ2_KL|3.062|3.7569|https://huggingface.co/ubergarm/GLM-4.5-GGUF/tree/main/IQ2_KL
 GLM-4.5|ubergarm|IQ1_KT|2.009|5.3270|https://huggingface.co/ubergarm/GLM-4.5-GGUF/tree/main/IQ1_KT
 Qwen3-235B-A22B-Thinking-2507|pure|Q8_0|8.505|4.1956
@@ -48,3 +49,15 @@ Qwen3-235B-A22B-Thinking-2507|ubergarm|IQ4_KSS|4.169|4.2799|https://huggingface.
 Qwen3-235B-A22B-Thinking-2507|ubergarm|IQ3_K|3.897|4.3319|https://huggingface.co/ubergarm/Qwen3-235B-A22B-Thinking-2507-GGUF/tree/main/IQ3_K
 Qwen3-235B-A22B-Thinking-2507|ubergarm|IQ3_KS|3.702|4.3718|https://huggingface.co/ubergarm/Qwen3-235B-A22B-Thinking-2507-GGUF/tree/main/IQ3_KS
 Qwen3-235B-A22B-Thinking-2507|ubergarm|IQ2_KL|2.991|4.6608|https://huggingface.co/ubergarm/Qwen3-235B-A22B-Thinking-2507-GGUF/tree/main/IQ2_KL
+DeepSeek-V3.1|pure|Q8_0|8.504|3.3473
+DeepSeek-V3.1|ubergarm|IQ5_K|5.944|3.3550|https://huggingface.co/ubergarm/DeepSeek-V3.1-GGUF/tree/main/IQ5_K
+DeepSeek-V3.1|ubergarm|IQ4_K|4.925|3.3715|https://huggingface.co/ubergarm/DeepSeek-V3.1-GGUF/tree/main/IQ4_K
+DeepSeek-V3.1|ubergarm|IQ4_KS|4.649|3.3806|https://huggingface.co/ubergarm/DeepSeek-V3.1-GGUF/tree/main/IQ4_KS
+DeepSeek-V3.1|ubergarm|IQ4_KSS|4.162|3.3887|https://huggingface.co/ubergarm/DeepSeek-V3.1-GGUF/tree/main/IQ4_KSS
+DeepSeek-V3.1|ubergarm|IQ3_K|3.753|3.4260|https://huggingface.co/ubergarm/DeepSeek-V3.1-GGUF/tree/main/IQ3_K
+DeepSeek-V3.1|ubergarm|IQ3_KS|3.551|3.4534|https://huggingface.co/ubergarm/DeepSeek-V3.1-GGUF/tree/main/IQ3_KS
+DeepSeek-V3.1|ubergarm|IQ2_KL|2.960|3.6312|https://huggingface.co/ubergarm/DeepSeek-V3.1-GGUF/tree/main/IQ2_KL
+DeepSeek-V3.1|ubergarm|IQ2_KT|2.619|3.8109|https://huggingface.co/ubergarm/DeepSeek-V3.1-GGUF/tree/main/IQ2_KT
+DeepSeek-V3.1|ubergarm|IQ2_KS|2.472|3.9583|https://huggingface.co/ubergarm/DeepSeek-V3.1-GGUF/tree/main/IQ2_KS
+DeepSeek-V3.1|ubergarm|IQ1_KT|1.984|4.3987|https://huggingface.co/ubergarm/DeepSeek-V3.1-GGUF/tree/main/IQ1_KT
+DeepSeek-V3.1|ubergarm|IQ1_S|1.710|5.3113|https://huggingface.co/ubergarm/DeepSeek-V3.1-GGUF/tree/main/IQ1_S
