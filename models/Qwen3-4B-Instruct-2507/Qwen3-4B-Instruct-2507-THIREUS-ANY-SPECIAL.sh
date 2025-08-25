@@ -465,7 +465,7 @@ ulimit -n 99999
 mkdir Qwen3-4B-Instruct-2507-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
     --custom-q "$custom" \
     --imatrix imatrix_ubergarm.dat \
-    Qwen3-4B-Instruct-2507-THIREUS-BF16-SPECIAL_SPLIT/Qwen3-4B-Instruct-2507-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01132.gguf \
+    Qwen3-4B-Instruct-2507-THIREUS-BF16-SPECIAL_SPLIT/Qwen3-4B-Instruct-2507-THIREUS-BF16-SPECIAL_TENSOR-00001-of-00399.gguf \
     Qwen3-4B-Instruct-2507-THIREUS-${1^^}-SPECIAL_SPLIT/Qwen3-4B-Instruct-2507-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
     ${1^^} \
     32 && chmod 444 Qwen3-4B-Instruct-2507-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
