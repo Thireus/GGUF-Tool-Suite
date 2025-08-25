@@ -34,6 +34,7 @@ _debug() {
 # cat tensors.map | cut -d: -f 3,5 | sed 's/\:dtype//g' | sed 's/\./\\\./g' | ./quants_regex_merger.sh 
 custom="
 ## Model head & embeddings
+token_embd\.weight=$1
 output_norm\.weight=f32
 
 ## Multi-headed attention parameters

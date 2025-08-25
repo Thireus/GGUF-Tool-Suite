@@ -104,6 +104,7 @@ if [ ! -t 0 ]; then
 else
   # …otherwise use the built‑in default
   custom="
+token_embd\.weight=bf16
 blk\.0\.attn_norm\.weight=f32
 blk\.0\.ffn_down\.weight=bf16
 blk\.0\.ffn_gate\.weight=bf16
