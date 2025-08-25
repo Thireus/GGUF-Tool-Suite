@@ -1,4 +1,5 @@
 ## Model head & embeddings
+token_embd\.weight=q8_0
 output_norm\.weight=f32
 
 ## Multi-headed attention parameters
