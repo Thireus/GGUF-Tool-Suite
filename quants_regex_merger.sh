@@ -1161,8 +1161,9 @@ gpuGiB=${gpuGiB:-0}
 cpuGiB=$(printf "%s" "$all" | sed -E -n 's/^# CPU Total: ([0-9]+)\..*$/\1/p')
 cpuGiB=${cpuGiB:-0}
 
-# Compute total GiB
-totalGiB=$(( gpuGiB + cpuGiB ))
+# Extract integer GPU+CPU GiB or default to 0
+totalGiB=$(printf "%s" "$all" | sed -E -n 's/^# GPU+CPU Total: ([0-9]+)\..*$/\1/p')
+totalGiB=${totalGiB:-0}
 
 # Extract BPW or default to 0
 bpw=$(printf "%s" "$all" | sed -E -n 's/^# -Average BPW: ([0-9]+\.[0-9]+).*$/\1/p')
