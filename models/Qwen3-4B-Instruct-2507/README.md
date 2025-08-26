@@ -36,22 +36,19 @@ git clone https://github.com/Thireus/GGUF-Tool-Suite
 # Download model quant mix from recipe file:
 cd GGUF-Tool-Suite
 rm -f download.conf # Make sure to copy the relevant download.conf for the model before running quant_assign.py
-cp -f models/DeepSeek-R1-0528/download.conf . # Use the download.conf of the chosen model
+cp -f models/Qwen3-4B-Instruct-2507/download.conf . # Use the download.conf of the chosen model
 mkdir -p kitchen && cd kitchen
-../quant_downloader.sh ../recipe_examples/ik_llama.cpp_recipes/DeepSeek-R1-0528.THIREUS-1.9364bpw-4.3533ppl.151GB-GGUF_11GB-GPU_140GB-CPU.3c88ec6_9fd615d.recipe
+../quant_downloader.sh ../recipe_examples/ik_llama.cpp_recipes/Qwen3-4B-Instruct-2507.ROOT-4.2498bpw-10.9335ppl.1GB-GGUF_0GB-GPU_1GB-CPU.9888e4b_9193781.recipe
 
 # Other recipe examples can be found at https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples
 
 # Launch ik_llama's llama-cli:
 ulimit -n 9999 # Lifts "too many open files" limitation on Linux
-~/ik_llama.cpp/build/bin/llama-cli \
-  -m DeepSeek-R1-0528-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
-  -mla 3 -fa -amb 512 -fmoe -ctk f16 -c 4096 -ngl 99 \
-  -ot "blk\.(3|4|5|6)\.ffn_.*=CUDA0" \
-  -ot "blk\.(7|8|9|10)\.ffn_.*=CUDA1" \
-  -ot exps=CPU -b 2048 -ub 1024 --warmup-batch --no-mmap --threads 36 \
-  --main-gpu 0 \
-  -p '<｜begin▁of▁sentence｜><｜User｜>What is the solution of x+5=-2?<｜Assistant｜><think>\n'
+~/ik_llama.cpp/build/bin/llama-server \
+  -m Qwen3-4B-Instruct-2507-THIREUS-BF16-SPECIAL_TENSOR-00001-of-00399.gguf \
+  -fa -amb 1024 -ctk q8_0 -c 32768 -ngl 99 \
+  -b 4096 -ub 4096 --warmup-batch --no-mmap --threads 1 \
+  --main-gpu 0
 ```
 
 </details>
@@ -68,9 +65,9 @@ ulimit -n 9999 # Lifts "too many open files" limitation on Linux
 
 ## 📊 How does it compare to other GGUFs?
 
-Here’s how DeepSeek-R1-0528 quantized with **Thireus’ GGUF Tool Suite** stacks up against other quantizers (lower perplexity = better at equal or lower bpw):
+Here’s how Qwen3-4B-Instruct-2507 quantized with **Thireus’ GGUF Tool Suite** stacks up against other quantizers (lower perplexity = better at equal or lower bpw):
 
-![PPLs Compared With Others](https://github.com/Thireus/GGUF-Tool-Suite/raw/main/ppl_graphs/DeepSeek-R1-0528.svg)
+![PPLs Compared With Others](https://github.com/Thireus/GGUF-Tool-Suite/raw/main/ppl_graphs/Qwen3-4B-Instruct-2507.svg)
 
 > _Note: The `recipe_examples` files illustrate good recipes. The Tool Suite computes the optimal ppl/bpw curve for you — just specify your target RAM, VRAM, and quant types, and `quant_assign.py` finds the best mix._  
 
