@@ -139,7 +139,7 @@ def plot_data(recipe_data, recipe_dir, imported_data=None, export=False, out_dir
 
     dir_name = os.path.basename(os.path.normpath(recipe_dir))
     # recipe markers now only use: '+', 'x', '*'
-    recipe_markers = ['+', 'x', '*']
+    recipe_markers = ['+', 'x', '*', '.']
     # imported markers remain as requested
     imported_markers = ['o', 's', '^', 'D', 'v', 'p', 'h', '<', '>']
 
@@ -253,7 +253,7 @@ def plot_data(recipe_data, recipe_dir, imported_data=None, export=False, out_dir
                 # pick imported colours *after* the reserved recipe colours so recipe keeps the first colours
                 color = color_cycle[(num_recipe_series + idx) % len(color_cycle)]
                 # zorder lower so imported points are drawn behind recipe points
-                line = plt.plot(xs_imp, ys_imp, marker=marker, linestyle='', label=author, zorder=1, color=color)[0]
+                line = plt.plot(xs_imp, ys_imp, marker=marker, markersize=3, linestyle='', label=author, zorder=1, color=color, alpha=0.75)[0]
                 imported_handles.append(line)
                 imported_labels.append(author)
 
