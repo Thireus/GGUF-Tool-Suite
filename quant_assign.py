@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-14-2025 -------------------- **#
+#** --------------- Updated: Aug-26-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -298,7 +298,7 @@ def parse_value(val):
 
 def classify_tensors(columns, cpu_patterns, gpu_patterns):
     """
-    Classify tensor names into CPU/GPU based on regex lists.
+    Classify tensor names into CPU/GPU-friendly based on regex lists.
     """
     classes = {'cpu': [], 'gpu': []}
     for name in columns:
@@ -1031,22 +1031,22 @@ def main():
     parser.add_argument('--tolerance', type=float, default=0.05,
                         help='Relative GiB tolerance for size optimization')
     parser.add_argument('--cpu-irq-k', type=float, default=1.5,
-                        help='IQR multiplier k for CPU outlier detection')
+                        help='IQR multiplier k for CPU-friendly outlier detection')
     parser.add_argument('--gpu-irq-k', type=float, default=1.5,
-                        help='IQR multiplier k for GPU outlier detection')
+                        help='IQR multiplier k for GPU-friendly outlier detection')
     parser.add_argument('csv_file', help='Input CSV file')
     parser.add_argument('--qtype', help='Case-sensitive qtype (e.g. q3_K) to analyze from the PPL CSV file (default: lowest quant)')
-    parser.add_argument('--cpu-assign-qtype', help='Case-sensitive qtype (e.g. q6_K) to assign to non-measured CPU tensors or tensors missing from csv (default: highest quant)')
-    parser.add_argument('--gpu-assign-qtype', help='Case-sensitive qtype (e.g. q3_K) to assign to non-measured GPU tensors or tensors missing from csv (default: highest quant)')
-    parser.add_argument('--cpu-assign-tensors', nargs='+', default=[], help="List of regex=qtype (case-sensitive, e.g. q6_K) patterns for CPU tensors to force-assign")
-    parser.add_argument('--gpu-assign-tensors', nargs='+', default=[], help="List of regex=qtype (case-sensitive, e.g. q3_K) patterns for GPU tensors to force-assign")
+    parser.add_argument('--cpu-assign-qtype', help='Case-sensitive qtype (e.g. q6_K) to assign to non-measured CPU-friendly tensors or tensors missing from csv (default: highest quant)')
+    parser.add_argument('--gpu-assign-qtype', help='Case-sensitive qtype (e.g. q3_K) to assign to non-measured GPU-friendly tensors or tensors missing from csv (default: highest quant)')
+    parser.add_argument('--cpu-assign-tensors', nargs='+', default=[], help="List of regex=qtype (case-sensitive, e.g. q6_K) patterns for CPU-friendly tensors to force-assign")
+    parser.add_argument('--gpu-assign-tensors', nargs='+', default=[], help="List of regex=qtype (case-sensitive, e.g. q3_K) patterns for GPU-friendly tensors to force-assign")
     #parser.add_argument('--sample-ppl', help='CSV sample PPL file path', required=True)
-    parser.add_argument('--cpu-tensors', nargs='+', default=[], help='Regex patterns for CPU tensors')
-    parser.add_argument('--gpu-tensors', nargs='+', default=[], help='Regex patterns for GPU tensors')
-    parser.add_argument('--cpu-quants', nargs='+', help='Ordered list of CPU case-sensitive quants (e.g. q6_K)')
-    parser.add_argument('--gpu-quants', nargs='+', help='Ordered list of GPU case-sensitive quants (e.g. q3_K)')
-    parser.add_argument('--cpu-tensors-max-size', type=str, help='Max CPU tensors size in GiB or percent (e.g., 80%%)')
-    parser.add_argument('--gpu-tensors-max-size', type=str, help='Max GPU tensors size in GiB or percent (e.g., 80%%)')
+    parser.add_argument('--cpu-tensors', nargs='+', default=[], help='Regex patterns for CPU-friendly tensors')
+    parser.add_argument('--gpu-tensors', nargs='+', default=[], help='Regex patterns for GPU-friendly tensors')
+    parser.add_argument('--cpu-quants', nargs='+', help='Ordered list of CPU-friendly case-sensitive quants (e.g. q6_K)')
+    parser.add_argument('--gpu-quants', nargs='+', help='Ordered list of GPU-friendly case-sensitive quants (e.g. q3_K)')
+    parser.add_argument('--cpu-tensors-max-size', type=str, help='Max CPU-friendly tensors size in GiB or percent (e.g., 80%%)')
+    parser.add_argument('--gpu-tensors-max-size', type=str, help='Max GPU-friendly tensors size in GiB or percent (e.g., 80%%)')
     parser.add_argument('--exponential-factor', type=float, default=1.0,
                         help='Exponent controlling midpoint adjustment aggressiveness during stretch sweeps. '
                              'Higher values push quantization toward extremes; default is 1.0.')
@@ -1111,7 +1111,7 @@ def main():
     # Reorder cpu_quants from highest to lowest bpw
     try:
         cpu_quants = sorted(cpu_quants, key=get_bpw, reverse=True)
-        if INFO: print(f"[Info] CPU quants reordered by bpw: {cpu_quants}")
+        if INFO: print(f"[Info] CPU-friendly quants reordered by bpw: {cpu_quants}")
     except Exception:
         pass
 
@@ -1125,7 +1125,7 @@ def main():
     # Reorder gpu_quants from highest to lowest bpw
     try:
         gpu_quants = sorted(gpu_quants, key=get_bpw, reverse=True)
-        if INFO: print(f"[Info] GPU quants reordered by bpw: {gpu_quants}")
+        if INFO: print(f"[Info] GPU-friendly quants reordered by bpw: {gpu_quants}")
     except Exception:
         pass
 
@@ -1239,10 +1239,10 @@ def main():
     pre_assignments_offset = {'cpu': 0, 'gpu': 0}
     for cls in ['cpu', 'gpu']:
         if cls == 'cpu' and not cpu_quants:
-            if INFO: print(f"[Info] CPU quants skipped because not being user-specified.")
+            if INFO: print(f"[Info] CPU-friendly quants skipped because not being user-specified.")
             continue # Skip loop if empty quants
         if cls == 'gpu' and not gpu_quants:
-            if INFO: print(f"[Info] GPU quants skipped because not being user-specified.")
+            if INFO: print(f"[Info] GPU-friendly quants skipped because not being user-specified.")
             continue # Skip loop if empty quants
         quants = cpu_quants if cls == 'cpu' else gpu_quants
         pat_assign_tensors = [pat.split('=')[0] for pat in args.cpu_assign_tensors] if cls == 'cpu' else [pat.split('=')[0] for pat in args.gpu_assign_tensors]
