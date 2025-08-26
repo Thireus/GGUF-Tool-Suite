@@ -222,14 +222,14 @@ python quant_assign.py ppl_results.csv \
 
 The file `ppl_results.csv` contains **individual tensor-level PPL benchmarks**, for example for **DeepSeek-R1-0528**:
 
-- `Q8_0` (GPU tensors) + `IQ3-XXS` (CPU tensors)
+- `Q8_0` (GPU-friendly tensor) + `IQ3-XXS` (CPU-friendly tensor)
 - Target model: **DeepSeek-R1-0528**
 - Quantization degradation reference: `IQ1-M-R4`
 
 This is the **core file** used to determine optimal quant mix strategies.  
 > ⚠️ Generating this CSV took **several days of GPU + CPU compute time**.
 
-- `IQ3-XXS` was chosen for CPU tensors as it fits within **256GB RAM**
+- `IQ3-XXS` was chosen for CPU-friendly tensors as it fits within **256GB RAM**
 - Scripts used to generate (edit the "USER CONFIGURATION" section in the bash scripts as needed):
 
 ```bash

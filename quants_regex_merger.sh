@@ -5,7 +5,7 @@
 #** regex for llama-quantize consumption.                     **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-20-2025 -------------------- **#
+#** --------------- Updated: Aug-26-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -1078,9 +1078,9 @@ list_bits() {
     fi
   fi
 
-  # CPU-loaded section: ffn_*_exps
+  # CPU-friendly section: ffn_*_exps
   if (( ${#cpu_exps[@]} )); then
-    echo "## CPU-loaded ffn_*_exps"
+    echo "## CPU-friendly ffn_*_exps"
     cpu_down=() cpu_up=() cpu_gate=()
     for l in "${cpu_exps[@]}"; do
       case "$l" in

@@ -213,7 +213,7 @@ USER_REGEX=(
   '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_shexp\.weight=iq3_xxs'
   '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_shexp\.weight=iq3_xxs'
 
-  ## CPU-loaded ffn_*_exps
+  ## CPU-friendly ffn_*_exps
   '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight=iq3_xxs'
   '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight=iq3_xxs'
   '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight=iq3_xxs'

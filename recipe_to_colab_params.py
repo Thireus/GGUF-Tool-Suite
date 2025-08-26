@@ -5,7 +5,7 @@
 #** Colab pipeline parameters for quant_recipe_pipeline.ipynb **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-14-2025 -------------------- **#
+#** --------------- Updated: Aug-26-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -50,18 +50,18 @@ DEFAULTS: Dict[str, Any] = {
     "repo_url": "https://github.com/Thireus/GGUF-Tool-Suite.git",
     "model_name": "DeepSeek-R1-0528",
     "model_link": "https://huggingface.co/deepseek-ai/DeepSeek-R1-0528",
-    "gpu_tensors": [r".*"],
     "cpu_tensors": [],
+    "gpu_tensors": [r".*"],
     "cpu_quants": ["iq4_ks", "iq3_k", "iq2_ks", "iq1_m_r4"],
     "gpu_quants": ["q8_0", "iq5_k_r4", "iq6_k"],
     "cpu_tensors_max_size": "230",
     "gpu_tensors_max_size": "95%",
     "tolerance": 0.01,
     "exponential_factor": 8,
-    "gpu_assign_qtype": "iq4_xs",
-    "gpu_assign_tensors": [r"blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=q8_0"],
     "cpu_assign_qtype": "",
     "cpu_assign_tensors": [],
+    "gpu_assign_qtype": "iq4_xs",
+    "gpu_assign_tensors": [r"blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=q8_0"],
     "harmonize_tensors": [[r"blk\..*\.ffn_up_exps.*", r"blk\..*\.ffn_gate_exps.*"]],
     "harmonization_technique": 3,
     "qtype": "",
@@ -201,11 +201,11 @@ def emit_parameters(params: Dict[str, Any]) -> str:
     lines.append(f'model_name = "{params["model_name"]}"                                     #@param {{type:"string"}}')
     lines.append(f'model_link = "{params["model_link"]}"  #@param {{type:"string"}}')
     lines.append("")
-    lines.append("# regex lists as Python lists of strings - Tensor names can be found in *.recipe file of the model directory")
-    lines.append(f'gpu_tensors = {pretty_py_list(params["gpu_tensors"])}    #@param {{type:"raw"}}')
+    lines.append("# regex lists as Python lists of strings - CPU/GPU-friendly tensor names can be found in *.recipe file of the model directory")
     lines.append(f'cpu_tensors = {pretty_py_list(params["cpu_tensors"])}   #@param {{type:"raw"}}')
+    lines.append(f'gpu_tensors = {pretty_py_list(params["gpu_tensors"])}    #@param {{type:"raw"}}')
     lines.append("")
-    lines.append("# quant types")
+    lines.append("# quant types for cpu-friendly and gpu-friendly tensor assignments")
     lines.append('cpu_quants = [{}]   #@param {{type:"raw"}}'.format(", ".join('"{}"'.format(q) for q in params["cpu_quants"])))
     lines.append('gpu_quants = [{}]              #@param {{type:"raw"}}'.format(", ".join('"{}"'.format(q) for q in params["gpu_quants"])))
     lines.append("")
@@ -216,10 +216,10 @@ def emit_parameters(params: Dict[str, Any]) -> str:
     lines.append(f'exponential_factor = {params["exponential_factor"]}          #@param {{type:"integer"}}')
     lines.append("")
     lines.append("# assignment override")
-    lines.append(f'gpu_assign_qtype = "{params["gpu_assign_qtype"]}"    #@param {{type:"string"}}')
-    lines.append(f'gpu_assign_tensors = {pretty_py_list(params["gpu_assign_tensors"])} #@param {{type:"raw"}}')
     lines.append(f'cpu_assign_qtype = "{params["cpu_assign_qtype"]}"        #@param {{type:"string"}}')
     lines.append(f'cpu_assign_tensors = {pretty_py_list(params["cpu_assign_tensors"])}        #@param {{type:"raw"}}')
+    lines.append(f'gpu_assign_qtype = "{params["gpu_assign_qtype"]}"    #@param {{type:"string"}}')
+    lines.append(f'gpu_assign_tensors = {pretty_py_list(params["gpu_assign_tensors"])} #@param {{type:"raw"}}')
     lines.append("")
     lines.append("# harmonization options (optional)")
     lines.append("# harmonize_tensors: list-of-lists of regex strings; each inner list declares a group whose matching tensors (within a class) will be qtype harmonized layer-wise.")
@@ -265,9 +265,9 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
     if repo_candidate:
         params['repo_url'] = repo_candidate.rstrip("/")
 
-    # Parse GPU/CPU quants from the summary sections if present
+    # Parse GPU/CPU-friendly quants from the summary sections if present
     if "GPU-loaded quants" in recipe_text:
-        m = re.search(r"##\s*GPU-loaded quants:([\s\S]*?)(?:\n##|\n#\s*CPU-loaded quants|\n## Summary|\n$)", recipe_text)
+        m = re.search(r"##\s*GPU-loaded quants:([\s\S]*?)(?:\n##|\n#\s*CPU-[A-Za-z]+ quants|\n## Summary|\n$)", recipe_text)
         if m:
             lines = m.group(1).splitlines()
             gpu_qs = []
@@ -282,8 +282,8 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
             if gpu_qs:
                 params['gpu_quants'] = gpu_qs
 
-    if "CPU-loaded quants" in recipe_text:
-        m = re.search(r"##\s*CPU-loaded quants:([\s\S]*?)(?:\n##|\n#\s*-Average BPW|\n## Summary|\n$)", recipe_text)
+    if "CPU-" in recipe_text:
+        m = re.search(r"##\s*CPU-[A-Za-z]+ quants:([\s\S]*?)(?:\n##|\n#\s*-Average BPW|\n## Summary|\n$)", recipe_text)
         if m:
             lines = m.group(1).splitlines()
             cpu_qs = []
@@ -307,8 +307,8 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
             '--gpu-tensors': 'gpu_tensors',
             '--cpu-quants': 'cpu_quants',
             '--gpu-quants': 'gpu_quants',
-            '--gpu-assign-tensors': 'gpu_assign_tensors',
             '--cpu-assign-tensors': 'cpu_assign_tensors',
+            '--gpu-assign-tensors': 'gpu_assign_tensors',
         }
         for flag, outname in multi_flags.items():
             vals = collect_flag_values(tokens, flag)
@@ -334,8 +334,8 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
                     params[outname] = items
 
         single_flags = {
-            '--gpu-assign-qtype': 'gpu_assign_qtype',
             '--cpu-assign-qtype': 'cpu_assign_qtype',
+            '--gpu-assign-qtype': 'gpu_assign_qtype',
             '--cpu-tensors-max-size': 'cpu_tensors_max_size',
             '--gpu-tensors-max-size': 'gpu_tensors_max_size',
             '--tolerance': 'tolerance',
