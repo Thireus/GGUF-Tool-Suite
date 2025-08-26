@@ -5,7 +5,7 @@
 #** identify tensor quantisation sensitiveness patterns.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-15-2025 -------------------- **#
+#** --------------- Updated: Aug-26-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -135,6 +135,7 @@ def plot_data(recipe_data, recipe_dir, imported_data=None, export=False, out_dir
     if export:
         matplotlib.use('Agg')
     import matplotlib.pyplot as plt
+    from collections.abc import Iterable
 
     dir_name = os.path.basename(os.path.normpath(recipe_dir))
     # recipe markers now only use: '+', 'x', '*'
@@ -152,7 +153,111 @@ def plot_data(recipe_data, recipe_dir, imported_data=None, export=False, out_dir
             continue
 
         fig = plt.figure()
-        # plot each source series (root and each subdir) for this model
+
+        # prepare color cycle so recipe series can reserve the "first" colours
+        prop_cycle = plt.rcParams.get('axes.prop_cycle')
+        color_cycle = []
+
+        # defensive extraction of colors from prop_cycle/by_key()
+        try:
+            if prop_cycle is not None:
+                by_key = getattr(prop_cycle, 'by_key', None)
+                if callable(by_key):
+                    try:
+                        by_key_res = by_key()
+                    except Exception:
+                        by_key_res = None
+                else:
+                    by_key_res = None
+
+                # 1) if it's a dict-like, use .get safely
+                if isinstance(by_key_res, dict):
+                    try:
+                        vals = by_key_res.get('color')
+                    except Exception:
+                        vals = None
+
+                    if isinstance(vals, (list, tuple)):
+                        color_cycle = list(vals)
+                    elif isinstance(vals, str):
+                        color_cycle = [vals]
+                    elif isinstance(vals, Iterable):
+                        try:
+                            color_cycle = list(vals)
+                        except Exception:
+                            # coerce elements to string as a last resort
+                            try:
+                                color_cycle = [str(x) for x in vals]
+                            except Exception:
+                                color_cycle = []
+                    else:
+                        color_cycle = []
+
+                # 2) if it exposes a .get method (mapping-like), try calling it guarded
+                elif by_key_res is not None and hasattr(by_key_res, 'get'):
+                    get_fn = getattr(by_key_res, 'get', None)
+                    if callable(get_fn):
+                        try:
+                            vals = get_fn('color')
+                        except Exception:
+                            vals = None
+
+                        if isinstance(vals, (list, tuple)):
+                            color_cycle = list(vals)
+                        elif isinstance(vals, str):
+                            color_cycle = [vals]
+                        elif isinstance(vals, Iterable):
+                            try:
+                                color_cycle = list(vals)
+                            except Exception:
+                                try:
+                                    color_cycle = [str(x) for x in vals]
+                                except Exception:
+                                    color_cycle = []
+                        else:
+                            color_cycle = []
+
+                # 3) fallback: try to treat by_key_res as an iterable of strings (guarded)
+                elif by_key_res is not None and isinstance(by_key_res, Iterable):
+                    try:
+                        seq = []
+                        for x in by_key_res:
+                            seq.append(x)
+                        if seq and all(isinstance(x, str) for x in seq):
+                            color_cycle = seq
+                        else:
+                            # coerce to strings if necessary
+                            color_cycle = [str(x) for x in seq] if seq else []
+                    except Exception:
+                        color_cycle = []
+        except Exception:
+            color_cycle = []
+
+        # final fallback to Matplotlib color names if nothing found
+        if not color_cycle:
+            color_cycle = ['C0', 'C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C8', 'C9']
+
+        num_recipe_series = len(sources)
+        recipe_handles = []
+        recipe_labels = []
+        imported_handles = []
+        imported_labels = []
+
+        # Plot any imported series for this model FIRST so they appear behind recipe series
+        if imported_data and model in imported_data:
+            for idx, (author, series_vals) in enumerate(imported_data[model].items()):
+                if not series_vals:
+                    continue
+                xs_imp, ys_imp = zip(*sorted(series_vals))
+                marker = imported_markers[idx % len(imported_markers)]
+                # pick imported colours *after* the reserved recipe colours so recipe keeps the first colours
+                color = color_cycle[(num_recipe_series + idx) % len(color_cycle)]
+                # zorder lower so imported points are drawn behind recipe points
+                line = plt.plot(xs_imp, ys_imp, marker=marker, linestyle='', label=author, zorder=1, color=color)[0]
+                imported_handles.append(line)
+                imported_labels.append(author)
+
+        # plot each source series (root and each subdir) for this model (drawn after imported -> on top)
         for idx, (source_label, vals) in enumerate(sorted(sources.items())):
             if not vals:
                 continue
@@ -164,22 +269,20 @@ def plot_data(recipe_data, recipe_dir, imported_data=None, export=False, out_dir
                 series_label = "Thireus' GGUF Tool Suite"
             # Use recipe-specific markers: '+', 'x', '*'
             marker = recipe_markers[idx % len(recipe_markers)]
-            plt.plot(xs, ys, marker=marker, linestyle='', label=series_label)
-
-        # Plot any imported series for this model
-        if imported_data and model in imported_data:
-            for idx, (author, series_vals) in enumerate(imported_data[model].items()):
-                if not series_vals:
-                    continue
-                xs_imp, ys_imp = zip(*sorted(series_vals))
-                marker = imported_markers[idx % len(imported_markers)]
-                plt.plot(xs_imp, ys_imp, marker=marker, linestyle='', label=author)
+            # recipe colours are the *first* colours in the cycle so they match original look
+            color = color_cycle[idx % len(color_cycle)]
+            # zorder higher so recipe points are on top
+            line = plt.plot(xs, ys, marker=marker, linestyle='', label=series_label, zorder=2, color=color)[0]
+            recipe_handles.append(line)
+            recipe_labels.append(series_label)
 
         plt.xlabel('Bits per weight (bpw)')
         plt.ylabel('Perplexity (ppl)')
         plt.title(f'{model}: ppl vs bpw')
-        # Make legend/label text smaller
-        plt.legend(fontsize='small')
+        # Make legend/label text smaller — but show recipe entries first (on top)
+        handles = recipe_handles + imported_handles
+        labels = recipe_labels + imported_labels
+        plt.legend(handles, labels, fontsize='small')
 
         if export:
             filename = f"{model}.svg"
