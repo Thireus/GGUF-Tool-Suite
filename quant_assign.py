@@ -1619,7 +1619,10 @@ def main():
         if not quants_list:
             continue
         # Section header per class
-        print(f"#\n# {cls.upper()}-loaded quants:")
+        if cls == 'cpu':
+            print(f"#\n# {cls.upper()}-friendly quants:")
+        else:
+            print(f"#\n# {cls.upper()}-loaded quants:")
         print(f"# QTYPE\t\tCount\tBPW\tAssigned GiB\t% Assigned\tMax GiB (all)")
         if cls == 'cpu':
             _assign_qtype = assign_qtype(args.cpu_assign_qtype, cpu_regex_assign, _quants_list, names_assigned)
