@@ -36,7 +36,7 @@ llama-imatrix \
     --verbosity 1 \
     -m ~/AI/Qwen3-4B-Thinking-2507/Qwen3-4B-Thinking-2507-THIREUS-BF16-SPECIAL_SPLIT/Qwen3-4B-Thinking-2507-THIREUS-BF16-SPECIAL_TENSOR-00001-of-00399.gguf \
     -f ubergarm-imatrix-calibration-corpus-v02.txt \
-    -o ./ubergarm_imatrix.dat \
+    -o ./imatrix_ubergarm.dat \
     -ngl 99 \
     --layer-similarity \
     --ctx-size 512 \
