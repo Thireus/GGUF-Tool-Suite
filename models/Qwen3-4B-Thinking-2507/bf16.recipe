@@ -1,0 +1,18 @@
+## Model head & embeddings
+token_embd\.weight=bf16
+output_norm\.weight=f32
+
+## Multi-headed attention parameters
+blk\.([0-9]|[1-2][0-9]|3[0-5])\.attn_v\.weight=bf16
+blk\.([0-9]|[1-2][0-9]|3[0-5])\.attn_output\.weight=bf16
+blk\.([0-9]|[1-2][0-9]|3[0-5])\.attn_k_norm\.weight=f32
+blk\.([0-9]|[1-2][0-9]|3[0-5])\.attn_q\.weight=bf16
+blk\.([0-9]|[1-2][0-9]|3[0-5])\.attn_norm\.weight=f32
+blk\.([0-9]|[1-2][0-9]|3[0-5])\.attn_k\.weight=bf16
+blk\.([0-9]|[1-2][0-9]|3[0-5])\.attn_q_norm\.weight=f32
+
+## Core FFN weights
+blk\.([0-9]|[1-2][0-9]|3[0-5])\.ffn_gate\.weight=bf16
+blk\.([0-9]|[1-2][0-9]|3[0-5])\.ffn_norm\.weight=f32
+blk\.([0-9]|[1-2][0-9]|3[0-5])\.ffn_down\.weight=bf16
+blk\.([0-9]|[1-2][0-9]|3[0-5])\.ffn_up\.weight=bf16
