@@ -5,7 +5,7 @@
 #** tensors.map files and optionally deletes unused shards.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-13-2025 -------------------- **#
+#** --------------- Updated: Aug-31-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -50,17 +50,17 @@ fi
 #    These are Bash regexes used in [[ $tensor_name =~ $pattern ]].
 #    Adjust or extend this list as needed.
 USER_REGEX=(
-  '^output\.weight'
-  '^token_embd\.weight'
-  '^blk\.[0-2]\.ffn_down\.weight'
-  '^blk\.[0-2]\.ffn_gate\.weight'
-  '^blk\.[0-2]\.ffn_up\.weight'
-  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_shexp\.weight'
-  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_shexp\.weight'
-  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_shexp\.weight'
-  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight'
-  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight'
-  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight'
+  '^output\.weight$'
+  '^token_embd\.weight$'
+  '^blk\.[0-2]\.ffn_down\.weight$'
+  '^blk\.[0-2]\.ffn_gate\.weight$'
+  '^blk\.[0-2]\.ffn_up\.weight$'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_shexp\.weight$'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_shexp\.weight$'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_shexp\.weight$'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight$'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight$'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight$'
 )
 
 # 2. Global option: delete shards whose tensor names do NOT match any of the above regexes.

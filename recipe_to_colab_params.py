@@ -5,7 +5,7 @@
 #** Colab pipeline parameters for quant_recipe_pipeline.ipynb **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-26-2025 -------------------- **#
+#** --------------- Updated: Aug-31-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -61,8 +61,8 @@ DEFAULTS: Dict[str, Any] = {
     "cpu_assign_qtype": "",
     "cpu_assign_tensors": [],
     "gpu_assign_qtype": "iq4_xs",
-    "gpu_assign_tensors": [r"blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=q8_0"],
-    "harmonize_tensors": [[r"blk\..*\.ffn_up_exps.*", r"blk\..*\.ffn_gate_exps.*"]],
+    "gpu_assign_tensors": [r"^blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight$=q8_0"],
+    "harmonize_tensors": [[r"^blk\..*\.ffn_up_exps.*", r"blk\..*\.ffn_gate_exps.*"]],
     "harmonization_technique": 3,
     "qtype": "",
     "debug": False,
@@ -326,7 +326,7 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
                     items: List[str] = []
                     for v in vals:
                         # keep tokens like 'blk\...=q8_0' intact; if comma-separated, split
-                        if "," in v and not v.startswith("blk\\."):
+                        if "," in v and not v.startswith(("^blk\\.", "blk\\.")):
                             for part in v.split(","):
                                 part = part.strip()
                                 if part:

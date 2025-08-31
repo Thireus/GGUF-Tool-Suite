@@ -5,7 +5,7 @@
 #** tensor sizes for matched regex tensors.                   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-23-2025 -------------------- **#
+#** --------------- Updated: Aug-31-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -51,21 +51,21 @@ run_downloader() {
 # Default map (used if not piped via stdin)
 DEFAULT_MAP=$(cat <<'EOF'
 # Low - Resistant to quant
-blk\.([3-9]|1[0-6])\.ffn_down_exps\.weight=iq2_k
-blk\.([3-9]|1[0-6])\.ffn_gate_exps\.weight=iq1_m_r4
-blk\.([3-9]|1[0-6])\.ffn_up_exps\.weight=iq1_m_r4
+^blk\.([3-9]|1[0-6])\.ffn_down_exps\.weight$=iq2_k
+^blk\.([3-9]|1[0-6])\.ffn_gate_exps\.weight$=iq1_m_r4
+^blk\.([3-9]|1[0-6])\.ffn_up_exps\.weight$=iq1_m_r4
 # Medium - Resistant to quant
-blk\.(1[7-9]|2[0-9]|3[0-2])\.ffn_down_exps\.weight=iq3_k
-blk\.(1[7-9]|2[0-9]|3[0-2])\.ffn_gate_exps\.weight=iq2_k
-blk\.(1[7-9]|2[0-9]|3[0-2])\.ffn_up_exps\.weight=iq2_k
+^blk\.(1[7-9]|2[0-9]|3[0-2])\.ffn_down_exps\.weight$=iq3_k
+^blk\.(1[7-9]|2[0-9]|3[0-2])\.ffn_gate_exps\.weight$=iq2_k
+^blk\.(1[7-9]|2[0-9]|3[0-2])\.ffn_up_exps\.weight$=iq2_k
 # High - Sensitive to quant
-blk\.(3[3-9]|4[0-9]|5[0-6])\.ffn_down_exps\.weight=iq4_ks
-blk\.(3[3-9]|4[0-9]|5[0-6])\.ffn_gate_exps\.weight=iq3_k
-blk\.(3[3-9]|4[0-9]|5[0-6])\.ffn_up_exps\.weight=iq3_k
+^blk\.(3[3-9]|4[0-9]|5[0-6])\.ffn_down_exps\.weight$=iq4_ks
+^blk\.(3[3-9]|4[0-9]|5[0-6])\.ffn_gate_exps\.weight$=iq3_k
+^blk\.(3[3-9]|4[0-9]|5[0-6])\.ffn_up_exps\.weight$=iq3_k
 # Medium-High - Sensitive to quant
-blk\.(5[7-9]|60)\.ffn_down_exps\.weight=iq4_ks
-blk\.(5[7-9]|60)\.ffn_gate_exps\.weight=iq3_k
-blk\.(5[7-9]|60)\.ffn_up_exps\.weight=iq3_k
+^blk\.(5[7-9]|60)\.ffn_down_exps\.weight$=iq4_ks
+^blk\.(5[7-9]|60)\.ffn_gate_exps\.weight$=iq3_k
+^blk\.(5[7-9]|60)\.ffn_up_exps\.weight$=iq3_k
 EOF
 )
 
@@ -188,7 +188,9 @@ for regex in "${!USER_MAP[@]}"; do
   echo "Scanning for tensor regex='$regex' with dtype='$tag' in '$_tag' map file…"
 
   # get matching lines (or empty), never exit
-  matched_lines=$(grep -E "$regex" "$TMPDIR"/tensors.$_tag.map 2>/dev/null || true)
+  matched_lines=$(awk 'NR==FNR { nums[++n]=$1; next }
+                     { for(i=1;i<=n;i++) if (FNR==nums[i]) print }
+                    ' <(printf '%s\n' $(cat "$TMPDIR/tensors.${_tag}.map" | cut -d: -f 3 | grep -E "$regex" -n | cut -d: -f 1)) "$TMPDIR/tensors.${_tag}.map" 2>/dev/null || true)
 
   # get number of matching lines
   matched_lines_num=$(echo "$matched_lines"| grep "^.*$" -c)

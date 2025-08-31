@@ -220,50 +220,50 @@ USER_REGEX=(
 
   # Token embedding and output tensors (GPU)
   # note token_embd cannot be repacked quant type
-  '^output\.weight=q8_0'
-  '^output_norm\.weight=f32=locked'
+  '^output\.weight$=q8_0'
+  '^output_norm\.weight$=f32=locked'
   # Be extremely careful about this one, especially if benchmarking below iq1_m, since it cannot be quantised to something lower than iq1_m, which is what will be used during benchmarking! Which will introduce incorrect ppl benchmark.
-  '^token_embd\.weight=q8_0'
+  '^token_embd\.weight$=q8_0'
 
   # GPU Only - not divisible by 256 so only supports qN_0
   # I recommend against unlocking this tensor, especially since it cannot be quantised to lower quants by llama, so the benchmark will be incorrect as it will use llama's auto-assigned fallback qtype without clear warning during the benchmark
-  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=q8_0=locked'
+  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight$=q8_0=locked'
 
   # GPU Only
   # Best to keep this one locked for Kimi-K2 because it cannot be quantised lower than iq2_ks, so any benchmark using lower quant than this will be faulty for this tensor
-  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_v_b\.weight=q8_0=locked'
+  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_v_b\.weight$=q8_0=locked'
 
   # GPU Only
-  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_b\.weight=q8_0=locked'
+  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_b\.weight$=q8_0=locked'
 
   # GPU Only
-  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_norm\.weight=f32=locked'
-  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a\.weight=q8_0=locked'
-  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a_norm\.weight=f32=locked'
-  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_b\.weight=q8_0=locked'
-  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_norm\.weight=f32=locked'
-  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_output\.weight=q8_0=locked'
-  '^blk\.([3-9]|[1-5][0-9]|60)\.exp_probs_b\.bias=f32=locked'
+  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_norm\.weight$=f32=locked'
+  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a\.weight$=q8_0=locked'
+  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a_norm\.weight$=f32=locked'
+  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_b\.weight$=q8_0=locked'
+  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_norm\.weight$=f32=locked'
+  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_output\.weight$=q8_0=locked'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.exp_probs_b\.bias$=f32=locked'
 
   # GPU Only
-  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_mqa\.weight=q8_0=locked'
+  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_mqa\.weight$=q8_0=locked'
 
   # GPU Only
-  '^blk\.[0-2]\.ffn_down\.weight=q8_0'
-  '^blk\.[0-2]\.ffn_up\.weight=q8_0'
-  '^blk\.[0-2]\.ffn_gate\.weight=q8_0'
-  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_inp\.weight=q8_0=locked'
-  '^blk\.([0-9]|[1-5][0-9]|60)\.ffn_norm\.weight=q8_0=locked'
+  '^blk\.[0-2]\.ffn_down\.weight$=q8_0'
+  '^blk\.[0-2]\.ffn_up\.weight$=q8_0'
+  '^blk\.[0-2]\.ffn_gate\.weight$=q8_0'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_inp\.weight$=q8_0=locked'
+  '^blk\.([0-9]|[1-5][0-9]|60)\.ffn_norm\.weight$=q8_0=locked'
 
   ## GPU-loaded ffn_*_shexp
-  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_shexp\.weight=iq3_xxs'
-  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_shexp\.weight=iq3_xxs'
-  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_shexp\.weight=iq3_xxs'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_shexp\.weight$=iq3_xxs'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_shexp\.weight$=iq3_xxs'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_shexp\.weight$=iq3_xxs'
 
   ## CPU-friendly ffn_*_exps
-  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight=iq3_xxs'
-  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight=iq3_xxs'
-  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight=iq3_xxs'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight$=iq3_xxs'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight$=iq3_xxs'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight$=iq3_xxs'
 )
 
 # Extract patterns and associated qtypes
