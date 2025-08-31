@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-26-2025 -------------------- **#
+#** --------------- Updated: Aug-31-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -1542,7 +1542,7 @@ def main():
                 # if _size == 0:
                 #     _size = total_size_for_quant([n], qtype)
                 # size = _size / GIB
-                print(f"{re.escape(n)}=f32")
+                print(f"^{re.escape(n)}$=f32")
 
         groups = group_tensors(names)
         for base, full in groups.items():
@@ -1551,12 +1551,12 @@ def main():
                 if not displayed_already:
                     print(f"# Group: {re.escape(base)}")
                     displayed_already = True
-                print(f"{re.escape(name)}={pre_assignments.get(name,'')}")
+                print(f"^{re.escape(name)}$={pre_assignments.get(name,'')}")
             for name in sorted((n for n in full if n in values), key=lambda n: values[n], reverse=True):
                 if not displayed_already:
                     print(f"# Group: {re.escape(base)}")
                     displayed_already = True
-                print(f"{re.escape(name)}={assignments[cls].get(name,'')}")
+                print(f"^{re.escape(name)}$={assignments[cls].get(name,'')}")
 
     # Summary of tensor sizes per class
     print("\n## Summary of tensor sizes per class")

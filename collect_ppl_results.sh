@@ -56,23 +56,23 @@ EOF
 USER_REGEX=(
   # Token embedding and output tensors (GPU)
   # note token_embd cannot be repacked quant type
-  '^output\.weight'
-  '^token_embd\.weight'
+  '^output\.weight$'
+  '^token_embd\.weight$'
 
   # GPU Only
-  '^blk\.[0-2]\.ffn_down\.weight'
-  '^blk\.[0-2]\.ffn_up\.weight'
-  '^blk\.[0-2]\.ffn_gate\.weight'
+  '^blk\.[0-2]\.ffn_down\.weight$'
+  '^blk\.[0-2]\.ffn_up\.weight$'
+  '^blk\.[0-2]\.ffn_gate\.weight$'
 
   ## GPU-loaded ffn_*_shexp
-  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_shexp\.weight'
-  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_shexp\.weight'
-  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_shexp\.weight'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_shexp\.weight$'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_shexp\.weight$'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_shexp\.weight$'
 
   ## CPU-loaded ffn_*_exps
-  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight'
-  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight'
-  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight$'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight$'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight$'
 )
 
 # Default output CSV filename (can be overridden via --output-csv)

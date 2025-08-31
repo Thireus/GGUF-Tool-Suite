@@ -58,9 +58,9 @@ from matplotlib.axes import Axes
 
 # ============== USER CONFIGURATION ==============
 USER_REGEX = [
-  r'^blk\.([0-9]|[1-2][0-9]|3[0-5])\.ffn_gate\.weight',
-  r'^blk\.([0-9]|[1-2][0-9]|3[0-5])\.ffn_down\.weight',
-  r'^blk\.([0-9]|[1-2][0-9]|3[0-5])\.ffn_up\.weight',
+  r'^blk\.([0-9]|[1-2][0-9]|3[0-5])\.ffn_gate\.weight$',
+  r'^blk\.([0-9]|[1-2][0-9]|3[0-5])\.ffn_down\.weight$',
+  r'^blk\.([0-9]|[1-2][0-9]|3[0-5])\.ffn_up\.weight$',
 ]
 # =========== End USER CONFIGURATION ============
 
