@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-06-2025 -------------------- **#
+#** --------------- Updated: Aug-31-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -77,15 +77,15 @@ fi
 # _sha256sum reads either from file (if you pass an arg) or from stdin
 _sha256sum() {
   if (( $# > 0 )); then
-    # file‑mode: pass filename as $1
+    # file-mode: pass filename as $1
     "${sha256tool[@]}" "${args[@]}" "$1" | awk '{print $1}'
   else
-    # stdin‑mode: read data from pipe
+    # stdin-mode: read data from pipe
     "${sha256tool[@]}" "${args[@]}" | awk '{print $1}'
   fi
 }
 
-# --- pure‑Bash shuffle replacement for `shuf` ---
+# --- pure-Bash shuffle replacement for `shuf` ---
 shuf() {
   local lines=() line n i j tmp
   # Read all stdin lines into an array
@@ -113,7 +113,22 @@ BENCH_CSV=""
 BENCH_FROM_QTYPE=""
 CUSTOM_QTYPES=()
 CUSTOM_CHUNKS=""
+CUSTOM_CONTEXT=""
 SKIP_GPG=false # If true, skip the gpg signature verification of the signed files
+
+# GROUP_TENSORS_RAW: array of group specifications, each element is a comma-separated
+# list of regexes that define that group (e.g. 'a1,a2' or 'blk\..*\.ffn_up_exps.*,blk\..*\.ffn_gate_exps.*')
+GROUP_TENSORS_RAW=()
+# When the single token '[]' is passed, grouping is disabled
+GROUP_TENSORS_DISABLED=false
+
+# New: bench mode and sweep context
+# BENCH_MODE: 0 = PPL only (default), 1 = SWEEP only, 2 = PPL then SWEEP
+BENCH_MODE=0
+
+# New parameter: control infinite looping (defaults to false)
+# User can pass: --infinite-loop true|false
+INFINITE_LOOP="false"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -131,12 +146,44 @@ while [[ $# -gt 0 ]]; do
       SKIP_GPG=true
       shift
       ;;
+    --group-tensors)
+      shift
+      GROUP_TENSORS_RAW=()
+      # collect one or more group specs (nargs '+')
+      while [[ $# -gt 0 && ! "$1" =~ ^-- ]]; do
+        GROUP_TENSORS_RAW+=("$1"); shift
+      done
+      ;;
+    --mode)
+      BENCH_MODE="$2"; shift 2;;
+    --context)
+      CUSTOM_CONTEXT="$2"; shift 2;;
+    --infinite-loop)
+      INFINITE_LOOP="$2"; shift 2;;
     *) echo "Unknown argument: $1" >&2; exit 1;;
   esac
 done
 
+# Validate INFINITE_LOOP value
+if ! [[ "$INFINITE_LOOP" =~ ^(true|false)$ ]]; then
+  echo "Error: --infinite-loop must be 'true' or 'false'." >&2
+  exit 1
+fi
+
+# Default grouping if not provided or if the user explicitly passed '[]' as first group, disable grouping
+if (( ${#GROUP_TENSORS_RAW[@]} == 0 )) || ((( ${#GROUP_TENSORS_RAW[@]} == 1 )) && [[ "${GROUP_TENSORS_RAW[0]}" == "[]" ]]); then
+  GROUP_TENSORS_DISABLED=true
+  GROUP_TENSORS_RAW=()
+fi
+
 if [[ -n "$BENCH_CSV" && -z "$BENCH_FROM_QTYPE" ]]; then
   echo "Error: --benchmark-worst-tensors-from-qtype must be provided when --benchmark-worst-tensors is used." >&2
+  exit 1
+fi
+
+# Validate BENCH_MODE
+if ! [[ "$BENCH_MODE" =~ ^[0-2]$ ]]; then
+  echo "Error: --mode must be 0 (PPL), 1 (SWEEP), or 2 (PPL then SWEEP)." >&2
   exit 1
 fi
 
@@ -237,23 +284,32 @@ N_THREADS=8
 # 5. Number of chunks to process for PPL:
 PPL_COMMAND_CHUNKS_TO_PROCESS=${CUSTOM_CHUNKS:-250}
 
-# 6. List of qtypes to process in the loop - it is recommended to assess the tensors.map of these as the quant of some tensors may differ:
+# 6. Max context size for SWEEP:
+BENCH_COMMAND_CONTEXT_TO_PROCESS=${CUSTOM_CONTEXT:-8192}
+
+# 7. List of qtypes to process in the loop - it is recommended to assess the tensors.map of these as the quant of some tensors may differ:
 # If iq1_s_* is chosen, know that the bench of some tensors like token_embd will be faulty (will be using a higher qtype)
 # This is because these tensors have not been quantised to iq1_s due to llama refusal
 QTYPES=(${CUSTOM_QTYPES[@]:-"iq1_m_r4" "iq2_k"})
 
-# 7. Baseline QTYPE for baseline PPL computation
+# 8. Baseline QTYPE for baseline PPL computation
 # Try to use the highest baseline you can that fits in your VRAM+RAM
 BASELINE_QTYPE="iq3_xxs"
 
-# 8. PPL command template:
+# 9. PPL command template:
 PPL_COMMAND_TEMPLATE='CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0,2,1 ~/ik_llama-main-b3833-65dd65c-bin-win-cuda-12.8-x64/llama-perplexity \
 -m {MODEL_FILE} -mla 3 -fa -amb 1024 -fmoe -ctk f16 -c 512 -ngl 99 \
 -ot "blk\.(3|4|5)\.ffn_.*=CUDA0" -ot "blk\.(6|7|8)\.ffn_.*=CUDA1" -ot "blk\.(9|10)\.ffn_.*=CUDA2" \
 -ot exps=CPU -b 16384 -ub 8192 --warmup-batch --no-mmap --threads 36 --main-gpu 0 --seed 1337 \
 -f ../../wiki.test.raw --chunks ${PPL_COMMAND_CHUNKS_TO_PROCESS}'
 
-# 9. Pattern to identify the main model shard in LOCAL_MODEL_DIR.
+# 10. SWEEP command template
+SWEEP_COMMAND_TEMPLATE='CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0 ~/ik_llama-main-b4123-ee719cc-bin-win-cuda-12.8-x64-avx512/llama-sweep-bench \
+-m {MODEL_FILE} -mla 3 -fa -amb 1024 -fmoe -ctk f16 -ngl 99 \
+-b 4096 -ub 4096 --warmup-batch --no-mmap --threads 36 --main-gpu 0 --seed 1337 \
+-c ${BENCH_COMMAND_CONTEXT_TO_PROCESS}'
+
+# 11. Pattern to identify the main model shard in LOCAL_MODEL_DIR.
 MAIN_SHARD_PATTERN="*-00001-of-*.gguf"
 
 # =============== End USER CONFIGURATION ===============
@@ -428,7 +484,7 @@ for LOCAL_QTYPE in "${_LOCAL_QTYPES[@]}"; do
     for idx in "${!PATTERNS[@]}"; do
       if [[ "${PATTERN_QTYPES[$idx]}" == "$__LOCAL_QTYPE" ]] && [[ $tensor_name =~ ${PATTERNS[$idx]} ]]; then
         clean___LOCAL_QTYPE="${__LOCAL_QTYPE%_r[0-9]}"
-        [[ "$clean_dtype" != "$clean___LOCAL_QTYPE" ]] && echo "[$(timestamp)] ❌ Error: '$local_tensors_map' cannot be used for benchmarking because not pure '$__LOCAL_QTYPE' - tensor '$tensor_name' (user-specified qtype: '$__LOCAL_QTYPE') does not match dtype='$dtype' from tensor map file. Please choose another base qtype." >&2 && exit 9
+        [[ "${clean_dtype,,}" != "${clean___LOCAL_QTYPE,,}" ]] && echo "[$(timestamp)] ❌ Error: '$local_tensors_map' cannot be used for benchmarking because not pure '$__LOCAL_QTYPE' - tensor '$tensor_name' (user-specified qtype: '$__LOCAL_QTYPE') does not match dtype='$dtype' from tensor map file. Please choose another base qtype." >&2 && exit 9
         tasks+=("$fname:$expected_hash:$__LOCAL_QTYPE")
         break
       fi
@@ -437,7 +493,6 @@ for LOCAL_QTYPE in "${_LOCAL_QTYPES[@]}"; do
 done
 # Deduplicate tasks (just in case, but there shouldn't be any...)
 mapfile -t tasks < <(printf "%s\n" "${tasks[@]}" | sort -u)
-echo "[$(timestamp)] Validating \${#tasks[@]} shards with up to $N_THREADS threads…"
 
 # Function to process a single shard line
 # Now takes: filename, expected_hash, qtype
@@ -466,7 +521,7 @@ process_line() {
     return
   fi
 
-  echo "[$(timestamp)] Hash mismatch ($actual_hash ≠ $expected_hash). Re‑fetching $fname…" >&2
+  echo "[$(timestamp)] Hash mismatch ($actual_hash ≠ $expected_hash). Re-fetching $fname…" >&2
 
   local tmp="${LOCAL_DOWNLOAD_DIR}/$fname"
   local -a candidates
@@ -474,7 +529,7 @@ process_line() {
     # when f32, first try bf16, then all local qtypes
     candidates=( bf16 "${LOCAL_QTYPES[@]}" )
   else
-    # otherwise only re‑try the original
+    # otherwise only re-try the original
     candidates=( "$qtype" )
   fi
 
@@ -538,18 +593,37 @@ fi
 #     # Not strictly required in this script
 # fi
 
-# Baseline benchmark
-baseline_result_file="bench_result.baseline.${BASELINE_QTYPE}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
-if [[ ! -f "$baseline_result_file" ]]; then
-    echo "[$(timestamp)] Running baseline PPL benchmark for BASELINE_QTYPE='$BASELINE_QTYPE', chunks=$PPL_COMMAND_CHUNKS_TO_PROCESS."
-    main_model_file=$(find_main_model_file) || { echo "Error: main model file not found for baseline." >&2; [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"; exit 1; }
-    baseline_cmd="${PPL_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
-    eval "$baseline_cmd" > "$baseline_result_file" 2>&1 < /dev/null
-    estimate=$(grep "Final estimate" "$baseline_result_file" || true)
-    echo "Baseline benchmark completed for chunks=$PPL_COMMAND_CHUNKS_TO_PROCESS: $estimate"
+# Baseline benchmark (PPL baseline) — only run if PPL is enabled (mode == 0 or 2)
+if [[ "$BENCH_MODE" -eq 0 || "$BENCH_MODE" -eq 2 ]]; then
+  baseline_result_file="bench_ppl_result.baseline.${BASELINE_QTYPE}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+  if [[ ! -f "$baseline_result_file" ]]; then
+      echo "[$(timestamp)] Running baseline PPL benchmark for BASELINE_QTYPE='$BASELINE_QTYPE', chunks=$PPL_COMMAND_CHUNKS_TO_PROCESS."
+      main_model_file=$(find_main_model_file) || { echo "Error: main model file not found for baseline." >&2; [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"; exit 1; }
+      baseline_cmd="${PPL_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
+      eval "$baseline_cmd" > "$baseline_result_file" 2>&1 < /dev/null
+      estimate=$(grep "Final estimate" "$baseline_result_file" || true)
+      echo "Baseline PPL benchmark completed for chunks=$PPL_COMMAND_CHUNKS_TO_PROCESS: $estimate"
+  else
+      estimate=$(grep "Final estimate" "$baseline_result_file" || true)
+      echo "[$(timestamp)] Baseline PPL already exists for BASELINE_QTYPE='$BASELINE_QTYPE', chunks=$PPL_COMMAND_CHUNKS_TO_PROCESS: $estimate"
+  fi
 else
-    estimate=$(grep "Final estimate" "$baseline_result_file" || true)
-    echo "Baseline benchmark already exists for BASELINE_QTYPE='$BASELINE_QTYPE', chunks=$PPL_COMMAND_CHUNKS_TO_PROCESS: $estimate"
+  echo "[$(timestamp)] Skipping baseline PPL because --mode=${BENCH_MODE} (PPL disabled)."
+fi
+
+# Baseline for SWEEP if sweep is enabled
+if [[ "$BENCH_MODE" -eq 1 || "$BENCH_MODE" -eq 2 ]]; then
+  sweep_baseline_result_file="bench_sweep_result.baseline.${BASELINE_QTYPE}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
+  if [[ ! -f "$sweep_baseline_result_file" ]]; then
+      echo "[$(timestamp)] Running baseline SWEEP benchmark for BASELINE_QTYPE='$BASELINE_QTYPE', context=$BENCH_COMMAND_CONTEXT_TO_PROCESS."
+      main_model_file=$(find_main_model_file) || { echo "Error: main model file not found for sweep baseline." >&2; [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"; exit 1; }
+      sweep_baseline_cmd="${SWEEP_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
+      # Ensure ${BENCH_COMMAND_CONTEXT_TO_PROCESS} expands in the command by using eval
+      eval "$sweep_baseline_cmd" > "$sweep_baseline_result_file" 2>&1 < /dev/null
+      echo "Baseline SWEEP benchmark completed for context=$BENCH_COMMAND_CONTEXT_TO_PROCESS."
+  else
+      echo "Baseline SWEEP already exists for BASELINE_QTYPE='$BASELINE_QTYPE', context=$BENCH_COMMAND_CONTEXT_TO_PROCESS."
+  fi
 fi
 
 # Startup logging
@@ -562,8 +636,29 @@ for pat in "${USER_REGEX[@]}"; do
     echo "  - $pat"
 done
 echo "PPL command template: $PPL_COMMAND_TEMPLATE"
+echo "SWEEP command template: $SWEEP_COMMAND_TEMPLATE"
 echo "Main shard pattern: $MAIN_SHARD_PATTERN"
 echo "Use SHA256 verification: $USE_SHA256"
+echo "Benchmark mode: $BENCH_MODE (0=PPL,1=SWEEP,2=PPL+SWEEP)"
+echo "Sweep context (-c): $BENCH_COMMAND_CONTEXT_TO_PROCESS"
+if [[ "$GROUP_TENSORS_DISABLED" == "true" ]]; then
+  echo "Group tensors: DISABLED"
+else
+  echo "Group tensors: ENABLED; groups:"
+  for g in "${GROUP_TENSORS_RAW[@]}"; do
+    echo "  - $g"
+  done
+fi
+
+# helper checks for enabled runs
+need_run_ppl() {
+  # PPL if mode==0 or mode==2
+  if [[ "$BENCH_MODE" -eq 0 || "$BENCH_MODE" -eq 2 ]]; then return 0; else return 1; fi
+}
+need_run_sweep() {
+  # SWEEP if mode==1 or mode==2
+  if [[ "$BENCH_MODE" -eq 1 || "$BENCH_MODE" -eq 2 ]]; then return 0; else return 1; fi
+}
 
 shuffle_shards_by_tensor_patterns() {
   local assoc_name=$1
@@ -654,7 +749,7 @@ shuffle_tensors_by_pattern() {
   # nameref for input tensor list
   local -n _tensors=$in_name
 
-  # 1) split into non‑numeric vs numeric
+  # 1) split into non-numeric vs numeric
   local non_num=() numeric=()
   for t in "${_tensors[@]}"; do
     if [[ $t =~ [0-9] ]]; then
@@ -664,13 +759,13 @@ shuffle_tensors_by_pattern() {
     fi
   done
 
-  # 2) shuffle non‑numeric group
+  # 2) shuffle non-numeric group
   local shuffled_non_num=()
   if (( ${#non_num[@]} )); then
     mapfile -t shuffled_non_num < <(printf '%s\n' "${non_num[@]}" | shuf)
   fi
 
-  # 3) bucket numeric tensors by pattern (replace digit‑runs with \.[0-9]+\.)
+  # 3) bucket numeric tensors by pattern (replace digit-runs with \.[0-9]+\.)
   declare -A pat_to_tensors
   for t in "${numeric[@]}"; do
     local pat="^$(sed -E 's/[0-9]+/\\\.[0-9]+\\\./g' <<<"$t")\$"
@@ -708,7 +803,7 @@ shuffle_tensors_by_pattern() {
     done
   done
 
-  # 7) combine non‑numeric first, then ordered numeric
+  # 7) combine non-numeric first, then ordered numeric
   local __result=()
   (( ${#shuffled_non_num[@]} )) && __result+=("${shuffled_non_num[@]}")
   (( ${#ordered_num[@]}    )) && __result+=("${ordered_num[@]}")
@@ -717,8 +812,72 @@ shuffle_tensors_by_pattern() {
   eval "${out_name}=(\"\${__result[@]}\")"
 }
 
-# Infinite loop: for each qtype and tensor, until all benchmarks exist; then sleep 60s and repeat
-while true; do
+# find_group_index_for_tensor <tensor> -> prints group index (0-based) or -1
+find_group_index_for_tensor() {
+  local tensor="$1"
+  if [[ "$GROUP_TENSORS_DISABLED" == "true" ]]; then
+    printf '%s\n' -1
+    return
+  fi
+  for idx in "${!GROUP_TENSORS_RAW[@]}"; do
+    local group_raw="${GROUP_TENSORS_RAW[$idx]}"
+    IFS=',' read -r -a regs <<< "$group_raw"
+    for reg in "${regs[@]}"; do
+      # trim spaces
+      reg="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$reg")"
+      [[ -z "$reg" ]] && continue
+      if [[ $tensor =~ $reg ]]; then
+        printf '%s\n' "$idx"
+        return
+      fi
+    done
+  done
+  printf '%s\n' -1
+}
+
+# collect_group_members <group_idx> <out_array_name>
+# populates the out array with all tensors present in current tensor_to_shard that match any regex in the group
+collect_group_members() {
+  local gidx="$1"
+  local -n out_arr=$2
+  out_arr=()
+  local group_raw="${GROUP_TENSORS_RAW[$gidx]}"
+  IFS=',' read -r -a regs <<< "$group_raw"
+  for reg in "${regs[@]}"; do
+    reg="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$reg")"
+    [[ -z "$reg" ]] && continue
+    for t in "${!tensor_to_shard[@]}"; do
+      if [[ $t =~ $reg ]]; then
+        if [[ ! " ${out_arr[*]} " =~ " $t " ]]; then
+          out_arr+=("$t")
+        fi
+      fi
+    done
+  done
+}
+
+# get_result_file_for_tensor <tensor> <qtype> -> prints both result filenames (PPL and SWEEP) and sets LAST_GROUP_IDX
+LAST_GROUP_IDX=-1
+get_result_file_for_tensor() {
+  local tensor="$1"; local qtype="$2"
+  gid=$(find_group_index_for_tensor "$tensor")
+  if (( gid >= 0 )); then
+    ppl="bench_ppl_result.group${gid}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+    sweep="bench_sweep_result.group${gid}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
+    LAST_GROUP_IDX=$gid
+  else
+    ppl="bench_ppl_result.${tensor}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+    sweep="bench_sweep_result.${tensor}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
+    LAST_GROUP_IDX=-1
+  fi
+  # print: <ppl_filename> <sweep_filename>
+  printf '%s %s\n' "$ppl" "$sweep"
+}
+
+# Instead of a raw `while true; do ... done`, wrap the main body in a function and control
+# whether it runs infinitely or just once based on the INFINITE_LOOP flag.
+run_main_loop() {
+
     for qtype in "${QTYPES[@]}"; do
         # Uppercase version for remote directory name
         qtype_up="${qtype^^}"
@@ -758,6 +917,8 @@ while true; do
         # Parse tensors.${qtype}.map: lines format assumed: filename.gguf:sha256hash:tensor_name:shape=...:dtype=...:elements=...:bytes=...
         # For each line, if tensor_name matches any USER_REGEX, then schedule that filename for benchmarking.
         declare -A shard_to_tensors=()  # map shard filename -> space-separated list of tensor_names
+        declare -A shard_to_hash=()     # map shard filename -> expected hash from map
+        declare -A tensor_to_shard=()   # map tensor_name -> shard filename
         while IFS= read -r line; do
             # Skip empty lines
             [[ -z "$line" ]] && continue
@@ -772,7 +933,7 @@ while true; do
               [[ -n "$locked" ]] && continue # Skip locked tensors
               if [[ $tensor_name =~ $pat ]]; then
                 clean_qtype="${qtype%_r[0-9]}"
-                [[ "$clean_dtype" != "$clean_qtype" ]] && echo "[$(timestamp)] ⚠️ Warning: '$local_tensors_map' cannot be used for benchmarking because not pure '$qtype' - tensor '$tensor_name' (user-specified qtype: '$qtype') does not match dtype='$dtype' from tensor map file. Please choose another target qtype or exclude this tensor. Skipping this qtype." >&2 && exit 10
+                [[ "${clean_dtype,,}" != "${clean_qtype,,}" ]] && echo "[$(timestamp)] ⚠️ Warning: '$local_tensors_map' cannot be used for benchmarking because not pure '$qtype' - tensor '$tensor_name' (user-specified qtype: '$qtype') does not match dtype='$dtype' from tensor map file. Please choose another target qtype or exclude this tensor. Skipping this qtype." >&2 && break
                 # Append tensor_name to shard_to_tensors["$fname"], avoiding duplicates
                 if [[ -z "${shard_to_tensors[$fname]:-}" ]]; then
                   shard_to_tensors["$fname"]="$tensor_name"
@@ -783,6 +944,9 @@ while true; do
                     shard_to_tensors["$fname"]="${existing} $tensor_name"
                   fi
                 fi
+                # store shard hash and tensor->shard mapping for later group processing
+                shard_to_hash["$fname"]="$file_hash"
+                tensor_to_shard["$tensor_name"]="$fname"
                 break
               fi
             done
@@ -805,6 +969,45 @@ while true; do
         # Organise shards so that the ones with tensors that have less layers come first because these tensors cannot be interpolated easily, so it's best to process them first
         shuffle_shards_by_tensor_patterns shard_to_tensors shuffled_shard_keys
 
+        declare -A PROCESSED_TENSOR=()
+        if [[ "$GROUP_TENSORS_DISABLED" != "true" ]]; then
+          for gidx in "${!GROUP_TENSORS_RAW[@]}"; do
+            # collect group members that exist in this tensor_to_shard set
+            collect_group_members "$gidx" tmp_members_group
+            if (( ${#tmp_members_group[@]} )); then
+              # check files for both PPL and SWEEP as required by BENCH_MODE
+              ppl_group_file="bench_ppl_result.group${gidx}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+              sweep_group_file="bench_sweep_result.group${gidx}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
+
+              ppl_done=false; sweep_done=false
+              if need_run_ppl; then [[ -f "$ppl_group_file" ]] && ppl_done=true || ppl_done=false; else ppl_done=true; fi
+              if need_run_sweep; then [[ -f "$sweep_group_file" ]] && sweep_done=true || sweep_done=false; else sweep_done=true; fi
+
+              if [[ "$ppl_done" == "true" && "$sweep_done" == "true" ]]; then
+                for mt in "${tmp_members_group[@]}"; do PROCESSED_TENSOR["$mt"]=1; done
+                echo "[$(timestamp)] Found existing group result(s): marking ${#tmp_members_group[@]} member(s) as processed."
+              fi
+            fi
+          done
+        fi
+
+        # mark individual per-tensor results too (only if not already marked via a group)
+        for t in "${!tensor_to_shard[@]}"; do
+          if [[ -z "${PROCESSED_TENSOR[$t]:-}" ]]; then
+            ppl_indf="bench_ppl_result.${t}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+            sweep_indf="bench_sweep_result.${t}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
+
+            ppl_done=false; sweep_done=false
+            if need_run_ppl; then [[ -f "$ppl_indf" ]] && ppl_done=true || ppl_done=false; else ppl_done=true; fi
+            if need_run_sweep; then [[ -f "$sweep_indf" ]] && sweep_done=true || sweep_done=false; else sweep_done=true; fi
+
+            if [[ "$ppl_done" == "true" && "$sweep_done" == "true" ]]; then
+              PROCESSED_TENSOR["$t"]=1
+              echo "[$(timestamp)] Found existing individual result(s): $t -> marking processed."
+            fi
+          fi
+        done
+
         # Loop over each shard filename and its tensor names
         for shard_fname in "${shuffled_shard_keys[@]}"; do
             # For each tensor_name in this shard
@@ -814,9 +1017,209 @@ while true; do
             shuffle_tensors_by_pattern tensor_list shuffled_tensor_list
             
             for tensor_name in "${shuffled_tensor_list[@]}"; do
-                result_file="bench_result.${tensor_name}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
-                if [[ -f "$result_file" ]]; then
-                    echo "[$(timestamp)] Result already exists for tensor='$tensor_name', qtype='$qtype' -> $result_file. Skipping."
+                # If this tensor was pre-marked as processed, skip
+                if [[ "${PROCESSED_TENSOR[$tensor_name]:-}" == "1" ]]; then
+                  continue
+                fi
+
+                # Determine result file for this tensor (group-aware)
+                group_idx_for_tensor=$(find_group_index_for_tensor "$tensor_name")
+                if (( group_idx_for_tensor >= 0 )); then
+                  # group path
+                  result_file_ppl="bench_ppl_result.group${group_idx_for_tensor}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+                  result_file_sweep="bench_sweep_result.group${group_idx_for_tensor}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
+                else
+                  # individual
+                  result_file_ppl="bench_ppl_result.${tensor_name}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+                  result_file_sweep="bench_sweep_result.${tensor_name}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
+                fi
+
+                # If tensor belongs to a group and grouping is enabled, handle group processing
+                if (( group_idx_for_tensor >= 0 )); then
+                  # collect all group members present in tensor_to_shard
+                  collect_group_members "$group_idx_for_tensor" group_members
+                  # determine which members still need benchmarking (not already processed)
+                  to_bench=()
+                  for gm in "${group_members[@]}"; do
+                    if [[ -z "${PROCESSED_TENSOR[$gm]:-}" ]]; then
+                      to_bench+=("$gm")
+                    fi
+                  done
+
+                  if (( ${#to_bench[@]} == 0 )); then
+                    # nothing to do (maybe already processed by another tensor)
+                    for gm in "${group_members[@]}"; do PROCESSED_TENSOR["$gm"]=1; done
+                    continue
+                  fi
+
+                  echo "[$(timestamp)] Tensor '$tensor_name' belongs to group #$group_idx_for_tensor; will benchmark group of ${#to_bench[@]} tensor(s)."
+
+                  # compute unique shards needed for the group
+                  declare -A shards_needed_map=()
+                  declare -A shard_expected_hash=()
+                  for t in "${to_bench[@]}"; do
+                    s="${tensor_to_shard[$t]}"
+                    shards_needed_map["$s"]=1
+                    shard_expected_hash["$s"]="${shard_to_hash[$s]:-}"
+                  done
+                  shards_needed=("${!shards_needed_map[@]}")
+
+                  # Download all required shards for the group (with verification)
+                  group_fetch_ok=true
+                  downloaded_shards=()
+                  for s in "${shards_needed[@]}"; do
+                    local_shard_tmp="${LOCAL_DOWNLOAD_DIR}/${s}"
+                    rm -f "$local_shard_tmp"
+                    chunk_id="$(echo $s | sed -nE 's/.*-([0-9]{5})-of-[0-9]{5}\.gguf$/\1/p')"
+                    expected_hash="${shard_expected_hash[$s]:-}"
+
+                    fetched=false
+                    while true; do
+                      echo "[$(timestamp)] Group: fetching shard '$s' (qtype=$qtype) ..."
+                      if run_downloader "${qtype^^}" "${chunk_id}" "${LOCAL_DOWNLOAD_DIR}" "${s}"; then
+                        echo "[$(timestamp)] Group: fetched $local_shard_tmp"
+                      else
+                        echo "[$(timestamp)] ⚠️ Warning: Could not fetch shard '$s' from remote while processing group. Aborting group." >&2
+                        break
+                      fi
+
+                      if [[ -n "$expected_hash" && "$USE_SHA256" == "true" ]]; then
+                        actual_hash="$(_sha256sum "$local_shard_tmp" | awk '{print $1}')"
+                        if [[ "$actual_hash" == "$expected_hash" ]]; then
+                          fetched=true
+                          break
+                        else
+                          echo "[$(timestamp)] Group: SHA256 mismatch for $s: got $actual_hash, expected $expected_hash. Retrying in 10s..." >&2
+                          sleep 10
+                          continue
+                        fi
+                      else
+                        fetched=true
+                        break
+                      fi
+                    done
+
+                    if [[ "$fetched" != true ]]; then
+                      group_fetch_ok=false
+                      break
+                    fi
+                    downloaded_shards+=("$local_shard_tmp")
+                  done
+
+                  if [[ "$group_fetch_ok" != true ]]; then
+                    echo "[$(timestamp)] ⚠️ Group fetch failed; skipping group and restoring any partial downloads." >&2
+                    for df in "${downloaded_shards[@]:-}"; do rm -f "$df"; done
+                    continue
+                  fi
+
+                  # Backup originals and replace with downloaded files for all required shards
+                  declare -A backups_made=()
+                  replace_ok=true
+                  for s in "${shards_needed[@]}"; do
+                    if [[ $s =~ -([0-9]{5}-of-[0-9]{5})\.gguf$ ]]; then
+                      suffix="${BASH_REMATCH[1]}.gguf"
+                      original_file=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-${suffix}" | grep -vF "$LOCAL_DOWNLOAD_DIR/" | head -n1 || true)
+                      if [[ -z "$original_file" ]]; then
+                        echo "[$(timestamp)] ⚠️ Warning: Could not find local original shard matching '*-${suffix}' in $LOCAL_MODEL_DIR. Aborting group." >&2
+                        replace_ok=false
+                        break
+                      fi
+                      backup_file="${original_file}.bak"
+                      if [[ -f "$backup_file" ]]; then
+                        echo "[$(timestamp)] Note: Backup already exists: $backup_file. Overwriting."
+                        rm -f "$backup_file"
+                      fi
+                      mv -f "$original_file" "$backup_file"
+                      backups_made["$original_file"]="$backup_file"
+                      # Move downloaded file into place
+                      mv -f "${LOCAL_DOWNLOAD_DIR}/${s}" "$original_file"
+                      echo "[$(timestamp)] Replaced original shard $original_file with downloaded shard."
+                    else
+                      echo "[$(timestamp)] ⚠️ Warning: Could not extract suffix from shard '$s'. Aborting group." >&2
+                      replace_ok=false
+                      break
+                    fi
+                  done
+
+                  if [[ "$replace_ok" != true ]]; then
+                    # restore any backups
+                    for orig in "${!backups_made[@]}"; do
+                      mv -f "${backups_made[$orig]}" "$orig"
+                      echo "[$(timestamp)] Restored $orig from backup after failed group replace."
+                    done
+                    continue
+                  fi
+
+                  # Run benchmark(s) for the group depending on mode
+                  group_result_file_ppl="bench_ppl_result.group${group_idx_for_tensor}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+                  group_result_file_sweep="bench_sweep_result.group${group_idx_for_tensor}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
+
+                  # Run PPL first if required
+                  if need_run_ppl; then
+                    echo "[$(timestamp)] Running PPL for group #${group_idx_for_tensor} -> $group_result_file_ppl"
+                    cmd="${PPL_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
+                    if eval "$cmd" > "$group_result_file_ppl" 2>&1 < /dev/null; then
+                      echo "[$(timestamp)] Group PPL finished and saved to $group_result_file_ppl"
+                    else
+                      echo "[$(timestamp)] ⚠️ Warning: Group PPL command exited non-zero. See $group_result_file_ppl for details." >&2
+                    fi
+                  fi
+
+                  # Run SWEEP if required (and after PPL if mode==2)
+                  if need_run_sweep; then
+                    echo "[$(timestamp)] Running SWEEP for group #${group_idx_for_tensor} -> $group_result_file_sweep"
+                    cmd="${SWEEP_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
+                    if eval "$cmd" > "$group_result_file_sweep" 2>&1 < /dev/null; then
+                      echo "[$(timestamp)] Group SWEEP finished and saved to $group_result_file_sweep"
+                    else
+                      echo "[$(timestamp)] ⚠️ Warning: Group SWEEP command exited non-zero. See $group_result_file_sweep for details." >&2
+                    fi
+                  fi
+
+                  # Mark all group members as processed only if all required outputs exist
+                  all_done=true
+                  if need_run_ppl; then [[ -f "$group_result_file_ppl" ]] || all_done=false; fi
+                  if need_run_sweep; then [[ -f "$group_result_file_sweep" ]] || all_done=false; fi
+
+                  if [[ "$all_done" == "true" ]]; then
+                    for t in "${group_members[@]}"; do PROCESSED_TENSOR["$t"]=1; done
+                  else
+                    echo "[$(timestamp)] ⚠️ Warning: Not all required group result files produced; group members will remain unmarked for re-run."
+                  fi
+
+                  # Restore originals from backups
+                  for orig in "${!backups_made[@]}"; do
+                    mv -f "${backups_made[$orig]}" "$orig"
+                    echo "[$(timestamp)] Restored original shard $orig from backup."
+                  done
+
+                  # Clean up any leftover temp files
+                  for df in "${downloaded_shards[@]:-}"; do rm -f "$df"; done
+
+                  # If termination requested, exit now
+                  if [[ "$EXIT_PENDING" -eq 1 ]]; then
+                    echo "[$(timestamp)] 💀 Termination flag detected; exiting after finishing current operation."
+                    [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+                    exit 0
+                  fi
+
+                  # done group processing; move to next tensor
+                  continue
+                fi
+
+                # Fallback to original single-tensor behaviour
+                # Recompute per-tensor result_file (non-group)
+                result_file_ppl="bench_ppl_result.${tensor_name}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+                result_file_sweep="bench_sweep_result.${tensor_name}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
+
+                # If both required results are already present, skip
+                ppl_done=false; sweep_done=false
+                if need_run_ppl; then [[ -f "$result_file_ppl" ]] && ppl_done=true || ppl_done=false; else ppl_done=true; fi
+                if need_run_sweep; then [[ -f "$result_file_sweep" ]] && sweep_done=true || sweep_done=false; else sweep_done=true; fi
+
+                if [[ "$ppl_done" == "true" && "$sweep_done" == "true" ]]; then
+                    echo "[$(timestamp)] Result(s) already exist for tensor='$tensor_name', qtype='$qtype' -> skipping."
+                    PROCESSED_TENSOR["$tensor_name"]=1
                     continue
                 fi
 
@@ -916,15 +1319,39 @@ while true; do
                 mv -f "$local_shard_tmp" "$original_file"
                 echo "[$(timestamp)] Replaced original shard with downloaded shard."
 
-                # Run PPL command
-                # Replace {MODEL_FILE} in template with main_model_file
-                cmd="${PPL_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
-                echo "[$(timestamp)] Running PPL command for tensor='$tensor_name', qtype='$qtype'..."
-                # Redirect stdout and stderr into result file, prevent interactive stdin
-                eval "$cmd" > "$result_file" 2>&1 < /dev/null || {
-                    echo "[$(timestamp)] ⚠️ Warning: PPL command exited with non-zero status for tensor='$tensor_name'. See $result_file for details." >&2
-                }
-                echo "[$(timestamp)] 👀 PPL output (stdout+stderr) saved to $result_file"
+                # Run benchmark(s) according to mode
+                # PPL:
+                if need_run_ppl; then
+                  echo "[$(timestamp)] Running PPL command for tensor='$tensor_name', qtype='$qtype'..."
+                  cmd="${PPL_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
+                  if eval "$cmd" > "$result_file_ppl" 2>&1 < /dev/null; then
+                    echo "[$(timestamp)] 👀 PPL output (stdout+stderr) saved to $result_file_ppl"
+                  else
+                    echo "[$(timestamp)] ⚠️ Warning: PPL command exited with non-zero status for tensor='$tensor_name'. See $result_file_ppl for details." >&2
+                  fi
+                fi
+
+                # SWEEP:
+                if need_run_sweep; then
+                  echo "[$(timestamp)] Running SWEEP command for tensor='$tensor_name', qtype='$qtype'..."
+                  cmd="${SWEEP_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
+                  if eval "$cmd" > "$result_file_sweep" 2>&1 < /dev/null; then
+                    echo "[$(timestamp)] 👀 SWEEP output (stdout+stderr) saved to $result_file_sweep"
+                  else
+                    echo "[$(timestamp)] ⚠️ Warning: SWEEP command exited with non-zero status for tensor='$tensor_name'. See $result_file_sweep for details." >&2
+                  fi
+                fi
+
+                # Mark processed only if all required outputs exist
+                all_done=true
+                if need_run_ppl; then [[ -f "$result_file_ppl" ]] || all_done=false; fi
+                if need_run_sweep; then [[ -f "$result_file_sweep" ]] || all_done=false; fi
+
+                if [[ "$all_done" == "true" ]]; then
+                  PROCESSED_TENSOR["$tensor_name"]=1
+                else
+                  echo "[$(timestamp)] ⚠️ Warning: Not all required result files produced for '$tensor_name'; it will remain unmarked for re-run."
+                fi
 
                 # Restore original shard
                 mv -f "$backup_file" "$original_file"
@@ -949,7 +1376,17 @@ while true; do
 
         echo "[$(timestamp)] 🎉 Finished qtype='$qtype'."
     done
+}
 
+# Run either infinite loop or single run according to INFINITE_LOOP flag
+if [[ "$INFINITE_LOOP" == "true" ]]; then
+  while true; do
+    run_main_loop
     echo "[$(timestamp)] ✅ All qtypes processed. Sleeping 60 seconds before next check..."
     sleep 60
-done
+  done
+else
+  # Single run (no infinite loop)
+  run_main_loop
+  echo "[$(timestamp)] ✅ All qtypes processed. (single run mode: --infinite-loop=false)"
+fi
