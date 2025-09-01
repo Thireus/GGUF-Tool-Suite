@@ -4,7 +4,7 @@ Run the following command to interact with the graphs:
 ```
 git clone https://github.com/Thireus/GGUF-Tool-Suite/
 cd GGUF-Tool-Suite/quants_graphs
-../compare_results.py --ppl-results ppl_results.csv --pp-results pp_results_cpu-Intel-7980XE.csv,pp_results_cuda-RTX-6000-Pro.csv --tg-results tg_results_cpu-Intel-7980XE.csv,tg_results_cuda-RTX-6000-Pro.csv --group-tensors '.*' --show --export-csv quant_score --export-dir .
+../compare_results.py --ppl-results ppl_results.csv --pp-results pp_results_cpu-AMD-5950X.csv,pp_results_cpu-Intel-7980XE.csv,pp_results_cuda-RTX-6000-Pro.csv --tg-results tg_results_cpu-AMD-5950X.csv,tg_results_cpu-Intel-7980XE.csv,tg_results_cuda-RTX-6000-Pro.csv --group-tensors '.*' --show --export-csv quant_score --export-dir . --ppl-factor 2
 ```
 
 The best quants are found at the top layer for each hardware considered, for instance:
@@ -12,6 +12,8 @@ The best quants are found at the top layer for each hardware considered, for ins
 ![Best_Cuda_Quants.png](Best_Cuda_Quants.png)
 
 ![Best_Intel_Quants.png](Best_Intel_Quants.png)
+
+![Best_AMD_Quants.png](Best_AMD_Quants.png)
 
 ## If you wish to produce similar graphs for your hardware:
 

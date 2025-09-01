@@ -1,3 +1,4 @@
+# Bad recipe because using old version of quant_assign, and incorrect ppl! - see issue #21
 ## Quant mix recipe created using Thireus' GGUF Tool Suite - https://gguf.thireus.com/
 # Model name: Qwen3-235B-A22B-Thinking-2507
 # Link to the original model: https://huggingface.co/Qwen/Qwen3-235B-A22B-Thinking-2507
@@ -21,25 +22,22 @@ blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_norm\.weight=f32
 blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_gate_inp\.weight=f32
 
 ## CPU-loaded ffn_*_exps
-# ffn_down_exps (down-extraction) — qbits: 6 5 4 
-blk\.(65|75|8[0-9]|6[8-9]|9[0-3]|7[7-9])\.ffn_down_exps\.weight=iq6_k
-blk\.(2|[5-6]|9|10|34|39|41|47|55|59|60|62|76|6[6-7]|7[0-1]|7[3-4])\.ffn_down_exps\.weight=iq5_k_r4
-blk\.([0-1]|[3-4]|[7-8]|40|61|72|5[6-8]|1[1-9]|5[0-4]|2[0-9]|4[8-9]|4[2-6]|6[3-4]|3[0-3]|3[5-8])\.ffn_down_exps\.weight=iq4_ks
+# ffn_down_exps (down-extraction) — qbits: 6 5 
+blk\.(79|8[0-9]|9[0-3])\.ffn_down_exps\.weight=iq6_k
+blk\.([0-9]|[1-6][0-9]|7[0-8])\.ffn_down_exps\.weight=iq5_k_r4
 
-# ffn_up_exps (up-extraction) — qbits: 6 5 4 
-blk\.(80|8[2-9]|9[0-3])\.ffn_up_exps\.weight=iq6_k
-blk\.(51|58|60|65|67|69|81|7[0-4]|7[6-9])\.ffn_up_exps\.weight=iq5_k_r4
-blk\.([0-9]|[1-4][0-9]|50|59|66|68|75|5[2-7]|6[1-4])\.ffn_up_exps\.weight=iq4_ks
+# ffn_up_exps (up-extraction) — qbits: 6 5 
+blk\.(8[2-9]|9[0-3])\.ffn_up_exps\.weight=iq6_k
+blk\.([0-9]|[1-7][0-9]|8[0-1])\.ffn_up_exps\.weight=iq5_k_r4
 
-# ffn_gate_exps (gate-extraction) — qbits: 6 5 4 
-blk\.(80|8[2-9]|9[0-3])\.ffn_gate_exps\.weight=iq6_k
-blk\.(51|58|60|65|67|69|81|7[0-4]|7[6-9])\.ffn_gate_exps\.weight=iq5_k_r4
-blk\.([0-9]|[1-4][0-9]|50|59|66|68|75|5[2-7]|6[1-4])\.ffn_gate_exps\.weight=iq4_ks
+# ffn_gate_exps (gate-extraction) — qbits: 6 5 
+blk\.(8[2-9]|9[0-3])\.ffn_gate_exps\.weight=iq6_k
+blk\.([0-9]|[1-7][0-9]|8[0-1])\.ffn_gate_exps\.weight=iq5_k_r4
 
 ## Summary of tensor sizes per class
 # GPU Total: 5.710 GiB (100.0%) | 5.71 GiB max, if all were q8_0 | 5.44 GiB min, if all were iq6_k
-# CPU Total: 128.918 GiB (73.6%) | 175.15 GiB max, if all were iq6_k | 112.36 GiB min, if all were iq4_ks
-# GPU+CPU Total: 134.628 GiB (86.8%)
+# CPU Total: 149.520 GiB (85.4%) | 175.15 GiB max, if all were iq6_k | 145.41 GiB min, if all were iq5_k_r4
+# GPU+CPU Total: 155.229 GiB (92.7%)
 
 ## Summary of tensor counts and bpw per qtype
 #
@@ -52,15 +50,14 @@ blk\.([0-9]|[1-4][0-9]|50|59|66|68|75|5[2-7]|6[1-4])\.ffn_gate_exps\.weight=iq4_
 #
 # CPU-loaded quants:
 # QTYPE		Count	BPW	Assigned GiB	% Assigned	Max GiB (all)
-# iq6_k     	47 	6.625 	 29.19 GiB	16.7%		175.15
-# iq5_k_r4  	52 	5.5   	 26.81 GiB	18.4%		145.41
-# iq4_ks    	183	4.25  	 72.91 GiB	64.9%		112.36
+# iq6_k     	39 	6.625 	 24.22 GiB	13.8%		175.15
+# iq5_k_r4  	243	5.5   	125.30 GiB	86.2%		145.41
 #
-# -Average BPW: 4.9191
+# -Average BPW: 5.6718
 #
 # -Notes:
 # - '+' means user-defined pre-assigned tensors, or tensor missing from csv data or f32 tensors
-# - Recipe produced on the 2025-08-19 21:32:45 UTC+0000 using Thireus' GGUF tools (https://gguf.thireus.com/)
+# - Recipe produced on the 2025-08-14 10:50:18 UTC+0000 using Thireus' GGUF tools (https://gguf.thireus.com/)
 # - Script SHA-256: 6d32a7363bd5b80cbcfc8ef09fa50fdba9a37bd998d8ba91005aec6fffed15c3
 # - Calibration dataset 'ppl_results.csv' SHA-256: 6251d5aeb5e3c42a328defefb4fa9930e5255c182f2f3dbe3d2b5bd0d6ed1000
 # - tensors.bf16.map SHA-256: a27fd8086310d07b113e4c8f1673f8b3250cf2e2967454e4f496b196e916fa35
@@ -69,8 +66,6 @@ blk\.([0-9]|[1-4][0-9]|50|59|66|68|75|5[2-7]|6[1-4])\.ffn_gate_exps\.weight=iq4_
 # - tensors.iq6_k.map model name: Qwen3-235B-A22B-Thinking-2507-THIREUS-IQ6_K-SPECIAL_TENSOR-01132-of-01132
 # - tensors.iq5_k_r4.map SHA-256: 7048eea1ed415f8669e680dd1e4943fd7d5575409faa50e5dfd00a296442cf70
 # - tensors.iq5_k_r4.map model name: Qwen3-235B-A22B-Thinking-2507-THIREUS-IQ5_K_R4-SPECIAL_TENSOR-01132-of-01132
-# - tensors.iq4_ks.map SHA-256: 09a74763282c42ec7629861c6a5303d8f421d3e505106e5c5c39b073f9dca23a
-# - tensors.iq4_ks.map model name: Qwen3-235B-A22B-Thinking-2507-THIREUS-IQ4_KS-SPECIAL_TENSOR-01132-of-01132
 # - tensors.q8_0.map SHA-256: 255e77346241c4dacf8f1ad75bc4131ab0f86e23eb8d12a260d09b6e79bc6bab
 # - tensors.q8_0.map model name: Qwen3-235B-A22B-Thinking-2507-THIREUS-Q8_0-SPECIAL_TENSOR-01132-of-01132
 # - tensors.iq1_m_r4.map SHA-256: 1a48c0a6ef6e492af570c3ca34e71048d785b0819ee3fe0ea87a976138f59715
@@ -78,10 +73,10 @@ blk\.([0-9]|[1-4][0-9]|50|59|66|68|75|5[2-7]|6[1-4])\.ffn_gate_exps\.weight=iq4_
 # - GPG signatures: PASSED
 # - Command used:
 # ../../quant_assign.py ppl_results.csv --tolerance 0.01 --cpu-irq-k 1.5 --gpu-irq-k 1.5 --gpu-assign-qtype iq5_k_r4 \
-# --cpu-tensors-max-size 129 --gpu-tensors-max-size 100% --exponential-factor 8 --cpu-tensors \
+# --cpu-tensors-max-size 120 --gpu-tensors-max-size 100% --exponential-factor 8 --cpu-tensors \
 # 'blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_down_exps\.weight' 'blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_up_exps\.weight' \
-# 'blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_gate_exps\.weight' --gpu-tensors '.*' --cpu-quants iq6_k iq5_k_r4 iq4_ks \
-# --gpu-quants q8_0 iq6_k --gpu-assign-tensors 'blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_k_b\.weight=q8_0' \
-# --harmonize-tensors 'blk\..*\.ffn_up_exps.*,blk\..*\.ffn_gate_exps.*' --harmonization-technique 3
+# 'blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_gate_exps\.weight' --gpu-tensors '.*' --cpu-quants iq6_k iq5_k_r4 --gpu-quants \
+# q8_0 iq6_k --gpu-assign-tensors 'blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_k_b\.weight=q8_0' --harmonize-tensors \
+# 'blk\..*\.ffn_up_exps.*,blk\..*\.ffn_gate_exps.*' --harmonization-technique 3
 
 ## THE END!
