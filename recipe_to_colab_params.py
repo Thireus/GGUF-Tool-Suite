@@ -227,7 +227,7 @@ def emit_parameters(params: Dict[str, Any]) -> str:
     # harmonize_tensors nested list printing
     ht = "[" + ", ".join(pretty_py_list(group) for group in params["harmonize_tensors"]) + "]"
     lines.append(f'harmonize_tensors = {ht}   #@param {{type:"raw"}}')
-    lines.append("# harmonization_technique: 1=max, 2=mean, 3=min (default)")
+    lines.append("# harmonization_technique: 0=disabled, 1=max, 2=mean, 3=min (default)")
     lines.append(f'harmonization_technique = {params["harmonization_technique"]}    #@param {{type:"integer"}}')
     lines.append("")
     lines.append("# calibration data qtype (leave empty for auto-selection which will choose the lowest bpw) - list of available qtypes can be found in the ppl_results.csv file")
@@ -379,6 +379,8 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
                     groups.append(parts)
             if groups:
                 params['harmonize_tensors'] = groups
+            else:
+                params['harmonize_tensors'] = ""
 
     # Fallback heuristics for gpu_quants if still missing
     if 'gpu_quants' not in params:
