@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-31-2025 -------------------- **#
+#** --------------- Updated: Sep-01-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -1057,14 +1057,14 @@ def main():
     parser.add_argument('--harmonize-tensors', nargs='+', default=[["blk\\..*\\.ffn_up_exps.*","blk\\..*\\.ffn_gate_exps.*"]],
                         help=('A Python literal list-of-lists of regex patterns. Each inner list declares a group of regexes whose matching tensors will be qtype harmonized **per layer**. ' 
                             "Example: --harmonize-tensors blk\\..\\*\\.ffn_up_exps.\\*,blk\\..\\*\\.ffn_gate_exps.\\* ... 'another_pat1,another_pat2'. "
-                            "Use --harmonize-tensors \"\" to disable harmonization. "
+                            "Use --harmonize-tensors \"\" to disable harmonization. Or use --harmonization-technique 0. "
                             "Note: harmonizing tensors to allow for fused ffn_up_exps and ffn_gate_exps can improve PP and TG speed, at the cost of slim restrictive dynamic quantization flexibility. "
                             "It is highly recommended to leave this parameter value default when using ik_llama.cpp for significant speed improvements (can be as high as +20%% speed gain) with MoE models - when using ik_llama.cpp with -fmoe 1 these tensors are fused, which can only happen if they are of the same qtype. " 
                             "Future versions of ik_llama.cpp may also take advantage of fused ffn_up_shexp and ffn_gate_shexp tensors. " ) )
-    parser.add_argument('--harmonization-technique', type=int, default=3, choices=[1,2,3],
-                        help=('Harmonization technique to use when --harmonize-tensors is set: 1=max, 2=mean, 3=min (default). ' 
+    parser.add_argument('--harmonization-technique', type=int, default=3, choices=[0,1,2,3],
+                        help=('Harmonization technique to use when --harmonize-tensors is set: 0=disabled, 1=max, 2=mean, 3=min (default). ' 
                             'Values are applied element-wise per layer across the matched tensors.'
-                            'Max ensures calibration data ppl measurement is not negatively degraded. Min will degrade calibration data accuracy but appears to give the best PPL results. Mean is a compromise in-between.'))
+                            'Max ensures calibration data ppl measurement is not negatively degraded. Min will degrade calibration data accuracy but appears to give the best PPL results. Mean is a compromise in-between. Disabled means harmonization is disabled.'))
     args = parser.parse_args()
 
     # ---- BEGIN pgpy-based “trusted-keys.asc” check ----
@@ -1144,7 +1144,13 @@ def main():
     # ---- NEW: Harmonize matching tensor rows ----
     # Convert nargs='+' form (list of comma-separated strings) into list-of-lists
     harmonize_groups = []
-    ht = args.harmonize_tensors
+    if args.harmonization_technique == 0:
+        ht = [''] # Disables harmonization
+    else:
+        ht = args.harmonize_tensors
+    
+    if ht and ht == ['']:
+        if INFO: print(f"[Info] Harmonization disabled by the user")
 
     if isinstance(ht, str):
         # old behaviour: user passed a Python literal string like '[["p1","p2"],["p3","p4"]]'
