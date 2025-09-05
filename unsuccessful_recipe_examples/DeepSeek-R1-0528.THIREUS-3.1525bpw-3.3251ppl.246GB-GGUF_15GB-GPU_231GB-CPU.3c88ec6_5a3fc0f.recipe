@@ -1,0 +1,98 @@
+# Bad recipe because using old version of quant_assign, and incorrect ppl! - see issue #21
+## Quant mix recipe created using Thireus' GGUF Tool Suite - https://gguf.thireus.com/
+# Model name: DeepSeek-R1-0528
+# Link to the original model: https://huggingface.co/deepseek-ai/DeepSeek-R1-0528
+
+## Model head & embeddings — qbits: 32 8 
+output_norm\.weight=f32
+token_embd\.weight=q8_0
+output\.weight=q8_0
+
+## Special attention kernels — single-quant only (llama-quantize takes care of it) — qbits: 8 
+blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=q8_0
+
+## Multi-headed attention parameters — qbits: 32 6 
+blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_norm\.weight=f32
+blk\.([0-9]|[1-5][0-9]|60)\.attn_q_b\.weight=iq6_k
+blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_b\.weight=iq6_k
+blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a_norm\.weight=f32
+blk\.([0-9]|[1-5][0-9]|60)\.attn_output\.weight=iq6_k
+blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_mqa\.weight=iq6_k
+blk\.([0-9]|[1-5][0-9]|60)\.attn_v_b\.weight=iq6_k
+blk\.([0-9]|[1-5][0-9]|60)\.attn_norm\.weight=f32
+blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a\.weight=iq6_k
+
+## Core FFN weights — qbits: 32 8 
+blk\.[0-2]\.ffn_gate\.weight=q8_0
+blk\.([0-9]|[1-5][0-9]|60)\.ffn_norm\.weight=f32
+blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_inp\.weight=f32
+blk\.[0-2]\.ffn_down\.weight=q8_0
+blk\.[0-2]\.ffn_up\.weight=q8_0
+
+## Other tensors — qbits: 32 
+blk\.([3-9]|[1-5][0-9]|60)\.exp_probs_b\.bias=f32
+
+## GPU-loaded ffn_*_shexp
+# ffn_down_shexp (down-projection) — qbits: 8 
+blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_shexp\.weight=q8_0
+
+# ffn_up_shexp (up-projection) — qbits: 8 
+blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_shexp\.weight=q8_0
+
+# ffn_gate_shexp (gate-projection) — qbits: 8 
+blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_shexp\.weight=q8_0
+
+## CPU-loaded ffn_*_exps
+# ffn_down_exps (down-extraction) — qbits: 4 3 2 1 
+blk\.(39|3[5-7]|4[0-2]|3[2-3]|4[7-9]|4[4-5])\.ffn_down_exps\.weight=iq4_ks
+blk\.(12|34|38|43|46|60|2[0-9]|3[0-1]|5[0-8])\.ffn_down_exps\.weight=iq3_k
+blk\.(14|16|59|1[8-9]|1[0-1])\.ffn_down_exps\.weight=iq2_k
+blk\.([3-9]|13|15|17)\.ffn_down_exps\.weight=iq1_m_r4
+
+# ffn_up_exps (up-extraction) — qbits: 4 3 2 1 
+blk\.(44|50)\.ffn_up_exps\.weight=iq4_ks
+blk\.(21|24|60|3[2-9]|5[1-7]|2[6-7]|4[5-9]|4[0-3])\.ffn_up_exps\.weight=iq3_k
+blk\.(3|[5-6]|8|20|25|1[7-8]|2[8-9]|5[8-9]|3[0-1]|2[2-3]|1[1-5])\.ffn_up_exps\.weight=iq2_k
+blk\.(4|7|9|10|16|19)\.ffn_up_exps\.weight=iq1_m_r4
+
+# ffn_gate_exps (gate-extraction) — qbits: 4 3 2 1 
+blk\.(44|46|4[8-9])\.ffn_gate_exps\.weight=iq4_ks
+blk\.(18|24|45|47|60|3[0-9]|5[0-9]|4[0-3]|2[7-9])\.ffn_gate_exps\.weight=iq3_k
+blk\.(5|19|2[0-2]|2[5-6]|1[2-6])\.ffn_gate_exps\.weight=iq2_k
+blk\.([3-4]|[6-9]|17|23|1[0-1])\.ffn_gate_exps\.weight=iq1_m_r4
+
+## Summary of tensor sizes per class
+# GPU Total: 15.642 GiB (100.0%) | 15.64 GiB max, if all were q8_0 | 15.64 GiB min, if all were q8_0
+# CPU Total: 231.000 GiB (71.4%) | 323.53 GiB max, if all were iq4_ks | 133.22 GiB min, if all were iq1_m_r4
+# GPU+CPU Total: 246.642 GiB (85.7%)
+
+## Summary of tensor counts and bpw per qtype
+#
+# GPU-loaded quants:
+# QTYPE		Count	BPW	Assigned GiB	% Assigned	Max GiB (all)
+# +f32       	361	32.0  	  0.40 GiB	-		-
+# +q8_0      	61 	8.5   	  0.51 GiB	-		-
+# q8_0      	185	8.5   	  5.54 GiB	100.0%		5.54
+# +iq6_k     	366	6.625 	  9.20 GiB	-		-
+#
+# CPU-loaded quants:
+# QTYPE		Count	BPW	Assigned GiB	% Assigned	Max GiB (all)
+# iq4_ks    	20 	4.25  	 37.19 GiB	11.5%		323.53
+# iq3_k     	88 	3.4375	132.34 GiB	50.6%		261.68
+# iq2_k     	40 	2.375 	 41.56 GiB	23.0%		180.80
+# iq1_m_r4  	26 	1.75  	 19.91 GiB	14.9%		133.22
+#
+# -Average BPW: 3.1525
+#
+# -Notes:
+# - '+' means user-defined pre-assigned tensors and f32 tensors
+# - Recipe produced on the 2025-07-11 22:54:20 BST+0100 using Thireus' GGUF tools (https://gguf.thireus.com/)
+# - Script SHA-256: 3c88ec66185ed0999d6be95e1d8e5fb2d22000c404863f0c2fa301a44160f8c3
+# - Command used:
+# quant_assign.py ppl_results.csv --gpu-tensors '.*' --cpu-tensors \
+# 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight' 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight' \
+# 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight' --cpu-quants iq4_ks iq3_k iq2_k iq1_m_r4 --gpu-quants q8_0 \
+# --cpu-tensors-max-size 230 --gpu-tensors-max-size 100% --tolerance 0.01 --exponential-factor 8 --gpu-assign-qtype \
+# iq6_k --gpu-assign-tensors 'blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=q8_0'
+
+## THE END!
