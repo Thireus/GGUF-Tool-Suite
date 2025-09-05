@@ -38,7 +38,7 @@ cd GGUF-Tool-Suite
 rm -f download.conf # Make sure to copy the relevant download.conf for the model before running quant_assign.py
 cp -f models/Kimi-K2-Instruct/download.conf . # Use the download.conf of the chosen model
 mkdir -p kitchen && cd kitchen
-../quant_downloader.sh ../recipe_examples/ik_llama.cpp_recipes/Kimi-K2-Instruct.ROOT-2.0216bpw-3.7224ppl.241GB-GGUF_10GB-GPU_231GB-CPU.68f915c_cc271ff.recipe
+../quant_downloader.sh ../recipe_examples/ik_harmonized_recipes/Kimi-K2-Instruct.ROOT-1.9968bpw-3.8128ppl.238GB-GGUF_10GB-GPU_228GB-CPU.90e3c2f_4766d51.recipe
 
 # Other recipe examples can be found at https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples
 
@@ -75,6 +75,8 @@ Here’s how DeepSeek-R1-0528 quantized with **Thireus’ GGUF Tool Suite** stac
 > _Note: The `recipe_examples` files illustrate good recipes. The Tool Suite computes the optimal ppl/bpw curve for you — just specify your target RAM, VRAM, and quant types, and `quant_assign.py` finds the best mix._  
 
 More perplexity/bpw graphs for other supported models: https://github.com/Thireus/GGUF-Tool-Suite/tree/main/ppl_graphs  
+
+*All PPL values are computed with the parameters `-ctk f16 -c 512 -b 4096 -ub 4096`. Changing any of these parameters will alter the PPL. In particular, reducing `-b 4096 -ub 4096` increases the PPL, while increasing them decreases the PPL.*
 
 ---
 

@@ -74,6 +74,8 @@ Here’s how DeepSeek-R1-0528 quantized with **Thireus’ GGUF Tool Suite** stac
 
 More perplexity/bpw graphs for other supported models: https://github.com/Thireus/GGUF-Tool-Suite/tree/main/ppl_graphs  
 
+*All PPL values are computed with the parameters `-ctk f16 -c 512 -b 4096 -ub 4096`. Changing any of these parameters will alter the PPL. In particular, reducing `-b 4096 -ub 4096` increases the PPL, while increasing them decreases the PPL.*
+
 ---
 
 ## 🚀 How do I get started?

@@ -47,7 +47,7 @@ cd GGUF-Tool-Suite
 rm -f download.conf # Make sure to copy the relevant download.conf for the model before running quant_assign.py
 cp -f models/GLM-4.5-Air/download.conf . # Use the download.conf of the chosen model
 mkdir -p kitchen && cd kitchen
-../quant_downloader.sh ../recipe_examples/ik_llama.cpp_recipes/GLM-4.5-Air.ROOT-3.9070bpw-4.6903ppl.50GB-GGUF_5GB-GPU_45GB-CPU.a02563d_270bea7.recipe
+../quant_downloader.sh ../recipe_examples/ik_llama.cpp_recipes/GLM-4.5-Air.ROOT-3.9285bpw-4.7264ppl.50GB-GGUF_5GB-GPU_44GB-CPU.90e3c2f_3949c22.recipe
 
 # Other recipe examples can be found at https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples
 
@@ -83,6 +83,8 @@ Here’s how GLM-4.5-Air quantized with **Thireus’ GGUF Tool Suite** stacks up
 > _Note: The `recipe_examples` files illustrate good recipes. The Tool Suite computes the optimal ppl/bpw curve for you — just specify your target RAM, VRAM, and quant types, and `quant_assign.py` finds the best mix._  
 
 More perplexity/bpw graphs for other supported models: https://github.com/Thireus/GGUF-Tool-Suite/tree/main/ppl_graphs  
+
+*All PPL values are computed with the parameters `-ctk f16 -c 512 -b 4096 -ub 4096`. Changing any of these parameters will alter the PPL. In particular, reducing `-b 4096 -ub 4096` increases the PPL, while increasing them decreases the PPL.*
 
 ---
 

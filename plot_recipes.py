@@ -139,7 +139,7 @@ def plot_data(recipe_data, recipe_dir, imported_data=None, export=False, out_dir
 
     dir_name = os.path.basename(os.path.normpath(recipe_dir))
     # recipe markers now only use: '+', 'x', '*'
-    recipe_markers = ['+', 'x', '*', '.']
+    recipe_markers = ['x', '+', '*', '.']
     # imported markers remain as requested
     imported_markers = ['o', 's', '^', 'D', 'v', 'p', 'h', '<', '>']
 
