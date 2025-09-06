@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-31-2025 -------------------- **#
+#** --------------- Updated: Sep-06-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -1322,7 +1322,7 @@ run_main_loop() {
                 # Run benchmark(s) according to mode
                 # PPL:
                 if need_run_ppl; then
-                  echo "[$(timestamp)] Running PPL command for tensor='$tensor_name', qtype='$qtype'..."
+                  echo "[$(timestamp)] Running PPL command for tensor='$tensor_name', qtype='$qtype'... output into $result_file_ppl"
                   cmd="${PPL_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
                   if eval "$cmd" > "$result_file_ppl" 2>&1 < /dev/null; then
                     echo "[$(timestamp)] 👀 PPL output (stdout+stderr) saved to $result_file_ppl"
