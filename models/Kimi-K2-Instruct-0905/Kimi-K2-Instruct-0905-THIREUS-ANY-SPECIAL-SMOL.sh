@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** Kimi-K2-Instruct-THIREUS-ANY-SPECIAL-SMOL.sh used for     **#
-#** 1-bit qtypes except iq1_s*. Adjust $1 in $custom!         **#
+#** Kimi-K2-Instruct-0905-THIREUS-ANY-SPECIAL-SMOL.sh used    **#
+#** for 1-bit qtypes except iq1_s*. Adjust $1 in $custom!     **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-17-2025 -------------------- **#
+#** --------------- Updated: Sep-06-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -497,11 +497,11 @@ custom=$(
 ulimit -S -s unlimited
 ulimit -n 99999
 
-# Kimi-K2-Instruct-THIREUS-TEMPLATE.gguf is too big and not worth using it because Q8_0 quanitsation is fast!
-mkdir Kimi-K2-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
+# Kimi-K2-Instruct-0905-THIREUS-TEMPLATE.gguf is too big and not worth using it because Q8_0 quanitsation is fast!
+mkdir Kimi-K2-Instruct-0905-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
     --custom-q "$custom" \
-    --imatrix imatrix_kimik2_ubergarm.dat \
-    Kimi-K2-Instruct-THIREUS-BF16-SPECIAL_SPLIT/Kimi-K2-Instruct-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01097.gguf \
-    Kimi-K2-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/Kimi-K2-Instruct-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
+    --imatrix imatrix_ubergarm.dat \
+    Kimi-K2-Instruct-0905-THIREUS-BF16-SPECIAL_SPLIT/Kimi-K2-Instruct-0905-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01097.gguf \
+    Kimi-K2-Instruct-0905-THIREUS-${1^^}-SPECIAL_SPLIT/Kimi-K2-Instruct-0905-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
     ${1^^} \
-    32 && chmod 444 Kimi-K2-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
+    32 && chmod 444 Kimi-K2-Instruct-0905-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
