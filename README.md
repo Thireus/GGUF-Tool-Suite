@@ -224,17 +224,16 @@ python quant_assign.py ppl_results.csv \
 
 ## 📊 About `ppl_results.csv`
 
-The file `ppl_results.csv` contains **individual tensor-level PPL benchmarks**, for example for **DeepSeek-R1-0528**:
+The file `ppl_results.csv` present in each model directory contains **individual tensor-level PPL benchmarks**, for example for **DeepSeek-R1-0528**:
 
-- `Q8_0` (GPU-friendly tensor) + `IQ3-XXS` (CPU-friendly tensor)
-- Target model: **DeepSeek-R1-0528**
-- Quantization degradation reference: `IQ1-M-R4`
+- Baseline quant: `q8_0` (for GPU-friendly tensors) + `iq3_xxs` (for CPU-friendly tensors)
+- Quantization degradation reference: `iq1_m_r4`
 
-This is the **core file** used to determine optimal quant mix strategies.  
-> ⚠️ Generating this CSV took **several days of GPU + CPU compute time**.
+`ppl_results.csv` is the **core calibration data file** used to determine the optimal quant mix for any given VRAM/RAM requirement. The perplexity of the model is computed after the quant of each tensor is individually dropped to `iq1_m_r4` (or whichever quantization degradation reference chosen by the user) - the ppl metrics obtained help identify which tensors are more sensitive to quantization than others.  
+> ⚠️ Generating this CSV usually takes **several days of GPU + CPU compute time** for big models.
 
-- `IQ3-XXS` was chosen for CPU-friendly tensors as it fits within **256GB RAM**
-- Scripts used to generate (edit the "USER CONFIGURATION" section in the bash scripts as needed):
+- `iq3_xxs` was chosen for CPU-friendly tensors as it helped fit the model within **256GB RAM** and isn't degrading PPL too much
+- Scripts used to produce this file (edit the "USER CONFIGURATION" section in the bash scripts as needed):
 
 ```bash
 # Make sure to copy the relevant download.conf for the model before running quant_assign.py
@@ -246,7 +245,7 @@ cp -f models/DeepSeek-R1-0528/download.conf .
 ./collect_ppl_results.sh --chunks 250 --qtypes iq1_m_r4
 ```
 
-📄 An article explaining the methodology is **coming soon**.
+📄 An article explaining this methodology in detail is **coming soon**.
 
 ---
 
