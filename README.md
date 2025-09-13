@@ -15,7 +15,7 @@ Here's how DeepSeek-R1-0528 quantized with **Thireus' GGUF Tool Suite** compares
 
 *The recipe_examples files are there to serve as examples of good recipes. Thireus' GGUF Tool Suite allows you to compute any quant mix recipe that follows the optimum ppl/bpw curve of this graph. Specify a target RAM and VRAM (and qtypes) specific to your computer specs, and the `quant_assign.py` script will automatically find the optimum quant mix recipe that achieves the best ppl.*
 
-*All PPL values are computed with the parameters `-ctk f16 -c 512 -b 4096 -ub 4096`. Changing any of these parameters will alter the PPL. In particular, reducing `-b 4096 -ub 4096` increases the PPL, while increasing them decreases the PPL.*
+*All PPL benchmarks are computed with the parameters `-ctk f16 -c 512 -b 4096 -ub 4096`. Changing any of these parameters will alter the PPL. In particular, reducing `-b 4096 -ub 4096` increases the PPL, while increasing them decreases the PPL.*
 
 ---
 
@@ -30,7 +30,7 @@ Here's how DeepSeek-R1-0528 quantized with **Thireus' GGUF Tool Suite** compares
 | [DeepSeek-V3-0324](https://huggingface.co/collections/Thireus/deepseek-v3-0324-thireus-special-split-6885d5fba52645afa377cc79) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ⚠️ Not evaluated | Should not be any different than DeepSeek-R1-0528. Calibration data produced by @ewhacc. |
 | [DeepSeek-V3.1](https://huggingface.co/collections/Thireus/deepseek-v31-thireus-special-split-68a8ad64125b2c6c7e8ce91d) | ✅ Complete | ✅ Complete | ⚠️ Untested | ⚠️ Not evaluated | Should not be any different than DeepSeek-R1-0528. |
 | [Kimi-K2-Instruct](https://huggingface.co/collections/Thireus/kimi-k2-instruct-thireus-special-split-68778e3701cf3e80574185e2) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Yes | Examples provided. It would appear that it does really well on _kt quants, likely because this is the target quant that was used for the calibration data. I may need to redo the calibration data using iq1_s_r4 to verify this theory. |
-| [Kimi-K2-Instruct-0905](https://huggingface.co/collections/Thireus/kimi-k2-instruct-0905-thireus-special-split-68bacdbc888c9a411d8a1a4c) | ⚠️ Not started | ⚠️ In progress... | ⚠️ Untested | ⚠️ Not evaluated | Similar to Kimi-K2-Instruc. |
+| [Kimi-K2-Instruct-0905](https://huggingface.co/collections/Thireus/kimi-k2-instruct-0905-thireus-special-split-68bacdbc888c9a411d8a1a4c) | ⚠️ In progress... | ⚠️ In progress... | ⚠️ Untested | ⚠️ Not evaluated | Similar to Kimi-K2-Instruc. |
 | [Qwen3-235B-A22B-Instruct-2507](https://huggingface.co/collections/Thireus/qwen3-235b-a22b-instruct-2507-thireus-special-split-68813c81fa03b52fe0d6f4e9) | ✅ Complete | ✅ Best effort (a few quants are still missing) | ⚠️ Untested | ⚠️ Not evaluated | All you need is available to produce quant mixes, but not personally tested. |
 | [Qwen3-4B-Instruct-2507](https://huggingface.co/collections/Thireus/Qwen3-4B-Instruct-2507-thireus-special-split-68813c81fa03b52fe0d6f4e9) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Tested and Working | Just a proof of concept that this tool suite isn't limited to massive models. |
 | [Qwen3-235B-A22B-Thinking-2507](https://huggingface.co/collections/Thireus/qwen3-235b-a22b-thinking-2507-thireus-special-split-688368c416e0f03b1853b10f) | ✅ Complete | ✅ Best effort (a few quants are still missing) | ✅ Tested and Working | ✅ Yes | Best to use at most two quant types for `quant_assign` to choose from per tensor group. |
