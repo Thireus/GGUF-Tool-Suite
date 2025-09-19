@@ -5,7 +5,7 @@
 #** for 1-bit qtypes except iq1_s*. Adjust $1 in $custom!     **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Sep-06-2025 -------------------- **#
+#** --------------- Updated: Sep-18-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -37,14 +37,14 @@ custom="
 
 ## Model head & embeddings — qbits: 32 16 
 ^token_embd\.weight$=$1
-^output\.weight$=$1
+^output\.weight$=iq2_ks
 ^output_norm\.weight$=f32
 
 ## Special attention kernels — forcing it to be iq1_m so that llama-quantize doesn't stop — qbits: 16 
-^blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight$=iq1_m
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight$=$1
 
 ## Multi-headed attention parameters - attn_v_b forced to iq2_ks so that llama-quantize doesn't stop - THIS IS GOING TO BE PROBLEMATIC TO BENCHMARK — qbits: 32 16 
-^blk\.([0-9]|[1-5][0-9]|60)\.attn_v_b\.weight$=iq2_ks
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_v_b\.weight$=$1
 ^blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_norm\.weight$=f32
 ^blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_mqa\.weight$=$1
 ^blk\.([0-9]|[1-5][0-9]|60)\.attn_output\.weight$=$1
@@ -54,10 +54,10 @@ custom="
 ^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a\.weight$=$1
 
 ## Core FFN weights — qbits: 32 16 
-^blk\.0\.ffn_gate\.weight$=$1
+^blk\.0\.ffn_gate\.weight$=iq2_ks
 ^blk\.([0-9]|[1-5][0-9]|60)\.ffn_norm\.weight$=f32
 ^blk\.0\.ffn_down\.weight$=$1
-^blk\.0\.ffn_up\.weight$=$1
+^blk\.0\.ffn_up\.weight$=iq2_ks
 ^blk\.([1-9]|[1-5][0-9]|60)\.ffn_gate_inp\.weight$=f32
 
 ## Other tensors — qbits: 32 
@@ -68,10 +68,10 @@ custom="
 ^blk\.([1-9]|[1-5][0-9]|60)\.ffn_down_shexp\.weight$=$1
 
 # ffn_up_shexp (up-projection) — qbits: 16 
-^blk\.([1-9]|[1-5][0-9]|60)\.ffn_up_shexp\.weight$=$1
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_up_shexp\.weight$=iq2_ks
 
 # ffn_gate_shexp (gate-projection) — qbits: 16 
-^blk\.([1-9]|[1-5][0-9]|60)\.ffn_gate_shexp\.weight$=$1
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_gate_shexp\.weight$=iq2_ks
 
 ## CPU-loaded ffn_*_exps
 # ffn_down_exps (down-extraction) — qbits: 16 
