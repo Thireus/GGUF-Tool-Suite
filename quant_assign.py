@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Sep-01-2025 -------------------- **#
+#** --------------- Updated: Sep-24-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -352,9 +352,13 @@ def select_qtype(df, qtype_arg):
 MAP_FILE_INFO     = {}   # will hold {"tensors.<qtype>.map": [sha256, last_line], …}
 SIG_FILE_HASHES   = {}   # will hold {"tensors.<qtype>.map.sig": sha256, …}
 # “Looks like q…k” ignoring case
-_INSPECT_RE = re.compile(r'^q.*k$', re.IGNORECASE)
+_INSPECT_K_RE = re.compile(r'^q.*k$', re.IGNORECASE)
 # Canonical form: lower-q, anything, upper-K
-_CANONICAL_RE = re.compile(r'^q.*K$')
+_CANONICAL_K_RE = re.compile(r'^q.*K$')
+# Special case: q…KV (any case)
+_INSPECT_KV_RE = re.compile(r'^q.*kv$', re.IGNORECASE)
+# Canonical form: q…KV with exact case
+_CANONICAL_KV_RE = re.compile(r'^q.*KV$')
 def fetch_map_for_qtype(qtype: str):
     """
     Fetch and cache tensors.{qtype}.map via tensor_downloader.sh.
@@ -363,11 +367,17 @@ def fetch_map_for_qtype(qtype: str):
     if qtype in _fetched_maps:
         return True
     # If it matches q…k (any case) but not exactly q…K, warn
-    if _INSPECT_RE.match(qtype) and not _CANONICAL_RE.match(qtype):
+    if _INSPECT_K_RE.match(qtype) and not _CANONICAL_K_RE.match(qtype):
         print(
             f"[Warning] qtype={qtype!r} does not match the canonical pattern r'^q.*K$'. "
-            "Q-types are case-sensitive and there are specific ones that start with lowercase 'q' and end with uppercase 'K' "
-            "(e.g. 'q3_K')."
+            "Q-types are case-sensitive and there are specific ones that start with lowercase 'q' "
+            "and end with uppercase 'K' (e.g. 'q3_K')."
+        )
+    # If it matches q…kv (any case) but not exactly q…KV, warn
+    if _INSPECT_KV_RE.match(qtype) and not _CANONICAL_KV_RE.match(qtype):
+        print(
+            f"[Warning] qtype={qtype!r} does not match the canonical pattern r'^q.*KV$'. "
+            "Q-types ending with 'KV' must use uppercase 'KV' (e.g. 'q8_KV')."
         )
     # Warn if it's fully capitalized
     if qtype.isupper():

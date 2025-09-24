@@ -211,11 +211,11 @@ python quant_assign.py ppl_results.csv \
 
 > 🔧 **Adjust parameters** such as `--cpu-tensors-max-size` or `--gpu-quants` as needed for your specific hardware.
 
-> ⚠️ q\*_K quants must be used with a capital "K" letter at the end of their name. All other quants are lowercase.
+> ⚠️ q\*_K and q\*_KV quants must be used with a capital "K" and "KV" letters at the end of their name. All other quants are lowercase.
 
 - List of quants compatible with `ik_llama.cpp`:
 
-> iq1_bn iq1_kt iq1_m iq1_s iq1_s_r4 iq2_bn iq2_bn_r4 iq2_k iq2_k_r4 iq2_kl iq2_ks iq2_kt iq2_m iq2_m_r4 iq2_s iq2_xs iq2_xs_r4 iq2_xxs iq2_xxs_r4 iq3_k iq3_k_r4 iq3_kl iq3_ks iq3_kt iq3_m iq3_s iq3_s_r4 iq3_xs iq3_xxs iq3_xxs_r4 iq4_k iq4_k_r4 iq4_ks iq4_ks_r4 iq4_kss iq4_kt iq4_nl iq4_nl_r4 iq4_xs iq4_xs_r8 iq5_k iq5_k_r4 iq5_ks iq5_ks_r4 iq6_k q1_m_r4 q2_K q2_k_r4 q2_k_s q3_K q3_k_l q3_k_m q3_k_r4 q3_k_s q4_0 q4_0_4_4 q4_0_4_8 q4_0_8_8 q4_0_r8 q4_1 q4_K q4_k_m q4_k_r4 q4_k_s q5_0 q5_0_r4 q5_1 q5_K q5_k_m q5_k_r4 q5_k_s q6_0 q6_0_r4 q6_K q6_k_r4 q8_0 q8_0_r8 q8_k_r8 q8_kv q8_kv_r8
+> iq1_bn iq1_kt iq1_m iq1_s iq1_s_r4 iq2_bn iq2_bn_r4 iq2_k iq2_k_r4 iq2_kl iq2_ks iq2_kt iq2_m iq2_m_r4 iq2_s iq2_xs iq2_xs_r4 iq2_xxs iq2_xxs_r4 iq3_k iq3_k_r4 iq3_kl iq3_ks iq3_kt iq3_m iq3_s iq3_s_r4 iq3_xs iq3_xxs iq3_xxs_r4 iq4_k iq4_k_r4 iq4_ks iq4_ks_r4 iq4_kss iq4_kt iq4_nl iq4_nl_r4 iq4_xs iq4_xs_r8 iq5_k iq5_k_r4 iq5_ks iq5_ks_r4 iq6_k q1_m_r4 q2_K q2_k_r4 q2_k_s q3_K q3_k_l q3_k_m q3_k_r4 q3_k_s q4_0 q4_0_4_4 q4_0_4_8 q4_0_8_8 q4_0_r8 q4_1 q4_K q4_k_m q4_k_r4 q4_k_s q5_0 q5_0_r4 q5_1 q5_K q5_k_m q5_k_r4 q5_k_s q6_0 q6_0_r4 q6_K q6_k_r4 q8_0 q8_0_r8 q8_k_r8 q8_KV q8_kv_r8
 
 - List of [quants compatible](https://github.com/ggml-org/llama.cpp/blob/master/tools/quantize/README.md) with `llama.cpp`:
 
