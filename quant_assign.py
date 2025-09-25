@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Sep-24-2025 -------------------- **#
+#** --------------- Updated: Sep-25-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -386,7 +386,7 @@ def fetch_map_for_qtype(qtype: str):
             "Q-types are case-sensitive and there are no known quant types that are entirely uppercase."
         )
     local_map = os.path.join(TMP_DIR, f"tensors.{qtype}.map")
-    cmd = [tensor_downloader, qtype.upper(), "0", TMP_DIR, f"tensors.{qtype}.map"]
+    cmd = ["bash", tensor_downloader, qtype.upper(), "0", TMP_DIR, f"tensors.{qtype}.map"]
     if INFO: print(f"[Info] Fetching map for {qtype}...")
     try:
         if DEBUG or INFO:
@@ -395,7 +395,7 @@ def fetch_map_for_qtype(qtype: str):
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         if INFO: print(f"[Info] Saved map to {local_map}")
         if not SKIP_GPG:
-            cmd_sig = [tensor_downloader, qtype.upper(), "-1", TMP_DIR, f"tensors.{qtype}.map.sig"]
+            cmd_sig = ["bash", tensor_downloader, qtype.upper(), "-1", TMP_DIR, f"tensors.{qtype}.map.sig"]
             if INFO: print(f"[Info] Fetching map gpg signature for {qtype}...")
             try:
                 if DEBUG or INFO:
