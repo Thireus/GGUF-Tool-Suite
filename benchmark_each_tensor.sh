@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Sep-06-2025 -------------------- **#
+#** --------------- Updated: Sep-25-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -1252,6 +1252,7 @@ run_main_loop() {
 
                 # Attempt download in a loop if SHA256 mismatch
                 fetch_success=false
+                retry_before_delete=3
                 while true; do
                     echo "[$(timestamp)] Fetching shard from remote: $shard_fname"
                     if run_downloader "${qtype^^}" "${chunk_id}" "${LOCAL_DOWNLOAD_DIR}" "${shard_fname}"; then
@@ -1270,6 +1271,12 @@ run_main_loop() {
                             break
                         else
                             echo "[$(timestamp)] SHA256 mismatch for $shard_fname: got $actual_hash, expected $expected_hash." >&2
+                            retry_before_delete=$((retry_before_delete - 1))
+                            if [[ $retry_before_delete -eq 0 ]]; then
+                                echo "[$(timestamp)] Too many SHA256 mismatch for $shard_fname, removing $shard_fname from download directory!" >&2
+                                rm -f "$local_shard_tmp"
+                                retry_before_delete=3
+                            fi
                             echo "[$(timestamp)] Retrying fetch after 10s..."
                             sleep 10
                             continue
