@@ -1,6 +1,18 @@
 ---
 license: mit
 ---
+## ⚠️ Cautionary Notice
+
+These GGUF files are **experimental** and subject to change. The code used to produce them is currently in **draft** status.
+
+- ⚠️ **Support in `llama.cpp` is not available yet** – see [ggml-org/llama.cpp Issue #16207](https://github.com/ggml-org/llama.cpp/issues/16207).
+- ⚠️ **Vision support in `ik_llama.cpp` is not available yet** – see [ikawrakow/ik_llama.cpp Issue #792](https://github.com/ikawrakow/ik_llama.cpp/issues/792).
+**Unless you are confident in what you're doing, and until support is officially confirmed,**  
+> 🔒 **Do not use these quantized models for production**  
+> 🔬 **Do not use them to assess the quality of the Qwen3-VL models**
+Proceed with caution and keep an eye on the upstream PRs for any updates that could affect compatibility or performance.
+---
+
 # Qwen3-VL-235B-A22B-Thinking
 
 ## 🤔 What is this [HuggingFace repository](https://huggingface.co/Thireus/Qwen3-VL-235B-A22B-Thinking-THIREUS-BF16-SPECIAL_SPLIT/) about?
