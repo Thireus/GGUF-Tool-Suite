@@ -170,3 +170,14 @@ Qwen3-Coder-480B-A35B-Instruct-GGUF|ubergarm|IQ2_KL|3.034|5.4113|https://hugging
 Qwen3-Coder-480B-A35B-Instruct-GGUF|ubergarm|IQ2_K|2.588|5.6578|https://huggingface.co/ubergarm/Qwen3-Coder-480B-A35B-Instruct-GGUF/tree/main/IQ2_K
 Qwen3-Coder-480B-A35B-Instruct-GGUF|ubergarm|IQ2_KS|2.578|5.6658|https://huggingface.co/ubergarm/Qwen3-Coder-480B-A35B-Instruct-GGUF/tree/main/IQ2_KS
 Qwen3-Coder-480B-A35B-Instruct-GGUF|ubergarm|IQ1_KT|1.945|6.3370|https://huggingface.co/ubergarm/Qwen3-Coder-480B-A35B-Instruct-GGUF/tree/main/IQ1_KT
+DeepSeek-V3.1-Terminus|ubergarm|Q8_0|8.504|3.3929
+DeepSeek-V3.1-Terminus|ubergarm|IQ5_K|5.941|3.4000|https://huggingface.co/ubergarm/DeepSeek-V3.1-Terminus-GGUF/tree/main/IQ5_K
+DeepSeek-V3.1-Terminus|ubergarm|smol-IQ5_KS|5.339|3.4059|https://huggingface.co/ubergarm/DeepSeek-V3.1-Terminus-GGUF/tree/main/smol-IQ5_KS
+DeepSeek-V3.1-Terminus|ubergarm|IQ4_K|4.896|3.4198|https://huggingface.co/ubergarm/DeepSeek-V3.1-Terminus-GGUF/tree/main/IQ4_K
+DeepSeek-V3.1-Terminus|ubergarm|smol-IQ4_KSS|4.080|3.4445|https://huggingface.co/ubergarm/DeepSeek-V3.1-Terminus-GGUF/tree/main/smol-IQ4_KSS
+DeepSeek-V3.1-Terminus|ubergarm|IQ3_K|3.724|3.4781|https://huggingface.co/ubergarm/DeepSeek-V3.1-Terminus-GGUF/tree/main/IQ3_K
+DeepSeek-V3.1-Terminus|ubergarm|IQ3_KS|3.545|3.5174|https://huggingface.co/ubergarm/DeepSeek-V3.1-Terminus-GGUF/tree/main/IQ3_KS
+DeepSeek-V3.1-Terminus|ubergarm|IQ2_KL|2.962|3.7112|https://huggingface.co/ubergarm/DeepSeek-V3.1-Terminus-GGUF/tree/main/IQ2_KL
+DeepSeek-V3.1-Terminus|ubergarm|IQ2_KS|2.472|4.0280|https://huggingface.co/ubergarm/DeepSeek-V3.1-Terminus-GGUF/tree/main/IQ2_KS
+DeepSeek-V3.1-Terminus|ubergarm|IQ1_KT|1.987|4.5310|https://huggingface.co/ubergarm/DeepSeek-V3.1-Terminus-GGUF/tree/main/IQ1_KT
+DeepSeek-V3.1-Terminus|ubergarm|IQ1_S|1.745|5.4829|https://huggingface.co/ubergarm/DeepSeek-V3.1-Terminus-GGUF/tree/main/IQ1_S
