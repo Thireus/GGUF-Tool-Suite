@@ -30,6 +30,7 @@ Here's how DeepSeek-R1-0528 quantized with **Thireus' GGUF Tool Suite** compares
 | [DeepSeek-V3-0324](https://huggingface.co/collections/Thireus/deepseek-v3-0324-thireus-special-split-6885d5fba52645afa377cc79) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ⚠️ Not evaluated | Should not be any different than DeepSeek-R1-0528. Calibration data produced by @ewhacc. |
 | [DeepSeek-V3.1](https://huggingface.co/collections/Thireus/deepseek-v31-thireus-special-split-68a8ad64125b2c6c7e8ce91d) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Yes | Great coding abilities even at 1.9bpw quantisation and excellent compatibility with [Cline](https://github.com/cline/cline)/[Kilo Code](https://github.com/Kilo-Org/kilocode)/[Roo Code](https://github.com/RooCodeInc/Roo-Code) for [Visual Studio Code](https://code.visualstudio.com/Download) using "Openai Compatible" API provider (extensively tested at full context length). |
 | [DeepSeek-V3.1-Terminus](https://huggingface.co/collections/Thireus/deepseek-v31-terminus-thireus-special-split-68d23e92699c4560d27b76d5) | ✅ Complete | ⚠️ In Progress... | ✅ Tested and Working | ✅ Yes | Similar to DeepSeek-V3.1 |
+| [DeepSeek-V3.2-Exp](https://huggingface.co/collections/Thireus/deepseek-v32-exp-thireus-special-split-68db895852d3c475d39e3ab3) | ⚠️ In Progress... | ⚠️ In Progress... | ⚠️ Untested | ⚠️ Not evaluated | Similar to DeepSeek-V3.1-Terminus |
 | [Kimi-K2-Instruct](https://huggingface.co/collections/Thireus/kimi-k2-instruct-thireus-special-split-68778e3701cf3e80574185e2) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Yes | Examples provided. It would appear that it does really well on _kt quants, likely because this is the target quant that was used for the calibration data. I may need to redo the calibration data using iq1_s_r4 to verify this theory. |
 | [Kimi-K2-Instruct-0905](https://huggingface.co/collections/Thireus/kimi-k2-instruct-0905-thireus-special-split-68bacdbc888c9a411d8a1a4c) | ✅ Complete | ✅ Complete | ⚠️ Untested | ⚠️ Not evaluated | Similar to Kimi-K2-Instruct. |
 | [Qwen3-VL-235B-A22B-Thinking](https://huggingface.co/collections/Thireus/qwen3-vl-235b-a22b-thinking-thireus-special-split-68d39cfb2e741c6b8b8e0175) | ⚠️ Not Started | ⚠️ In Progress... | ⚠️ Untested | ⚠️ Not evaluated | Similar to Qwen3-235B-A22B-Thinking-2507 |
@@ -270,6 +271,9 @@ Big thanks to **ubergarm** for his support and for providing the invaluable **`i
 
 📄 Ubergarm's `imatrix` for DeepSeek-V3.1-Terminus can be found here:  
 🔗 [imatrix_DeepSeek-V3.1-Terminus_ubergarm.dat](https://huggingface.co/ubergarm/DeepSeek-V3.1-Terminus-GGUF/blob/main/imatrix-DeepSeek-V3.1-Terminus-Q8_0.dat)
+
+📄 Ubergarm's `imatrix` for DeepSeek-V3.2-Exp can be found here:  
+🔗 [imatrix_DeepSeek-V3.2-Exp_ubergarm.dat](https://huggingface.co/ubergarm/DeepSeek-V3.2-Exp-GGUF/blob/main/imatrix-DeepSeek-V3.2-Exp-Q8_0.dat)
 
 📄 Ubergarm's `imatrix` for Kimi-K2-Instruct can be found here:  
 🔗 [imatrix_Kimi-K2-Instruct_ubergarm.dat](https://huggingface.co/ubergarm/Kimi-K2-Instruct-GGUF/blob/main/imatrix-Kimi-K2-Instruct-Q8_0.dat)
