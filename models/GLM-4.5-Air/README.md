@@ -1,15 +1,6 @@
 ---
 license: mit
 ---
-## ⚠️ Compatibility Notice
-
-Support for the GLM-4.5 family was recently merged into both [**llama.cpp**](https://github.com/ggml-org/llama.cpp) and [**ik_llama.cpp**](https://github.com/ikawrakow/ik_llama.cpp), so you must update to their latest versions before using any GGUF files from this repo. Older GGUF files and older versions of either codebase will be incompatible.
-
-- [**llama.cpp**](https://github.com/ggml-org/llama.cpp) — see merged PR [ggml-org/llama.cpp#14939](https://github.com/ggml-org/llama.cpp/pull/14939)  
-- [**ik_llama.cpp**](https://github.com/ikawrakow/ik_llama.cpp) — see merged PR [ikawrakow/ik_llama.cpp#668](https://github.com/ikawrakow/ik_llama.cpp/pull/668)
-
----
-
 # GLM-4.5-Air
 
 ## 🤔 What is this [HuggingFace repository](https://huggingface.co/Thireus/GLM-4.5-Air-THIREUS-BF16-SPECIAL_SPLIT/) about?
