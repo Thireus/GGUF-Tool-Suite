@@ -30,11 +30,11 @@
 ^blk\.92\.nextn\.hnorm\.weight$=f32
 
 ## GPU-loaded ffn_*_shexp
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_down_shexp\.weight$=q8_0
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_up_shexp\.weight$=q8_0
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_shexp\.weight$=q8_0
+^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_down_shexp\.weight$=iq6_k
+^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_up_shexp\.weight$=iq6_k
+^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_shexp\.weight$=iq6_k
 
 ## CPU-friendly ffn_*_exps
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_down_exps\.weight$=q8_0
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_up_exps\.weight$=q8_0
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_exps\.weight$=q8_0
+^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_down_exps\.weight$=iq6_k
+^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_up_exps\.weight$=iq6_k
+^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_exps\.weight$=iq6_k
