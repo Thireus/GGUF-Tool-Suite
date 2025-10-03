@@ -45,7 +45,10 @@ import subprocess
 import tempfile
 from collections import Counter
 import textwrap
-from typing import cast
+from typing import cast, Dict, List, Iterable, Tuple, Optional
+import heapq
+
+GIB = 1024 ** 3
 
 # Global default quants list
 DEFAULT_QUANTS = ['q8_0', 'q4_0']
@@ -140,6 +143,30 @@ def compute_iqr_bounds(values, k):
     lower = Q1 - k * IQR
     upper = Q3 + k * IQR
     return lower, upper
+
+
+def load_degradation_factors():
+    here = os.path.dirname(os.path.abspath(__file__))
+    path = os.path.join(here, "quants_graphs", "ppl_results.csv")
+    df = pd.read_csv(path)
+    # Expect columns: "QTYPE" and "group0"
+    degradation_factors = {}
+    for _, row in df.iterrows():
+        q = str(row["QTYPE"]).strip()
+        val = row["group0"]
+        # e.g. " +2.12%" or "0%"
+        s = str(val).strip()
+        if s.endswith("%"):
+            s = s[:-1]
+        if s.startswith("+"):
+            s = s[1:]
+        try:
+            f = float(s) / 100.0
+        except ValueError:
+            continue
+        degradation_factors[q] = f
+    return degradation_factors
+
 
 
 def _call_normalised_ppl(keys):
@@ -687,6 +714,145 @@ def total_size_for_quant(names, qtype):
     return sum(sizes_map.get(name, 0) for name in names)
 
 
+import heapq
+from typing import Dict, List, Iterable, Tuple, Optional
+
+GIB = 1024 ** 3
+
+def greedy_quant_assign(
+     tensors: Iterable[str],
+    tensor_sizes: Dict[str, Dict[str, int]],
+    ppl_loss: Dict[str, float],
+    degradation_factors: Dict[str, float],
+    tensor_quants: Optional[Dict[str, List[str]]],
+     budget_bytes: int,
+    *,
+     preassign_missing_ppl: bool = True,
+    debug: bool = False
+) -> Tuple[Dict[str, str], int]:
+    """
+    Greedy quant assignment using a min-heap (score = delta_deg / delta_size).
+    - tensors: iterable of tensor names to assign
+    - tensor_sizes[tensor][qtype] -> size in bytes (must exist for qtypes used)
+    - ppl_loss[tensor] -> sensitivity (float). If missing and preassign_missing_ppl True, the tensor is kept at initial quant.
+    - degradation_factors[qtype] -> numeric factor (bigger means worse quant)
+    - tensor_quants[tensor] -> list of qtypes allowed for that tensor (if None, fallback to all qtypes available in tensor_sizes[t])
+    - budget_bytes: absolute byte budget for this class (already adjusted by offsets)
+    - returns (assignment dict, total_size_bytes)
+    """
+    # --- Validation & normalize tensor_quants into allowed_map (ordered largest->smallest)
+    allowed_map: Dict[str, List[str]] = {}
+    for t in tensors:
+        # allowed list fallback
+        allowed = None
+        if tensor_quants and t in tensor_quants and tensor_quants[t]:
+            allowed = list(tensor_quants[t])
+        else:
+            # fallback: take all qtypes present in tensor_sizes[t]
+            qtypes = list(tensor_sizes.get(t, {}).keys())
+            if not qtypes:
+                raise ValueError(f"No size map available for tensor '{t}' (cannot determine allowed quants).")
+            allowed = qtypes
+
+        # Filter allowed to qtypes that have sizes and degradation_factors
+        filtered = []
+        for q in allowed:
+            if q not in degradation_factors:
+                # skip qtypes with no degradation factor (can't evaluate)
+                continue
+            if q not in tensor_sizes.get(t, {}):
+                # skip qtypes with no size info for this tensor
+                continue
+            filtered.append(q)
+        if not filtered:
+                    raise ValueError(f"No usable qtypes for tensor '{t}' after filtering (allowed: {allowed}).")
+
+        # Sort descending by size (largest first) so index 0 is highest-quality (largest bytes)
+        filtered.sort(key=lambda q: tensor_sizes[t][q], reverse=True)
+        allowed_map[t] = filtered
+
+    # --- Initial assignment: highest allowed quant (largest size)
+    assignment: Dict[str, str] = {}
+    preassigned_due_to_missing_ppl = set()
+    for t in tensors:
+        top_q = allowed_map[t][0]
+        assignment[t] = top_q
+        # If ppl_loss missing and we should preassign, mark it and we will not push moves for it.
+        if t not in ppl_loss and preassign_missing_ppl:
+            preassigned_due_to_missing_ppl.add(t)
+
+     # --- initial total size
+    total_size = 0
+    for t in tensors:
+        q = assignment[t]
+        total_size += tensor_sizes[t][q]
+
+    if debug:
+        print(f"[GREEDY] initial total_size = {total_size / GIB:.3f} GiB; budget = {budget_bytes / GIB:.3f} GiB")
+
+    # --- prepare heap with (score, counter, tensor, from_q, to_q)
+    pq: List[Tuple[float, int, str, str, str]] = []
+    counter = 0
+
+    def push_moves(tensor: str, from_q: str):
+        nonlocal counter
+        # if tensor was preassigned due to missing ppl, do not push moves
+        if tensor in preassigned_due_to_missing_ppl:
+            return
+        allowed = allowed_map[tensor]
+        try:
+            from_idx = allowed.index(from_q)
+        except ValueError:
+            # from_q not in list (shouldn't happen) -> skip
+            return
+        for to_q in allowed[from_idx + 1:]:
+            size_from = tensor_sizes[tensor][from_q]
+            size_to = tensor_sizes[tensor][to_q]
+            delta_size = size_from - size_to
+            if delta_size <= 0:
+                continue
+            # ppl_loss must exist (we filtered preassigned_missing_ppl earlier)
+            loss = ppl_loss.get(tensor, None)
+            if loss is None:
+                # If no ppl data and we didn't preassign, skip (safety)
+                continue
+            delta_deg = loss * (degradation_factors[to_q] - degradation_factors[from_q])
+            score = float(delta_deg) / float(delta_size)
+                                # push (score, counter) so heap is deterministic on ties
+            heapq.heappush(pq, (score, counter, tensor, from_q, to_q))
+            counter += 1
+
+    # initialize moves from top quant for every tensor
+    for t in tensors:
+        push_moves(t, assignment[t])
+
+    # --- main loop
+    while total_size > budget_bytes and pq:
+        score, _, tensor, from_q, to_q = heapq.heappop(pq)
+        # stale-check: must still be at from_q
+        if assignment.get(tensor) != from_q:
+            # stale entry; ignore
+            continue
+
+        # Apply downgrade
+        size_from = tensor_sizes[tensor][from_q]
+        size_to = tensor_sizes[tensor][to_q]
+        total_size -= (size_from - size_to)
+        assignment[tensor] = to_q
+
+        if debug:
+            print(f"[GREEDY] downgraded {tensor}: {from_q} -> {to_q}; saved {(size_from-size_to)/GIB:.3f} GiB; new total {(total_size)/GIB:.3f} GiB")
+
+        # push next possible moves for this tensor (relative to its new quant)
+        push_moves(tensor, to_q)
+
+    if debug:
+        print(f"[GREEDY] final total_size = {total_size / GIB:.3f} GiB")
+
+    return assignment, total_size
+
+
+
 def optimize_midpoint_and_assign(quants, _, class_values,
                                  max_bytes, tolerance=0.05, exp_factor=1.0, harmonize_groups=None):
     """
@@ -1075,6 +1241,8 @@ def main():
                         help=('Harmonization technique to use when --harmonize-tensors is set: 0=disabled, 1=max, 2=mean, 3=min (default). ' 
                             'Values are applied element-wise per layer across the matched tensors.'
                             'Max ensures calibration data ppl measurement is not negatively degraded. Min will degrade calibration data accuracy but appears to give the best PPL results. Mean is a compromise in-between. Disabled means harmonization is disabled.'))
+    parser.add_argument('--use-greedy-quant-assign', action='store_true', help='Use greedy priority-queue quant assignment instead of default spread/midpoint method')
+
     args = parser.parse_args()
 
     # ---- BEGIN pgpy-based “trusted-keys.asc” check ----
@@ -1109,6 +1277,10 @@ def main():
 
     DEBUG = args.debug
     INFO = args.info or DEBUG
+
+    degradation_factors = load_degradation_factors()
+    if INFO:
+        print(f"[Info] Loaded degradation_factors ({len(degradation_factors)} entries)")
 
     if args.cpu_tensors and not args.cpu_quants:
         parser.error("--cpu-quants is required when --cpu-tensors is used")
@@ -1480,13 +1652,14 @@ def main():
                         if INFO:
                             print(f"[Info] Assigned {desc} quant {assigned_q} to outlier {nm}, size={size_harmonized/GIB:.3f} GiB (harmonized group {group_idx})")
 
-        # process low and high outliers (lowest quant = quants[-1], highest quant = quants[0])
-        _process_outliers_list(out_low, quants[-1], "lowest")
-        _process_outliers_list(out_high, quants[0], "highest")
+        if not args.use_greedy_quant_assign:
+	    # process low and high outliers (lowest quant = quants[-1], highest quant = quants[0])
+            _process_outliers_list(out_low, quants[-1], "lowest")
+            _process_outliers_list(out_high, quants[0], "highest")
 
-        # remove processed outliers from class_vals so they are not considered in normal assignment
-        for n in list(processed_outliers):
-            class_vals.pop(n, None)
+            # remove processed outliers from class_vals so they are not considered in normal assignment
+            for n in list(processed_outliers):
+                class_vals.pop(n, None)
 
         # Normal assignment on remaining
         
@@ -1530,9 +1703,20 @@ def main():
                 [lowest_q], None, class_vals)
             total_bytes = sum(sizes.values())
         elif max_arg_bytes:
-            assignment, total_bytes = optimize_midpoint_and_assign(
-                quants, None, class_vals,
-                max_arg_bytes, args.tolerance, args.exponential_factor, harmonize_groups=harmonize_groups)
+            if args.use_greedy_quant_assign:
+                # Build tensor_quants mapping (default to cls-specific quants)
+                 tensor_quants = {n: (gpu_quants if cls=='gpu' else cpu_quants) for n in names_to_assign}
+                 assignment, total_bytes = greedy_quant_assign(
+                    tensors=names_to_assign,
+                    tensor_sizes={n: {q: get_map_sizes(q)[0].get(n, 0) for q in (gpu_quants if cls=='gpu' else cpu_quants)} for n in names_to_assign},
+                    ppl_loss=class_vals,
+                    degradation_factors=degradation_factors,
+                    tensor_quants=tensor_quants,
+                    budget_bytes=max_arg_bytes,
+                    debug=DEBUG
+                )
+            else:
+                assignment, total_bytes = optimize_midpoint_and_assign( quants, None, class_vals, max_arg_bytes, args.tolerance, args.exponential_factor, harmonize_groups=harmonize_groups)
             #print(f"# Optimized sub-total {cls.upper()} size excluding outliers and f32: {total_bytes/GIB:.3f} GiB")
         else:
             assignment, sizes = assign_quants(
