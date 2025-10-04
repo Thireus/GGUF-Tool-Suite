@@ -42,10 +42,14 @@ custom="
 
 ## Multi-headed attention parameters
 ^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_v\.bias$=f32
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_v\.weight$=$1
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q\.weight$=$1
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_output\.weight$=$1
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k\.weight$=$1
+^blk\.([0-9]|[1-8][0-9]|9[0-1])\.attn_v\.weight$=$1
+^blk\.(92)\.attn_v\.weight$=iq2_ks
+^blk\.([0-9]|[1-8][0-9]|9[0-1])\.attn_q\.weight$=$1
+^blk\.(92)\.attn_q\.weight$=iq2_ks
+^blk\.([0-9]|[1-8][0-9]|9[0-1])\.attn_output\.weight$=$1
+^blk\.(92)\.attn_output\.weight$=iq2_ks
+^blk\.([0-9]|[1-8][0-9]|9[0-1])\.attn_k\.weight$=$1
+^blk\.(92)\.attn_k\.weight$=iq2_ks
 ^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q\.bias$=f32
 ^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q_norm\.weight$=f32
 ^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k_norm\.weight$=f32
