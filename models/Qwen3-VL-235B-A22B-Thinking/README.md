@@ -3,10 +3,10 @@ license: mit
 ---
 ## ⚠️ Cautionary Notice
 
-These GGUF files are **experimental** and subject to change. The code used to produce them is currently in **draft** status.
+These GGUF files are **experimental** and subject to change. The code used to produce them is currently in **draft** status. The llama.cpp code patch used to produce these shards can be found at https://huggingface.co/yairpatch/Qwen3-VL-30B-A3B-Thinking-GGUF.
 
-- ⚠️ **Support in `llama.cpp` is not available yet** – see [ggml-org/llama.cpp Issue #16207](https://github.com/ggml-org/llama.cpp/issues/16207).
-- ⚠️ **Vision support in `ik_llama.cpp` is not available yet** – see [ikawrakow/ik_llama.cpp Issue #792](https://github.com/ikawrakow/ik_llama.cpp/issues/792).
+- ⚠️ **Official support in `llama.cpp` is not available yet** – see [ggml-org/llama.cpp Issue #16207](https://github.com/ggml-org/llama.cpp/issues/16207).
+- ⚠️ **Official support in `ik_llama.cpp` is not available yet**.
 **Unless you are confident in what you're doing, and until support is officially confirmed,**  
 > 🔒 **Do not use these quantized models for production**  
 > 🔬 **Do not use them to assess the quality of the Qwen3-VL models**
