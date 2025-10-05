@@ -5,7 +5,7 @@
 #** regex for llama-quantize consumption.                     **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-31-2025 -------------------- **#
+#** --------------- Updated: Oct-05-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -104,1765 +104,465 @@ if [ ! -t 0 ]; then
 else
   # …otherwise use the built‑in default
   custom="
-^token_embd\.weight$=bf16
-^blk\.0\.attn_norm\.weight$=f32
-^blk\.0\.ffn_down\.weight$=bf16
-^blk\.0\.ffn_gate\.weight$=bf16
-^blk\.0\.ffn_up\.weight$=bf16
-^blk\.0\.post_attention_norm\.weight$=f32
-^blk\.0\.attn_k_norm\.weight$=f32
-^blk\.0\.attn_k\.bias$=f32
-^blk\.0\.attn_k\.weight$=bf16
-^blk\.0\.attn_output\.weight$=bf16
-^blk\.0\.attn_q_norm\.weight$=f32
-^blk\.0\.attn_q\.bias$=f32
-^blk\.0\.attn_q\.weight$=bf16
-^blk\.0\.attn_v\.bias$=f32
-^blk\.0\.attn_v\.weight$=bf16
-^blk\.1\.attn_norm\.weight$=f32
-^blk\.1\.ffn_down\.weight$=bf16
-^blk\.1\.ffn_gate\.weight$=bf16
-^blk\.1\.ffn_up\.weight$=bf16
-^blk\.1\.post_attention_norm\.weight$=f32
-^blk\.1\.attn_k_norm\.weight$=f32
-^blk\.1\.attn_k\.bias$=f32
-^blk\.1\.attn_k\.weight$=bf16
-^blk\.1\.attn_output\.weight$=bf16
-^blk\.1\.attn_q_norm\.weight$=f32
-^blk\.1\.attn_q\.bias$=f32
-^blk\.1\.attn_q\.weight$=bf16
-^blk\.1\.attn_v\.bias$=f32
-^blk\.1\.attn_v\.weight$=bf16
-^blk\.2\.attn_norm\.weight$=f32
-^blk\.2\.ffn_down\.weight$=bf16
-^blk\.2\.ffn_gate\.weight$=bf16
-^blk\.2\.ffn_up\.weight$=bf16
-^blk\.2\.post_attention_norm\.weight$=f32
-^blk\.2\.attn_k_norm\.weight$=f32
-^blk\.2\.attn_k\.bias$=f32
-^blk\.2\.attn_k\.weight$=bf16
-^blk\.2\.attn_output\.weight$=bf16
-^blk\.2\.attn_q_norm\.weight$=f32
-^blk\.2\.attn_q\.bias$=f32
-^blk\.2\.attn_q\.weight$=bf16
-^blk\.2\.attn_v\.bias$=f32
-^blk\.2\.attn_v\.weight$=bf16
-^blk\.3\.attn_norm\.weight$=f32
-^blk\.3\.ffn_down_exps\.weight$=bf16
-^blk\.3\.ffn_gate_exps\.weight$=bf16
-^blk\.3\.ffn_up_exps\.weight$=bf16
-^blk\.3\.exp_probs_b\.bias$=f32
-^blk\.3\.ffn_gate_inp\.weight$=f32
-^blk\.3\.ffn_down_shexp\.weight$=bf16
-^blk\.3\.ffn_gate_shexp\.weight$=bf16
-^blk\.3\.ffn_up_shexp\.weight$=bf16
-^blk\.3\.post_attention_norm\.weight$=f32
-^blk\.3\.attn_k_norm\.weight$=f32
-^blk\.3\.attn_k\.bias$=f32
-^blk\.3\.attn_k\.weight$=bf16
-^blk\.3\.attn_output\.weight$=bf16
-^blk\.3\.attn_q_norm\.weight$=f32
-^blk\.3\.attn_q\.bias$=f32
-^blk\.3\.attn_q\.weight$=bf16
-^blk\.3\.attn_v\.bias$=f32
-^blk\.3\.attn_v\.weight$=bf16
-^blk\.4\.attn_norm\.weight$=f32
-^blk\.4\.ffn_down_exps\.weight$=bf16
-^blk\.4\.ffn_gate_exps\.weight$=bf16
-^blk\.4\.ffn_up_exps\.weight$=bf16
-^blk\.4\.exp_probs_b\.bias$=f32
-^blk\.4\.ffn_gate_inp\.weight$=f32
-^blk\.4\.ffn_down_shexp\.weight$=bf16
-^blk\.4\.ffn_gate_shexp\.weight$=bf16
-^blk\.4\.ffn_up_shexp\.weight$=bf16
-^blk\.4\.post_attention_norm\.weight$=f32
-^blk\.4\.attn_k_norm\.weight$=f32
-^blk\.4\.attn_k\.bias$=f32
-^blk\.4\.attn_k\.weight$=bf16
-^blk\.4\.attn_output\.weight$=bf16
-^blk\.4\.attn_q_norm\.weight$=f32
-^blk\.4\.attn_q\.bias$=f32
-^blk\.4\.attn_q\.weight$=bf16
-^blk\.4\.attn_v\.bias$=f32
-^blk\.4\.attn_v\.weight$=bf16
-^blk\.5\.attn_norm\.weight$=f32
-^blk\.5\.ffn_down_exps\.weight$=bf16
-^blk\.5\.ffn_gate_exps\.weight$=bf16
-^blk\.5\.ffn_up_exps\.weight$=bf16
-^blk\.5\.exp_probs_b\.bias$=f32
-^blk\.5\.ffn_gate_inp\.weight$=f32
-^blk\.5\.ffn_down_shexp\.weight$=bf16
-^blk\.5\.ffn_gate_shexp\.weight$=bf16
-^blk\.5\.ffn_up_shexp\.weight$=bf16
-^blk\.5\.post_attention_norm\.weight$=f32
-^blk\.5\.attn_k_norm\.weight$=f32
-^blk\.5\.attn_k\.bias$=f32
-^blk\.5\.attn_k\.weight$=bf16
-^blk\.5\.attn_output\.weight$=bf16
-^blk\.5\.attn_q_norm\.weight$=f32
-^blk\.5\.attn_q\.bias$=f32
-^blk\.5\.attn_q\.weight$=bf16
-^blk\.5\.attn_v\.bias$=f32
-^blk\.5\.attn_v\.weight$=bf16
-^blk\.6\.attn_norm\.weight$=f32
-^blk\.6\.ffn_down_exps\.weight$=bf16
-^blk\.6\.ffn_gate_exps\.weight$=bf16
-^blk\.6\.ffn_up_exps\.weight$=bf16
-^blk\.6\.exp_probs_b\.bias$=f32
-^blk\.6\.ffn_gate_inp\.weight$=f32
-^blk\.6\.ffn_down_shexp\.weight$=bf16
-^blk\.6\.ffn_gate_shexp\.weight$=bf16
-^blk\.6\.ffn_up_shexp\.weight$=bf16
-^blk\.6\.post_attention_norm\.weight$=f32
-^blk\.6\.attn_k_norm\.weight$=f32
-^blk\.6\.attn_k\.bias$=f32
-^blk\.6\.attn_k\.weight$=bf16
-^blk\.6\.attn_output\.weight$=bf16
-^blk\.6\.attn_q_norm\.weight$=f32
-^blk\.6\.attn_q\.bias$=f32
-^blk\.6\.attn_q\.weight$=bf16
-^blk\.6\.attn_v\.bias$=f32
-^blk\.6\.attn_v\.weight$=bf16
-^blk\.7\.attn_norm\.weight$=f32
-^blk\.7\.ffn_down_exps\.weight$=bf16
-^blk\.7\.ffn_gate_exps\.weight$=bf16
-^blk\.7\.ffn_up_exps\.weight$=bf16
-^blk\.7\.exp_probs_b\.bias$=f32
-^blk\.7\.ffn_gate_inp\.weight$=f32
-^blk\.7\.ffn_down_shexp\.weight$=bf16
-^blk\.7\.ffn_gate_shexp\.weight$=bf16
-^blk\.7\.ffn_up_shexp\.weight$=bf16
-^blk\.7\.post_attention_norm\.weight$=f32
-^blk\.7\.attn_k_norm\.weight$=f32
-^blk\.7\.attn_k\.bias$=f32
-^blk\.7\.attn_k\.weight$=bf16
-^blk\.7\.attn_output\.weight$=bf16
-^blk\.7\.attn_q_norm\.weight$=f32
-^blk\.7\.attn_q\.bias$=f32
-^blk\.7\.attn_q\.weight$=bf16
-^blk\.7\.attn_v\.bias$=f32
-^blk\.7\.attn_v\.weight$=bf16
-^blk\.8\.attn_norm\.weight$=f32
-^blk\.8\.ffn_down_exps\.weight$=bf16
-^blk\.8\.ffn_gate_exps\.weight$=bf16
-^blk\.8\.ffn_up_exps\.weight$=bf16
-^blk\.8\.exp_probs_b\.bias$=f32
-^blk\.8\.ffn_gate_inp\.weight$=f32
-^blk\.8\.ffn_down_shexp\.weight$=bf16
-^blk\.8\.ffn_gate_shexp\.weight$=bf16
-^blk\.8\.ffn_up_shexp\.weight$=bf16
-^blk\.8\.post_attention_norm\.weight$=f32
-^blk\.8\.attn_k_norm\.weight$=f32
-^blk\.8\.attn_k\.bias$=f32
-^blk\.8\.attn_k\.weight$=bf16
-^blk\.8\.attn_output\.weight$=bf16
-^blk\.8\.attn_q_norm\.weight$=f32
-^blk\.8\.attn_q\.bias$=f32
-^blk\.8\.attn_q\.weight$=bf16
-^blk\.8\.attn_v\.bias$=f32
-^blk\.8\.attn_v\.weight$=bf16
-^blk\.9\.attn_norm\.weight$=f32
-^blk\.9\.ffn_down_exps\.weight$=bf16
-^blk\.9\.ffn_gate_exps\.weight$=bf16
-^blk\.9\.ffn_up_exps\.weight$=bf16
-^blk\.9\.exp_probs_b\.bias$=f32
-^blk\.9\.ffn_gate_inp\.weight$=f32
-^blk\.9\.ffn_down_shexp\.weight$=bf16
-^blk\.9\.ffn_gate_shexp\.weight$=bf16
-^blk\.9\.ffn_up_shexp\.weight$=bf16
-^blk\.9\.post_attention_norm\.weight$=f32
-^blk\.9\.attn_k_norm\.weight$=f32
-^blk\.9\.attn_k\.bias$=f32
-^blk\.9\.attn_k\.weight$=bf16
-^blk\.9\.attn_output\.weight$=bf16
-^blk\.9\.attn_q_norm\.weight$=f32
-^blk\.9\.attn_q\.bias$=f32
-^blk\.9\.attn_q\.weight$=bf16
-^blk\.9\.attn_v\.bias$=f32
-^blk\.9\.attn_v\.weight$=bf16
-^blk\.10\.attn_norm\.weight$=f32
-^blk\.10\.ffn_down_exps\.weight$=bf16
-^blk\.10\.ffn_gate_exps\.weight$=bf16
-^blk\.10\.ffn_up_exps\.weight$=bf16
-^blk\.10\.exp_probs_b\.bias$=f32
-^blk\.10\.ffn_gate_inp\.weight$=f32
-^blk\.10\.ffn_down_shexp\.weight$=bf16
-^blk\.10\.ffn_gate_shexp\.weight$=bf16
-^blk\.10\.ffn_up_shexp\.weight$=bf16
-^blk\.10\.post_attention_norm\.weight$=f32
-^blk\.10\.attn_k_norm\.weight$=f32
-^blk\.10\.attn_k\.bias$=f32
-^blk\.10\.attn_k\.weight$=bf16
-^blk\.10\.attn_output\.weight$=bf16
-^blk\.10\.attn_q_norm\.weight$=f32
-^blk\.10\.attn_q\.bias$=f32
-^blk\.10\.attn_q\.weight$=bf16
-^blk\.10\.attn_v\.bias$=f32
-^blk\.10\.attn_v\.weight$=bf16
-^blk\.11\.attn_norm\.weight$=f32
-^blk\.11\.ffn_down_exps\.weight$=bf16
-^blk\.11\.ffn_gate_exps\.weight$=bf16
-^blk\.11\.ffn_up_exps\.weight$=bf16
-^blk\.11\.exp_probs_b\.bias$=f32
-^blk\.11\.ffn_gate_inp\.weight$=f32
-^blk\.11\.ffn_down_shexp\.weight$=bf16
-^blk\.11\.ffn_gate_shexp\.weight$=bf16
-^blk\.11\.ffn_up_shexp\.weight$=bf16
-^blk\.11\.post_attention_norm\.weight$=f32
-^blk\.11\.attn_k_norm\.weight$=f32
-^blk\.11\.attn_k\.bias$=f32
-^blk\.11\.attn_k\.weight$=bf16
-^blk\.11\.attn_output\.weight$=bf16
-^blk\.11\.attn_q_norm\.weight$=f32
-^blk\.11\.attn_q\.bias$=f32
-^blk\.11\.attn_q\.weight$=bf16
-^blk\.11\.attn_v\.bias$=f32
-^blk\.11\.attn_v\.weight$=bf16
-^blk\.12\.attn_norm\.weight$=f32
-^blk\.12\.ffn_down_exps\.weight$=bf16
-^blk\.12\.ffn_gate_exps\.weight$=bf16
-^blk\.12\.ffn_up_exps\.weight$=bf16
-^blk\.12\.exp_probs_b\.bias$=f32
-^blk\.12\.ffn_gate_inp\.weight$=f32
-^blk\.12\.ffn_down_shexp\.weight$=bf16
-^blk\.12\.ffn_gate_shexp\.weight$=bf16
-^blk\.12\.ffn_up_shexp\.weight$=bf16
-^blk\.12\.post_attention_norm\.weight$=f32
-^blk\.12\.attn_k_norm\.weight$=f32
-^blk\.12\.attn_k\.bias$=f32
-^blk\.12\.attn_k\.weight$=bf16
-^blk\.12\.attn_output\.weight$=bf16
-^blk\.12\.attn_q_norm\.weight$=f32
-^blk\.12\.attn_q\.bias$=f32
-^blk\.12\.attn_q\.weight$=bf16
-^blk\.12\.attn_v\.bias$=f32
-^blk\.12\.attn_v\.weight$=bf16
-^blk\.13\.attn_norm\.weight$=f32
-^blk\.13\.ffn_down_exps\.weight$=bf16
-^blk\.13\.ffn_gate_exps\.weight$=bf16
-^blk\.13\.ffn_up_exps\.weight$=bf16
-^blk\.13\.exp_probs_b\.bias$=f32
-^blk\.13\.ffn_gate_inp\.weight$=f32
-^blk\.13\.ffn_down_shexp\.weight$=bf16
-^blk\.13\.ffn_gate_shexp\.weight$=bf16
-^blk\.13\.ffn_up_shexp\.weight$=bf16
-^blk\.13\.post_attention_norm\.weight$=f32
-^blk\.13\.attn_k_norm\.weight$=f32
-^blk\.13\.attn_k\.bias$=f32
-^blk\.13\.attn_k\.weight$=bf16
-^blk\.13\.attn_output\.weight$=bf16
-^blk\.13\.attn_q_norm\.weight$=f32
-^blk\.13\.attn_q\.bias$=f32
-^blk\.13\.attn_q\.weight$=bf16
-^blk\.13\.attn_v\.bias$=f32
-^blk\.13\.attn_v\.weight$=bf16
-^blk\.14\.attn_norm\.weight$=f32
-^blk\.14\.ffn_down_exps\.weight$=bf16
-^blk\.14\.ffn_gate_exps\.weight$=bf16
-^blk\.14\.ffn_up_exps\.weight$=bf16
-^blk\.14\.exp_probs_b\.bias$=f32
-^blk\.14\.ffn_gate_inp\.weight$=f32
-^blk\.14\.ffn_down_shexp\.weight$=bf16
-^blk\.14\.ffn_gate_shexp\.weight$=bf16
-^blk\.14\.ffn_up_shexp\.weight$=bf16
-^blk\.14\.post_attention_norm\.weight$=f32
-^blk\.14\.attn_k_norm\.weight$=f32
-^blk\.14\.attn_k\.bias$=f32
-^blk\.14\.attn_k\.weight$=bf16
-^blk\.14\.attn_output\.weight$=bf16
-^blk\.14\.attn_q_norm\.weight$=f32
-^blk\.14\.attn_q\.bias$=f32
-^blk\.14\.attn_q\.weight$=bf16
-^blk\.14\.attn_v\.bias$=f32
-^blk\.14\.attn_v\.weight$=bf16
-^blk\.15\.attn_norm\.weight$=f32
-^blk\.15\.ffn_down_exps\.weight$=bf16
-^blk\.15\.ffn_gate_exps\.weight$=bf16
-^blk\.15\.ffn_up_exps\.weight$=bf16
-^blk\.15\.exp_probs_b\.bias$=f32
-^blk\.15\.ffn_gate_inp\.weight$=f32
-^blk\.15\.ffn_down_shexp\.weight$=bf16
-^blk\.15\.ffn_gate_shexp\.weight$=bf16
-^blk\.15\.ffn_up_shexp\.weight$=bf16
-^blk\.15\.post_attention_norm\.weight$=f32
-^blk\.15\.attn_k_norm\.weight$=f32
-^blk\.15\.attn_k\.bias$=f32
-^blk\.15\.attn_k\.weight$=bf16
-^blk\.15\.attn_output\.weight$=bf16
-^blk\.15\.attn_q_norm\.weight$=f32
-^blk\.15\.attn_q\.bias$=f32
-^blk\.15\.attn_q\.weight$=bf16
-^blk\.15\.attn_v\.bias$=f32
-^blk\.15\.attn_v\.weight$=bf16
-^blk\.16\.attn_norm\.weight$=f32
-^blk\.16\.ffn_down_exps\.weight$=bf16
-^blk\.16\.ffn_gate_exps\.weight$=bf16
-^blk\.16\.ffn_up_exps\.weight$=bf16
-^blk\.16\.exp_probs_b\.bias$=f32
-^blk\.16\.ffn_gate_inp\.weight$=f32
-^blk\.16\.ffn_down_shexp\.weight$=bf16
-^blk\.16\.ffn_gate_shexp\.weight$=bf16
-^blk\.16\.ffn_up_shexp\.weight$=bf16
-^blk\.16\.post_attention_norm\.weight$=f32
-^blk\.16\.attn_k_norm\.weight$=f32
-^blk\.16\.attn_k\.bias$=f32
-^blk\.16\.attn_k\.weight$=bf16
-^blk\.16\.attn_output\.weight$=bf16
-^blk\.16\.attn_q_norm\.weight$=f32
-^blk\.16\.attn_q\.bias$=f32
-^blk\.16\.attn_q\.weight$=bf16
-^blk\.16\.attn_v\.bias$=f32
-^blk\.16\.attn_v\.weight$=bf16
-^blk\.17\.attn_norm\.weight$=f32
-^blk\.17\.ffn_down_exps\.weight$=bf16
-^blk\.17\.ffn_gate_exps\.weight$=bf16
-^blk\.17\.ffn_up_exps\.weight$=bf16
-^blk\.17\.exp_probs_b\.bias$=f32
-^blk\.17\.ffn_gate_inp\.weight$=f32
-^blk\.17\.ffn_down_shexp\.weight$=bf16
-^blk\.17\.ffn_gate_shexp\.weight$=bf16
-^blk\.17\.ffn_up_shexp\.weight$=bf16
-^blk\.17\.post_attention_norm\.weight$=f32
-^blk\.17\.attn_k_norm\.weight$=f32
-^blk\.17\.attn_k\.bias$=f32
-^blk\.17\.attn_k\.weight$=bf16
-^blk\.17\.attn_output\.weight$=bf16
-^blk\.17\.attn_q_norm\.weight$=f32
-^blk\.17\.attn_q\.bias$=f32
-^blk\.17\.attn_q\.weight$=bf16
-^blk\.17\.attn_v\.bias$=f32
-^blk\.17\.attn_v\.weight$=bf16
-^blk\.18\.attn_norm\.weight$=f32
-^blk\.18\.ffn_down_exps\.weight$=bf16
-^blk\.18\.ffn_gate_exps\.weight$=bf16
-^blk\.18\.ffn_up_exps\.weight$=bf16
-^blk\.18\.exp_probs_b\.bias$=f32
-^blk\.18\.ffn_gate_inp\.weight$=f32
-^blk\.18\.ffn_down_shexp\.weight$=bf16
-^blk\.18\.ffn_gate_shexp\.weight$=bf16
-^blk\.18\.ffn_up_shexp\.weight$=bf16
-^blk\.18\.post_attention_norm\.weight$=f32
-^blk\.18\.attn_k_norm\.weight$=f32
-^blk\.18\.attn_k\.bias$=f32
-^blk\.18\.attn_k\.weight$=bf16
-^blk\.18\.attn_output\.weight$=bf16
-^blk\.18\.attn_q_norm\.weight$=f32
-^blk\.18\.attn_q\.bias$=f32
-^blk\.18\.attn_q\.weight$=bf16
-^blk\.18\.attn_v\.bias$=f32
-^blk\.18\.attn_v\.weight$=bf16
-^blk\.19\.attn_norm\.weight$=f32
-^blk\.19\.ffn_down_exps\.weight$=bf16
-^blk\.19\.ffn_gate_exps\.weight$=bf16
-^blk\.19\.ffn_up_exps\.weight$=bf16
-^blk\.19\.exp_probs_b\.bias$=f32
-^blk\.19\.ffn_gate_inp\.weight$=f32
-^blk\.19\.ffn_down_shexp\.weight$=bf16
-^blk\.19\.ffn_gate_shexp\.weight$=bf16
-^blk\.19\.ffn_up_shexp\.weight$=bf16
-^blk\.19\.post_attention_norm\.weight$=f32
-^blk\.19\.attn_k_norm\.weight$=f32
-^blk\.19\.attn_k\.bias$=f32
-^blk\.19\.attn_k\.weight$=bf16
-^blk\.19\.attn_output\.weight$=bf16
-^blk\.19\.attn_q_norm\.weight$=f32
-^blk\.19\.attn_q\.bias$=f32
-^blk\.19\.attn_q\.weight$=bf16
-^blk\.19\.attn_v\.bias$=f32
-^blk\.19\.attn_v\.weight$=bf16
-^blk\.20\.attn_norm\.weight$=f32
-^blk\.20\.ffn_down_exps\.weight$=bf16
-^blk\.20\.ffn_gate_exps\.weight$=bf16
-^blk\.20\.ffn_up_exps\.weight$=bf16
-^blk\.20\.exp_probs_b\.bias$=f32
-^blk\.20\.ffn_gate_inp\.weight$=f32
-^blk\.20\.ffn_down_shexp\.weight$=bf16
-^blk\.20\.ffn_gate_shexp\.weight$=bf16
-^blk\.20\.ffn_up_shexp\.weight$=bf16
-^blk\.20\.post_attention_norm\.weight$=f32
-^blk\.20\.attn_k_norm\.weight$=f32
-^blk\.20\.attn_k\.bias$=f32
-^blk\.20\.attn_k\.weight$=bf16
-^blk\.20\.attn_output\.weight$=bf16
-^blk\.20\.attn_q_norm\.weight$=f32
-^blk\.20\.attn_q\.bias$=f32
-^blk\.20\.attn_q\.weight$=bf16
-^blk\.20\.attn_v\.bias$=f32
-^blk\.20\.attn_v\.weight$=bf16
-^blk\.21\.attn_norm\.weight$=f32
-^blk\.21\.ffn_down_exps\.weight$=bf16
-^blk\.21\.ffn_gate_exps\.weight$=bf16
-^blk\.21\.ffn_up_exps\.weight$=bf16
-^blk\.21\.exp_probs_b\.bias$=f32
-^blk\.21\.ffn_gate_inp\.weight$=f32
-^blk\.21\.ffn_down_shexp\.weight$=bf16
-^blk\.21\.ffn_gate_shexp\.weight$=bf16
-^blk\.21\.ffn_up_shexp\.weight$=bf16
-^blk\.21\.post_attention_norm\.weight$=f32
-^blk\.21\.attn_k_norm\.weight$=f32
-^blk\.21\.attn_k\.bias$=f32
-^blk\.21\.attn_k\.weight$=bf16
-^blk\.21\.attn_output\.weight$=bf16
-^blk\.21\.attn_q_norm\.weight$=f32
-^blk\.21\.attn_q\.bias$=f32
-^blk\.21\.attn_q\.weight$=bf16
-^blk\.21\.attn_v\.bias$=f32
-^blk\.21\.attn_v\.weight$=bf16
-^blk\.22\.attn_norm\.weight$=f32
-^blk\.22\.ffn_down_exps\.weight$=bf16
-^blk\.22\.ffn_gate_exps\.weight$=bf16
-^blk\.22\.ffn_up_exps\.weight$=bf16
-^blk\.22\.exp_probs_b\.bias$=f32
-^blk\.22\.ffn_gate_inp\.weight$=f32
-^blk\.22\.ffn_down_shexp\.weight$=bf16
-^blk\.22\.ffn_gate_shexp\.weight$=bf16
-^blk\.22\.ffn_up_shexp\.weight$=bf16
-^blk\.22\.post_attention_norm\.weight$=f32
-^blk\.22\.attn_k_norm\.weight$=f32
-^blk\.22\.attn_k\.bias$=f32
-^blk\.22\.attn_k\.weight$=bf16
-^blk\.22\.attn_output\.weight$=bf16
-^blk\.22\.attn_q_norm\.weight$=f32
-^blk\.22\.attn_q\.bias$=f32
-^blk\.22\.attn_q\.weight$=bf16
-^blk\.22\.attn_v\.bias$=f32
-^blk\.22\.attn_v\.weight$=bf16
-^blk\.23\.attn_norm\.weight$=f32
-^blk\.23\.ffn_down_exps\.weight$=bf16
-^blk\.23\.ffn_gate_exps\.weight$=bf16
-^blk\.23\.ffn_up_exps\.weight$=bf16
-^blk\.23\.exp_probs_b\.bias$=f32
-^blk\.23\.ffn_gate_inp\.weight$=f32
-^blk\.23\.ffn_down_shexp\.weight$=bf16
-^blk\.23\.ffn_gate_shexp\.weight$=bf16
-^blk\.23\.ffn_up_shexp\.weight$=bf16
-^blk\.23\.post_attention_norm\.weight$=f32
-^blk\.23\.attn_k_norm\.weight$=f32
-^blk\.23\.attn_k\.bias$=f32
-^blk\.23\.attn_k\.weight$=bf16
-^blk\.23\.attn_output\.weight$=bf16
-^blk\.23\.attn_q_norm\.weight$=f32
-^blk\.23\.attn_q\.bias$=f32
-^blk\.23\.attn_q\.weight$=bf16
-^blk\.23\.attn_v\.bias$=f32
-^blk\.23\.attn_v\.weight$=bf16
-^blk\.24\.attn_norm\.weight$=f32
-^blk\.24\.ffn_down_exps\.weight$=bf16
-^blk\.24\.ffn_gate_exps\.weight$=bf16
-^blk\.24\.ffn_up_exps\.weight$=bf16
-^blk\.24\.exp_probs_b\.bias$=f32
-^blk\.24\.ffn_gate_inp\.weight$=f32
-^blk\.24\.ffn_down_shexp\.weight$=bf16
-^blk\.24\.ffn_gate_shexp\.weight$=bf16
-^blk\.24\.ffn_up_shexp\.weight$=bf16
-^blk\.24\.post_attention_norm\.weight$=f32
-^blk\.24\.attn_k_norm\.weight$=f32
-^blk\.24\.attn_k\.bias$=f32
-^blk\.24\.attn_k\.weight$=bf16
-^blk\.24\.attn_output\.weight$=bf16
-^blk\.24\.attn_q_norm\.weight$=f32
-^blk\.24\.attn_q\.bias$=f32
-^blk\.24\.attn_q\.weight$=bf16
-^blk\.24\.attn_v\.bias$=f32
-^blk\.24\.attn_v\.weight$=bf16
-^blk\.25\.attn_norm\.weight$=f32
-^blk\.25\.ffn_down_exps\.weight$=bf16
-^blk\.25\.ffn_gate_exps\.weight$=bf16
-^blk\.25\.ffn_up_exps\.weight$=bf16
-^blk\.25\.exp_probs_b\.bias$=f32
-^blk\.25\.ffn_gate_inp\.weight$=f32
-^blk\.25\.ffn_down_shexp\.weight$=bf16
-^blk\.25\.ffn_gate_shexp\.weight$=bf16
-^blk\.25\.ffn_up_shexp\.weight$=bf16
-^blk\.25\.post_attention_norm\.weight$=f32
-^blk\.25\.attn_k_norm\.weight$=f32
-^blk\.25\.attn_k\.bias$=f32
-^blk\.25\.attn_k\.weight$=bf16
-^blk\.25\.attn_output\.weight$=bf16
-^blk\.25\.attn_q_norm\.weight$=f32
-^blk\.25\.attn_q\.bias$=f32
-^blk\.25\.attn_q\.weight$=bf16
-^blk\.25\.attn_v\.bias$=f32
-^blk\.25\.attn_v\.weight$=bf16
-^blk\.26\.attn_norm\.weight$=f32
-^blk\.26\.ffn_down_exps\.weight$=bf16
-^blk\.26\.ffn_gate_exps\.weight$=bf16
-^blk\.26\.ffn_up_exps\.weight$=bf16
-^blk\.26\.exp_probs_b\.bias$=f32
-^blk\.26\.ffn_gate_inp\.weight$=f32
-^blk\.26\.ffn_down_shexp\.weight$=bf16
-^blk\.26\.ffn_gate_shexp\.weight$=bf16
-^blk\.26\.ffn_up_shexp\.weight$=bf16
-^blk\.26\.post_attention_norm\.weight$=f32
-^blk\.26\.attn_k_norm\.weight$=f32
-^blk\.26\.attn_k\.bias$=f32
-^blk\.26\.attn_k\.weight$=bf16
-^blk\.26\.attn_output\.weight$=bf16
-^blk\.26\.attn_q_norm\.weight$=f32
-^blk\.26\.attn_q\.bias$=f32
-^blk\.26\.attn_q\.weight$=bf16
-^blk\.26\.attn_v\.bias$=f32
-^blk\.26\.attn_v\.weight$=bf16
-^blk\.27\.attn_norm\.weight$=f32
-^blk\.27\.ffn_down_exps\.weight$=bf16
-^blk\.27\.ffn_gate_exps\.weight$=bf16
-^blk\.27\.ffn_up_exps\.weight$=bf16
-^blk\.27\.exp_probs_b\.bias$=f32
-^blk\.27\.ffn_gate_inp\.weight$=f32
-^blk\.27\.ffn_down_shexp\.weight$=bf16
-^blk\.27\.ffn_gate_shexp\.weight$=bf16
-^blk\.27\.ffn_up_shexp\.weight$=bf16
-^blk\.27\.post_attention_norm\.weight$=f32
-^blk\.27\.attn_k_norm\.weight$=f32
-^blk\.27\.attn_k\.bias$=f32
-^blk\.27\.attn_k\.weight$=bf16
-^blk\.27\.attn_output\.weight$=bf16
-^blk\.27\.attn_q_norm\.weight$=f32
-^blk\.27\.attn_q\.bias$=f32
-^blk\.27\.attn_q\.weight$=bf16
-^blk\.27\.attn_v\.bias$=f32
-^blk\.27\.attn_v\.weight$=bf16
-^blk\.28\.attn_norm\.weight$=f32
-^blk\.28\.ffn_down_exps\.weight$=bf16
-^blk\.28\.ffn_gate_exps\.weight$=bf16
-^blk\.28\.ffn_up_exps\.weight$=bf16
-^blk\.28\.exp_probs_b\.bias$=f32
-^blk\.28\.ffn_gate_inp\.weight$=f32
-^blk\.28\.ffn_down_shexp\.weight$=bf16
-^blk\.28\.ffn_gate_shexp\.weight$=bf16
-^blk\.28\.ffn_up_shexp\.weight$=bf16
-^blk\.28\.post_attention_norm\.weight$=f32
-^blk\.28\.attn_k_norm\.weight$=f32
-^blk\.28\.attn_k\.bias$=f32
-^blk\.28\.attn_k\.weight$=bf16
-^blk\.28\.attn_output\.weight$=bf16
-^blk\.28\.attn_q_norm\.weight$=f32
-^blk\.28\.attn_q\.bias$=f32
-^blk\.28\.attn_q\.weight$=bf16
-^blk\.28\.attn_v\.bias$=f32
-^blk\.28\.attn_v\.weight$=bf16
-^blk\.29\.attn_norm\.weight$=f32
-^blk\.29\.ffn_down_exps\.weight$=bf16
-^blk\.29\.ffn_gate_exps\.weight$=bf16
-^blk\.29\.ffn_up_exps\.weight$=bf16
-^blk\.29\.exp_probs_b\.bias$=f32
-^blk\.29\.ffn_gate_inp\.weight$=f32
-^blk\.29\.ffn_down_shexp\.weight$=bf16
-^blk\.29\.ffn_gate_shexp\.weight$=bf16
-^blk\.29\.ffn_up_shexp\.weight$=bf16
-^blk\.29\.post_attention_norm\.weight$=f32
-^blk\.29\.attn_k_norm\.weight$=f32
-^blk\.29\.attn_k\.bias$=f32
-^blk\.29\.attn_k\.weight$=bf16
-^blk\.29\.attn_output\.weight$=bf16
-^blk\.29\.attn_q_norm\.weight$=f32
-^blk\.29\.attn_q\.bias$=f32
-^blk\.29\.attn_q\.weight$=bf16
-^blk\.29\.attn_v\.bias$=f32
-^blk\.29\.attn_v\.weight$=bf16
-^blk\.30\.attn_norm\.weight$=f32
-^blk\.30\.ffn_down_exps\.weight$=bf16
-^blk\.30\.ffn_gate_exps\.weight$=bf16
-^blk\.30\.ffn_up_exps\.weight$=bf16
-^blk\.30\.exp_probs_b\.bias$=f32
-^blk\.30\.ffn_gate_inp\.weight$=f32
-^blk\.30\.ffn_down_shexp\.weight$=bf16
-^blk\.30\.ffn_gate_shexp\.weight$=bf16
-^blk\.30\.ffn_up_shexp\.weight$=bf16
-^blk\.30\.post_attention_norm\.weight$=f32
-^blk\.30\.attn_k_norm\.weight$=f32
-^blk\.30\.attn_k\.bias$=f32
-^blk\.30\.attn_k\.weight$=bf16
-^blk\.30\.attn_output\.weight$=bf16
-^blk\.30\.attn_q_norm\.weight$=f32
-^blk\.30\.attn_q\.bias$=f32
-^blk\.30\.attn_q\.weight$=bf16
-^blk\.30\.attn_v\.bias$=f32
-^blk\.30\.attn_v\.weight$=bf16
-^blk\.31\.attn_norm\.weight$=f32
-^blk\.31\.ffn_down_exps\.weight$=bf16
-^blk\.31\.ffn_gate_exps\.weight$=bf16
-^blk\.31\.ffn_up_exps\.weight$=bf16
-^blk\.31\.exp_probs_b\.bias$=f32
-^blk\.31\.ffn_gate_inp\.weight$=f32
-^blk\.31\.ffn_down_shexp\.weight$=bf16
-^blk\.31\.ffn_gate_shexp\.weight$=bf16
-^blk\.31\.ffn_up_shexp\.weight$=bf16
-^blk\.31\.post_attention_norm\.weight$=f32
-^blk\.31\.attn_k_norm\.weight$=f32
-^blk\.31\.attn_k\.bias$=f32
-^blk\.31\.attn_k\.weight$=bf16
-^blk\.31\.attn_output\.weight$=bf16
-^blk\.31\.attn_q_norm\.weight$=f32
-^blk\.31\.attn_q\.bias$=f32
-^blk\.31\.attn_q\.weight$=bf16
-^blk\.31\.attn_v\.bias$=f32
-^blk\.31\.attn_v\.weight$=bf16
-^blk\.32\.attn_norm\.weight$=f32
-^blk\.32\.ffn_down_exps\.weight$=bf16
-^blk\.32\.ffn_gate_exps\.weight$=bf16
-^blk\.32\.ffn_up_exps\.weight$=bf16
-^blk\.32\.exp_probs_b\.bias$=f32
-^blk\.32\.ffn_gate_inp\.weight$=f32
-^blk\.32\.ffn_down_shexp\.weight$=bf16
-^blk\.32\.ffn_gate_shexp\.weight$=bf16
-^blk\.32\.ffn_up_shexp\.weight$=bf16
-^blk\.32\.post_attention_norm\.weight$=f32
-^blk\.32\.attn_k_norm\.weight$=f32
-^blk\.32\.attn_k\.bias$=f32
-^blk\.32\.attn_k\.weight$=bf16
-^blk\.32\.attn_output\.weight$=bf16
-^blk\.32\.attn_q_norm\.weight$=f32
-^blk\.32\.attn_q\.bias$=f32
-^blk\.32\.attn_q\.weight$=bf16
-^blk\.32\.attn_v\.bias$=f32
-^blk\.32\.attn_v\.weight$=bf16
-^blk\.33\.attn_norm\.weight$=f32
-^blk\.33\.ffn_down_exps\.weight$=bf16
-^blk\.33\.ffn_gate_exps\.weight$=bf16
-^blk\.33\.ffn_up_exps\.weight$=bf16
-^blk\.33\.exp_probs_b\.bias$=f32
-^blk\.33\.ffn_gate_inp\.weight$=f32
-^blk\.33\.ffn_down_shexp\.weight$=bf16
-^blk\.33\.ffn_gate_shexp\.weight$=bf16
-^blk\.33\.ffn_up_shexp\.weight$=bf16
-^blk\.33\.post_attention_norm\.weight$=f32
-^blk\.33\.attn_k_norm\.weight$=f32
-^blk\.33\.attn_k\.bias$=f32
-^blk\.33\.attn_k\.weight$=bf16
-^blk\.33\.attn_output\.weight$=bf16
-^blk\.33\.attn_q_norm\.weight$=f32
-^blk\.33\.attn_q\.bias$=f32
-^blk\.33\.attn_q\.weight$=bf16
-^blk\.33\.attn_v\.bias$=f32
-^blk\.33\.attn_v\.weight$=bf16
-^blk\.34\.attn_norm\.weight$=f32
-^blk\.34\.ffn_down_exps\.weight$=bf16
-^blk\.34\.ffn_gate_exps\.weight$=bf16
-^blk\.34\.ffn_up_exps\.weight$=bf16
-^blk\.34\.exp_probs_b\.bias$=f32
-^blk\.34\.ffn_gate_inp\.weight$=f32
-^blk\.34\.ffn_down_shexp\.weight$=bf16
-^blk\.34\.ffn_gate_shexp\.weight$=bf16
-^blk\.34\.ffn_up_shexp\.weight$=bf16
-^blk\.34\.post_attention_norm\.weight$=f32
-^blk\.34\.attn_k_norm\.weight$=f32
-^blk\.34\.attn_k\.bias$=f32
-^blk\.34\.attn_k\.weight$=bf16
-^blk\.34\.attn_output\.weight$=bf16
-^blk\.34\.attn_q_norm\.weight$=f32
-^blk\.34\.attn_q\.bias$=f32
-^blk\.34\.attn_q\.weight$=bf16
-^blk\.34\.attn_v\.bias$=f32
-^blk\.34\.attn_v\.weight$=bf16
-^blk\.35\.attn_norm\.weight$=f32
-^blk\.35\.ffn_down_exps\.weight$=bf16
-^blk\.35\.ffn_gate_exps\.weight$=bf16
-^blk\.35\.ffn_up_exps\.weight$=bf16
-^blk\.35\.exp_probs_b\.bias$=f32
-^blk\.35\.ffn_gate_inp\.weight$=f32
-^blk\.35\.ffn_down_shexp\.weight$=bf16
-^blk\.35\.ffn_gate_shexp\.weight$=bf16
-^blk\.35\.ffn_up_shexp\.weight$=bf16
-^blk\.35\.post_attention_norm\.weight$=f32
-^blk\.35\.attn_k_norm\.weight$=f32
-^blk\.35\.attn_k\.bias$=f32
-^blk\.35\.attn_k\.weight$=bf16
-^blk\.35\.attn_output\.weight$=bf16
-^blk\.35\.attn_q_norm\.weight$=f32
-^blk\.35\.attn_q\.bias$=f32
-^blk\.35\.attn_q\.weight$=bf16
-^blk\.35\.attn_v\.bias$=f32
-^blk\.35\.attn_v\.weight$=bf16
-^blk\.36\.attn_norm\.weight$=f32
-^blk\.36\.ffn_down_exps\.weight$=bf16
-^blk\.36\.ffn_gate_exps\.weight$=bf16
-^blk\.36\.ffn_up_exps\.weight$=bf16
-^blk\.36\.exp_probs_b\.bias$=f32
-^blk\.36\.ffn_gate_inp\.weight$=f32
-^blk\.36\.ffn_down_shexp\.weight$=bf16
-^blk\.36\.ffn_gate_shexp\.weight$=bf16
-^blk\.36\.ffn_up_shexp\.weight$=bf16
-^blk\.36\.post_attention_norm\.weight$=f32
-^blk\.36\.attn_k_norm\.weight$=f32
-^blk\.36\.attn_k\.bias$=f32
-^blk\.36\.attn_k\.weight$=bf16
-^blk\.36\.attn_output\.weight$=bf16
-^blk\.36\.attn_q_norm\.weight$=f32
-^blk\.36\.attn_q\.bias$=f32
-^blk\.36\.attn_q\.weight$=bf16
-^blk\.36\.attn_v\.bias$=f32
-^blk\.36\.attn_v\.weight$=bf16
-^blk\.37\.attn_norm\.weight$=f32
-^blk\.37\.ffn_down_exps\.weight$=bf16
-^blk\.37\.ffn_gate_exps\.weight$=bf16
-^blk\.37\.ffn_up_exps\.weight$=bf16
-^blk\.37\.exp_probs_b\.bias$=f32
-^blk\.37\.ffn_gate_inp\.weight$=f32
-^blk\.37\.ffn_down_shexp\.weight$=bf16
-^blk\.37\.ffn_gate_shexp\.weight$=bf16
-^blk\.37\.ffn_up_shexp\.weight$=bf16
-^blk\.37\.post_attention_norm\.weight$=f32
-^blk\.37\.attn_k_norm\.weight$=f32
-^blk\.37\.attn_k\.bias$=f32
-^blk\.37\.attn_k\.weight$=bf16
-^blk\.37\.attn_output\.weight$=bf16
-^blk\.37\.attn_q_norm\.weight$=f32
-^blk\.37\.attn_q\.bias$=f32
-^blk\.37\.attn_q\.weight$=bf16
-^blk\.37\.attn_v\.bias$=f32
-^blk\.37\.attn_v\.weight$=bf16
-^blk\.38\.attn_norm\.weight$=f32
-^blk\.38\.ffn_down_exps\.weight$=bf16
-^blk\.38\.ffn_gate_exps\.weight$=bf16
-^blk\.38\.ffn_up_exps\.weight$=bf16
-^blk\.38\.exp_probs_b\.bias$=f32
-^blk\.38\.ffn_gate_inp\.weight$=f32
-^blk\.38\.ffn_down_shexp\.weight$=bf16
-^blk\.38\.ffn_gate_shexp\.weight$=bf16
-^blk\.38\.ffn_up_shexp\.weight$=bf16
-^blk\.38\.post_attention_norm\.weight$=f32
-^blk\.38\.attn_k_norm\.weight$=f32
-^blk\.38\.attn_k\.bias$=f32
-^blk\.38\.attn_k\.weight$=bf16
-^blk\.38\.attn_output\.weight$=bf16
-^blk\.38\.attn_q_norm\.weight$=f32
-^blk\.38\.attn_q\.bias$=f32
-^blk\.38\.attn_q\.weight$=bf16
-^blk\.38\.attn_v\.bias$=f32
-^blk\.38\.attn_v\.weight$=bf16
-^blk\.39\.attn_norm\.weight$=f32
-^blk\.39\.ffn_down_exps\.weight$=bf16
-^blk\.39\.ffn_gate_exps\.weight$=bf16
-^blk\.39\.ffn_up_exps\.weight$=bf16
-^blk\.39\.exp_probs_b\.bias$=f32
-^blk\.39\.ffn_gate_inp\.weight$=f32
-^blk\.39\.ffn_down_shexp\.weight$=bf16
-^blk\.39\.ffn_gate_shexp\.weight$=bf16
-^blk\.39\.ffn_up_shexp\.weight$=bf16
-^blk\.39\.post_attention_norm\.weight$=f32
-^blk\.39\.attn_k_norm\.weight$=f32
-^blk\.39\.attn_k\.bias$=f32
-^blk\.39\.attn_k\.weight$=bf16
-^blk\.39\.attn_output\.weight$=bf16
-^blk\.39\.attn_q_norm\.weight$=f32
-^blk\.39\.attn_q\.bias$=f32
-^blk\.39\.attn_q\.weight$=bf16
-^blk\.39\.attn_v\.bias$=f32
-^blk\.39\.attn_v\.weight$=bf16
-^blk\.40\.attn_norm\.weight$=f32
-^blk\.40\.ffn_down_exps\.weight$=bf16
-^blk\.40\.ffn_gate_exps\.weight$=bf16
-^blk\.40\.ffn_up_exps\.weight$=bf16
-^blk\.40\.exp_probs_b\.bias$=f32
-^blk\.40\.ffn_gate_inp\.weight$=f32
-^blk\.40\.ffn_down_shexp\.weight$=bf16
-^blk\.40\.ffn_gate_shexp\.weight$=bf16
-^blk\.40\.ffn_up_shexp\.weight$=bf16
-^blk\.40\.post_attention_norm\.weight$=f32
-^blk\.40\.attn_k_norm\.weight$=f32
-^blk\.40\.attn_k\.bias$=f32
-^blk\.40\.attn_k\.weight$=bf16
-^blk\.40\.attn_output\.weight$=bf16
-^blk\.40\.attn_q_norm\.weight$=f32
-^blk\.40\.attn_q\.bias$=f32
-^blk\.40\.attn_q\.weight$=bf16
-^blk\.40\.attn_v\.bias$=f32
-^blk\.40\.attn_v\.weight$=bf16
-^blk\.41\.attn_norm\.weight$=f32
-^blk\.41\.ffn_down_exps\.weight$=bf16
-^blk\.41\.ffn_gate_exps\.weight$=bf16
-^blk\.41\.ffn_up_exps\.weight$=bf16
-^blk\.41\.exp_probs_b\.bias$=f32
-^blk\.41\.ffn_gate_inp\.weight$=f32
-^blk\.41\.ffn_down_shexp\.weight$=bf16
-^blk\.41\.ffn_gate_shexp\.weight$=bf16
-^blk\.41\.ffn_up_shexp\.weight$=bf16
-^blk\.41\.post_attention_norm\.weight$=f32
-^blk\.41\.attn_k_norm\.weight$=f32
-^blk\.41\.attn_k\.bias$=f32
-^blk\.41\.attn_k\.weight$=bf16
-^blk\.41\.attn_output\.weight$=bf16
-^blk\.41\.attn_q_norm\.weight$=f32
-^blk\.41\.attn_q\.bias$=f32
-^blk\.41\.attn_q\.weight$=bf16
-^blk\.41\.attn_v\.bias$=f32
-^blk\.41\.attn_v\.weight$=bf16
-^blk\.42\.attn_norm\.weight$=f32
-^blk\.42\.ffn_down_exps\.weight$=bf16
-^blk\.42\.ffn_gate_exps\.weight$=bf16
-^blk\.42\.ffn_up_exps\.weight$=bf16
-^blk\.42\.exp_probs_b\.bias$=f32
-^blk\.42\.ffn_gate_inp\.weight$=f32
-^blk\.42\.ffn_down_shexp\.weight$=bf16
-^blk\.42\.ffn_gate_shexp\.weight$=bf16
-^blk\.42\.ffn_up_shexp\.weight$=bf16
-^blk\.42\.post_attention_norm\.weight$=f32
-^blk\.42\.attn_k_norm\.weight$=f32
-^blk\.42\.attn_k\.bias$=f32
-^blk\.42\.attn_k\.weight$=bf16
-^blk\.42\.attn_output\.weight$=bf16
-^blk\.42\.attn_q_norm\.weight$=f32
-^blk\.42\.attn_q\.bias$=f32
-^blk\.42\.attn_q\.weight$=bf16
-^blk\.42\.attn_v\.bias$=f32
-^blk\.42\.attn_v\.weight$=bf16
-^blk\.43\.attn_norm\.weight$=f32
-^blk\.43\.ffn_down_exps\.weight$=bf16
-^blk\.43\.ffn_gate_exps\.weight$=bf16
-^blk\.43\.ffn_up_exps\.weight$=bf16
-^blk\.43\.exp_probs_b\.bias$=f32
-^blk\.43\.ffn_gate_inp\.weight$=f32
-^blk\.43\.ffn_down_shexp\.weight$=bf16
-^blk\.43\.ffn_gate_shexp\.weight$=bf16
-^blk\.43\.ffn_up_shexp\.weight$=bf16
-^blk\.43\.post_attention_norm\.weight$=f32
-^blk\.43\.attn_k_norm\.weight$=f32
-^blk\.43\.attn_k\.bias$=f32
-^blk\.43\.attn_k\.weight$=bf16
-^blk\.43\.attn_output\.weight$=bf16
-^blk\.43\.attn_q_norm\.weight$=f32
-^blk\.43\.attn_q\.bias$=f32
-^blk\.43\.attn_q\.weight$=bf16
-^blk\.43\.attn_v\.bias$=f32
-^blk\.43\.attn_v\.weight$=bf16
-^blk\.44\.attn_norm\.weight$=f32
-^blk\.44\.ffn_down_exps\.weight$=bf16
-^blk\.44\.ffn_gate_exps\.weight$=bf16
-^blk\.44\.ffn_up_exps\.weight$=bf16
-^blk\.44\.exp_probs_b\.bias$=f32
-^blk\.44\.ffn_gate_inp\.weight$=f32
-^blk\.44\.ffn_down_shexp\.weight$=bf16
-^blk\.44\.ffn_gate_shexp\.weight$=bf16
-^blk\.44\.ffn_up_shexp\.weight$=bf16
-^blk\.44\.post_attention_norm\.weight$=f32
-^blk\.44\.attn_k_norm\.weight$=f32
-^blk\.44\.attn_k\.bias$=f32
-^blk\.44\.attn_k\.weight$=bf16
-^blk\.44\.attn_output\.weight$=bf16
-^blk\.44\.attn_q_norm\.weight$=f32
-^blk\.44\.attn_q\.bias$=f32
-^blk\.44\.attn_q\.weight$=bf16
-^blk\.44\.attn_v\.bias$=f32
-^blk\.44\.attn_v\.weight$=bf16
-^blk\.45\.attn_norm\.weight$=f32
-^blk\.45\.ffn_down_exps\.weight$=bf16
-^blk\.45\.ffn_gate_exps\.weight$=bf16
-^blk\.45\.ffn_up_exps\.weight$=bf16
-^blk\.45\.exp_probs_b\.bias$=f32
-^blk\.45\.ffn_gate_inp\.weight$=f32
-^blk\.45\.ffn_down_shexp\.weight$=bf16
-^blk\.45\.ffn_gate_shexp\.weight$=bf16
-^blk\.45\.ffn_up_shexp\.weight$=bf16
-^blk\.45\.post_attention_norm\.weight$=f32
-^blk\.45\.attn_k_norm\.weight$=f32
-^blk\.45\.attn_k\.bias$=f32
-^blk\.45\.attn_k\.weight$=bf16
-^blk\.45\.attn_output\.weight$=bf16
-^blk\.45\.attn_q_norm\.weight$=f32
-^blk\.45\.attn_q\.bias$=f32
-^blk\.45\.attn_q\.weight$=bf16
-^blk\.45\.attn_v\.bias$=f32
-^blk\.45\.attn_v\.weight$=bf16
-^blk\.46\.attn_norm\.weight$=f32
-^blk\.46\.ffn_down_exps\.weight$=bf16
-^blk\.46\.ffn_gate_exps\.weight$=bf16
-^blk\.46\.ffn_up_exps\.weight$=bf16
-^blk\.46\.exp_probs_b\.bias$=f32
-^blk\.46\.ffn_gate_inp\.weight$=f32
-^blk\.46\.ffn_down_shexp\.weight$=bf16
-^blk\.46\.ffn_gate_shexp\.weight$=bf16
-^blk\.46\.ffn_up_shexp\.weight$=bf16
-^blk\.46\.post_attention_norm\.weight$=f32
-^blk\.46\.attn_k_norm\.weight$=f32
-^blk\.46\.attn_k\.bias$=f32
-^blk\.46\.attn_k\.weight$=bf16
-^blk\.46\.attn_output\.weight$=bf16
-^blk\.46\.attn_q_norm\.weight$=f32
-^blk\.46\.attn_q\.bias$=f32
-^blk\.46\.attn_q\.weight$=bf16
-^blk\.46\.attn_v\.bias$=f32
-^blk\.46\.attn_v\.weight$=bf16
-^blk\.47\.attn_norm\.weight$=f32
-^blk\.47\.ffn_down_exps\.weight$=bf16
-^blk\.47\.ffn_gate_exps\.weight$=bf16
-^blk\.47\.ffn_up_exps\.weight$=bf16
-^blk\.47\.exp_probs_b\.bias$=f32
-^blk\.47\.ffn_gate_inp\.weight$=f32
-^blk\.47\.ffn_down_shexp\.weight$=bf16
-^blk\.47\.ffn_gate_shexp\.weight$=bf16
-^blk\.47\.ffn_up_shexp\.weight$=bf16
-^blk\.47\.post_attention_norm\.weight$=f32
-^blk\.47\.attn_k_norm\.weight$=f32
-^blk\.47\.attn_k\.bias$=f32
-^blk\.47\.attn_k\.weight$=bf16
-^blk\.47\.attn_output\.weight$=bf16
-^blk\.47\.attn_q_norm\.weight$=f32
-^blk\.47\.attn_q\.bias$=f32
-^blk\.47\.attn_q\.weight$=bf16
-^blk\.47\.attn_v\.bias$=f32
-^blk\.47\.attn_v\.weight$=bf16
-^blk\.48\.attn_norm\.weight$=f32
-^blk\.48\.ffn_down_exps\.weight$=bf16
-^blk\.48\.ffn_gate_exps\.weight$=bf16
-^blk\.48\.ffn_up_exps\.weight$=bf16
-^blk\.48\.exp_probs_b\.bias$=f32
-^blk\.48\.ffn_gate_inp\.weight$=f32
-^blk\.48\.ffn_down_shexp\.weight$=bf16
-^blk\.48\.ffn_gate_shexp\.weight$=bf16
-^blk\.48\.ffn_up_shexp\.weight$=bf16
-^blk\.48\.post_attention_norm\.weight$=f32
-^blk\.48\.attn_k_norm\.weight$=f32
-^blk\.48\.attn_k\.bias$=f32
-^blk\.48\.attn_k\.weight$=bf16
-^blk\.48\.attn_output\.weight$=bf16
-^blk\.48\.attn_q_norm\.weight$=f32
-^blk\.48\.attn_q\.bias$=f32
-^blk\.48\.attn_q\.weight$=bf16
-^blk\.48\.attn_v\.bias$=f32
-^blk\.48\.attn_v\.weight$=bf16
-^blk\.49\.attn_norm\.weight$=f32
-^blk\.49\.ffn_down_exps\.weight$=bf16
-^blk\.49\.ffn_gate_exps\.weight$=bf16
-^blk\.49\.ffn_up_exps\.weight$=bf16
-^blk\.49\.exp_probs_b\.bias$=f32
-^blk\.49\.ffn_gate_inp\.weight$=f32
-^blk\.49\.ffn_down_shexp\.weight$=bf16
-^blk\.49\.ffn_gate_shexp\.weight$=bf16
-^blk\.49\.ffn_up_shexp\.weight$=bf16
-^blk\.49\.post_attention_norm\.weight$=f32
-^blk\.49\.attn_k_norm\.weight$=f32
-^blk\.49\.attn_k\.bias$=f32
-^blk\.49\.attn_k\.weight$=bf16
-^blk\.49\.attn_output\.weight$=bf16
-^blk\.49\.attn_q_norm\.weight$=f32
-^blk\.49\.attn_q\.bias$=f32
-^blk\.49\.attn_q\.weight$=bf16
-^blk\.49\.attn_v\.bias$=f32
-^blk\.49\.attn_v\.weight$=bf16
-^blk\.50\.attn_norm\.weight$=f32
-^blk\.50\.ffn_down_exps\.weight$=bf16
-^blk\.50\.ffn_gate_exps\.weight$=bf16
-^blk\.50\.ffn_up_exps\.weight$=bf16
-^blk\.50\.exp_probs_b\.bias$=f32
-^blk\.50\.ffn_gate_inp\.weight$=f32
-^blk\.50\.ffn_down_shexp\.weight$=bf16
-^blk\.50\.ffn_gate_shexp\.weight$=bf16
-^blk\.50\.ffn_up_shexp\.weight$=bf16
-^blk\.50\.post_attention_norm\.weight$=f32
-^blk\.50\.attn_k_norm\.weight$=f32
-^blk\.50\.attn_k\.bias$=f32
-^blk\.50\.attn_k\.weight$=bf16
-^blk\.50\.attn_output\.weight$=bf16
-^blk\.50\.attn_q_norm\.weight$=f32
-^blk\.50\.attn_q\.bias$=f32
-^blk\.50\.attn_q\.weight$=bf16
-^blk\.50\.attn_v\.bias$=f32
-^blk\.50\.attn_v\.weight$=bf16
-^blk\.51\.attn_norm\.weight$=f32
-^blk\.51\.ffn_down_exps\.weight$=bf16
-^blk\.51\.ffn_gate_exps\.weight$=bf16
-^blk\.51\.ffn_up_exps\.weight$=bf16
-^blk\.51\.exp_probs_b\.bias$=f32
-^blk\.51\.ffn_gate_inp\.weight$=f32
-^blk\.51\.ffn_down_shexp\.weight$=bf16
-^blk\.51\.ffn_gate_shexp\.weight$=bf16
-^blk\.51\.ffn_up_shexp\.weight$=bf16
-^blk\.51\.post_attention_norm\.weight$=f32
-^blk\.51\.attn_k_norm\.weight$=f32
-^blk\.51\.attn_k\.bias$=f32
-^blk\.51\.attn_k\.weight$=bf16
-^blk\.51\.attn_output\.weight$=bf16
-^blk\.51\.attn_q_norm\.weight$=f32
-^blk\.51\.attn_q\.bias$=f32
-^blk\.51\.attn_q\.weight$=bf16
-^blk\.51\.attn_v\.bias$=f32
-^blk\.51\.attn_v\.weight$=bf16
-^blk\.52\.attn_norm\.weight$=f32
-^blk\.52\.ffn_down_exps\.weight$=bf16
-^blk\.52\.ffn_gate_exps\.weight$=bf16
-^blk\.52\.ffn_up_exps\.weight$=bf16
-^blk\.52\.exp_probs_b\.bias$=f32
-^blk\.52\.ffn_gate_inp\.weight$=f32
-^blk\.52\.ffn_down_shexp\.weight$=bf16
-^blk\.52\.ffn_gate_shexp\.weight$=bf16
-^blk\.52\.ffn_up_shexp\.weight$=bf16
-^blk\.52\.post_attention_norm\.weight$=f32
-^blk\.52\.attn_k_norm\.weight$=f32
-^blk\.52\.attn_k\.bias$=f32
-^blk\.52\.attn_k\.weight$=bf16
-^blk\.52\.attn_output\.weight$=bf16
-^blk\.52\.attn_q_norm\.weight$=f32
-^blk\.52\.attn_q\.bias$=f32
-^blk\.52\.attn_q\.weight$=bf16
-^blk\.52\.attn_v\.bias$=f32
-^blk\.52\.attn_v\.weight$=bf16
-^blk\.53\.attn_norm\.weight$=f32
-^blk\.53\.ffn_down_exps\.weight$=bf16
-^blk\.53\.ffn_gate_exps\.weight$=bf16
-^blk\.53\.ffn_up_exps\.weight$=bf16
-^blk\.53\.exp_probs_b\.bias$=f32
-^blk\.53\.ffn_gate_inp\.weight$=f32
-^blk\.53\.ffn_down_shexp\.weight$=bf16
-^blk\.53\.ffn_gate_shexp\.weight$=bf16
-^blk\.53\.ffn_up_shexp\.weight$=bf16
-^blk\.53\.post_attention_norm\.weight$=f32
-^blk\.53\.attn_k_norm\.weight$=f32
-^blk\.53\.attn_k\.bias$=f32
-^blk\.53\.attn_k\.weight$=bf16
-^blk\.53\.attn_output\.weight$=bf16
-^blk\.53\.attn_q_norm\.weight$=f32
-^blk\.53\.attn_q\.bias$=f32
-^blk\.53\.attn_q\.weight$=bf16
-^blk\.53\.attn_v\.bias$=f32
-^blk\.53\.attn_v\.weight$=bf16
-^blk\.54\.attn_norm\.weight$=f32
-^blk\.54\.ffn_down_exps\.weight$=bf16
-^blk\.54\.ffn_gate_exps\.weight$=bf16
-^blk\.54\.ffn_up_exps\.weight$=bf16
-^blk\.54\.exp_probs_b\.bias$=f32
-^blk\.54\.ffn_gate_inp\.weight$=f32
-^blk\.54\.ffn_down_shexp\.weight$=bf16
-^blk\.54\.ffn_gate_shexp\.weight$=bf16
-^blk\.54\.ffn_up_shexp\.weight$=bf16
-^blk\.54\.post_attention_norm\.weight$=f32
-^blk\.54\.attn_k_norm\.weight$=f32
-^blk\.54\.attn_k\.bias$=f32
-^blk\.54\.attn_k\.weight$=bf16
-^blk\.54\.attn_output\.weight$=bf16
-^blk\.54\.attn_q_norm\.weight$=f32
-^blk\.54\.attn_q\.bias$=f32
-^blk\.54\.attn_q\.weight$=bf16
-^blk\.54\.attn_v\.bias$=f32
-^blk\.54\.attn_v\.weight$=bf16
-^blk\.55\.attn_norm\.weight$=f32
-^blk\.55\.ffn_down_exps\.weight$=bf16
-^blk\.55\.ffn_gate_exps\.weight$=bf16
-^blk\.55\.ffn_up_exps\.weight$=bf16
-^blk\.55\.exp_probs_b\.bias$=f32
-^blk\.55\.ffn_gate_inp\.weight$=f32
-^blk\.55\.ffn_down_shexp\.weight$=bf16
-^blk\.55\.ffn_gate_shexp\.weight$=bf16
-^blk\.55\.ffn_up_shexp\.weight$=bf16
-^blk\.55\.post_attention_norm\.weight$=f32
-^blk\.55\.attn_k_norm\.weight$=f32
-^blk\.55\.attn_k\.bias$=f32
-^blk\.55\.attn_k\.weight$=bf16
-^blk\.55\.attn_output\.weight$=bf16
-^blk\.55\.attn_q_norm\.weight$=f32
-^blk\.55\.attn_q\.bias$=f32
-^blk\.55\.attn_q\.weight$=bf16
-^blk\.55\.attn_v\.bias$=f32
-^blk\.55\.attn_v\.weight$=bf16
-^blk\.56\.attn_norm\.weight$=f32
-^blk\.56\.ffn_down_exps\.weight$=bf16
-^blk\.56\.ffn_gate_exps\.weight$=bf16
-^blk\.56\.ffn_up_exps\.weight$=bf16
-^blk\.56\.exp_probs_b\.bias$=f32
-^blk\.56\.ffn_gate_inp\.weight$=f32
-^blk\.56\.ffn_down_shexp\.weight$=bf16
-^blk\.56\.ffn_gate_shexp\.weight$=bf16
-^blk\.56\.ffn_up_shexp\.weight$=bf16
-^blk\.56\.post_attention_norm\.weight$=f32
-^blk\.56\.attn_k_norm\.weight$=f32
-^blk\.56\.attn_k\.bias$=f32
-^blk\.56\.attn_k\.weight$=bf16
-^blk\.56\.attn_output\.weight$=bf16
-^blk\.56\.attn_q_norm\.weight$=f32
-^blk\.56\.attn_q\.bias$=f32
-^blk\.56\.attn_q\.weight$=bf16
-^blk\.56\.attn_v\.bias$=f32
-^blk\.56\.attn_v\.weight$=bf16
-^blk\.57\.attn_norm\.weight$=f32
-^blk\.57\.ffn_down_exps\.weight$=bf16
-^blk\.57\.ffn_gate_exps\.weight$=bf16
-^blk\.57\.ffn_up_exps\.weight$=bf16
-^blk\.57\.exp_probs_b\.bias$=f32
-^blk\.57\.ffn_gate_inp\.weight$=f32
-^blk\.57\.ffn_down_shexp\.weight$=bf16
-^blk\.57\.ffn_gate_shexp\.weight$=bf16
-^blk\.57\.ffn_up_shexp\.weight$=bf16
-^blk\.57\.post_attention_norm\.weight$=f32
-^blk\.57\.attn_k_norm\.weight$=f32
-^blk\.57\.attn_k\.bias$=f32
-^blk\.57\.attn_k\.weight$=bf16
-^blk\.57\.attn_output\.weight$=bf16
-^blk\.57\.attn_q_norm\.weight$=f32
-^blk\.57\.attn_q\.bias$=f32
-^blk\.57\.attn_q\.weight$=bf16
-^blk\.57\.attn_v\.bias$=f32
-^blk\.57\.attn_v\.weight$=bf16
-^blk\.58\.attn_norm\.weight$=f32
-^blk\.58\.ffn_down_exps\.weight$=bf16
-^blk\.58\.ffn_gate_exps\.weight$=bf16
-^blk\.58\.ffn_up_exps\.weight$=bf16
-^blk\.58\.exp_probs_b\.bias$=f32
-^blk\.58\.ffn_gate_inp\.weight$=f32
-^blk\.58\.ffn_down_shexp\.weight$=bf16
-^blk\.58\.ffn_gate_shexp\.weight$=bf16
-^blk\.58\.ffn_up_shexp\.weight$=bf16
-^blk\.58\.post_attention_norm\.weight$=f32
-^blk\.58\.attn_k_norm\.weight$=f32
-^blk\.58\.attn_k\.bias$=f32
-^blk\.58\.attn_k\.weight$=bf16
-^blk\.58\.attn_output\.weight$=bf16
-^blk\.58\.attn_q_norm\.weight$=f32
-^blk\.58\.attn_q\.bias$=f32
-^blk\.58\.attn_q\.weight$=bf16
-^blk\.58\.attn_v\.bias$=f32
-^blk\.58\.attn_v\.weight$=bf16
-^blk\.59\.attn_norm\.weight$=f32
-^blk\.59\.ffn_down_exps\.weight$=bf16
-^blk\.59\.ffn_gate_exps\.weight$=bf16
-^blk\.59\.ffn_up_exps\.weight$=bf16
-^blk\.59\.exp_probs_b\.bias$=f32
-^blk\.59\.ffn_gate_inp\.weight$=f32
-^blk\.59\.ffn_down_shexp\.weight$=bf16
-^blk\.59\.ffn_gate_shexp\.weight$=bf16
-^blk\.59\.ffn_up_shexp\.weight$=bf16
-^blk\.59\.post_attention_norm\.weight$=f32
-^blk\.59\.attn_k_norm\.weight$=f32
-^blk\.59\.attn_k\.bias$=f32
-^blk\.59\.attn_k\.weight$=bf16
-^blk\.59\.attn_output\.weight$=bf16
-^blk\.59\.attn_q_norm\.weight$=f32
-^blk\.59\.attn_q\.bias$=f32
-^blk\.59\.attn_q\.weight$=bf16
-^blk\.59\.attn_v\.bias$=f32
-^blk\.59\.attn_v\.weight$=bf16
-^blk\.60\.attn_norm\.weight$=f32
-^blk\.60\.ffn_down_exps\.weight$=bf16
-^blk\.60\.ffn_gate_exps\.weight$=bf16
-^blk\.60\.ffn_up_exps\.weight$=bf16
-^blk\.60\.exp_probs_b\.bias$=f32
-^blk\.60\.ffn_gate_inp\.weight$=f32
-^blk\.60\.ffn_down_shexp\.weight$=bf16
-^blk\.60\.ffn_gate_shexp\.weight$=bf16
-^blk\.60\.ffn_up_shexp\.weight$=bf16
-^blk\.60\.post_attention_norm\.weight$=f32
-^blk\.60\.attn_k_norm\.weight$=f32
-^blk\.60\.attn_k\.bias$=f32
-^blk\.60\.attn_k\.weight$=bf16
-^blk\.60\.attn_output\.weight$=bf16
-^blk\.60\.attn_q_norm\.weight$=f32
-^blk\.60\.attn_q\.bias$=f32
-^blk\.60\.attn_q\.weight$=bf16
-^blk\.60\.attn_v\.bias$=f32
-^blk\.60\.attn_v\.weight$=bf16
-^blk\.61\.attn_norm\.weight$=f32
-^blk\.61\.ffn_down_exps\.weight$=bf16
-^blk\.61\.ffn_gate_exps\.weight$=bf16
-^blk\.61\.ffn_up_exps\.weight$=bf16
-^blk\.61\.exp_probs_b\.bias$=f32
-^blk\.61\.ffn_gate_inp\.weight$=f32
-^blk\.61\.ffn_down_shexp\.weight$=bf16
-^blk\.61\.ffn_gate_shexp\.weight$=bf16
-^blk\.61\.ffn_up_shexp\.weight$=bf16
-^blk\.61\.post_attention_norm\.weight$=f32
-^blk\.61\.attn_k_norm\.weight$=f32
-^blk\.61\.attn_k\.bias$=f32
-^blk\.61\.attn_k\.weight$=bf16
-^blk\.61\.attn_output\.weight$=bf16
-^blk\.61\.attn_q_norm\.weight$=f32
-^blk\.61\.attn_q\.bias$=f32
-^blk\.61\.attn_q\.weight$=bf16
-^blk\.61\.attn_v\.bias$=f32
-^blk\.61\.attn_v\.weight$=bf16
-^blk\.62\.attn_norm\.weight$=f32
-^blk\.62\.ffn_down_exps\.weight$=bf16
-^blk\.62\.ffn_gate_exps\.weight$=bf16
-^blk\.62\.ffn_up_exps\.weight$=bf16
-^blk\.62\.exp_probs_b\.bias$=f32
-^blk\.62\.ffn_gate_inp\.weight$=f32
-^blk\.62\.ffn_down_shexp\.weight$=bf16
-^blk\.62\.ffn_gate_shexp\.weight$=bf16
-^blk\.62\.ffn_up_shexp\.weight$=bf16
-^blk\.62\.post_attention_norm\.weight$=f32
-^blk\.62\.attn_k_norm\.weight$=f32
-^blk\.62\.attn_k\.bias$=f32
-^blk\.62\.attn_k\.weight$=bf16
-^blk\.62\.attn_output\.weight$=bf16
-^blk\.62\.attn_q_norm\.weight$=f32
-^blk\.62\.attn_q\.bias$=f32
-^blk\.62\.attn_q\.weight$=bf16
-^blk\.62\.attn_v\.bias$=f32
-^blk\.62\.attn_v\.weight$=bf16
-^blk\.63\.attn_norm\.weight$=f32
-^blk\.63\.ffn_down_exps\.weight$=bf16
-^blk\.63\.ffn_gate_exps\.weight$=bf16
-^blk\.63\.ffn_up_exps\.weight$=bf16
-^blk\.63\.exp_probs_b\.bias$=f32
-^blk\.63\.ffn_gate_inp\.weight$=f32
-^blk\.63\.ffn_down_shexp\.weight$=bf16
-^blk\.63\.ffn_gate_shexp\.weight$=bf16
-^blk\.63\.ffn_up_shexp\.weight$=bf16
-^blk\.63\.post_attention_norm\.weight$=f32
-^blk\.63\.attn_k_norm\.weight$=f32
-^blk\.63\.attn_k\.bias$=f32
-^blk\.63\.attn_k\.weight$=bf16
-^blk\.63\.attn_output\.weight$=bf16
-^blk\.63\.attn_q_norm\.weight$=f32
-^blk\.63\.attn_q\.bias$=f32
-^blk\.63\.attn_q\.weight$=bf16
-^blk\.63\.attn_v\.bias$=f32
-^blk\.63\.attn_v\.weight$=bf16
-^blk\.64\.attn_norm\.weight$=f32
-^blk\.64\.ffn_down_exps\.weight$=bf16
-^blk\.64\.ffn_gate_exps\.weight$=bf16
-^blk\.64\.ffn_up_exps\.weight$=bf16
-^blk\.64\.exp_probs_b\.bias$=f32
-^blk\.64\.ffn_gate_inp\.weight$=f32
-^blk\.64\.ffn_down_shexp\.weight$=bf16
-^blk\.64\.ffn_gate_shexp\.weight$=bf16
-^blk\.64\.ffn_up_shexp\.weight$=bf16
-^blk\.64\.post_attention_norm\.weight$=f32
-^blk\.64\.attn_k_norm\.weight$=f32
-^blk\.64\.attn_k\.bias$=f32
-^blk\.64\.attn_k\.weight$=bf16
-^blk\.64\.attn_output\.weight$=bf16
-^blk\.64\.attn_q_norm\.weight$=f32
-^blk\.64\.attn_q\.bias$=f32
-^blk\.64\.attn_q\.weight$=bf16
-^blk\.64\.attn_v\.bias$=f32
-^blk\.64\.attn_v\.weight$=bf16
-^blk\.65\.attn_norm\.weight$=f32
-^blk\.65\.ffn_down_exps\.weight$=bf16
-^blk\.65\.ffn_gate_exps\.weight$=bf16
-^blk\.65\.ffn_up_exps\.weight$=bf16
-^blk\.65\.exp_probs_b\.bias$=f32
-^blk\.65\.ffn_gate_inp\.weight$=f32
-^blk\.65\.ffn_down_shexp\.weight$=bf16
-^blk\.65\.ffn_gate_shexp\.weight$=bf16
-^blk\.65\.ffn_up_shexp\.weight$=bf16
-^blk\.65\.post_attention_norm\.weight$=f32
-^blk\.65\.attn_k_norm\.weight$=f32
-^blk\.65\.attn_k\.bias$=f32
-^blk\.65\.attn_k\.weight$=bf16
-^blk\.65\.attn_output\.weight$=bf16
-^blk\.65\.attn_q_norm\.weight$=f32
-^blk\.65\.attn_q\.bias$=f32
-^blk\.65\.attn_q\.weight$=bf16
-^blk\.65\.attn_v\.bias$=f32
-^blk\.65\.attn_v\.weight$=bf16
-^blk\.66\.attn_norm\.weight$=f32
-^blk\.66\.ffn_down_exps\.weight$=bf16
-^blk\.66\.ffn_gate_exps\.weight$=bf16
-^blk\.66\.ffn_up_exps\.weight$=bf16
-^blk\.66\.exp_probs_b\.bias$=f32
-^blk\.66\.ffn_gate_inp\.weight$=f32
-^blk\.66\.ffn_down_shexp\.weight$=bf16
-^blk\.66\.ffn_gate_shexp\.weight$=bf16
-^blk\.66\.ffn_up_shexp\.weight$=bf16
-^blk\.66\.post_attention_norm\.weight$=f32
-^blk\.66\.attn_k_norm\.weight$=f32
-^blk\.66\.attn_k\.bias$=f32
-^blk\.66\.attn_k\.weight$=bf16
-^blk\.66\.attn_output\.weight$=bf16
-^blk\.66\.attn_q_norm\.weight$=f32
-^blk\.66\.attn_q\.bias$=f32
-^blk\.66\.attn_q\.weight$=bf16
-^blk\.66\.attn_v\.bias$=f32
-^blk\.66\.attn_v\.weight$=bf16
-^blk\.67\.attn_norm\.weight$=f32
-^blk\.67\.ffn_down_exps\.weight$=bf16
-^blk\.67\.ffn_gate_exps\.weight$=bf16
-^blk\.67\.ffn_up_exps\.weight$=bf16
-^blk\.67\.exp_probs_b\.bias$=f32
-^blk\.67\.ffn_gate_inp\.weight$=f32
-^blk\.67\.ffn_down_shexp\.weight$=bf16
-^blk\.67\.ffn_gate_shexp\.weight$=bf16
-^blk\.67\.ffn_up_shexp\.weight$=bf16
-^blk\.67\.post_attention_norm\.weight$=f32
-^blk\.67\.attn_k_norm\.weight$=f32
-^blk\.67\.attn_k\.bias$=f32
-^blk\.67\.attn_k\.weight$=bf16
-^blk\.67\.attn_output\.weight$=bf16
-^blk\.67\.attn_q_norm\.weight$=f32
-^blk\.67\.attn_q\.bias$=f32
-^blk\.67\.attn_q\.weight$=bf16
-^blk\.67\.attn_v\.bias$=f32
-^blk\.67\.attn_v\.weight$=bf16
-^blk\.68\.attn_norm\.weight$=f32
-^blk\.68\.ffn_down_exps\.weight$=bf16
-^blk\.68\.ffn_gate_exps\.weight$=bf16
-^blk\.68\.ffn_up_exps\.weight$=bf16
-^blk\.68\.exp_probs_b\.bias$=f32
-^blk\.68\.ffn_gate_inp\.weight$=f32
-^blk\.68\.ffn_down_shexp\.weight$=bf16
-^blk\.68\.ffn_gate_shexp\.weight$=bf16
-^blk\.68\.ffn_up_shexp\.weight$=bf16
-^blk\.68\.post_attention_norm\.weight$=f32
-^blk\.68\.attn_k_norm\.weight$=f32
-^blk\.68\.attn_k\.bias$=f32
-^blk\.68\.attn_k\.weight$=bf16
-^blk\.68\.attn_output\.weight$=bf16
-^blk\.68\.attn_q_norm\.weight$=f32
-^blk\.68\.attn_q\.bias$=f32
-^blk\.68\.attn_q\.weight$=bf16
-^blk\.68\.attn_v\.bias$=f32
-^blk\.68\.attn_v\.weight$=bf16
-^blk\.69\.attn_norm\.weight$=f32
-^blk\.69\.ffn_down_exps\.weight$=bf16
-^blk\.69\.ffn_gate_exps\.weight$=bf16
-^blk\.69\.ffn_up_exps\.weight$=bf16
-^blk\.69\.exp_probs_b\.bias$=f32
-^blk\.69\.ffn_gate_inp\.weight$=f32
-^blk\.69\.ffn_down_shexp\.weight$=bf16
-^blk\.69\.ffn_gate_shexp\.weight$=bf16
-^blk\.69\.ffn_up_shexp\.weight$=bf16
-^blk\.69\.post_attention_norm\.weight$=f32
-^blk\.69\.attn_k_norm\.weight$=f32
-^blk\.69\.attn_k\.bias$=f32
-^blk\.69\.attn_k\.weight$=bf16
-^blk\.69\.attn_output\.weight$=bf16
-^blk\.69\.attn_q_norm\.weight$=f32
-^blk\.69\.attn_q\.bias$=f32
-^blk\.69\.attn_q\.weight$=bf16
-^blk\.69\.attn_v\.bias$=f32
-^blk\.69\.attn_v\.weight$=bf16
-^blk\.70\.attn_norm\.weight$=f32
-^blk\.70\.ffn_down_exps\.weight$=bf16
-^blk\.70\.ffn_gate_exps\.weight$=bf16
-^blk\.70\.ffn_up_exps\.weight$=bf16
-^blk\.70\.exp_probs_b\.bias$=f32
-^blk\.70\.ffn_gate_inp\.weight$=f32
-^blk\.70\.ffn_down_shexp\.weight$=bf16
-^blk\.70\.ffn_gate_shexp\.weight$=bf16
-^blk\.70\.ffn_up_shexp\.weight$=bf16
-^blk\.70\.post_attention_norm\.weight$=f32
-^blk\.70\.attn_k_norm\.weight$=f32
-^blk\.70\.attn_k\.bias$=f32
-^blk\.70\.attn_k\.weight$=bf16
-^blk\.70\.attn_output\.weight$=bf16
-^blk\.70\.attn_q_norm\.weight$=f32
-^blk\.70\.attn_q\.bias$=f32
-^blk\.70\.attn_q\.weight$=bf16
-^blk\.70\.attn_v\.bias$=f32
-^blk\.70\.attn_v\.weight$=bf16
-^blk\.71\.attn_norm\.weight$=f32
-^blk\.71\.ffn_down_exps\.weight$=bf16
-^blk\.71\.ffn_gate_exps\.weight$=bf16
-^blk\.71\.ffn_up_exps\.weight$=bf16
-^blk\.71\.exp_probs_b\.bias$=f32
-^blk\.71\.ffn_gate_inp\.weight$=f32
-^blk\.71\.ffn_down_shexp\.weight$=bf16
-^blk\.71\.ffn_gate_shexp\.weight$=bf16
-^blk\.71\.ffn_up_shexp\.weight$=bf16
-^blk\.71\.post_attention_norm\.weight$=f32
-^blk\.71\.attn_k_norm\.weight$=f32
-^blk\.71\.attn_k\.bias$=f32
-^blk\.71\.attn_k\.weight$=bf16
-^blk\.71\.attn_output\.weight$=bf16
-^blk\.71\.attn_q_norm\.weight$=f32
-^blk\.71\.attn_q\.bias$=f32
-^blk\.71\.attn_q\.weight$=bf16
-^blk\.71\.attn_v\.bias$=f32
-^blk\.71\.attn_v\.weight$=bf16
-^blk\.72\.attn_norm\.weight$=f32
-^blk\.72\.ffn_down_exps\.weight$=bf16
-^blk\.72\.ffn_gate_exps\.weight$=bf16
-^blk\.72\.ffn_up_exps\.weight$=bf16
-^blk\.72\.exp_probs_b\.bias$=f32
-^blk\.72\.ffn_gate_inp\.weight$=f32
-^blk\.72\.ffn_down_shexp\.weight$=bf16
-^blk\.72\.ffn_gate_shexp\.weight$=bf16
-^blk\.72\.ffn_up_shexp\.weight$=bf16
-^blk\.72\.post_attention_norm\.weight$=f32
-^blk\.72\.attn_k_norm\.weight$=f32
-^blk\.72\.attn_k\.bias$=f32
-^blk\.72\.attn_k\.weight$=bf16
-^blk\.72\.attn_output\.weight$=bf16
-^blk\.72\.attn_q_norm\.weight$=f32
-^blk\.72\.attn_q\.bias$=f32
-^blk\.72\.attn_q\.weight$=bf16
-^blk\.72\.attn_v\.bias$=f32
-^blk\.72\.attn_v\.weight$=bf16
-^blk\.73\.attn_norm\.weight$=f32
-^blk\.73\.ffn_down_exps\.weight$=bf16
-^blk\.73\.ffn_gate_exps\.weight$=bf16
-^blk\.73\.ffn_up_exps\.weight$=bf16
-^blk\.73\.exp_probs_b\.bias$=f32
-^blk\.73\.ffn_gate_inp\.weight$=f32
-^blk\.73\.ffn_down_shexp\.weight$=bf16
-^blk\.73\.ffn_gate_shexp\.weight$=bf16
-^blk\.73\.ffn_up_shexp\.weight$=bf16
-^blk\.73\.post_attention_norm\.weight$=f32
-^blk\.73\.attn_k_norm\.weight$=f32
-^blk\.73\.attn_k\.bias$=f32
-^blk\.73\.attn_k\.weight$=bf16
-^blk\.73\.attn_output\.weight$=bf16
-^blk\.73\.attn_q_norm\.weight$=f32
-^blk\.73\.attn_q\.bias$=f32
-^blk\.73\.attn_q\.weight$=bf16
-^blk\.73\.attn_v\.bias$=f32
-^blk\.73\.attn_v\.weight$=bf16
-^blk\.74\.attn_norm\.weight$=f32
-^blk\.74\.ffn_down_exps\.weight$=bf16
-^blk\.74\.ffn_gate_exps\.weight$=bf16
-^blk\.74\.ffn_up_exps\.weight$=bf16
-^blk\.74\.exp_probs_b\.bias$=f32
-^blk\.74\.ffn_gate_inp\.weight$=f32
-^blk\.74\.ffn_down_shexp\.weight$=bf16
-^blk\.74\.ffn_gate_shexp\.weight$=bf16
-^blk\.74\.ffn_up_shexp\.weight$=bf16
-^blk\.74\.post_attention_norm\.weight$=f32
-^blk\.74\.attn_k_norm\.weight$=f32
-^blk\.74\.attn_k\.bias$=f32
-^blk\.74\.attn_k\.weight$=bf16
-^blk\.74\.attn_output\.weight$=bf16
-^blk\.74\.attn_q_norm\.weight$=f32
-^blk\.74\.attn_q\.bias$=f32
-^blk\.74\.attn_q\.weight$=bf16
-^blk\.74\.attn_v\.bias$=f32
-^blk\.74\.attn_v\.weight$=bf16
-^blk\.75\.attn_norm\.weight$=f32
-^blk\.75\.ffn_down_exps\.weight$=bf16
-^blk\.75\.ffn_gate_exps\.weight$=bf16
-^blk\.75\.ffn_up_exps\.weight$=bf16
-^blk\.75\.exp_probs_b\.bias$=f32
-^blk\.75\.ffn_gate_inp\.weight$=f32
-^blk\.75\.ffn_down_shexp\.weight$=bf16
-^blk\.75\.ffn_gate_shexp\.weight$=bf16
-^blk\.75\.ffn_up_shexp\.weight$=bf16
-^blk\.75\.post_attention_norm\.weight$=f32
-^blk\.75\.attn_k_norm\.weight$=f32
-^blk\.75\.attn_k\.bias$=f32
-^blk\.75\.attn_k\.weight$=bf16
-^blk\.75\.attn_output\.weight$=bf16
-^blk\.75\.attn_q_norm\.weight$=f32
-^blk\.75\.attn_q\.bias$=f32
-^blk\.75\.attn_q\.weight$=bf16
-^blk\.75\.attn_v\.bias$=f32
-^blk\.75\.attn_v\.weight$=bf16
-^blk\.76\.attn_norm\.weight$=f32
-^blk\.76\.ffn_down_exps\.weight$=bf16
-^blk\.76\.ffn_gate_exps\.weight$=bf16
-^blk\.76\.ffn_up_exps\.weight$=bf16
-^blk\.76\.exp_probs_b\.bias$=f32
-^blk\.76\.ffn_gate_inp\.weight$=f32
-^blk\.76\.ffn_down_shexp\.weight$=bf16
-^blk\.76\.ffn_gate_shexp\.weight$=bf16
-^blk\.76\.ffn_up_shexp\.weight$=bf16
-^blk\.76\.post_attention_norm\.weight$=f32
-^blk\.76\.attn_k_norm\.weight$=f32
-^blk\.76\.attn_k\.bias$=f32
-^blk\.76\.attn_k\.weight$=bf16
-^blk\.76\.attn_output\.weight$=bf16
-^blk\.76\.attn_q_norm\.weight$=f32
-^blk\.76\.attn_q\.bias$=f32
-^blk\.76\.attn_q\.weight$=bf16
-^blk\.76\.attn_v\.bias$=f32
-^blk\.76\.attn_v\.weight$=bf16
-^blk\.77\.attn_norm\.weight$=f32
-^blk\.77\.ffn_down_exps\.weight$=bf16
-^blk\.77\.ffn_gate_exps\.weight$=bf16
-^blk\.77\.ffn_up_exps\.weight$=bf16
-^blk\.77\.exp_probs_b\.bias$=f32
-^blk\.77\.ffn_gate_inp\.weight$=f32
-^blk\.77\.ffn_down_shexp\.weight$=bf16
-^blk\.77\.ffn_gate_shexp\.weight$=bf16
-^blk\.77\.ffn_up_shexp\.weight$=bf16
-^blk\.77\.post_attention_norm\.weight$=f32
-^blk\.77\.attn_k_norm\.weight$=f32
-^blk\.77\.attn_k\.bias$=f32
-^blk\.77\.attn_k\.weight$=bf16
-^blk\.77\.attn_output\.weight$=bf16
-^blk\.77\.attn_q_norm\.weight$=f32
-^blk\.77\.attn_q\.bias$=f32
-^blk\.77\.attn_q\.weight$=bf16
-^blk\.77\.attn_v\.bias$=f32
-^blk\.77\.attn_v\.weight$=bf16
-^blk\.78\.attn_norm\.weight$=f32
-^blk\.78\.ffn_down_exps\.weight$=bf16
-^blk\.78\.ffn_gate_exps\.weight$=bf16
-^blk\.78\.ffn_up_exps\.weight$=bf16
-^blk\.78\.exp_probs_b\.bias$=f32
-^blk\.78\.ffn_gate_inp\.weight$=f32
-^blk\.78\.ffn_down_shexp\.weight$=bf16
-^blk\.78\.ffn_gate_shexp\.weight$=bf16
-^blk\.78\.ffn_up_shexp\.weight$=bf16
-^blk\.78\.post_attention_norm\.weight$=f32
-^blk\.78\.attn_k_norm\.weight$=f32
-^blk\.78\.attn_k\.bias$=f32
-^blk\.78\.attn_k\.weight$=bf16
-^blk\.78\.attn_output\.weight$=bf16
-^blk\.78\.attn_q_norm\.weight$=f32
-^blk\.78\.attn_q\.bias$=f32
-^blk\.78\.attn_q\.weight$=bf16
-^blk\.78\.attn_v\.bias$=f32
-^blk\.78\.attn_v\.weight$=bf16
-^blk\.79\.attn_norm\.weight$=f32
-^blk\.79\.ffn_down_exps\.weight$=bf16
-^blk\.79\.ffn_gate_exps\.weight$=bf16
-^blk\.79\.ffn_up_exps\.weight$=bf16
-^blk\.79\.exp_probs_b\.bias$=f32
-^blk\.79\.ffn_gate_inp\.weight$=f32
-^blk\.79\.ffn_down_shexp\.weight$=bf16
-^blk\.79\.ffn_gate_shexp\.weight$=bf16
-^blk\.79\.ffn_up_shexp\.weight$=bf16
-^blk\.79\.post_attention_norm\.weight$=f32
-^blk\.79\.attn_k_norm\.weight$=f32
-^blk\.79\.attn_k\.bias$=f32
-^blk\.79\.attn_k\.weight$=bf16
-^blk\.79\.attn_output\.weight$=bf16
-^blk\.79\.attn_q_norm\.weight$=f32
-^blk\.79\.attn_q\.bias$=f32
-^blk\.79\.attn_q\.weight$=bf16
-^blk\.79\.attn_v\.bias$=f32
-^blk\.79\.attn_v\.weight$=bf16
-^blk\.80\.attn_norm\.weight$=f32
-^blk\.80\.ffn_down_exps\.weight$=bf16
-^blk\.80\.ffn_gate_exps\.weight$=bf16
-^blk\.80\.ffn_up_exps\.weight$=bf16
-^blk\.80\.exp_probs_b\.bias$=f32
-^blk\.80\.ffn_gate_inp\.weight$=f32
-^blk\.80\.ffn_down_shexp\.weight$=bf16
-^blk\.80\.ffn_gate_shexp\.weight$=bf16
-^blk\.80\.ffn_up_shexp\.weight$=bf16
-^blk\.80\.post_attention_norm\.weight$=f32
-^blk\.80\.attn_k_norm\.weight$=f32
-^blk\.80\.attn_k\.bias$=f32
-^blk\.80\.attn_k\.weight$=bf16
-^blk\.80\.attn_output\.weight$=bf16
-^blk\.80\.attn_q_norm\.weight$=f32
-^blk\.80\.attn_q\.bias$=f32
-^blk\.80\.attn_q\.weight$=bf16
-^blk\.80\.attn_v\.bias$=f32
-^blk\.80\.attn_v\.weight$=bf16
-^blk\.81\.attn_norm\.weight$=f32
-^blk\.81\.ffn_down_exps\.weight$=bf16
-^blk\.81\.ffn_gate_exps\.weight$=bf16
-^blk\.81\.ffn_up_exps\.weight$=bf16
-^blk\.81\.exp_probs_b\.bias$=f32
-^blk\.81\.ffn_gate_inp\.weight$=f32
-^blk\.81\.ffn_down_shexp\.weight$=bf16
-^blk\.81\.ffn_gate_shexp\.weight$=bf16
-^blk\.81\.ffn_up_shexp\.weight$=bf16
-^blk\.81\.post_attention_norm\.weight$=f32
-^blk\.81\.attn_k_norm\.weight$=f32
-^blk\.81\.attn_k\.bias$=f32
-^blk\.81\.attn_k\.weight$=bf16
-^blk\.81\.attn_output\.weight$=bf16
-^blk\.81\.attn_q_norm\.weight$=f32
-^blk\.81\.attn_q\.bias$=f32
-^blk\.81\.attn_q\.weight$=bf16
-^blk\.81\.attn_v\.bias$=f32
-^blk\.81\.attn_v\.weight$=bf16
-^blk\.82\.attn_norm\.weight$=f32
-^blk\.82\.ffn_down_exps\.weight$=bf16
-^blk\.82\.ffn_gate_exps\.weight$=bf16
-^blk\.82\.ffn_up_exps\.weight$=bf16
-^blk\.82\.exp_probs_b\.bias$=f32
-^blk\.82\.ffn_gate_inp\.weight$=f32
-^blk\.82\.ffn_down_shexp\.weight$=bf16
-^blk\.82\.ffn_gate_shexp\.weight$=bf16
-^blk\.82\.ffn_up_shexp\.weight$=bf16
-^blk\.82\.post_attention_norm\.weight$=f32
-^blk\.82\.attn_k_norm\.weight$=f32
-^blk\.82\.attn_k\.bias$=f32
-^blk\.82\.attn_k\.weight$=bf16
-^blk\.82\.attn_output\.weight$=bf16
-^blk\.82\.attn_q_norm\.weight$=f32
-^blk\.82\.attn_q\.bias$=f32
-^blk\.82\.attn_q\.weight$=bf16
-^blk\.82\.attn_v\.bias$=f32
-^blk\.82\.attn_v\.weight$=bf16
-^blk\.83\.attn_norm\.weight$=f32
-^blk\.83\.ffn_down_exps\.weight$=bf16
-^blk\.83\.ffn_gate_exps\.weight$=bf16
-^blk\.83\.ffn_up_exps\.weight$=bf16
-^blk\.83\.exp_probs_b\.bias$=f32
-^blk\.83\.ffn_gate_inp\.weight$=f32
-^blk\.83\.ffn_down_shexp\.weight$=bf16
-^blk\.83\.ffn_gate_shexp\.weight$=bf16
-^blk\.83\.ffn_up_shexp\.weight$=bf16
-^blk\.83\.post_attention_norm\.weight$=f32
-^blk\.83\.attn_k_norm\.weight$=f32
-^blk\.83\.attn_k\.bias$=f32
-^blk\.83\.attn_k\.weight$=bf16
-^blk\.83\.attn_output\.weight$=bf16
-^blk\.83\.attn_q_norm\.weight$=f32
-^blk\.83\.attn_q\.bias$=f32
-^blk\.83\.attn_q\.weight$=bf16
-^blk\.83\.attn_v\.bias$=f32
-^blk\.83\.attn_v\.weight$=bf16
-^blk\.84\.attn_norm\.weight$=f32
-^blk\.84\.ffn_down_exps\.weight$=bf16
-^blk\.84\.ffn_gate_exps\.weight$=bf16
-^blk\.84\.ffn_up_exps\.weight$=bf16
-^blk\.84\.exp_probs_b\.bias$=f32
-^blk\.84\.ffn_gate_inp\.weight$=f32
-^blk\.84\.ffn_down_shexp\.weight$=bf16
-^blk\.84\.ffn_gate_shexp\.weight$=bf16
-^blk\.84\.ffn_up_shexp\.weight$=bf16
-^blk\.84\.post_attention_norm\.weight$=f32
-^blk\.84\.attn_k_norm\.weight$=f32
-^blk\.84\.attn_k\.bias$=f32
-^blk\.84\.attn_k\.weight$=bf16
-^blk\.84\.attn_output\.weight$=bf16
-^blk\.84\.attn_q_norm\.weight$=f32
-^blk\.84\.attn_q\.bias$=f32
-^blk\.84\.attn_q\.weight$=bf16
-^blk\.84\.attn_v\.bias$=f32
-^blk\.84\.attn_v\.weight$=bf16
-^blk\.85\.attn_norm\.weight$=f32
-^blk\.85\.ffn_down_exps\.weight$=bf16
-^blk\.85\.ffn_gate_exps\.weight$=bf16
-^blk\.85\.ffn_up_exps\.weight$=bf16
-^blk\.85\.exp_probs_b\.bias$=f32
-^blk\.85\.ffn_gate_inp\.weight$=f32
-^blk\.85\.ffn_down_shexp\.weight$=bf16
-^blk\.85\.ffn_gate_shexp\.weight$=bf16
-^blk\.85\.ffn_up_shexp\.weight$=bf16
-^blk\.85\.post_attention_norm\.weight$=f32
-^blk\.85\.attn_k_norm\.weight$=f32
-^blk\.85\.attn_k\.bias$=f32
-^blk\.85\.attn_k\.weight$=bf16
-^blk\.85\.attn_output\.weight$=bf16
-^blk\.85\.attn_q_norm\.weight$=f32
-^blk\.85\.attn_q\.bias$=f32
-^blk\.85\.attn_q\.weight$=bf16
-^blk\.85\.attn_v\.bias$=f32
-^blk\.85\.attn_v\.weight$=bf16
-^blk\.86\.attn_norm\.weight$=f32
-^blk\.86\.ffn_down_exps\.weight$=bf16
-^blk\.86\.ffn_gate_exps\.weight$=bf16
-^blk\.86\.ffn_up_exps\.weight$=bf16
-^blk\.86\.exp_probs_b\.bias$=f32
-^blk\.86\.ffn_gate_inp\.weight$=f32
-^blk\.86\.ffn_down_shexp\.weight$=bf16
-^blk\.86\.ffn_gate_shexp\.weight$=bf16
-^blk\.86\.ffn_up_shexp\.weight$=bf16
-^blk\.86\.post_attention_norm\.weight$=f32
-^blk\.86\.attn_k_norm\.weight$=f32
-^blk\.86\.attn_k\.bias$=f32
-^blk\.86\.attn_k\.weight$=bf16
-^blk\.86\.attn_output\.weight$=bf16
-^blk\.86\.attn_q_norm\.weight$=f32
-^blk\.86\.attn_q\.bias$=f32
-^blk\.86\.attn_q\.weight$=bf16
-^blk\.86\.attn_v\.bias$=f32
-^blk\.86\.attn_v\.weight$=bf16
-^blk\.87\.attn_norm\.weight$=f32
-^blk\.87\.ffn_down_exps\.weight$=bf16
-^blk\.87\.ffn_gate_exps\.weight$=bf16
-^blk\.87\.ffn_up_exps\.weight$=bf16
-^blk\.87\.exp_probs_b\.bias$=f32
-^blk\.87\.ffn_gate_inp\.weight$=f32
-^blk\.87\.ffn_down_shexp\.weight$=bf16
-^blk\.87\.ffn_gate_shexp\.weight$=bf16
-^blk\.87\.ffn_up_shexp\.weight$=bf16
-^blk\.87\.post_attention_norm\.weight$=f32
-^blk\.87\.attn_k_norm\.weight$=f32
-^blk\.87\.attn_k\.bias$=f32
-^blk\.87\.attn_k\.weight$=bf16
-^blk\.87\.attn_output\.weight$=bf16
-^blk\.87\.attn_q_norm\.weight$=f32
-^blk\.87\.attn_q\.bias$=f32
-^blk\.87\.attn_q\.weight$=bf16
-^blk\.87\.attn_v\.bias$=f32
-^blk\.87\.attn_v\.weight$=bf16
-^blk\.88\.attn_norm\.weight$=f32
-^blk\.88\.ffn_down_exps\.weight$=bf16
-^blk\.88\.ffn_gate_exps\.weight$=bf16
-^blk\.88\.ffn_up_exps\.weight$=bf16
-^blk\.88\.exp_probs_b\.bias$=f32
-^blk\.88\.ffn_gate_inp\.weight$=f32
-^blk\.88\.ffn_down_shexp\.weight$=bf16
-^blk\.88\.ffn_gate_shexp\.weight$=bf16
-^blk\.88\.ffn_up_shexp\.weight$=bf16
-^blk\.88\.post_attention_norm\.weight$=f32
-^blk\.88\.attn_k_norm\.weight$=f32
-^blk\.88\.attn_k\.bias$=f32
-^blk\.88\.attn_k\.weight$=bf16
-^blk\.88\.attn_output\.weight$=bf16
-^blk\.88\.attn_q_norm\.weight$=f32
-^blk\.88\.attn_q\.bias$=f32
-^blk\.88\.attn_q\.weight$=bf16
-^blk\.88\.attn_v\.bias$=f32
-^blk\.88\.attn_v\.weight$=bf16
-^blk\.89\.attn_norm\.weight$=f32
-^blk\.89\.ffn_down_exps\.weight$=bf16
-^blk\.89\.ffn_gate_exps\.weight$=bf16
-^blk\.89\.ffn_up_exps\.weight$=bf16
-^blk\.89\.exp_probs_b\.bias$=f32
-^blk\.89\.ffn_gate_inp\.weight$=f32
-^blk\.89\.ffn_down_shexp\.weight$=bf16
-^blk\.89\.ffn_gate_shexp\.weight$=bf16
-^blk\.89\.ffn_up_shexp\.weight$=bf16
-^blk\.89\.post_attention_norm\.weight$=f32
-^blk\.89\.attn_k_norm\.weight$=f32
-^blk\.89\.attn_k\.bias$=f32
-^blk\.89\.attn_k\.weight$=bf16
-^blk\.89\.attn_output\.weight$=bf16
-^blk\.89\.attn_q_norm\.weight$=f32
-^blk\.89\.attn_q\.bias$=f32
-^blk\.89\.attn_q\.weight$=bf16
-^blk\.89\.attn_v\.bias$=f32
-^blk\.89\.attn_v\.weight$=bf16
-^blk\.90\.attn_norm\.weight$=f32
-^blk\.90\.ffn_down_exps\.weight$=bf16
-^blk\.90\.ffn_gate_exps\.weight$=bf16
-^blk\.90\.ffn_up_exps\.weight$=bf16
-^blk\.90\.exp_probs_b\.bias$=f32
-^blk\.90\.ffn_gate_inp\.weight$=f32
-^blk\.90\.ffn_down_shexp\.weight$=bf16
-^blk\.90\.ffn_gate_shexp\.weight$=bf16
-^blk\.90\.ffn_up_shexp\.weight$=bf16
-^blk\.90\.post_attention_norm\.weight$=f32
-^blk\.90\.attn_k_norm\.weight$=f32
-^blk\.90\.attn_k\.bias$=f32
-^blk\.90\.attn_k\.weight$=bf16
-^blk\.90\.attn_output\.weight$=bf16
-^blk\.90\.attn_q_norm\.weight$=f32
-^blk\.90\.attn_q\.bias$=f32
-^blk\.90\.attn_q\.weight$=bf16
-^blk\.90\.attn_v\.bias$=f32
-^blk\.90\.attn_v\.weight$=bf16
-^output\.weight$=bf16
-^blk\.91\.attn_norm\.weight$=f32
-^blk\.91\.ffn_down_exps\.weight$=bf16
-^blk\.91\.ffn_gate_exps\.weight$=bf16
-^blk\.91\.ffn_up_exps\.weight$=bf16
-^blk\.91\.exp_probs_b\.bias$=f32
-^blk\.91\.ffn_gate_inp\.weight$=f32
-^blk\.91\.ffn_down_shexp\.weight$=bf16
-^blk\.91\.ffn_gate_shexp\.weight$=bf16
-^blk\.91\.ffn_up_shexp\.weight$=bf16
-^blk\.91\.post_attention_norm\.weight$=f32
-^blk\.91\.attn_k_norm\.weight$=f32
-^blk\.91\.attn_k\.bias$=f32
-^blk\.91\.attn_k\.weight$=bf16
-^blk\.91\.attn_output\.weight$=bf16
-^blk\.91\.attn_q_norm\.weight$=f32
-^blk\.91\.attn_q\.bias$=f32
-^blk\.91\.attn_q\.weight$=bf16
-^blk\.91\.attn_v\.bias$=f32
-^blk\.91\.attn_v\.weight$=bf16
-^output_norm\.weight$=f32
-^blk\.92\.nextn\.eh_proj\.weight$=bf16
-^blk\.92\.nextn\.enorm\.weight$=f32
-^blk\.92\.nextn\.hnorm\.weight$=f32
-^blk\.92\.attn_norm\.weight$=f32
-^blk\.92\.ffn_down_exps\.weight$=bf16
-^blk\.92\.ffn_gate_exps\.weight$=bf16
-^blk\.92\.ffn_up_exps\.weight$=bf16
-^blk\.92\.exp_probs_b\.bias$=f32
-^blk\.92\.ffn_gate_inp\.weight$=f32
-^blk\.92\.ffn_down_shexp\.weight$=bf16
-^blk\.92\.ffn_gate_shexp\.weight$=bf16
-^blk\.92\.ffn_up_shexp\.weight$=bf16
-^blk\.92\.post_attention_norm\.weight$=f32
-^blk\.92\.attn_k_norm\.weight$=f32
-^blk\.92\.attn_k\.bias$=f32
-^blk\.92\.attn_k\.weight$=bf16
-^blk\.92\.attn_output\.weight$=bf16
-^blk\.92\.attn_q_norm\.weight$=f32
-^blk\.92\.attn_q\.bias$=f32
-^blk\.92\.attn_q\.weight$=bf16
-^blk\.92\.attn_v\.bias$=f32
-^blk\.92\.attn_v\.weight$=bf16
-^blk\.92\.nextn\.shared_head_norm\.weight$=f32
+^v\.blk\.0\.attn_out\.bias$=f32
+^v\.blk\.0\.attn_out\.weight$=bf16
+^v\.blk\.0\.attn_q\.bias$=f32
+^v\.blk\.0\.attn_k\.bias$=f32
+^v\.blk\.0\.attn_v\.bias$=f32
+^v\.blk\.0\.attn_q\.weight$=bf16
+^v\.blk\.0\.attn_k\.weight$=bf16
+^v\.blk\.0\.attn_v\.weight$=bf16
+^v\.blk\.0\.ffn_up\.bias$=f32
+^v\.blk\.0\.ffn_up\.weight$=bf16
+^v\.blk\.0\.ffn_down\.bias$=f32
+^v\.blk\.0\.ffn_down\.weight$=bf16
+^v\.blk\.0\.ln1\.bias$=f32
+^v\.blk\.0\.ln1\.weight$=f32
+^v\.blk\.0\.ln2\.bias$=f32
+^v\.blk\.0\.ln2\.weight$=f32
+^v\.blk\.1\.attn_out\.bias$=f32
+^v\.blk\.1\.attn_out\.weight$=bf16
+^v\.blk\.1\.attn_q\.bias$=f32
+^v\.blk\.1\.attn_k\.bias$=f32
+^v\.blk\.1\.attn_v\.bias$=f32
+^v\.blk\.1\.attn_q\.weight$=bf16
+^v\.blk\.1\.attn_k\.weight$=bf16
+^v\.blk\.1\.attn_v\.weight$=bf16
+^v\.blk\.1\.ffn_up\.bias$=f32
+^v\.blk\.1\.ffn_up\.weight$=bf16
+^v\.blk\.1\.ffn_down\.bias$=f32
+^v\.blk\.1\.ffn_down\.weight$=bf16
+^v\.blk\.1\.ln1\.bias$=f32
+^v\.blk\.1\.ln1\.weight$=f32
+^v\.blk\.1\.ln2\.bias$=f32
+^v\.blk\.1\.ln2\.weight$=f32
+^v\.blk\.10\.attn_out\.bias$=f32
+^v\.blk\.10\.attn_out\.weight$=bf16
+^v\.blk\.10\.attn_q\.bias$=f32
+^v\.blk\.10\.attn_k\.bias$=f32
+^v\.blk\.10\.attn_v\.bias$=f32
+^v\.blk\.10\.attn_q\.weight$=bf16
+^v\.blk\.10\.attn_k\.weight$=bf16
+^v\.blk\.10\.attn_v\.weight$=bf16
+^v\.blk\.10\.ffn_up\.bias$=f32
+^v\.blk\.10\.ffn_up\.weight$=bf16
+^v\.blk\.10\.ffn_down\.bias$=f32
+^v\.blk\.10\.ffn_down\.weight$=bf16
+^v\.blk\.10\.ln1\.bias$=f32
+^v\.blk\.10\.ln1\.weight$=f32
+^v\.blk\.10\.ln2\.bias$=f32
+^v\.blk\.10\.ln2\.weight$=f32
+^v\.blk\.11\.attn_out\.bias$=f32
+^v\.blk\.11\.attn_out\.weight$=bf16
+^v\.blk\.11\.attn_q\.bias$=f32
+^v\.blk\.11\.attn_k\.bias$=f32
+^v\.blk\.11\.attn_v\.bias$=f32
+^v\.blk\.11\.attn_q\.weight$=bf16
+^v\.blk\.11\.attn_k\.weight$=bf16
+^v\.blk\.11\.attn_v\.weight$=bf16
+^v\.blk\.11\.ffn_up\.bias$=f32
+^v\.blk\.11\.ffn_up\.weight$=bf16
+^v\.blk\.11\.ffn_down\.bias$=f32
+^v\.blk\.11\.ffn_down\.weight$=bf16
+^v\.blk\.11\.ln1\.bias$=f32
+^v\.blk\.11\.ln1\.weight$=f32
+^v\.blk\.11\.ln2\.bias$=f32
+^v\.blk\.11\.ln2\.weight$=f32
+^v\.blk\.12\.attn_out\.bias$=f32
+^v\.blk\.12\.attn_out\.weight$=bf16
+^v\.blk\.12\.attn_q\.bias$=f32
+^v\.blk\.12\.attn_k\.bias$=f32
+^v\.blk\.12\.attn_v\.bias$=f32
+^v\.blk\.12\.attn_q\.weight$=bf16
+^v\.blk\.12\.attn_k\.weight$=bf16
+^v\.blk\.12\.attn_v\.weight$=bf16
+^v\.blk\.12\.ffn_up\.bias$=f32
+^v\.blk\.12\.ffn_up\.weight$=bf16
+^v\.blk\.12\.ffn_down\.bias$=f32
+^v\.blk\.12\.ffn_down\.weight$=bf16
+^v\.blk\.12\.ln1\.bias$=f32
+^v\.blk\.12\.ln1\.weight$=f32
+^v\.blk\.12\.ln2\.bias$=f32
+^v\.blk\.12\.ln2\.weight$=f32
+^v\.blk\.13\.attn_out\.bias$=f32
+^v\.blk\.13\.attn_out\.weight$=bf16
+^v\.blk\.13\.attn_q\.bias$=f32
+^v\.blk\.13\.attn_k\.bias$=f32
+^v\.blk\.13\.attn_v\.bias$=f32
+^v\.blk\.13\.attn_q\.weight$=bf16
+^v\.blk\.13\.attn_k\.weight$=bf16
+^v\.blk\.13\.attn_v\.weight$=bf16
+^v\.blk\.13\.ffn_up\.bias$=f32
+^v\.blk\.13\.ffn_up\.weight$=bf16
+^v\.blk\.13\.ffn_down\.bias$=f32
+^v\.blk\.13\.ffn_down\.weight$=bf16
+^v\.blk\.13\.ln1\.bias$=f32
+^v\.blk\.13\.ln1\.weight$=f32
+^v\.blk\.13\.ln2\.bias$=f32
+^v\.blk\.13\.ln2\.weight$=f32
+^v\.blk\.14\.attn_out\.bias$=f32
+^v\.blk\.14\.attn_out\.weight$=bf16
+^v\.blk\.14\.attn_q\.bias$=f32
+^v\.blk\.14\.attn_k\.bias$=f32
+^v\.blk\.14\.attn_v\.bias$=f32
+^v\.blk\.14\.attn_q\.weight$=bf16
+^v\.blk\.14\.attn_k\.weight$=bf16
+^v\.blk\.14\.attn_v\.weight$=bf16
+^v\.blk\.14\.ffn_up\.bias$=f32
+^v\.blk\.14\.ffn_up\.weight$=bf16
+^v\.blk\.14\.ffn_down\.bias$=f32
+^v\.blk\.14\.ffn_down\.weight$=bf16
+^v\.blk\.14\.ln1\.bias$=f32
+^v\.blk\.14\.ln1\.weight$=f32
+^v\.blk\.14\.ln2\.bias$=f32
+^v\.blk\.14\.ln2\.weight$=f32
+^v\.blk\.15\.attn_out\.bias$=f32
+^v\.blk\.15\.attn_out\.weight$=bf16
+^v\.blk\.15\.attn_q\.bias$=f32
+^v\.blk\.15\.attn_k\.bias$=f32
+^v\.blk\.15\.attn_v\.bias$=f32
+^v\.blk\.15\.attn_q\.weight$=bf16
+^v\.blk\.15\.attn_k\.weight$=bf16
+^v\.blk\.15\.attn_v\.weight$=bf16
+^v\.blk\.15\.ffn_up\.bias$=f32
+^v\.blk\.15\.ffn_up\.weight$=bf16
+^v\.blk\.15\.ffn_down\.bias$=f32
+^v\.blk\.15\.ffn_down\.weight$=bf16
+^v\.blk\.15\.ln1\.bias$=f32
+^v\.blk\.15\.ln1\.weight$=f32
+^v\.blk\.15\.ln2\.bias$=f32
+^v\.blk\.15\.ln2\.weight$=f32
+^v\.blk\.16\.attn_out\.bias$=f32
+^v\.blk\.16\.attn_out\.weight$=bf16
+^v\.blk\.16\.attn_q\.bias$=f32
+^v\.blk\.16\.attn_k\.bias$=f32
+^v\.blk\.16\.attn_v\.bias$=f32
+^v\.blk\.16\.attn_q\.weight$=bf16
+^v\.blk\.16\.attn_k\.weight$=bf16
+^v\.blk\.16\.attn_v\.weight$=bf16
+^v\.blk\.16\.ffn_up\.bias$=f32
+^v\.blk\.16\.ffn_up\.weight$=bf16
+^v\.blk\.16\.ffn_down\.bias$=f32
+^v\.blk\.16\.ffn_down\.weight$=bf16
+^v\.blk\.16\.ln1\.bias$=f32
+^v\.blk\.16\.ln1\.weight$=f32
+^v\.blk\.16\.ln2\.bias$=f32
+^v\.blk\.16\.ln2\.weight$=f32
+^v\.blk\.17\.attn_out\.bias$=f32
+^v\.blk\.17\.attn_out\.weight$=bf16
+^v\.blk\.17\.attn_q\.bias$=f32
+^v\.blk\.17\.attn_k\.bias$=f32
+^v\.blk\.17\.attn_v\.bias$=f32
+^v\.blk\.17\.attn_q\.weight$=bf16
+^v\.blk\.17\.attn_k\.weight$=bf16
+^v\.blk\.17\.attn_v\.weight$=bf16
+^v\.blk\.17\.ffn_up\.bias$=f32
+^v\.blk\.17\.ffn_up\.weight$=bf16
+^v\.blk\.17\.ffn_down\.bias$=f32
+^v\.blk\.17\.ffn_down\.weight$=bf16
+^v\.blk\.17\.ln1\.bias$=f32
+^v\.blk\.17\.ln1\.weight$=f32
+^v\.blk\.17\.ln2\.bias$=f32
+^v\.blk\.17\.ln2\.weight$=f32
+^v\.blk\.18\.attn_out\.bias$=f32
+^v\.blk\.18\.attn_out\.weight$=bf16
+^v\.blk\.18\.attn_q\.bias$=f32
+^v\.blk\.18\.attn_k\.bias$=f32
+^v\.blk\.18\.attn_v\.bias$=f32
+^v\.blk\.18\.attn_q\.weight$=bf16
+^v\.blk\.18\.attn_k\.weight$=bf16
+^v\.blk\.18\.attn_v\.weight$=bf16
+^v\.blk\.18\.ffn_up\.bias$=f32
+^v\.blk\.18\.ffn_up\.weight$=bf16
+^v\.blk\.18\.ffn_down\.bias$=f32
+^v\.blk\.18\.ffn_down\.weight$=bf16
+^v\.blk\.18\.ln1\.bias$=f32
+^v\.blk\.18\.ln1\.weight$=f32
+^v\.blk\.18\.ln2\.bias$=f32
+^v\.blk\.18\.ln2\.weight$=f32
+^v\.blk\.19\.attn_out\.bias$=f32
+^v\.blk\.19\.attn_out\.weight$=bf16
+^v\.blk\.19\.attn_q\.bias$=f32
+^v\.blk\.19\.attn_k\.bias$=f32
+^v\.blk\.19\.attn_v\.bias$=f32
+^v\.blk\.19\.attn_q\.weight$=bf16
+^v\.blk\.19\.attn_k\.weight$=bf16
+^v\.blk\.19\.attn_v\.weight$=bf16
+^v\.blk\.19\.ffn_up\.bias$=f32
+^v\.blk\.19\.ffn_up\.weight$=bf16
+^v\.blk\.19\.ffn_down\.bias$=f32
+^v\.blk\.19\.ffn_down\.weight$=bf16
+^v\.blk\.19\.ln1\.bias$=f32
+^v\.blk\.19\.ln1\.weight$=f32
+^v\.blk\.19\.ln2\.bias$=f32
+^v\.blk\.19\.ln2\.weight$=f32
+^v\.blk\.2\.attn_out\.bias$=f32
+^v\.blk\.2\.attn_out\.weight$=bf16
+^v\.blk\.2\.attn_q\.bias$=f32
+^v\.blk\.2\.attn_k\.bias$=f32
+^v\.blk\.2\.attn_v\.bias$=f32
+^v\.blk\.2\.attn_q\.weight$=bf16
+^v\.blk\.2\.attn_k\.weight$=bf16
+^v\.blk\.2\.attn_v\.weight$=bf16
+^v\.blk\.2\.ffn_up\.bias$=f32
+^v\.blk\.2\.ffn_up\.weight$=bf16
+^v\.blk\.2\.ffn_down\.bias$=f32
+^v\.blk\.2\.ffn_down\.weight$=bf16
+^v\.blk\.2\.ln1\.bias$=f32
+^v\.blk\.2\.ln1\.weight$=f32
+^v\.blk\.2\.ln2\.bias$=f32
+^v\.blk\.2\.ln2\.weight$=f32
+^v\.blk\.20\.attn_out\.bias$=f32
+^v\.blk\.20\.attn_out\.weight$=bf16
+^v\.blk\.20\.attn_q\.bias$=f32
+^v\.blk\.20\.attn_k\.bias$=f32
+^v\.blk\.20\.attn_v\.bias$=f32
+^v\.blk\.20\.attn_q\.weight$=bf16
+^v\.blk\.20\.attn_k\.weight$=bf16
+^v\.blk\.20\.attn_v\.weight$=bf16
+^v\.blk\.20\.ffn_up\.bias$=f32
+^v\.blk\.20\.ffn_up\.weight$=bf16
+^v\.blk\.20\.ffn_down\.bias$=f32
+^v\.blk\.20\.ffn_down\.weight$=bf16
+^v\.blk\.20\.ln1\.bias$=f32
+^v\.blk\.20\.ln1\.weight$=f32
+^v\.blk\.20\.ln2\.bias$=f32
+^v\.blk\.20\.ln2\.weight$=f32
+^v\.blk\.21\.attn_out\.bias$=f32
+^v\.blk\.21\.attn_out\.weight$=bf16
+^v\.blk\.21\.attn_q\.bias$=f32
+^v\.blk\.21\.attn_k\.bias$=f32
+^v\.blk\.21\.attn_v\.bias$=f32
+^v\.blk\.21\.attn_q\.weight$=bf16
+^v\.blk\.21\.attn_k\.weight$=bf16
+^v\.blk\.21\.attn_v\.weight$=bf16
+^v\.blk\.21\.ffn_up\.bias$=f32
+^v\.blk\.21\.ffn_up\.weight$=bf16
+^v\.blk\.21\.ffn_down\.bias$=f32
+^v\.blk\.21\.ffn_down\.weight$=bf16
+^v\.blk\.21\.ln1\.bias$=f32
+^v\.blk\.21\.ln1\.weight$=f32
+^v\.blk\.21\.ln2\.bias$=f32
+^v\.blk\.21\.ln2\.weight$=f32
+^v\.blk\.22\.attn_out\.bias$=f32
+^v\.blk\.22\.attn_out\.weight$=bf16
+^v\.blk\.22\.attn_q\.bias$=f32
+^v\.blk\.22\.attn_k\.bias$=f32
+^v\.blk\.22\.attn_v\.bias$=f32
+^v\.blk\.22\.attn_q\.weight$=bf16
+^v\.blk\.22\.attn_k\.weight$=bf16
+^v\.blk\.22\.attn_v\.weight$=bf16
+^v\.blk\.22\.ffn_up\.bias$=f32
+^v\.blk\.22\.ffn_up\.weight$=bf16
+^v\.blk\.22\.ffn_down\.bias$=f32
+^v\.blk\.22\.ffn_down\.weight$=bf16
+^v\.blk\.22\.ln1\.bias$=f32
+^v\.blk\.22\.ln1\.weight$=f32
+^v\.blk\.22\.ln2\.bias$=f32
+^v\.blk\.22\.ln2\.weight$=f32
+^v\.blk\.23\.attn_out\.bias$=f32
+^v\.blk\.23\.attn_out\.weight$=bf16
+^v\.blk\.23\.attn_q\.bias$=f32
+^v\.blk\.23\.attn_k\.bias$=f32
+^v\.blk\.23\.attn_v\.bias$=f32
+^v\.blk\.23\.attn_q\.weight$=bf16
+^v\.blk\.23\.attn_k\.weight$=bf16
+^v\.blk\.23\.attn_v\.weight$=bf16
+^v\.blk\.23\.ffn_up\.bias$=f32
+^v\.blk\.23\.ffn_up\.weight$=bf16
+^v\.blk\.23\.ffn_down\.bias$=f32
+^v\.blk\.23\.ffn_down\.weight$=bf16
+^v\.blk\.23\.ln1\.bias$=f32
+^v\.blk\.23\.ln1\.weight$=f32
+^v\.blk\.23\.ln2\.bias$=f32
+^v\.blk\.23\.ln2\.weight$=f32
+^v\.blk\.24\.attn_out\.bias$=f32
+^v\.blk\.24\.attn_out\.weight$=bf16
+^v\.blk\.24\.attn_q\.bias$=f32
+^v\.blk\.24\.attn_k\.bias$=f32
+^v\.blk\.24\.attn_v\.bias$=f32
+^v\.blk\.24\.attn_q\.weight$=bf16
+^v\.blk\.24\.attn_k\.weight$=bf16
+^v\.blk\.24\.attn_v\.weight$=bf16
+^v\.blk\.24\.ffn_up\.bias$=f32
+^v\.blk\.24\.ffn_up\.weight$=bf16
+^v\.blk\.24\.ffn_down\.bias$=f32
+^v\.blk\.24\.ffn_down\.weight$=bf16
+^v\.blk\.24\.ln1\.bias$=f32
+^v\.blk\.24\.ln1\.weight$=f32
+^v\.blk\.24\.ln2\.bias$=f32
+^v\.blk\.24\.ln2\.weight$=f32
+^v\.blk\.25\.attn_out\.bias$=f32
+^v\.blk\.25\.attn_out\.weight$=bf16
+^v\.blk\.25\.attn_q\.bias$=f32
+^v\.blk\.25\.attn_k\.bias$=f32
+^v\.blk\.25\.attn_v\.bias$=f32
+^v\.blk\.25\.attn_q\.weight$=bf16
+^v\.blk\.25\.attn_k\.weight$=bf16
+^v\.blk\.25\.attn_v\.weight$=bf16
+^v\.blk\.25\.ffn_up\.bias$=f32
+^v\.blk\.25\.ffn_up\.weight$=bf16
+^v\.blk\.25\.ffn_down\.bias$=f32
+^v\.blk\.25\.ffn_down\.weight$=bf16
+^v\.blk\.25\.ln1\.bias$=f32
+^v\.blk\.25\.ln1\.weight$=f32
+^v\.blk\.25\.ln2\.bias$=f32
+^v\.blk\.25\.ln2\.weight$=f32
+^v\.blk\.26\.attn_out\.bias$=f32
+^v\.blk\.26\.attn_out\.weight$=bf16
+^v\.blk\.26\.attn_q\.bias$=f32
+^v\.blk\.26\.attn_k\.bias$=f32
+^v\.blk\.26\.attn_v\.bias$=f32
+^v\.blk\.26\.attn_q\.weight$=bf16
+^v\.blk\.26\.attn_k\.weight$=bf16
+^v\.blk\.26\.attn_v\.weight$=bf16
+^v\.blk\.26\.ffn_up\.bias$=f32
+^v\.blk\.26\.ffn_up\.weight$=bf16
+^v\.blk\.26\.ffn_down\.bias$=f32
+^v\.blk\.26\.ffn_down\.weight$=bf16
+^v\.blk\.26\.ln1\.bias$=f32
+^v\.blk\.26\.ln1\.weight$=f32
+^v\.blk\.26\.ln2\.bias$=f32
+^v\.blk\.26\.ln2\.weight$=f32
+^v\.blk\.3\.attn_out\.bias$=f32
+^v\.blk\.3\.attn_out\.weight$=bf16
+^v\.blk\.3\.attn_q\.bias$=f32
+^v\.blk\.3\.attn_k\.bias$=f32
+^v\.blk\.3\.attn_v\.bias$=f32
+^v\.blk\.3\.attn_q\.weight$=bf16
+^v\.blk\.3\.attn_k\.weight$=bf16
+^v\.blk\.3\.attn_v\.weight$=bf16
+^v\.blk\.3\.ffn_up\.bias$=f32
+^v\.blk\.3\.ffn_up\.weight$=bf16
+^v\.blk\.3\.ffn_down\.bias$=f32
+^v\.blk\.3\.ffn_down\.weight$=bf16
+^v\.blk\.3\.ln1\.bias$=f32
+^v\.blk\.3\.ln1\.weight$=f32
+^v\.blk\.3\.ln2\.bias$=f32
+^v\.blk\.3\.ln2\.weight$=f32
+^v\.blk\.4\.attn_out\.bias$=f32
+^v\.blk\.4\.attn_out\.weight$=bf16
+^v\.blk\.4\.attn_q\.bias$=f32
+^v\.blk\.4\.attn_k\.bias$=f32
+^v\.blk\.4\.attn_v\.bias$=f32
+^v\.blk\.4\.attn_q\.weight$=bf16
+^v\.blk\.4\.attn_k\.weight$=bf16
+^v\.blk\.4\.attn_v\.weight$=bf16
+^v\.blk\.4\.ffn_up\.bias$=f32
+^v\.blk\.4\.ffn_up\.weight$=bf16
+^v\.blk\.4\.ffn_down\.bias$=f32
+^v\.blk\.4\.ffn_down\.weight$=bf16
+^v\.blk\.4\.ln1\.bias$=f32
+^v\.blk\.4\.ln1\.weight$=f32
+^v\.blk\.4\.ln2\.bias$=f32
+^v\.blk\.4\.ln2\.weight$=f32
+^v\.blk\.5\.attn_out\.bias$=f32
+^v\.blk\.5\.attn_out\.weight$=bf16
+^v\.blk\.5\.attn_q\.bias$=f32
+^v\.blk\.5\.attn_k\.bias$=f32
+^v\.blk\.5\.attn_v\.bias$=f32
+^v\.blk\.5\.attn_q\.weight$=bf16
+^v\.blk\.5\.attn_k\.weight$=bf16
+^v\.blk\.5\.attn_v\.weight$=bf16
+^v\.blk\.5\.ffn_up\.bias$=f32
+^v\.blk\.5\.ffn_up\.weight$=bf16
+^v\.blk\.5\.ffn_down\.bias$=f32
+^v\.blk\.5\.ffn_down\.weight$=bf16
+^v\.blk\.5\.ln1\.bias$=f32
+^v\.blk\.5\.ln1\.weight$=f32
+^v\.blk\.5\.ln2\.bias$=f32
+^v\.blk\.5\.ln2\.weight$=f32
+^v\.blk\.6\.attn_out\.bias$=f32
+^v\.blk\.6\.attn_out\.weight$=bf16
+^v\.blk\.6\.attn_q\.bias$=f32
+^v\.blk\.6\.attn_k\.bias$=f32
+^v\.blk\.6\.attn_v\.bias$=f32
+^v\.blk\.6\.attn_q\.weight$=bf16
+^v\.blk\.6\.attn_k\.weight$=bf16
+^v\.blk\.6\.attn_v\.weight$=bf16
+^v\.blk\.6\.ffn_up\.bias$=f32
+^v\.blk\.6\.ffn_up\.weight$=bf16
+^v\.blk\.6\.ffn_down\.bias$=f32
+^v\.blk\.6\.ffn_down\.weight$=bf16
+^v\.blk\.6\.ln1\.bias$=f32
+^v\.blk\.6\.ln1\.weight$=f32
+^v\.blk\.6\.ln2\.bias$=f32
+^v\.blk\.6\.ln2\.weight$=f32
+^v\.blk\.7\.attn_out\.bias$=f32
+^v\.blk\.7\.attn_out\.weight$=bf16
+^v\.blk\.7\.attn_q\.bias$=f32
+^v\.blk\.7\.attn_k\.bias$=f32
+^v\.blk\.7\.attn_v\.bias$=f32
+^v\.blk\.7\.attn_q\.weight$=bf16
+^v\.blk\.7\.attn_k\.weight$=bf16
+^v\.blk\.7\.attn_v\.weight$=bf16
+^v\.blk\.7\.ffn_up\.bias$=f32
+^v\.blk\.7\.ffn_up\.weight$=bf16
+^v\.blk\.7\.ffn_down\.bias$=f32
+^v\.blk\.7\.ffn_down\.weight$=bf16
+^v\.blk\.7\.ln1\.bias$=f32
+^v\.blk\.7\.ln1\.weight$=f32
+^v\.blk\.7\.ln2\.bias$=f32
+^v\.blk\.7\.ln2\.weight$=f32
+^v\.blk\.8\.attn_out\.bias$=f32
+^v\.blk\.8\.attn_out\.weight$=bf16
+^v\.blk\.8\.attn_q\.bias$=f32
+^v\.blk\.8\.attn_k\.bias$=f32
+^v\.blk\.8\.attn_v\.bias$=f32
+^v\.blk\.8\.attn_q\.weight$=bf16
+^v\.blk\.8\.attn_k\.weight$=bf16
+^v\.blk\.8\.attn_v\.weight$=bf16
+^v\.blk\.8\.ffn_up\.bias$=f32
+^v\.blk\.8\.ffn_up\.weight$=bf16
+^v\.blk\.8\.ffn_down\.bias$=f32
+^v\.blk\.8\.ffn_down\.weight$=bf16
+^v\.blk\.8\.ln1\.bias$=f32
+^v\.blk\.8\.ln1\.weight$=f32
+^v\.blk\.8\.ln2\.bias$=f32
+^v\.blk\.8\.ln2\.weight$=f32
+^v\.blk\.9\.attn_out\.bias$=f32
+^v\.blk\.9\.attn_out\.weight$=bf16
+^v\.blk\.9\.attn_q\.bias$=f32
+^v\.blk\.9\.attn_k\.bias$=f32
+^v\.blk\.9\.attn_v\.bias$=f32
+^v\.blk\.9\.attn_q\.weight$=bf16
+^v\.blk\.9\.attn_k\.weight$=bf16
+^v\.blk\.9\.attn_v\.weight$=bf16
+^v\.blk\.9\.ffn_up\.bias$=f32
+^v\.blk\.9\.ffn_up\.weight$=bf16
+^v\.blk\.9\.ffn_down\.bias$=f32
+^v\.blk\.9\.ffn_down\.weight$=bf16
+^v\.blk\.9\.ln1\.bias$=f32
+^v\.blk\.9\.ln1\.weight$=f32
+^v\.blk\.9\.ln2\.bias$=f32
+^v\.blk\.9\.ln2\.weight$=f32
+^v\.deepstack\.0\.fc1\.bias$=f32
+^v\.deepstack\.0\.fc1\.weight$=bf16
+^v\.deepstack\.0\.fc2\.bias$=f32
+^v\.deepstack\.0\.fc2\.weight$=bf16
+^v\.deepstack\.0\.norm\.bias$=f32
+^v\.deepstack\.0\.norm\.weight$=f32
+^v\.deepstack\.1\.fc1\.bias$=f32
+^v\.deepstack\.1\.fc1\.weight$=bf16
+^v\.deepstack\.1\.fc2\.bias$=f32
+^v\.deepstack\.1\.fc2\.weight$=bf16
+^v\.deepstack\.1\.norm\.bias$=f32
+^v\.deepstack\.1\.norm\.weight$=f32
+^v\.deepstack\.2\.fc1\.bias$=f32
+^v\.deepstack\.2\.fc1\.weight$=bf16
+^v\.deepstack\.2\.fc2\.bias$=f32
+^v\.deepstack\.2\.fc2\.weight$=bf16
+^v\.deepstack\.2\.norm\.bias$=f32
+^v\.deepstack\.2\.norm\.weight$=f32
+^mm\.0\.bias$=f32
+^mm\.0\.weight$=bf16
+^mm\.2\.bias$=f32
+^mm\.2\.weight$=bf16
+^v\.post_ln\.bias$=f32
+^v\.post_ln\.weight$=f32
+^v\.patch_embd\.weight$=f32
+^v\.patch_embd\.weight\.1$=f32
+^v\.position_embd\.weight$=f32
 "
 fi
 
@@ -1995,85 +695,127 @@ build_range_regex() {
 }
 
 
-# -------------------------------------------------------------------
-# shorten_regex_list(): read stdin, collapse consecutive blk.N lines
-# -------------------------------------------------------------------
+# --------------------------------------------------------------------------------
+# shorten_regex_list(): read stdin, collapse consecutive blk.N (and similar) lines
+# --------------------------------------------------------------------------------
 shorten_regex_list() {
   local -a lines
   declare -A groups
+  declare -A prefixes_seen
 
   # Read input line by line
   while IFS= read -r line; do
-    if [[ $line =~ ^\^?blk\\.([0-9]+)\\.(.+)\$?$ ]]; then
-      # Extract block number and suffix
-      block_num="${BASH_REMATCH[1]}"
-      suffix="${BASH_REMATCH[2]}"
-      groups["$suffix"]+="$block_num "
-      _debug "Bucket $block_num → suffix $suffix"
+    if [[ $line =~ ^\^?(blk)\\.([0-9]+)\\.(.+)\$?$ ]]; then
+      # Extract prefix, block number and suffix
+      block_prefix="${BASH_REMATCH[1]}"
+      block_num="${BASH_REMATCH[2]}"
+      suffix="${BASH_REMATCH[3]}"
+      groups["${block_prefix}_${suffix}"]+="$block_num "
+      _debug "Bucket $block_num → prefix $block_prefix suffix $suffix"
+    elif [[ $line =~ ^\^?(mm)\\.([0-9]+)\\.(.+)\$?$ ]]; then
+      # Extract prefix, block number and suffix
+      block_prefix="${BASH_REMATCH[1]}"
+      block_num="${BASH_REMATCH[2]}"
+      suffix="${BASH_REMATCH[3]}"
+      groups["${block_prefix}_${suffix}"]+="$block_num "
+      _debug "Bucket $block_num → prefix $block_prefix suffix $suffix"
+    elif [[ $line =~ ^\^?(v\\.blk)\\.([0-9]+)\\.(.+)\$?$ ]]; then
+      # Extract prefix, block number and suffix
+      block_prefix="${BASH_REMATCH[1]}"
+      block_num="${BASH_REMATCH[2]}"
+      suffix="${BASH_REMATCH[3]}"
+      groups["${block_prefix}_${suffix}"]+="$block_num "
+      _debug "Bucket $block_num → prefix $block_prefix suffix $suffix"
+    elif [[ $line =~ ^\^?(v\\.deepstack)\\.([0-9]+)\\.(.+)\$?$ ]]; then
+      # Extract prefix, block number and suffix
+      block_prefix="${BASH_REMATCH[1]}"
+      block_num="${BASH_REMATCH[2]}"
+      suffix="${BASH_REMATCH[3]}"
+      groups["${block_prefix}_${suffix}"]+="$block_num "
+      _debug "Bucket $block_num → prefix $block_prefix suffix $suffix"
     else
-      # Non-blk line: output immediately
+      # Non-blk (mm, v, deepstack) line: output immediately
       printf '%s\n' "$line"
     fi
   done
 
-  # Process each group
-  for suffix in "${!groups[@]}"; do
-    # Get the numbers for this suffix
-    nums_str="${groups[$suffix]}"
-    # Split into array
-    read -ra nums <<<"$nums_str"
-    # Sort and uniq
-    IFS=$'\n' sorted=($(printf '%s\n' "${nums[@]}" | sort -n | uniq))
-    unset IFS
-
-    # If no numbers, skip
-    if (( ${#sorted[@]} == 0 )); then
-      continue
-    fi
-
-    # Break into consecutive runs
-    runs=()
-    run_start=${sorted[0]}
-    run_prev=${sorted[0]}
-
-    for (( i=1; i<${#sorted[@]}; i++ )); do
-      num=${sorted[i]}
-      if (( num == run_prev + 1 )); then
-        run_prev=$num
-      else
-        runs+=("$run_start $run_prev")
-        run_start=$num
-        run_prev=$num
-      fi
-    done
-    runs+=("$run_start $run_prev")
-
-    # Build the regex parts for the runs
-    parts=()
-    for run in "${runs[@]}"; do
-      read s e <<<"$run"
-      if (( s == e )); then
-        parts+=("$s")
-        _debug "Run: single number $s"
-      else
-        part=$(build_range_regex "$s" "$e")
-        parts+=("$part")
-        _debug "Run: consecutive $s to $e -> $part"
-      fi
-    done
-
-    # Join parts with '|'
-    block_regex=$(IFS='|'; echo "${parts[*]}")
-
-    # If block_regex contains '|', wrap in non-capturing group
-    if [[ "$block_regex" == *"|"* ]]; then
-      #block_regex="(?:$block_regex)"
-      block_regex="($block_regex)"
-      _debug "Wrapped block_regex: $block_regex"
-    fi
-
-    printf '^blk\\.%s\\.%s\n' "$block_regex" "$suffix"
+  # collect unique prefixes
+  declare -A prefixes_seen
+  for key in "${!groups[@]}"; do
+    prefix="${key%%_*}"        # part before first underscore
+    prefixes_seen["$prefix"]=1
   done
+
+  # iterate prefixes then suffixes
+  for prefix in "${!prefixes_seen[@]}"; do
+    _debug "Processing prefix: $prefix"
+    for key in "${!groups[@]}"; do
+      if [[ $key == "${prefix}_"* ]]; then
+        _debug "Processing key: $key"
+        # compute suffix by slicing off prefix + the underscore
+        len=$(( ${#prefix} + 1 ))
+        suffix="${key:len}"                 # plain substring — no globbing
+        nums_str="${groups[$key]% }"        # Get the numbers for this suffix
+        _debug "Processing suffix: $suffix (value: $nums_str)"
+
+        # Split nums_str into array
+        read -ra nums <<<"$nums_str"
+        # Sort and uniq
+        IFS=$'\n' sorted=($(printf '%s\n' "${nums[@]}" | sort -n | uniq))
+        unset IFS
+
+        # If no numbers, skip
+        if (( ${#sorted[@]} == 0 )); then
+          continue
+        fi
+
+        # Break into consecutive runs
+        runs=()
+        run_start=${sorted[0]}
+        run_prev=${sorted[0]}
+
+        for (( i=1; i<${#sorted[@]}; i++ )); do
+          num=${sorted[i]}
+          if (( num == run_prev + 1 )); then
+            run_prev=$num
+          else
+            runs+=("$run_start $run_prev")
+            run_start=$num
+            run_prev=$num
+          fi
+        done
+        runs+=("$run_start $run_prev")
+
+        # Build the regex parts for the runs
+        parts=()
+        for run in "${runs[@]}"; do
+          read s e <<<"$run"
+          if (( s == e )); then
+            parts+=("$s")
+            _debug "Run: single number $s"
+          else
+            part=$(build_range_regex "$s" "$e")
+            parts+=("$part")
+            _debug "Run: consecutive $s to $e -> $part"
+          fi
+        done
+
+        # Join parts with '|'
+        block_regex=$(IFS='|'; echo "${parts[*]}")
+
+        # If block_regex contains '|', wrap in non-capturing group
+        if [[ "$block_regex" == *"|"* ]]; then
+          #block_regex="(?:$block_regex)"
+          block_regex="($block_regex)"
+          _debug "Wrapped block_regex: $block_regex"
+        fi
+
+        printf '^%s\\.%s\\.%s\n' "$prefix" "$block_regex" "$suffix"
+
+      fi
+    done
+  done
+
 }
 
 # -----------------------------------------------------------------------------------------
@@ -2085,74 +827,97 @@ optimise_regex_list() {
   declare -A by_suffix by_prefix pmap
 
   while IFS= read -r line; do
-    # only lines of the form blk\.(...)\.<suffix>
-    if [[ $line == \^?blk\\.* ]] && ([[ $line == *\|\[* ]] || [[ $line == *\]\|* ]]); then
-      _debug "Original line: $line"
+    # only lines of the form blk\.(...)\.<suffix> (and similar for mm, v and deepstack)
+    if ([[ $line == *\|\[* ]] || [[ $line == *\]\|* ]]); then
+    _debug "THIREUS line-> $line"
+      for prefix in "blk" "mm" "v\\.blk" "v\\.deepstack"; do
+      _debug "THIREUS prefix-> $prefix"
+        lit1="^${prefix}\\."   # literal: ^ then prefix then backslash+dot
+        lit2="${prefix}\\."    # literal: prefix then backslash+dot
+        # check literal string-starts-with using substring comparison (no pattern/regex)
+        if [[ "${line:0:${#lit1}}" == "$lit1" || "^${line:0:${#lit2}}" == "$lit2" ]]; then
+          _debug "Original line: $line"
 
-      # 1) strip leading 'blk\.('
-      pr=${line#blk\(\\.}
-      # Actually we want to remove literally "blk\.("
-      pr=${line#'blk\.('} 
-
-      # 2) extract up to ')\.' as inner
-      inner=${pr%%')\.'*}
-      # 3) suffix is what follows ")\."
-      suffix=${pr#*')\.'}
-
-      _debug "  pr         = '$pr'"
-      _debug "  inner      = '$inner'"
-      _debug "  suffix     = '$suffix'"
-
-      # 4) split alternation into parts[]
-      IFS='|' read -r -a parts <<<"$inner"
-      _debug "  parts      = ${parts[*]}"
-
-      # clear collectors
-      plain=(); extras=()
-      by_suffix=(); by_prefix=()
-
-      # 5) classify each part
-      for p in "${parts[@]}"; do
-        if [[ $p =~ ^([0-9]+)(\[[0-9]+-[0-9]+\])$ ]]; then
-          local num=${BASH_REMATCH[1]}
-          local su=${BASH_REMATCH[2]}
-          by_suffix["$su"]+="$num "
-          _debug "    by_suffix[$su] += $num"
-        elif [[ $p =~ ^(\[[0-9]+-[0-9]+\])([0-9]+)$ ]]; then
-          local prf=${BASH_REMATCH[1]}
-          local num=${BASH_REMATCH[2]}
-          by_prefix["$prf"]+="$num "
-          _debug "    by_prefix[$prf] += $num"
-        else
-          plain+=("$p")
-          _debug "    plain += $p"
-        fi
-      done
-
-      # 6) merge runs in by_suffix (X[lo-hi])
-      for su in "${!by_suffix[@]}"; do
-        # build and sort unique nums array
-        read -r -a nums <<<"${by_suffix[$su]}"
-        IFS=$'\n' nums=($(printf '%s\n' "${nums[@]}" | sort -n | uniq))
-        unset IFS
-
-        # skip if no entries
-        if [[ ${#nums[@]} -eq 0 ]]; then
-          _debug "  no entries for suffix $su, skipping"
-          continue
-        fi
-
-        _debug "  merging by_suffix[$su]: ${nums[*]}"
-
-        # declare before assignment
-        local start prev n
-        start=${nums[0]}
-        prev=$start
-
-        for n in "${nums[@]:1}"; do
-          if (( n == prev+1 )); then
-            prev=$n
+          # 1) strip leading 'blk\.(' and similar prefix
+          # Check if line starts with lit1 + '(' or lit2 + '('
+          if [[ "${line:0:$(( ${#lit1} + 1 ))}" == "${lit1}(" ]]; then
+            pr="${line:$(( ${#lit1} + 1 ))}"   # strip ^prefix\.( literally)
+          elif [[ "${line:0:$(( ${#lit2} + 1 ))}" == "${lit2}(" ]]; then
+            pr="${line:$(( ${#lit2} + 1 ))}"
           else
+            pr="$line"
+          fi
+
+          # 2) extract up to ')\.' as inner
+          inner=${pr%%')\.'*}
+          # 3) suffix is what follows ")\."
+          suffix=${pr#*')\.'}
+
+          _debug "  pr         = '$pr'"
+          _debug "  inner      = '$inner'"
+          _debug "  suffix     = '$suffix'"
+
+          # 4) split alternation into parts[]
+          IFS='|' read -r -a parts <<<"$inner"
+          _debug "  parts      = ${parts[*]}"
+
+          # clear collectors
+          plain=(); extras=()
+          by_suffix=(); by_prefix=()
+
+          # 5) classify each part
+          for p in "${parts[@]}"; do
+            if [[ $p =~ ^([0-9]+)(\[[0-9]+-[0-9]+\])$ ]]; then
+              local num=${BASH_REMATCH[1]}
+              local su=${BASH_REMATCH[2]}
+              by_suffix["$su"]+="$num "
+              _debug "    by_suffix[$su] += $num"
+            elif [[ $p =~ ^(\[[0-9]+-[0-9]+\])([0-9]+)$ ]]; then
+              local prf=${BASH_REMATCH[1]}
+              local num=${BASH_REMATCH[2]}
+              by_prefix["$prf"]+="$num "
+              _debug "    by_prefix[$prf] += $num"
+            else
+              plain+=("$p")
+              _debug "    plain += $p"
+            fi
+          done
+
+          # 6) merge runs in by_suffix (X[lo-hi])
+          for su in "${!by_suffix[@]}"; do
+            # build and sort unique nums array
+            read -r -a nums <<<"${by_suffix[$su]}"
+            IFS=$'\n' nums=($(printf '%s\n' "${nums[@]}" | sort -n | uniq))
+            unset IFS
+
+            # skip if no entries
+            if [[ ${#nums[@]} -eq 0 ]]; then
+              _debug "  no entries for suffix $su, skipping"
+              continue
+            fi
+
+            _debug "  merging by_suffix[$su]: ${nums[*]}"
+
+            # declare before assignment
+            local start prev n
+            start=${nums[0]}
+            prev=$start
+
+            for n in "${nums[@]:1}"; do
+              if (( n == prev+1 )); then
+                prev=$n
+              else
+                if (( start < prev )); then
+                  extras+=("[${start}-${prev}]$su")
+                  _debug "    extras += [${start}-${prev}]$su"
+                else
+                  extras+=("${start}$su")
+                  _debug "    extras += ${start}$su"
+                fi
+                start=$n; prev=$n
+              fi
+            done
+            # flush last
             if (( start < prev )); then
               extras+=("[${start}-${prev}]$su")
               _debug "    extras += [${start}-${prev}]$su"
@@ -2160,42 +925,42 @@ optimise_regex_list() {
               extras+=("${start}$su")
               _debug "    extras += ${start}$su"
             fi
-            start=$n; prev=$n
-          fi
-        done
-        # flush last
-        if (( start < prev )); then
-          extras+=("[${start}-${prev}]$su")
-          _debug "    extras += [${start}-${prev}]$su"
-        else
-          extras+=("${start}$su")
-          _debug "    extras += ${start}$su"
-        fi
-      done
+          done
 
-      for prf in "${!by_prefix[@]}"; do
-        # build and sort unique nums array
-        read -r -a nums <<<"${by_prefix[$prf]}"
-        IFS=$'\n' nums=($(printf '%s\n' "${nums[@]}" | sort -n | uniq))
-        unset IFS
+          for prf in "${!by_prefix[@]}"; do
+            # build and sort unique nums array
+            read -r -a nums <<<"${by_prefix[$prf]}"
+            IFS=$'\n' nums=($(printf '%s\n' "${nums[@]}" | sort -n | uniq))
+            unset IFS
 
-        # skip if no entries
-        if [[ ${#nums[@]} -eq 0 ]]; then
-          _debug "    no entries for prefix $prf, skipping"
-          continue
-        fi
+            # skip if no entries
+            if [[ ${#nums[@]} -eq 0 ]]; then
+              _debug "    no entries for prefix $prf, skipping"
+              continue
+            fi
 
-        _debug "  merging by_prefix[$prf]: ${nums[*]}"
+            _debug "  merging by_prefix[$prf]: ${nums[*]}"
 
-        # declare before assignment
-        local start prev n
-        start=${nums[0]}
-        prev=$start
+            # declare before assignment
+            local start prev n
+            start=${nums[0]}
+            prev=$start
 
-        for n in "${nums[@]:1}"; do
-          if (( n == prev+1 )); then
-            prev=$n
-          else
+            for n in "${nums[@]:1}"; do
+              if (( n == prev+1 )); then
+                prev=$n
+              else
+                if (( start < prev )); then
+                  extras+=("$prf[${start}-${prev}]")
+                  _debug "    extras += $prf[${start}-${prev}]"
+                else
+                  extras+=("$prf$start")
+                  _debug "    extras += $prf$start"
+                fi
+                start=$n; prev=$n
+              fi
+            done
+            # flush last
             if (( start < prev )); then
               extras+=("$prf[${start}-${prev}]")
               _debug "    extras += $prf[${start}-${prev}]"
@@ -2203,30 +968,20 @@ optimise_regex_list() {
               extras+=("$prf$start")
               _debug "    extras += $prf$start"
             fi
-            start=$n; prev=$n
-          fi
-        done
-        # flush last
-        if (( start < prev )); then
-          extras+=("$prf[${start}-${prev}]")
-          _debug "    extras += $prf[${start}-${prev}]"
-        else
-          extras+=("$prf$start")
-          _debug "    extras += $prf$start"
+          done
+
+          # 8) combine plain + extras
+          final_parts=( "${plain[@]}" "${extras[@]}" )
+          _debug "  final_parts = ${final_parts[*]}"
+
+          # 9) re-assemble
+          printf '^%s\.(' "$prefix"
+          ( IFS='|'; printf '%s' "${final_parts[*]}" )
+          printf ')\.%s\n' "$suffix"
         fi
       done
-
-      # 8) combine plain + extras
-      final_parts=( "${plain[@]}" "${extras[@]}" )
-      _debug "  final_parts = ${final_parts[*]}"
-
-      # 9) re-assemble
-      printf '^blk\.('
-      ( IFS='|'; printf '%s' "${final_parts[*]}" )
-      printf ')\.%s\n' "$suffix"
-
     else
-      printf '%s\n' "$line"
+      printf '^%s\n' "${line#^}"
     fi
   done
 }
@@ -2294,11 +1049,10 @@ reorder_and_group() {
   done
 
   # Helper: bucket lines by first digit in quant, sort descending
-    bucket_by_bit() {
+  bucket_by_bit() {
     local -n lines=$1
     local -a flat sorted
     local line quant bit
-    # attach bit to each line
     for line in "${lines[@]}"; do
       quant="${line#*=}"
       if [[ $quant =~ ([0-9]) ]]; then
@@ -2308,36 +1062,28 @@ reorder_and_group() {
       fi
       flat+=("$bit:$line")
     done
-    # sort by bit descending
-    IFS=$'
-' sorted=( $(printf '%s
-' "${flat[@]}" | sort -t: -k1,1nr) )
+    IFS=$'\n' sorted=( $(printf '%s\n' "${flat[@]}" | sort -t: -k1,1nr) )
     unset IFS flat
-    # print lines without blank gaps
     for item in "${sorted[@]}"; do
       echo "${item#*:}"
     done
   }
 
-# Helper: compute unique sorted quant bits for a group
-list_bits() {
-  local -n lines=$1
-  local bits=() bit
-  for l in "${lines[@]}"; do
-    q="${l#*=}"
-    [[ $q =~ ([0-9]+) ]] && bits+=("${BASH_REMATCH[1]}")
-  done
-  printf '%s\n' "${bits[@]}" | sort -urn | tr '\n' ' '
-}
+  # Helper: compute unique sorted quant bits for a group
+  list_bits() {
+    local -n lines=$1
+    local bits=() bit
+    for l in "${lines[@]}"; do
+      q="${l#*=}"
+      [[ $q =~ ([0-9]+) ]] && bits+=("${BASH_REMATCH[1]}")
+    done
+    printf '%s\n' "${bits[@]}" | sort -urn | tr '\n' ' '
+  }
 
   # --- Output sections ---
   echo "## Quant mix recipe created using Thireus' GGUF Tool Suite - https://gguf.thireus.com/"
-  if [[ -n "$MODEL_NAME" ]]; then
-    echo "# Model name: $(basename ${MODEL_NAME})"
-  fi
-  if [[ -n "$MODEL_LINK" ]]; then
-    echo "# Link to the original model: ${MODEL_LINK}"
-  fi
+  [[ -n "$MODEL_NAME" ]] && echo "# Model name: $(basename ${MODEL_NAME})"
+  [[ -n "$MODEL_LINK" ]] && echo "# Link to the original model: ${MODEL_LINK}"
   echo
 
   # Model head & embeddings
@@ -2376,37 +1122,118 @@ list_bits() {
     echo
   fi
 
-  # Core FFN weights
+  # Dense Feed-Forward Network weights (main up/down projections + dense gates for blk.[0-2])
   ffn_raw=()
   for i in "${!others[@]}"; do
     l="${others[i]}"
-    if [[ "$l" =~ ffn_.* ]] && [[ ! "$l" =~ exps ]] && [[ ! "$l" =~ shexp ]]; then
+
+    # skip expert-formatted tensors (they are handled elsewhere)
+    if [[ "$l" =~ exps ]] || [[ "$l" =~ shexp ]]; then
+      continue
+    fi
+
+    # collect down/up projections anywhere
+    if [[ "$l" == *ffn_down* ]] || [[ "$l" == *ffn_up* ]]; then
       ffn_raw+=( "$l" )
       unset 'others[i]'
+      continue
+    fi
+
+    # collect dense gate weights specifically for blocks 0..2
+    # the input lines contain literal patterns like '^blk\.[0-2]\.ffn_gate...'
+    # use fixed-string grep to match that exact substring
+    if printf '%s\n' "$l" | grep -F -q '^blk\.[0-2]\.ffn_gate'; then
+      ffn_raw+=( "$l" )
+      unset 'others[i]'
+      continue
+    fi
+    if printf '%s\n' "$l" | grep -F -q '^v\.blk\.[0-2]\.ffn_gate'; then
+      ffn_raw+=( "$l" )
+      unset 'others[i]'
+      continue
     fi
   done
+
   if (( ${#ffn_raw[@]} )); then
-    echo "## Core FFN weights — qbits: $(list_bits ffn_raw)"
+    echo "## Dense Feed-Forward Network weights — qbits: $(list_bits ffn_raw)"
     for l in "${ffn_raw[@]}"; do echo "$l"; done
     echo
   fi
 
-  # Any others not matched
-  other=()
+  # --- New Other tensor groups (with MoE Gating & Routing) ---
+  ln_post=() embeddings=() deepstack=() nextn=() moe_gating=() gate_raw=() misc=()
   for i in "${!others[@]}"; do
     l="${others[i]}"
-    other+=( "$l" )
+    case "$l" in
+      *post_ln*|*ln1*|*ln2* )
+        ln_post+=("$l") ;;
+      *patch_embd*|*position_embd* )
+        embeddings+=("$l") ;;
+      *deepstack* )
+        deepstack+=("$l") ;;
+      *nextn* )
+        nextn+=("$l") ;;
+      # MoE gating & routing: gate input + routing/probability biases
+      *ffn_gate_inp*|*exp_probs_b* )
+        moe_gating+=("$l") ;;
+      # remaining gate-related tensors (e.g. dense/block-0..2 ffn_gate were captured earlier)
+      *ffn_gate* )
+        gate_raw+=("$l") ;;
+      * )
+        misc+=("$l") ;;
+    esac
     unset 'others[i]'
   done
-  if (( ${#other[@]} )); then
-    echo "## Other tensors — qbits: $(list_bits other)"
-    for l in "${other[@]}"; do echo "$l"; done
+
+  # Print groups
+  if (( ${#ln_post[@]} )); then
+    echo "## LayerNorm / Post-LN parameters — qbits: $(list_bits ln_post)"
+    for l in "${ln_post[@]}"; do echo "$l"; done
     echo
   fi
 
-  # GPU-loaded section: ffn_*_shexp
+  if (( ${#embeddings[@]} )); then
+    echo "## Embeddings & positional encodings — qbits: $(list_bits embeddings)"
+    for l in "${embeddings[@]}"; do echo "$l"; done
+    echo
+  fi
+
+  if (( ${#deepstack[@]} )); then
+    echo "## Deepstack modules — qbits: $(list_bits deepstack)"
+    for l in "${deepstack[@]}"; do echo "$l"; done
+    echo
+  fi
+
+  if (( ${#nextn[@]} )); then
+    echo "## NextN tensors — qbits: $(list_bits nextn)"
+    for l in "${nextn[@]}"; do echo "$l"; done
+    echo
+  fi
+
+  # NEW: MoE Gating & Routing (ffn_gate_inp, exp_probs_b, etc.)
+  if (( ${#moe_gating[@]} )); then
+    echo "## MoE Gating & Routing — qbits: $(list_bits moe_gating)"
+    for l in "${moe_gating[@]}"; do echo "$l"; done
+    echo
+  fi
+
+  # Gating network (other gate-related tensors not captured above)
+  if (( ${#gate_raw[@]} )); then
+    echo "## Gating network — qbits: $(list_bits gate_raw)"
+    for l in "${gate_raw[@]}"; do echo "$l"; done
+    echo
+  fi
+
+  # Misc / Other remaining tensors
+  if (( ${#misc[@]} )); then
+    echo "## Misc / Other tensors — qbits: $(list_bits misc)"
+    for l in "${misc[@]}"; do echo "$l"; done
+    echo
+  fi
+
+  # Shared experts section: ffn_*_shexp
   if (( ${#gpu_shexp[@]} )); then
-    echo "## GPU-loaded ffn_*_shexp"
+    echo "## GPU-loaded - MoE Shared Experts Feed-Forward Network - ffn_*_shexp"
     gpu_down=() gpu_up=() gpu_gate=()
     for l in "${gpu_shexp[@]}"; do
       case "$l" in
@@ -2415,26 +1242,14 @@ list_bits() {
         *ffn_gate_*) gpu_gate+=("$l") ;; 
       esac
     done
-    if (( ${#gpu_down[@]} )); then
-      echo "# ffn_down_shexp (down-projection) — qbits: $(list_bits gpu_down)"
-      bucket_by_bit gpu_down
-      echo
-    fi
-    if (( ${#gpu_up[@]} )); then
-      echo "# ffn_up_shexp (up-projection) — qbits: $(list_bits gpu_up)"
-      bucket_by_bit gpu_up
-      echo
-    fi
-    if (( ${#gpu_gate[@]} )); then
-      echo "# ffn_gate_shexp (gate-projection) — qbits: $(list_bits gpu_gate)"
-      bucket_by_bit gpu_gate
-      echo
-    fi
+    (( ${#gpu_down[@]} )) && echo "# ffn_down_shexp — down-projection (shared experts) — qbits: $(list_bits gpu_down)" && bucket_by_bit gpu_down && echo
+    (( ${#gpu_up[@]} ))   && echo "# ffn_up_shexp — up-projection (shared experts) — qbits: $(list_bits gpu_up)" && bucket_by_bit gpu_up && echo
+    (( ${#gpu_gate[@]} )) && echo "# ffn_gate_shexp — gating network (shared experts) — qbits: $(list_bits gpu_gate)" && bucket_by_bit gpu_gate && echo
   fi
 
-  # CPU-friendly section: ffn_*_exps
+  # Single-expert FFN section: ffn_*_exps
   if (( ${#cpu_exps[@]} )); then
-    echo "## CPU-friendly ffn_*_exps"
+    echo "## CPU-friendly - MoE Per-expert Feed-Forward Network - ffn_*_exps"
     cpu_down=() cpu_up=() cpu_gate=()
     for l in "${cpu_exps[@]}"; do
       case "$l" in
@@ -2443,21 +1258,9 @@ list_bits() {
         *ffn_gate_*) cpu_gate+=("$l") ;; 
       esac
     done
-    if (( ${#cpu_down[@]} )); then
-      echo "# ffn_down_exps (down-extraction) — qbits: $(list_bits cpu_down)"
-      bucket_by_bit cpu_down
-      echo
-    fi
-    if (( ${#cpu_up[@]} )); then
-      echo "# ffn_up_exps (up-extraction) — qbits: $(list_bits cpu_up)"
-      bucket_by_bit cpu_up
-      echo
-    fi
-    if (( ${#cpu_gate[@]} )); then
-      echo "# ffn_gate_exps (gate-extraction) — qbits: $(list_bits cpu_gate)"
-      bucket_by_bit cpu_gate
-      echo
-    fi
+    (( ${#cpu_down[@]} )) && echo "# ffn_down_exps — down-projection (per-expert) — qbits: $(list_bits cpu_down)" && bucket_by_bit cpu_down && echo
+    (( ${#cpu_up[@]} ))   && echo "# ffn_up_exps — up-projection (per-expert) — qbits: $(list_bits cpu_up)" && bucket_by_bit cpu_up && echo
+    (( ${#cpu_gate[@]} )) && echo "# ffn_gate_exps — gating network (per-expert) — qbits: $(list_bits cpu_gate)" && bucket_by_bit cpu_gate && echo
   fi
 }
 
