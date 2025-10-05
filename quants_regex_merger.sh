@@ -764,6 +764,8 @@ shorten_regex_list() {
         IFS=$'\n' sorted=($(printf '%s\n' "${nums[@]}" | sort -n | uniq))
         unset IFS
 
+        _debug "Processing sorted suffix: ${sorted[*]}"
+
         # If no numbers, skip
         if (( ${#sorted[@]} == 0 )); then
           continue
@@ -841,7 +843,7 @@ optimise_regex_list() {
           # 1) strip leading 'blk\.(' and similar prefix
           # Check if line starts with lit1 + '(' or lit2 + '('
           if [[ "${line:0:$(( ${#lit1} + 1 ))}" == "${lit1}(" ]]; then
-            pr="${line:$(( ${#lit1} + 1 ))}"   # strip ^prefix\.( literally)
+            pr="${line:$(( ${#lit1} + 1 ))}"   # strip ^prefix\.(
           elif [[ "${line:0:$(( ${#lit2} + 1 ))}" == "${lit2}(" ]]; then
             pr="${line:$(( ${#lit2} + 1 ))}"
           else
@@ -973,6 +975,41 @@ optimise_regex_list() {
           # 8) combine plain + extras
           final_parts=( "${plain[@]}" "${extras[@]}" )
           _debug "  final_parts = ${final_parts[*]}"
+
+          # --- sorting logic ---
+          sorted_stream=$(
+            for p in "${final_parts[@]}"; do
+              s="$p"
+              key=0
+              while [[ -n $s ]]; do
+                if [[ $s =~ ^([0-9]+)(.*) ]]; then
+                  chunk="${BASH_REMATCH[1]}"
+                  s="${BASH_REMATCH[2]}"
+                elif [[ $s =~ ^\[([0-9]+)-([0-9]+)\](.*) ]]; then
+                  chunk="${BASH_REMATCH[1]}"
+                  s="${BASH_REMATCH[3]}"
+                else
+                  key=999999999999
+                  break
+                fi
+                digits=${#chunk}
+                multiplier=1
+                for ((i=0;i<digits;i++)); do
+                  multiplier=$((multiplier * 10))
+                done
+                key=$(( key * multiplier + chunk ))
+              done
+              printf '%s\t%s\n' "$key" "$p"
+            done | sort -t$'\t' -k1,1n -k2,2
+          )
+
+          # read sorted result back
+          final_parts=()
+          while IFS=$'\t' read -r _key item; do
+            [[ -z $item ]] && continue
+            final_parts+=( "$item" )
+          done <<< "$sorted_stream"
+          _debug "  final_parts sorted = ${final_parts[*]}"
 
           # 9) re-assemble
           printf '^%s\.(' "$prefix"
@@ -1160,7 +1197,6 @@ reorder_and_group() {
     echo
   fi
 
-  # --- New Other tensor groups (with MoE Gating & Routing) ---
   ln_post=() embeddings=() deepstack=() nextn=() moe_gating=() gate_raw=() misc=()
   for i in "${!others[@]}"; do
     l="${others[i]}"
@@ -1210,7 +1246,7 @@ reorder_and_group() {
     echo
   fi
 
-  # NEW: MoE Gating & Routing (ffn_gate_inp, exp_probs_b, etc.)
+  # MoE Gating & Routing (ffn_gate_inp, exp_probs_b, etc.)
   if (( ${#moe_gating[@]} )); then
     echo "## MoE Gating & Routing — qbits: $(list_bits moe_gating)"
     for l in "${moe_gating[@]}"; do echo "$l"; done
