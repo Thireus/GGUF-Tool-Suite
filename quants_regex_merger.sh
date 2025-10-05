@@ -829,9 +829,9 @@ optimise_regex_list() {
   while IFS= read -r line; do
     # only lines of the form blk\.(...)\.<suffix> (and similar for mm, v and deepstack)
     if ([[ $line == *\|\[* ]] || [[ $line == *\]\|* ]]); then
-    _debug "THIREUS line-> $line"
+    #_debug "line-> $line"
       for prefix in "blk" "mm" "v\\.blk" "v\\.deepstack"; do
-      _debug "THIREUS prefix-> $prefix"
+      #_debug "prefix-> $prefix"
         lit1="^${prefix}\\."   # literal: ^ then prefix then backslash+dot
         lit2="${prefix}\\."    # literal: prefix then backslash+dot
         # check literal string-starts-with using substring comparison (no pattern/regex)
