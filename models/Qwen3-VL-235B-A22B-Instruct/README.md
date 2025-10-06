@@ -7,6 +7,7 @@ These GGUF files are **experimental** and subject to change. The code used to pr
 
 - ⚠️ **Official support in `llama.cpp` is not available yet** – see [ggml-org/llama.cpp Issue #16207](https://github.com/ggml-org/llama.cpp/issues/16207). Test builds are available at https://github.com/Thireus/llama.cpp/releases (`tr-qwen3-vl` tag).
 - ⚠️ **Official support in `ik_llama.cpp` is not available yet**. Test builds are available at https://github.com/Thireus/ik_llama.cpp/releases (`tr-qwen3-vl` tag).
+
 **Unless you are confident in what you're doing, and until support is officially confirmed,**  
 > 🔒 **Do not use these quantized models for production**  
 > 🔬 **Do not use them to assess the quality of the Qwen3-VL models**
