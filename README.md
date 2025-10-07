@@ -290,6 +290,9 @@ Big thanks to **ubergarm** for his support and for providing the invaluable **`i
 📄 Thireus's computed Ubergarm's `imatrix` for Qwen3-4B-Instruct-2507 can be found in the model directory:  
 🔗 [imatrix_Qwen3-4B-Instruct-2507_ubergarm.dat](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/models/Qwen3-4B-Instruct-2507/imatrix_ubergarm.dat)
 
+📄 Thireus's computed Ubergarm's `imatrix` for Qwen3-VL-235B-A22B-Thinking can be found in the model directory:  
+🔗 [imatrix_Qwen3-VL-235B-A22B-Thinking_ubergarm.dat](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/models/Qwen3-VL-235B-A22B-Thinking/imatrix_ubergarm.dat)
+
 📄 Ubergarm's `imatrix` for Qwen3-235B-A22B-Thinking-2507 can be found here:  
 🔗 [imatrix_Qwen3-235B-A22B-Thinking-2507_ubergarm.dat](https://huggingface.co/ubergarm/Qwen3-235B-A22B-Thinking-2507-GGUF/blob/main/imatrix-Qwen3-235B-A22B-Thinking-2507-BF16.dat)
 
