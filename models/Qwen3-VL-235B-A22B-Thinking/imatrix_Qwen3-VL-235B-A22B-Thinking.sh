@@ -32,7 +32,8 @@ ulimit -n 99999
 curl -L https://gist.githubusercontent.com/ubergarm/edfeb3ff9c6ec8b49e88cdf627b0711a/raw/ba5b01b6960a86874592f5913e283746ff734483/ubergarm-imatrix-calibration-corpus-v02.txt -o ubergarm-imatrix-calibration-corpus-v02.txt
 
 # See instructions on https://github.com/ikawrakow/ik_llama.cpp/discussions/434
-CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0,1,2,3 ~/ik_llama-tr-qwen3-vl-b4184-2b0ce8a-bin-win-cuda-12.8-x64-avx512/llama-imatrix  \
+# 3x RTX 6000 PRO + 256GB DDR4 RAM + Intel i7980XE - compute_imatrix: 45.59 seconds per pass - ETA 10 hours 38.32 minutes
+CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0,1,2 ~/ik_llama-tr-qwen3-vl-b4184-2b0ce8a-bin-win-cuda-12.8-x64-avx512/llama-imatrix  \
     --verbosity 1 \
     -m Qwen3-VL-235B-A22B-Thinking-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01132.gguf \
     -f ubergarm-imatrix-calibration-corpus-v02.txt \
@@ -40,9 +41,9 @@ CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0,1,2,3 ~/ik_llama-tr-qwen3-vl
     -ngl 99 \
     --layer-similarity \
     --ctx-size 512 \
-    --threads 18 --warmup-batch --no-mmap --main-gpu 0 -mla 3 -fa -amb 1024 -fmoe \
-    -ot "blk\.([0-9]|1[0-8])\.ffn_.*=CUDA0" \
-    -ot "blk\.(19|2[0-9]|3[0-7])\.ffn_.*=CUDA1" \
-    -ot "blk\.(38|39|4[0-9]|5[0-6])\.ffn_.*=CUDA2" \
-    -ot "blk\.(5[7-9]|6[0-1])\.ffn_.*=CUDA3" \
-    -ot exps=CPU -b 4096 -ub 4096
+    --threads 18 --no-mmap --main-gpu 0 -fmoe \
+    -ot "blk\.([0-9]|1[0-7])\.ffn_.*=CUDA0" \
+    -ot "blk\.(18|19|2[0-9]|3[0-5])\.ffn_.*=CUDA1" \
+    -ot "blk\.(3[6-9]|4[0-9]|5[0-3])\.ffn_.*=CUDA2" \
+    -ot exps=CPU -b 1024 -ub 1024
+    
