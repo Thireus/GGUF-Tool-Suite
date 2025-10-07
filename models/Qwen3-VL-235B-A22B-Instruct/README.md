@@ -9,9 +9,12 @@ These GGUF files are **experimental** and subject to change. The code used to pr
 - ⚠️ **Official support in `ik_llama.cpp` is not available yet**. Test builds are available at https://github.com/Thireus/ik_llama.cpp/releases (`tr-qwen3-vl` tag).
 
 **Unless you are confident in what you're doing, and until support is officially confirmed,**  
+
 > 🔒 **Do not use these quantized models for production**  
 > 🔬 **Do not use them to assess the quality of the Qwen3-VL models**
+
 Proceed with caution and keep an eye on the upstream PRs for any updates that could affect compatibility or performance.
+
 ---
 
 # Qwen3-VL-235B-A22B-Instruct
