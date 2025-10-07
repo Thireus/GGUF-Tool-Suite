@@ -40,9 +40,9 @@ CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0,1,2,3 ~/ik_llama-tr-qwen3-vl
     -ngl 99 \
     --layer-similarity \
     --ctx-size 512 \
-    --threads 18 --warmup-batch --no-mmap --main-gpu 0 -mla 3 -fa -amb 1024 -fmoe \
-    -ot "blk\.([0-9]|1[0-8])\.ffn_.*=CUDA0" \
-    -ot "blk\.(19|2[0-9]|3[0-7])\.ffn_.*=CUDA1" \
-    -ot "blk\.(38|39|4[0-9]|5[0-6])\.ffn_.*=CUDA2" \
-    -ot "blk\.(5[7-9]|6[0-1])\.ffn_.*=CUDA3" \
-    -ot exps=CPU -b 4096 -ub 4096
+    --threads 18 --no-mmap --main-gpu 0 -fmoe \
+    -ot "blk\.([0-9]|1[0-7])\.ffn_.*=CUDA0" \
+    -ot "blk\.(18|19|2[0-9]|3[0-5])\.ffn_.*=CUDA1" \
+    -ot "blk\.(3[6-9]|4[0-9]|5[0-3])\.ffn_.*=CUDA2" \
+    -ot "blk\.(5[4-7])\.ffn_.*=CUDA3" \
+    -ot exps=CPU -b 1024 -ub 1024

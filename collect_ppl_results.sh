@@ -2,10 +2,10 @@
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
 #** collect_ppl_results.sh is a helper tool that collects the **#
-#** benchmark ppl results of benchmark_each_tensor.sh.        **#
+#** benchmark PPL and KLD results of benchmark_each_tensor.sh **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-31-2025 -------------------- **#
+#** --------------- Updated: Oct-07-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -35,17 +35,19 @@ usage() {
 Usage: $(basename "$0") [OPTIONS]
 
 Options:
-  --chunks CHUNKS                      Number of PPL chunks to process (integer)
-  --baseline-ppl PPL                   Baseline PPL value for percent-delta computation (float)
-  --inject-baseline-ppl-qtype QTYPE    Baseline PPL value will be injected in results for matching qtype (float)
-  --auto-baseline QTYPE                Automatically read bench_ppl_result.baseline.QTYPE.<CHUNKS>.txt and use it
+  --chunks CHUNKS                       Number of PPL chunks to process (integer)
+  --baseline-ppl PPL                    Baseline PPL value for percent-delta computation (float)
+  --inject-baseline-ppl-qtype QTYPE     Baseline PPL value will be injected in results for matching qtype (float)
+  --auto-baseline QTYPE                 Automatically read bench_ppl(_kld)_result.baseline.QTYPE.<CHUNKS>.txt and use it
   --group-tensors REG1[,REG2] [REG3,..] Specify one or more group specifications (same syntax as benchmark_each_tensor.sh).
-                                         Each argument is a group: comma-separated regexes. If omitted, grouping disabled.
-  --expand-groups                      When present, expand groups into individual tensor columns (default: disabled)
-  --hide-empty                         Don't include empty benchmark results to the output csv
-  --output-csv FILE                    Path to output CSV file (default: $OUTPUT_CSV)
-  --qtypes Q1,Q2,...                   Comma-separated list of qtypes to use (overrides auto-discovery)
-  -h, --help                           Show this help message and exit
+                                          Each argument is a group: comma-separated regexes. If omitted, grouping disabled.
+  --expand-groups                       When present, expand groups into individual tensor columns (default: disabled)
+  --hide-empty                          Don't include empty benchmark results to the output csv
+  --output-ppl-csv FILE                 Path to output PPL CSV file (default: $OUTPUT_PPL_CSV)
+  --output-kld-csv FILE                 Path to output KLD CSV file (default: $OUTPUT_KLD_CSV)
+  --qtypes Q1,Q2,...                    Comma-separated list of qtypes to use (overrides auto-discovery)
+  --no-kld                              Disable kld collection
+  -h, --help                            Show this help message and exit
 EOF
 }
 
@@ -75,8 +77,9 @@ USER_REGEX=(
   '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight$'
 )
 
-# Default output CSV filename (can be overridden via --output-csv)
-OUTPUT_CSV="ppl_results.csv"
+# Default output CSV filename (can be overridden via --output-ppl-csv and --output-kld-csv)
+OUTPUT_PPL_CSV="ppl_results.csv"
+OUTPUT_KLD_CSV="kld_results.csv"
 
 # =========== End USER CONFIGURATION ============
 
@@ -90,6 +93,7 @@ qtypes=""
 GROUP_TENSORS_RAW=()
 GROUP_TENSORS_DISABLED=true
 EXPAND_GROUPS=false
+NO_KLD=false
 
 # Parse command-line arguments
 while [[ $# -gt 0 ]]; do
@@ -134,11 +138,18 @@ while [[ $# -gt 0 ]]; do
       HIDE_EMPTY=true
       shift
       ;;
-    --output-csv)
+    --output-ppl-csv)
       if [[ -z "${2:-}" || "${2:0:2}" == "--" ]]; then
-        echo "Error: --output-csv requires a filename argument" >&2; usage; exit 1
+        echo "Error: --output-ppl-csv requires a filename argument" >&2; usage; exit 1
       fi
-      OUTPUT_CSV="$2"
+      OUTPUT_PPL_CSV="$2"
+      shift 2
+      ;;
+    --output-kld-csv)
+      if [[ -z "${2:-}" || "${2:0:2}" == "--" ]]; then
+        echo "Error: --output-kld-csv requires a filename argument" >&2; usage; exit 1
+      fi
+      OUTPUT_KLD_CSV="$2"
       shift 2
       ;;
     --qtypes)
@@ -164,6 +175,10 @@ while [[ $# -gt 0 ]]; do
       EXPAND_GROUPS=true
       shift
       ;;
+    --no-kld)
+      NO_KLD=true
+      shift
+      ;;
     -h|--help)
       usage; exit 0
       ;;
@@ -180,10 +195,11 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting collection of PPL results."
 [[ -n "$PPL_CHUNKS" ]] && echo "Using PPL chunks: $PPL_CHUNKS"
 [[ -n "$BASELINE_PPL" ]] && echo "Using baseline PPL: $BASELINE_PPL"
 [[ -n "$BASELINE_PPL_QTYPE" ]] && echo "Injecting baseline PPL for this qtype: $BASELINE_PPL_QTYPE"
-[[ -n "$AUTO_BASELINE_QTYPE" ]] && echo "Auto-baseline will attempt to read bench_ppl_result.baseline.${AUTO_BASELINE_QTYPE}.${PPL_CHUNKS}.txt"
+[[ -n "$AUTO_BASELINE_QTYPE" ]] && echo "Auto-baseline will attempt to read bench_ppl(_kld)_result.baseline.${AUTO_BASELINE_QTYPE}.${PPL_CHUNKS}.txt"
 [[ "$HIDE_EMPTY" == true ]] && echo "Hide empty qtype bench results from the csv: $HIDE_EMPTY"
 [[ -n "$qtypes" ]] && echo "Overriding qtypes with: $qtypes"
-echo "Output CSV: $OUTPUT_CSV"
+echo "Output PPL CSV: $OUTPUT_PPL_CSV"
+[[ "$NO_KLD" == "false" ]] && echo "Output KLD CSV: $OUTPUT_KLD_CSV"
 if [[ "$GROUP_TENSORS_DISABLED" != "true" ]]; then
   echo "Group tensors: ENABLED; groups:"
   for g in "${GROUP_TENSORS_RAW[@]}"; do echo "  - $g"; done
@@ -193,6 +209,7 @@ if [[ "$GROUP_TENSORS_DISABLED" != "true" ]]; then
     echo "Group expansion: DISABLED (show one column per group)"
   fi
 fi
+[[ "$NO_KLD" == "false" ]] && echo "KLD collection disabled: $NO_KLD"
 
 # If the single token '[]' is passed, grouping disabled (mirror benchmark_each_tensor behaviour)
 if (( ${#GROUP_TENSORS_RAW[@]} == 0 )) || ( (( ${#GROUP_TENSORS_RAW[@]} == 1 )) && [[ "${GROUP_TENSORS_RAW[0]}" == "[]" ]] ); then
@@ -229,11 +246,39 @@ QTYPES=("${sorted_qtypes[@]}")
 echo "Found qtypes: ${QTYPES[*]}"
 
 declare -A PPL_VALUES    # key: "qtype|tensor_name" => PPL value (string)
+declare -A KLD_VALUES    # key: "qtype|tensor_name" => KLD value (string)
 declare -A TENSOR_SET    # key: tensor_name or groupN => 1
 declare -A PROCESSED_GROUP_QTYPE  # key: "qtype|groupidx" => 1/MISSING
 
-# gather list of ppl result files in current dir matching chunks (includes group and baseline files)
-all_bench_ppl_result_files=$(find . -maxdepth 1 -type f -printf "%f\n" 2>/dev/null | grep -E "^bench_ppl_result\..*\.${PPL_CHUNKS}\.txt$" 2>/dev/null || true)
+# gather list of ppl (and ppl_kld) result files in current dir matching chunks (includes group and baseline files)
+if [[ "$NO_KLD" == "true" ]]; then
+    # Try to find bench_ppl_result files first
+    _kld=''
+    all_bench_ppl_result_files=$(find . -maxdepth 1 -type f -printf "%f\n" 2>/dev/null \
+        | grep -E "^bench_ppl${_kld}_result\..*\.${PPL_CHUNKS}\.txt$" 2>/dev/null || true)
+
+    # If none found, fall back to bench_ppl_kld_result files
+    if [[ -z "$all_bench_ppl_result_files" ]]; then
+        _kld='_kld'
+        all_bench_ppl_result_files=$(find . -maxdepth 1 -type f -printf "%f\n" 2>/dev/null \
+            | grep -E "^bench_ppl${_kld}_result\..*\.${PPL_CHUNKS}\.txt$" 2>/dev/null || true)
+        echo "Warning: No bench_ppl${_kld}_result.*.txt found in current directory - PPL will be collected from the PPL+KLD bench result files."
+    fi
+else
+    # First try bench_ppl_kld_result
+    _kld='_kld'
+    all_bench_ppl_result_files=$(find . -maxdepth 1 -type f -printf "%f\n" 2>/dev/null \
+        | grep -E "^bench_ppl${_kld}_result\..*\.${PPL_CHUNKS}\.txt$" 2>/dev/null || true)
+
+    # Fallback to bench_ppl_result if none found, but also disable KLD collection because these files won't contain KLD
+    if [[ -z "$all_bench_ppl_result_files" ]]; then
+        _kld=''
+        all_bench_ppl_result_files=$(find . -maxdepth 1 -type f -printf "%f\n" 2>/dev/null \
+            | grep -E "^bench_ppl${_kld}_result\..*\.${PPL_CHUNKS}\.txt$" 2>/dev/null || true)
+        NO_KLD=true
+        echo "Warning: No bench_ppl${_kld}_result.*.txt found in current directory - KLD collection is now disabled!"
+    fi
+fi
 
 # Helper: find_group_index_for_tensor <tensor> -> prints group index (0-based) or -1
 find_group_index_for_tensor() {
@@ -258,24 +303,51 @@ find_group_index_for_tensor() {
   printf '%s\n' -1
 }
 
-# Helper to extract Final estimate PPL from a result file (returns numeric PPL or empty)
+# Helper to extract PPL from a result file (returns numeric PPL or empty)
 extract_ppl_from_file() {
   local file="$1"
-  awk '
-    # remove leading/trailing whitespace helper
-    function trim(s) { sub(/^[ \t\r\n]+/, "", s); sub(/[ \t\r\n]+$/, "", s); return s }
+  local val
 
-    /Final estimate: PPL/ {
-      # try to match "PPL = 123.456" (with optional spaces)
-      if (match($0, /PPL[ \t]*=[ \t]*([0-9]+(\.[0-9]+)?)/, m)) {
-        print m[1]; exit
-      }
-      # fallback: any "=" followed by a number
-      if (match($0, /=[ \t]*([0-9]+(\.[0-9]+)?)/, m)) {
-        print m[1]; exit
-      }
-    }
-  ' "$file" 2>/dev/null || true
+  # Try "PPL = 123.456"
+  val=$(grep 'PPL *= *[0-9]' "$file" | head -n 1)
+  if [[ -n "$val" ]]; then
+    val=$(echo "$val" | sed -E 's/.*PPL[[:space:]]*=[[:space:]]*([0-9]+(\.[0-9]+)?).*/\1/')
+    [[ -n "$val" ]] && { echo "$val"; return; }
+  fi
+
+  # Fallback: "Mean PPL(Q) : 39.632743 ± ..."
+  val=$(grep 'Mean PPL(Q) *: *[0-9]' "$file" | head -n 1)
+  if [[ -n "$val" ]]; then
+    val=$(echo "$val" | sed -E 's/.*Mean[[:space:]]PPL\(Q\)[[:space:]]*:[[:space:]]*([0-9]+(\.[0-9]+)?).*/\1/')
+    [[ -n "$val" ]] && { echo "$val"; return; }
+  fi
+
+  # Fallback: any "=" followed by a number
+  val=$(grep '= *[0-9]' "$file" | head -n 1)
+  if [[ -n "$val" ]]; then
+    val=$(echo "$val" | sed -E 's/.*=[[:space:]]*([0-9]+(\.[0-9]+)?).*/\1/')
+    [[ -n "$val" ]] && { echo "$val"; return; }
+  fi
+}
+
+# Helper to extract KLD from a result file (returns numeric KLD or empty)
+extract_kld_from_file() {
+  local file="$1"
+  local val
+
+  # Try "Mean    KLD:   1.249031 ± ..." (tabs or spaces)
+  val=$(grep 'KLD' "$file" | grep 'Mean' | head -n 1)
+  if [[ -n "$val" ]]; then
+    val=$(echo "$val" | sed -E 's/.*Mean[[:space:]]*KLD[[:space:]]*:[[:space:]]*([0-9]+(\.[0-9]+)?).*/\1/')
+    [[ -n "$val" ]] && { echo "$val"; return; }
+  fi
+
+  # Fallback: any "KLD:" followed by a number (tabs or spaces)
+  val=$(grep 'KLD:' "$file" | head -n 1)
+  if [[ -n "$val" ]]; then
+    val=$(echo "$val" | sed -E 's/.*KLD:[[:space:]]*([0-9]+(\.[0-9]+)?).*/\1/')
+    [[ -n "$val" ]] && { echo "$val"; return; }
+  fi
 }
 
 # If grouping is enabled and groups are NOT expanded, and the user does not hide empty columns,
@@ -286,9 +358,9 @@ if [[ "$GROUP_TENSORS_DISABLED" != "true" && "$EXPAND_GROUPS" == "false" && "$HI
   done
 fi
 
-# If auto-baseline requested, attempt to read bench_ppl_result.baseline.<qtype>.<CHUNKS>.txt
+# If auto-baseline requested, attempt to read bench_ppl(_kld)_result.baseline.<qtype>.<CHUNKS>.txt
 if [[ -n "$AUTO_BASELINE_QTYPE" ]]; then
-  baseline_fname="bench_ppl_result.baseline.${AUTO_BASELINE_QTYPE}.${PPL_CHUNKS}.txt"
+  baseline_fname="bench_ppl${_kld}_result.baseline.${AUTO_BASELINE_QTYPE}.${PPL_CHUNKS}.txt"
   if printf '%s\n' "$all_bench_ppl_result_files" | grep -qF -- "$baseline_fname"; then
     base_val=$(extract_ppl_from_file "./${baseline_fname}" || true)
     if [[ -n "$base_val" ]]; then
@@ -302,7 +374,7 @@ if [[ -n "$AUTO_BASELINE_QTYPE" ]]; then
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] BASELINE_PPL='$BASELINE_PPL' and BASELINE_PPL_QTYPE='$BASELINE_PPL_QTYPE' have now been set"
       fi
     else
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Auto-baseline: baseline file exists but no 'Final estimate: PPL' line found in $baseline_fname"
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Auto-baseline: baseline file exists but no matching PPL line found in $baseline_fname"
     fi
   else
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Auto-baseline: baseline file $baseline_fname not found for qtype=${AUTO_BASELINE_QTYPE}"
@@ -389,8 +461,8 @@ for qtype in "${QTYPES[@]}"; do
               continue
             fi
 
-            # Look for group result file: bench_ppl_result.group{gid}.{qtype}.{PPL_CHUNKS}.txt
-            group_result_filename="bench_ppl_result.group${gid}.${qtype}.${PPL_CHUNKS}.txt"
+            # Look for group result file: bench_ppl${_kld}_result.group{gid}.{qtype}.{PPL_CHUNKS}.txt
+            group_result_filename="bench_ppl${_kld}_result.group${gid}.${qtype}.${PPL_CHUNKS}.txt"
             if ! printf '%s\n' "$all_bench_ppl_result_files" | grep -qF -- "$group_result_filename"; then
                 # Only log missing once per (qtype,group)
                 if [[ -z "${PROCESSED_GROUP_QTYPE[$proc_key]:-}" ]]; then
@@ -401,24 +473,42 @@ for qtype in "${QTYPES[@]}"; do
             else
                 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Found group PPL result file: $group_result_filename -> applying to ${#group_members[@]} member(s)."
                 result_file="./${group_result_filename}"
-                val=""
+
+                # Extract PPL
+                val_ppl=""
                 if [[ -f "$result_file" ]]; then
-                    val=$(extract_ppl_from_file "$result_file" || true)
+                    val_ppl=$(extract_ppl_from_file "$result_file" || true)
                 fi
-                if [[ -z "$val" ]]; then
+                if [[ -z "$val_ppl" ]]; then
                     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: Could not extract PPL from $result_file. Marking 404 for group."
-                    val="404"
+                    val_ppl="404"
                 else
-                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracted group #${gid} (qtype=${qtype}): PPL=$val"
+                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracted group #${gid} (qtype=${qtype}): PPL=$val_ppl"
+                fi
+
+                # Extract KLD
+                if [[ "$NO_KLD" == "false" ]]; then
+                  val_kld=""
+                  if [[ -f "$result_file" ]]; then
+                      val_kld=$(extract_kld_from_file "$result_file" || true)
+                  fi
+                  if [[ -z "$val_kld" ]]; then
+                      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: Could not extract KLD from $result_file. Marking 404 for group."
+                      val_kld="404"
+                  else
+                      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracted group #${gid} (qtype=${qtype}): KLD=$val_kld"
+                  fi
                 fi
 
                 if [[ "$EXPAND_GROUPS" == "true" ]]; then
                   for gm in "${group_members[@]}"; do
-                    PPL_VALUES["${qtype}|${gm}"]="$val"
+                    PPL_VALUES["${qtype}|${gm}"]="$val_ppl"
+                    KLD_VALUES["${qtype}|${gm}"]="$val_kld"
                     [[ "$HIDE_EMPTY" == true ]] && TENSOR_SET["$gm"]=1
                   done
                 else
-                  PPL_VALUES["${qtype}|group${gid}"]="$val"
+                  PPL_VALUES["${qtype}|group${gid}"]="$val_ppl"
+                  KLD_VALUES["${qtype}|group${gid}"]="$val_kld"
                   [[ "$HIDE_EMPTY" == true ]] && TENSOR_SET["group${gid}"]=1
                 fi
 
@@ -428,7 +518,7 @@ for qtype in "${QTYPES[@]}"; do
         fi
 
         # Fallback: look for individual per-tensor result
-        result_file="bench_ppl_result.${tensor_name}.${qtype}.${PPL_CHUNKS}.txt"
+        result_file="bench_ppl${_kld}_result.${tensor_name}.${qtype}.${PPL_CHUNKS}.txt"
         if ! printf '%s\n' "$all_bench_ppl_result_files" | grep -qF -- "$result_file"; then
             # no individual file: leave empty
             continue
@@ -446,8 +536,8 @@ for qtype in "${QTYPES[@]}"; do
                 PPL_VALUES["${qtype}|${tensor_name}"]="$BASELINE_PPL"
                 continue
             else
-                # try to read bench_ppl_result.baseline.<qtype>.<chunks>.txt
-                baseline_fname="bench_ppl_result.baseline.${qtype}.${PPL_CHUNKS}.txt"
+                # try to read bench_ppl${_kld}_result.baseline.<qtype>.<chunks>.txt
+                baseline_fname="bench_ppl${_kld}_result.baseline.${qtype}.${PPL_CHUNKS}.txt"
                 if [[ -f "$baseline_fname" ]]; then
                     bval=$(extract_ppl_from_file "./${baseline_fname}" || true)
                     if [[ -n "$bval" ]]; then
@@ -463,28 +553,26 @@ for qtype in "${QTYPES[@]}"; do
         fi
 
         if [[ -f "$result_file" ]]; then
-            ppl_line=$(grep 'Final estimate: PPL' "$result_file" || true)
-            if [[ -n "$ppl_line" ]]; then
-                extracted=$(awk '/Final estimate: PPL/ {
-                    for(i=1;i<=NF;i++){
-                        if($i=="=" && i+1<=NF){
-                            print $(i+1)
-                            exit
-                        }
-                    }
-                }' <<< "$ppl_line")
-                if [[ -n "$extracted" ]]; then
-                    PPL_VALUES["${qtype}|${tensor_name}"]="$extracted"
-                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracted PPL: $extracted for ${tensor_name}.${qtype}"
-                else
-                    PPL_VALUES["${qtype}|${tensor_name}"]="404"
-                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: Could not extract numeric PPL from line: '$ppl_line'. Using PPL=404."
-                fi
+            val_ppl=$(extract_ppl_from_file "$result_file" || true)
+            if [[ -n "$val_ppl" ]]; then
+                PPL_VALUES["${qtype}|${tensor_name}"]="$val_ppl"
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracted PPL: $val_ppl for ${tensor_name}.${qtype}"
             else
                 PPL_VALUES["${qtype}|${tensor_name}"]="404"
-                echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: No 'Final estimate: PPL' line found in $result_file. Using PPL=404."
+                echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: No matching PPL line found in $result_file. Using PPL=404."
+            fi
+            if [[ "$NO_KLD" == "false" ]]; then
+                val_kld=$(extract_kld_from_file "$result_file" || true)
+                if [[ -n "$val_kld" ]]; then
+                    KLD_VALUES["${qtype}|${tensor_name}"]="$val_kld"
+                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracted KLD: $val_kld for ${tensor_name}.${qtype}"
+                else
+                    KLD_VALUES["${qtype}|${tensor_name}"]="404"
+                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: No matching KLD line found in $result_file. Using KLD=404."
+                fi
             fi
         fi
+
     done
 done
 
@@ -497,10 +585,10 @@ fi
 IFS=$'\n' sorted_tensors=($(printf '%s\n' "${tensor_list[@]}" | sort -Vu))
 unset IFS
 
-# 4. Write CSV
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Writing CSV to $OUTPUT_CSV"
+# 4. Write PPL CSV
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] Writing PPL CSV to $OUTPUT_PPL_CSV"
 
-echo "[DEBUG] Writing CSV..."
+echo "[DEBUG] Writing PPL CSV..."
 
 {
     printf 'QTYPE'
@@ -536,8 +624,43 @@ echo "[DEBUG] Writing CSV..."
         done
         printf '\n'
     done
-} > "$OUTPUT_CSV"
+} > "$OUTPUT_PPL_CSV"
 
-echo "[DEBUG] Finished writing CSV."
+echo "[DEBUG] Finished writing PPL CSV."
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Done. CSV available at: $OUTPUT_CSV"
+# 5. Write KLD CSV if enabled
+if [[ "$NO_KLD" == "false" ]]; then
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Writing KLD CSV to $OUTPUT_KLD_CSV"
+
+  echo "[DEBUG] Writing KLD CSV..."
+
+  {
+      printf 'QTYPE'
+      for t in "${sorted_tensors[@]}"; do
+          echo "[DEBUG] Header tensor: $t" >&2
+          printf ',%s' "$t"
+      done
+      printf '\n'
+
+      for qtype in "${QTYPES[@]}"; do
+          echo "[DEBUG] Writing row for QTYPE: $qtype" >&2
+          printf '%s' "$qtype"
+          for t in "${sorted_tensors[@]}"; do
+              key="${qtype}|${t}"
+              val="${KLD_VALUES[$key]:-}"
+              echo "[DEBUG] Raw value for [$key] = '$val'" >&2
+
+              printf ',%s' "$val"
+          done
+          printf '\n'
+      done
+  } > "$OUTPUT_KLD_CSV"
+
+  echo "[DEBUG] Finished writing KLD CSV."
+fi
+
+# 6. The end!
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] All Done."
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] PPL CSV available at: $OUTPUT_PPL_CSV"
+[[ "$NO_KLD" == "false" ]] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] KLD CSV available at: $OUTPUT_KLD_CSV"
