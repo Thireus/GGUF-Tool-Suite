@@ -47,7 +47,7 @@ cmake --build build --config Release -j16
 cd ..
 
 # Obtain Thireus' GGUF-Tool-Suite
-git clone https://github.com/Thireus/GGUF-Tool-Suite
+GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/Thireus/GGUF-Tool-Suite
 
 # Download model quant mix from recipe file:
 cd GGUF-Tool-Suite
