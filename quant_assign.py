@@ -1423,32 +1423,34 @@ def main():
 
     # harmonize_groups is now a list-of-lists of regex strings (or empty list to disable)
 
-    try:
-        # Provide df columns (excluding QTYPE) so the helper can match against available tensor names
-        harmonize_row(row, [c for c in df.columns if c != 'QTYPE'], harmonize_groups, args.harmonization_technique)
-    except ValueError as ve:
-        parser.error(str(ve))
+    # --- Disable harmonization here when using greedy quant assign. for greedy quant assign the harmonization is handled inside greedy_quant_assign itself ---
+    if not args.use_greedy_quant_assign:
+        try:
+            # Provide df columns (excluding QTYPE) so the helper can match against available tensor names
+            harmonize_row(row, [c for c in df.columns if c != 'QTYPE'], harmonize_groups, args.harmonization_technique)
+        except ValueError as ve:
+            parser.error(str(ve))
 
-    # Which columns we actually want to update
-    cols_to_update = [c for c in row.index if c != "QTYPE" and c in df.columns]
+        # Which columns we actually want to update
+        cols_to_update = [c for c in row.index if c != "QTYPE" and c in df.columns]
 
-    # Determine the df index to update
-    if hasattr(row, "name") and row.name is not None and row.name in df.index:
-        idx = row.name
-    else:
-        mask = (df["QTYPE"] == row["QTYPE"])
-        matches = df.index[mask].tolist()
-        if len(matches) == 0:
-            raise ValueError(f"Could not find any row in df with QTYPE == {row['QTYPE']!r} to update.")
-        if len(matches) > 1:
-            # warning; choose first. Adjust if you prefer to update all matches.
-            print(f"[Warning] Multiple rows with QTYPE == {row['QTYPE']!r}; updating the first match.")
-        idx = matches[0]
+        # Determine the df index to update
+        if hasattr(row, "name") and row.name is not None and row.name in df.index:
+            idx = row.name
+        else:
+            mask = (df["QTYPE"] == row["QTYPE"])
+            matches = df.index[mask].tolist()
+            if len(matches) == 0:
+                raise ValueError(f"Could not find any row in df with QTYPE == {row['QTYPE']!r} to update.")
+            if len(matches) > 1:
+                # warning; choose first. Adjust if you prefer to update all matches.
+                print(f"[Warning] Multiple rows with QTYPE == {row['QTYPE']!r}; updating the first match.")
+            idx = matches[0]
 
-    # Update columns one-by-one (avoids type-checker issues and is explicit)
-    for col in cols_to_update:
-        # row[col] might be a numpy scalar or python scalar — both are fine
-        df.at[idx, col] = row[col]
+        # Update columns one-by-one (avoids type-checker issues and is explicit)
+        for col in cols_to_update:
+            # row[col] might be a numpy scalar or python scalar — both are fine
+            df.at[idx, col] = row[col]
 
     # ---- END harmonization ----
     #print(row.to_string(max_rows=None))
