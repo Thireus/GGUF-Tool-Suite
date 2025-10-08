@@ -849,6 +849,66 @@ def greedy_quant_assign(
     if debug:
         print(f"[GREEDY] final total_size = {total_size / GIB:.3f} GiB")
 
+    # --- Second pass: promote tensors if we have headroom
+    promote_pq: List[Tuple[float, int, str, str, str]] = []
+    counter = 0
+
+    def push_promotions(tensor: str, from_q: str):
+        nonlocal counter
+        # skip preassigned or tensors without ppl data
+        if tensor in preassigned_due_to_missing_ppl or tensor not in ppl_loss:
+            return
+        allowed = allowed_map[tensor]
+        try:
+            from_idx = allowed.index(from_q)
+        except ValueError:
+            return
+        # explore upgrades to higher quants (i.e. lower indices)
+        for to_q in reversed(allowed[:from_idx]):
+            size_from = tensor_sizes[tensor][from_q]
+            size_to = tensor_sizes[tensor][to_q]
+            delta_size = size_to - size_from
+            if delta_size <= 0:
+                continue
+            delta_deg = ppl_loss[tensor] * (degradation_factors[from_q] - degradation_factors[to_q])
+            score = float(delta_deg) / float(delta_size)
+            # push as max-heap (invert score)
+            heapq.heappush(promote_pq, (-score, counter, tensor, from_q, to_q))
+            counter += 1
+
+    # initialize promotion opportunities
+    for t in tensors:
+        push_promotions(t, assignment[t])
+
+    if debug:
+        print(f"[GREEDY] starting promotion phase (headroom = {(budget_bytes - total_size)/GIB:.3f} GiB)")
+
+    while promote_pq:
+        _, _, tensor, from_q, to_q = heapq.heappop(promote_pq)
+        size_from = tensor_sizes[tensor][from_q]
+        size_to = tensor_sizes[tensor][to_q]
+        new_total = total_size + (size_to - size_from)
+        if new_total > budget_bytes:
+            # can't afford this promotion, skip
+            continue
+
+        # stale-check
+        if assignment.get(tensor) != from_q:
+            continue
+
+        # apply promotion
+        total_size = new_total
+        assignment[tensor] = to_q
+
+        if debug:
+            print(f"[GREEDY] promoted {tensor}: {from_q} -> {to_q}; added {(size_to - size_from)/GIB:.3f} GiB; total = {total_size/GIB:.3f} GiB")
+
+        # push next possible promotion for this tensor
+        push_promotions(tensor, to_q)
+
+    if debug:
+        print(f"[GREEDY] promotion phase done; final total_size = {total_size / GIB:.3f} GiB")
+
     return assignment, total_size
 
 
