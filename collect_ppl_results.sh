@@ -46,7 +46,7 @@ Options:
   --output-ppl-csv FILE                 Path to output PPL CSV file (default: $OUTPUT_PPL_CSV)
   --output-kld-csv FILE                 Path to output KLD CSV file (default: $OUTPUT_KLD_CSV)
   --output-regex-csv FILE               Path to output REGEX CSV file (default: $OUTPUT_REGEX_CSV)
-  --regex REGEX                         String pattern to match where metric can be found, e.g. '.*Mean[[:space:]]*Δp[[:space:]]*:[[:space:]]*(-?[0-9]+(\.[0-9]+)?).*'
+  --regex REGEX                         String pattern to match any desired metric from bench log file, e.g. '.*Mean[[:space:]]*Δp[[:space:]]*:[[:space:]]*(-?[0-9]+(\.[0-9]+)?).*'
   --qtypes Q1,Q2,...                    Comma-separated list of qtypes to use (overrides auto-discovery)
   --no-kld                              Disable kld collection
   -h, --help                            Show this help message and exit
