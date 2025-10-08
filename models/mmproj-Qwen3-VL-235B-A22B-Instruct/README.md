@@ -1,11 +1,23 @@
 ---
 license: mit
 ---
-# GLM-4.5-Air
+## ⚠️ Cautionary Notice
 
-## 🤔 What is this [HuggingFace repository](https://huggingface.co/Thireus/GLM-4.5-Air-THIREUS-BF16-SPECIAL_SPLIT/) about?
+These GGUF files are **experimental** and subject to change. The code used to produce them is currently in **draft** status. The llama.cpp code patch used to produce these shards can be found at https://huggingface.co/yairpatch/Qwen3-VL-30B-A3B-Thinking-GGUF.
 
-This repository provides **GGUF-quantized tensors** for the GLM-4.5-Air model (official repo: https://huggingface.co/zai-org/GLM-4.5-Air). These GGUF shards are designed to be used with **Thireus’ GGUF Tool Suite** (https://gguf.thireus.com), a collection of tools that automatically finds the perplexity-optimal mix of quantizations for any given VRAM and RAM target. With the Tool Suite, you can generate and download custom quantization “recipes” effortlessly.
+- ⚠️ **Official support in `llama.cpp` is not available yet** – see [ggml-org/llama.cpp Issue #16207](https://github.com/ggml-org/llama.cpp/issues/16207). Test builds are available at https://github.com/Thireus/llama.cpp/releases (`tr-qwen3-vl` tag).
+- ⚠️ **Official support in `ik_llama.cpp` is not available yet**. Test builds are available at https://github.com/Thireus/ik_llama.cpp/releases (`tr-qwen3-vl` tag).
+**Unless you are confident in what you're doing, and until support is officially confirmed,**  
+> 🔒 **Do not use these quantized models for production**  
+> 🔬 **Do not use them to assess the quality of the Qwen3-VL models**
+Proceed with caution and keep an eye on the upstream PRs for any updates that could affect compatibility or performance.
+---
+
+# mmproj-Qwen3-VL-235B-A22B-Instruct
+
+## 🤔 What is this [HuggingFace repository](https://huggingface.co/Thireus/mmproj-Qwen3-VL-235B-A22B-Instruct-THIREUS-BF16-SPECIAL_SPLIT/) about?
+
+This repository provides **GGUF-quantized tensors** for the [mmproj](https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal.md) version of the Qwen3-VL-235B-A22B-Instruct model (official repo: https://huggingface.co/Qwen/Qwen3-VL-235B-A22B-Instruct). These GGUF shards are designed to be used with **Thireus’ GGUF Tool Suite** (https://gguf.thireus.com), a collection of tools that automatically finds the perplexity-optimal mix of quantizations for any given VRAM and RAM target. With the Tool Suite, you can generate and download custom quantization “recipes” effortlessly.
 
 - 📖 Read more: https://github.com/Thireus/GGUF-Tool-Suite  
 - 🔍 Example quant mixes: https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples  
@@ -36,21 +48,22 @@ GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/Thireus/GGUF-Tool-Suite
 # Download model quant mix from recipe file:
 cd GGUF-Tool-Suite
 rm -f download.conf # Make sure to copy the relevant download.conf for the model before running quant_assign.py
-cp -f models/GLM-4.5-Air/download.conf . # Use the download.conf of the chosen model
+cp -f models/mmproj-Qwen3-VL-235B-A22B-Instruct/download.conf . # Use the download.conf of the chosen model
 mkdir -p kitchen && cd kitchen
-../quant_downloader.sh ../recipe_examples/ik_llama.cpp_recipes/GLM-4.5-Air.ROOT-3.9285bpw-4.7264ppl.50GB-GGUF_5GB-GPU_44GB-CPU.90e3c2f_3949c22.recipe
+../quant_downloader.sh ../recipe_examples/ik_harmonized_recipes/mmproj-Qwen3-VL-235B-A22B-Instruct.ROOT-4.9374bpw-4.2319ppl.135GB-GGUF_8GB-GPU_127GB-CPU.60c9e01_c6c07f0.recipe
 
 # Other recipe examples can be found at https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples
 
-# Launch ik_llama's llama-server:
+# Launch ik_llama's llama-cli:
 ulimit -n 9999 # Lifts "too many open files" limitation on Linux
-~/ik_llama.cpp/build/bin/llama-server \
-  -m GLM-4.5-Air-THIREUS-BF16-SPECIAL_TENSOR-00001-of-00804.gguf \
-  -fa -fmoe -ctk f16 -c 4096 -ngl 99 \
-  -ot "blk\.([0-9]|1[0-9]|2[0-4])\.ffn_.*=CUDA0" \
-  -ot "blk\.(2[5-9]|3[0-9]|4[0-6])\.ffn_.*=CPU" \
+~/ik_llama.cpp/build/bin/llama-cli \
+  -m mmproj-Qwen3-VL-235B-A22B-Instruct-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01132.gguf \
+  -mla 3 -fa -amb 512 -fmoe -ctk f16 -c 4096 -ngl 99 \
+  -ot "blk\.(3|4|5|6)\.ffn_.*=CUDA0" \
+  -ot "blk\.(7|8|9|10)\.ffn_.*=CUDA1" \
   -ot exps=CPU -b 2048 -ub 1024 --warmup-batch --no-mmap --threads 36 \
-  --main-gpu 0
+  --main-gpu 0 \
+  -p '<｜begin▁of▁sentence｜><｜User｜>What is the solution of x+5=-2?<｜Assistant｜><think>\n'
 ```
 
 </details>
@@ -67,9 +80,9 @@ ulimit -n 9999 # Lifts "too many open files" limitation on Linux
 
 ## 📊 How does it compare to other GGUFs?
 
-Here’s how GLM-4.5-Air quantized with **Thireus’ GGUF Tool Suite** stacks up against other quantizers (lower perplexity = better at equal or lower bpw):
+Here’s how mmproj-Qwen3-VL-235B-A22B-Instruct quantized with **Thireus’ GGUF Tool Suite** stacks up against other quantizers (lower perplexity = better at equal or lower bpw):
 
-![PPLs Compared With Others](https://github.com/Thireus/GGUF-Tool-Suite/raw/main/ppl_graphs/GLM-4.5-Air.svg)
+![PPLs Compared With Others](https://github.com/Thireus/GGUF-Tool-Suite/raw/main/ppl_graphs/mmproj-Qwen3-VL-235B-A22B-Instruct.svg)
 
 > _Note: The `recipe_examples` files illustrate good recipes. The Tool Suite computes the optimal ppl/bpw curve for you — just specify your target RAM, VRAM, and quant types, and `quant_assign.py` finds the best mix._  
 
@@ -104,7 +117,7 @@ No, because I believe in **tailored quantization** for each user’s hardware. I
 
 Instead, I prefer to share examples of recipes so users can see exactly how they were produced (command included inside these recipe files) and tweak them for their own rigs. The `quant_downloader.sh` script handles automatic fetching and verification of each shard. Note that recipes provided by [Ubergarm](https://huggingface.co/ubergarm) on his model cards are also compatible with `quant_downloader.sh`.
 
-Users who don’t trust the GGUF shards on HuggingFace can also quantize their own by passing recipe lines to `llama-quantize --custom-q` ([see example](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/models/DeepSeek-R1-0528/DeepSeek-R1-0528-THIREUS-ANY-SPECIAL.sh#L482-L486)). Run `llama-quantize --help` to list compatible quants for `quant_assign.py`. This approach is especially useful if you prefer `llama.cpp` over `ik_llama.cpp`.  
+Users who don’t trust the GGUF shards on HuggingFace can also quantize their own by passing recipe lines to `llama-quantize --custom-q` ([see example](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/models/mmproj-Qwen3-VL-235B-A22B-Instruct/mmproj-Qwen3-VL-235B-A22B-Instruct-THIREUS-ANY-SPECIAL.sh#L482-L486)). Run `llama-quantize --help` to list compatible quants for `quant_assign.py`. This approach is especially useful if you prefer `llama.cpp` over `ik_llama.cpp`.  
 
 ---
 

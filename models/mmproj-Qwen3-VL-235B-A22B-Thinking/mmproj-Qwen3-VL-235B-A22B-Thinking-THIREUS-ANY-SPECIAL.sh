@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** Qwen3-VL-235B-A22B-Thinking-THIREUS-ANY-SPECIAL.sh used   **#
-#** for ppl bench purpose. Adjust $1 in $custom!              **#
+#** mmproj-Qwen3-VL-235B-A22B-Thinking-THIREUS-ANY-SPECIAL.sh **#
+#** used for ppl bench purpose. Adjust $1 in $custom!         **#
 #**                                                           **#
 #** ********************************************************* **#
 #** --------------- Updated: Oct-05-2025 -------------------- **#
@@ -35,33 +35,46 @@ _debug() {
 custom="
 ## Quant mix recipe created using Thireus' GGUF Tool Suite - https://gguf.thireus.com/
 
-## Model head & embeddings — qbits: 32 16 
-^token_embd\.weight$=$1
-^output_norm\.weight$=f32
-^output\.weight$=$1
-
 ## Multi-headed attention parameters — qbits: 32 16 
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_v\.weight$=$1
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_q\.weight$=$1
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_output\.weight$=$1
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_k\.weight$=$1
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_q_norm\.weight$=f32
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_k_norm\.weight$=f32
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_norm\.weight$=f32
+^v\.blk\.([0-9]|1[0-9]|2[0-6])\.attn_k\.weight$=$1
+^v\.blk\.([0-9]|1[0-9]|2[0-6])\.attn_q\.weight$=$1
+^v\.blk\.([0-9]|1[0-9]|2[0-6])\.attn_k\.bias$=f32
+^v\.blk\.([0-9]|1[0-9]|2[0-6])\.attn_out\.weight$=$1
+^v\.blk\.([0-9]|1[0-9]|2[0-6])\.attn_v\.bias$=f32
+^v\.blk\.([0-9]|1[0-9]|2[0-6])\.attn_v\.weight$=$1
+^v\.blk\.([0-9]|1[0-9]|2[0-6])\.attn_q\.bias$=f32
+^v\.blk\.([0-9]|1[0-9]|2[0-6])\.attn_out\.bias$=f32
 
-## Core FFN weights — qbits: 32 
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_gate_inp\.weight$=f32
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_norm\.weight$=f32
+## Dense Feed-Forward Network weights — qbits: 32 16 
+^v\.blk\.([0-9]|1[0-9]|2[0-6])\.ffn_up\.bias$=f32
+^v\.blk\.([0-9]|1[0-9]|2[0-6])\.ffn_down\.bias$=f32
+^v\.blk\.([0-9]|1[0-9]|2[0-6])\.ffn_up\.weight$=$1
+^v\.blk\.([0-9]|1[0-9]|2[0-6])\.ffn_down\.weight$=$1
 
-## CPU-friendly ffn_*_exps
-# ffn_down_exps (down-extraction) — qbits: 16 
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_down_exps\.weight$=$1
+## LayerNorm / Post-LN parameters — qbits: 32 
+^v\.post_ln\.bias$=f32
+^v\.post_ln\.weight$=f32
+^v\.blk\.([0-9]|1[0-9]|2[0-6])\.ln1\.weight$=f32
+^v\.blk\.([0-9]|1[0-9]|2[0-6])\.ln2\.bias$=f32
+^v\.blk\.([0-9]|1[0-9]|2[0-6])\.ln1\.bias$=f32
+^v\.blk\.([0-9]|1[0-9]|2[0-6])\.ln2\.weight$=f32
 
-# ffn_up_exps (up-extraction) — qbits: 16 
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_up_exps\.weight$=$1
+## Embeddings & positional encodings — qbits: 32 
+^v\.patch_embd\.weight$=f32
+^v\.patch_embd\.weight\.1$=f32
+^v\.position_embd\.weight$=f32
 
-# ffn_gate_exps (gate-extraction) — qbits: 16 
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_gate_exps\.weight$=$1
+## Deepstack modules — qbits: 32 16 
+^v\.deepstack\.[0-2]\.fc1\.bias$=f32
+^v\.deepstack\.[0-2]\.fc1\.weight$=$1
+^v\.deepstack\.[0-2]\.norm\.weight$=f32
+^v\.deepstack\.[0-2]\.fc2\.weight$=$1
+^v\.deepstack\.[0-2]\.fc2\.bias$=f32
+^v\.deepstack\.[0-2]\.norm\.bias$=f32
+
+## Misc / Other tensors — qbits: 32 16 
+^mm\.(0|2)\.bias$=f32
+^mm\.(0|2)\.weight$=$1
 
 
 

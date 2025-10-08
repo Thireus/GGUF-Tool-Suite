@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Sep-25-2025 -------------------- **#
+#** --------------- Updated: Oct-07-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -122,13 +122,15 @@ GROUP_TENSORS_RAW=()
 # When the single token '[]' is passed, grouping is disabled
 GROUP_TENSORS_DISABLED=false
 
-# New: bench mode and sweep context
-# BENCH_MODE: 0 = PPL only (default), 1 = SWEEP only, 2 = PPL then SWEEP
+# Bench mode and sweep context
+# BENCH_MODE: 0 = PPL+KLD only (default), 1 = SWEEP only, 2 = PPL+KLD then SWEEP
 BENCH_MODE=0
 
-# New parameter: control infinite looping (defaults to false)
-# User can pass: --infinite-loop true|false
-INFINITE_LOOP="false"
+# Control infinite looping (defaults to false)
+INFINITE_LOOP=false
+
+# Defines if Kullback–Leibler divergence (KLD) must not be computed (defaults to false)
+NO_KLD=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -159,16 +161,16 @@ while [[ $# -gt 0 ]]; do
     --context)
       CUSTOM_CONTEXT="$2"; shift 2;;
     --infinite-loop)
-      INFINITE_LOOP="$2"; shift 2;;
+      INFINITE_LOOP=true
+      shift
+      ;;
+    --no-kld)
+      NO_KLD=true
+      shift
+      ;;
     *) echo "Unknown argument: $1" >&2; exit 1;;
   esac
 done
-
-# Validate INFINITE_LOOP value
-if ! [[ "$INFINITE_LOOP" =~ ^(true|false)$ ]]; then
-  echo "Error: --infinite-loop must be 'true' or 'false'." >&2
-  exit 1
-fi
 
 # Default grouping if not provided or if the user explicitly passed '[]' as first group, disable grouping
 if (( ${#GROUP_TENSORS_RAW[@]} == 0 )) || ((( ${#GROUP_TENSORS_RAW[@]} == 1 )) && [[ "${GROUP_TENSORS_RAW[0]}" == "[]" ]]); then
@@ -183,7 +185,7 @@ fi
 
 # Validate BENCH_MODE
 if ! [[ "$BENCH_MODE" =~ ^[0-2]$ ]]; then
-  echo "Error: --mode must be 0 (PPL), 1 (SWEEP), or 2 (PPL then SWEEP)." >&2
+  echo "Error: --mode must be 0 (PPL+KLD), 1 (SWEEP), or 2 (PPL+KLD then SWEEP)." >&2
   exit 1
 fi
 
@@ -281,7 +283,7 @@ LOCAL_QTYPES=( $(printf "%s\n" "${_LOCAL_QTYPES[@]}" | grep -v '^f32$') )
 # 4. Number of concurrent threads for initial fetch/validation:
 N_THREADS=8
 
-# 5. Number of chunks to process for PPL:
+# 5. Number of chunks to process for PPL+KLD:
 PPL_COMMAND_CHUNKS_TO_PROCESS=${CUSTOM_CHUNKS:-250}
 
 # 6. Max context size for SWEEP:
@@ -292,11 +294,12 @@ BENCH_COMMAND_CONTEXT_TO_PROCESS=${CUSTOM_CONTEXT:-8192}
 # This is because these tensors have not been quantised to iq1_s due to llama refusal
 QTYPES=(${CUSTOM_QTYPES[@]:-"iq1_m_r4" "iq2_k"})
 
-# 8. Baseline QTYPE for baseline PPL computation
+# 8. Baseline QTYPE for baseline PPL+KLD computation, try to best match the recipe's mean quant provided in USER_REGEX
 # Try to use the highest baseline you can that fits in your VRAM+RAM
 BASELINE_QTYPE="iq3_xxs"
 
 # 9. PPL command template:
+# Do not add KLD parameters, they will be automatically added if necessary at the end of this template - See "Add KLD parameter placeholder" section
 PPL_COMMAND_TEMPLATE='CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0,2,1 ~/ik_llama-main-b3833-65dd65c-bin-win-cuda-12.8-x64/llama-perplexity \
 -m {MODEL_FILE} -mla 3 -fa -amb 1024 -fmoe -ctk f16 -c 512 -ngl 99 \
 -ot "blk\.(3|4|5)\.ffn_.*=CUDA0" -ot "blk\.(6|7|8)\.ffn_.*=CUDA1" -ot "blk\.(9|10)\.ffn_.*=CUDA2" \
@@ -313,6 +316,18 @@ SWEEP_COMMAND_TEMPLATE='CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0 ~/ik
 MAIN_SHARD_PATTERN="*-00001-of-*.gguf"
 
 # =============== End USER CONFIGURATION ===============
+
+# Add KLD parameter placeholder to PPL_COMMAND_TEMPLATE if necessary
+if [[ "$NO_KLD" == "false" ]]; then
+  PPL_COMMAND_TEMPLATE="${PPL_COMMAND_TEMPLATE} {KLD_PARAMETER}"
+  PLUS_KLD='+KLD'
+  _kld='_kld'
+  #echo "[$(timestamp)] KLD computation enabled by default."
+else
+  PLUS_KLD=''
+  _kld=''
+  #echo "[$(timestamp)] KLD computation disabled. (--no_kld=true)"
+fi
 
 # Verify gpg readiness
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -368,13 +383,13 @@ if [[ -n "$BENCH_CSV" ]]; then
     max_val=-1
     sel_idx=-1
 
-    # Find the tensor with highest PPL matching this pattern
+    # Find the tensor with highest PPL/KLD matching this pattern
     for idx in "${!hdrs[@]}"; do
       name=${hdrs[$idx]}
       if [[ $name =~ $pat_regex ]]; then
         v=${vals[$idx]:-}
         [[ -z "$v" ]] && continue
-        echo "[$(timestamp)]  Matched tensor '$name' with PPL=$v"
+        echo "[$(timestamp)]  Matched tensor '$name' with PPL/KLD value $v"
         if (( $(bc <<< "$v > $max_val") )); then
           max_val=$v
           sel_idx=$idx
@@ -384,7 +399,7 @@ if [[ -n "$BENCH_CSV" ]]; then
 
     if (( sel_idx >= 0 )); then
       selected_name=${hdrs[$sel_idx]}
-      echo "[$(timestamp)] Selected worst tensor for pattern '$pat_regex': $selected_name (PPL=$max_val)"
+      echo "[$(timestamp)] Selected worst tensor for pattern '$pat_regex': $selected_name (PPL/KLD $max_val)"
       SELECTED_TENSORS+=("$selected_name")
       SELECTED_QTYPES+=("$pat_qtype")
     else
@@ -593,22 +608,26 @@ fi
 #     # Not strictly required in this script
 # fi
 
-# Baseline benchmark (PPL baseline) — only run if PPL is enabled (mode == 0 or 2)
+# Baseline benchmark (PPL+KLD baseline) — only run if PPL+KLD is enabled (mode == 0 or 2)
 if [[ "$BENCH_MODE" -eq 0 || "$BENCH_MODE" -eq 2 ]]; then
-  baseline_result_file="bench_ppl_result.baseline.${BASELINE_QTYPE}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
-  if [[ ! -f "$baseline_result_file" ]]; then
-      echo "[$(timestamp)] Running baseline PPL benchmark for BASELINE_QTYPE='$BASELINE_QTYPE', chunks=$PPL_COMMAND_CHUNKS_TO_PROCESS."
+  baseline_result_file="bench_ppl${_kld}_result.baseline.${BASELINE_QTYPE}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+  baseline_kld_file="bench_kld_result.baseline.${BASELINE_QTYPE}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.bin"
+  if [[ ! -f "$baseline_result_file" || ( "$NO_KLD" == "false" && ! -f "$baseline_kld_file" ) ]]; then
+      [[ ! -f "$baseline_result_file" ]] && echo "[$(timestamp)] PPL baseline file not yet computed: $baseline_result_file (not found)"
+      [[ "$NO_KLD" == "false" && ! -f "$baseline_kld_file" ]] && echo "[$(timestamp)] KLD baseline file not yet computed: $baseline_kld_file (not found)"
+      echo "[$(timestamp)] Running baseline PPL$PLUS_KLD benchmark for BASELINE_QTYPE='$BASELINE_QTYPE', chunks=$PPL_COMMAND_CHUNKS_TO_PROCESS."
       main_model_file=$(find_main_model_file) || { echo "Error: main model file not found for baseline." >&2; [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"; exit 1; }
-      baseline_cmd="${PPL_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
+      baseline_cmd="${PPL_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}" # Replace model placeholder by actual model file path
+      [[ "$NO_KLD" == "false" ]] && baseline_cmd="${baseline_cmd//\{KLD_PARAMETER\}/--kl-divergence-base $baseline_kld_file}" # Replace kld placeholder by actual kld parameter
       eval "$baseline_cmd" > "$baseline_result_file" 2>&1 < /dev/null
       estimate=$(grep "Final estimate" "$baseline_result_file" || true)
-      echo "Baseline PPL benchmark completed for chunks=$PPL_COMMAND_CHUNKS_TO_PROCESS: $estimate"
+      echo "Baseline PPL$PLUS_KLD benchmark completed for chunks=$PPL_COMMAND_CHUNKS_TO_PROCESS: $estimate"
   else
       estimate=$(grep "Final estimate" "$baseline_result_file" || true)
-      echo "[$(timestamp)] Baseline PPL already exists for BASELINE_QTYPE='$BASELINE_QTYPE', chunks=$PPL_COMMAND_CHUNKS_TO_PROCESS: $estimate"
+      echo "[$(timestamp)] Baseline PPL$PLUS_KLD already exists for BASELINE_QTYPE='$BASELINE_QTYPE', chunks=$PPL_COMMAND_CHUNKS_TO_PROCESS: $estimate"
   fi
 else
-  echo "[$(timestamp)] Skipping baseline PPL because --mode=${BENCH_MODE} (PPL disabled)."
+  echo "[$(timestamp)] Skipping baseline PPL$PLUS_KLD because --mode=${BENCH_MODE} (PPL$PLUS_KLD disabled)."
 fi
 
 # Baseline for SWEEP if sweep is enabled
@@ -635,11 +654,16 @@ echo "Tensor regex patterns:"
 for pat in "${USER_REGEX[@]}"; do
     echo "  - $pat"
 done
-echo "PPL command template: $PPL_COMMAND_TEMPLATE"
+echo "PPL$PLUS_KLD command template: $PPL_COMMAND_TEMPLATE"
 echo "SWEEP command template: $SWEEP_COMMAND_TEMPLATE"
 echo "Main shard pattern: $MAIN_SHARD_PATTERN"
 echo "Use SHA256 verification: $USE_SHA256"
-echo "Benchmark mode: $BENCH_MODE (0=PPL,1=SWEEP,2=PPL+SWEEP)"
+echo "Benchmark mode: $BENCH_MODE (0=PPL+KLD,1=SWEEP,2=PPL+KLD+SWEEP)"
+if [[ "$NO_KLD" == "true" ]]; then
+  echo "KLD benchmarking: DISABLED"
+else
+  echo "KLD benchmarking: ENABLED"
+fi
 echo "Sweep context (-c): $BENCH_COMMAND_CONTEXT_TO_PROCESS"
 if [[ "$GROUP_TENSORS_DISABLED" == "true" ]]; then
   echo "Group tensors: DISABLED"
@@ -652,7 +676,7 @@ fi
 
 # helper checks for enabled runs
 need_run_ppl() {
-  # PPL if mode==0 or mode==2
+  # PPL+KLD if mode==0 or mode==2
   if [[ "$BENCH_MODE" -eq 0 || "$BENCH_MODE" -eq 2 ]]; then return 0; else return 1; fi
 }
 need_run_sweep() {
@@ -856,22 +880,24 @@ collect_group_members() {
   done
 }
 
-# get_result_file_for_tensor <tensor> <qtype> -> prints both result filenames (PPL and SWEEP) and sets LAST_GROUP_IDX
+# get_result_file_for_tensor <tensor> <qtype> -> prints both result filenames (PPL, KLD and SWEEP) and sets LAST_GROUP_IDX
 LAST_GROUP_IDX=-1
 get_result_file_for_tensor() {
   local tensor="$1"; local qtype="$2"
   gid=$(find_group_index_for_tensor "$tensor")
   if (( gid >= 0 )); then
-    ppl="bench_ppl_result.group${gid}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+    ppl="bench_ppl${_kld}_result.group${gid}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+    #kld="bench_kld_result.group${gid}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.bin"
     sweep="bench_sweep_result.group${gid}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
     LAST_GROUP_IDX=$gid
   else
-    ppl="bench_ppl_result.${tensor}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+    ppl="bench_ppl${_kld}_result.${tensor}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+    #kld="bench_kld_result.${tensor}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.bin"
     sweep="bench_sweep_result.${tensor}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
     LAST_GROUP_IDX=-1
   fi
-  # print: <ppl_filename> <sweep_filename>
-  printf '%s %s\n' "$ppl" "$sweep"
+  # print: <ppl_filename> <sweep_filename> # <kld_filename>
+  printf '%s %s\n' "$ppl" "$sweep" # "$kld"
 }
 
 # Instead of a raw `while true; do ... done`, wrap the main body in a function and control
@@ -964,7 +990,7 @@ run_main_loop() {
             echo "[$(timestamp)] ❌ Error: Could not find main model shard matching '$MAIN_SHARD_PATTERN' in $LOCAL_MODEL_DIR. Skipping benchmarking." >&2
             continue
         }
-        echo "[$(timestamp)] Main model shard for PPL: $main_model_file"
+        echo "[$(timestamp)] Main model shard for PPL+KLD: $main_model_file"
 
         # Organise shards so that the ones with tensors that have less layers come first because these tensors cannot be interpolated easily, so it's best to process them first
         shuffle_shards_by_tensor_patterns shard_to_tensors shuffled_shard_keys
@@ -976,7 +1002,7 @@ run_main_loop() {
             collect_group_members "$gidx" tmp_members_group
             if (( ${#tmp_members_group[@]} )); then
               # check files for both PPL and SWEEP as required by BENCH_MODE
-              ppl_group_file="bench_ppl_result.group${gidx}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+              ppl_group_file="bench_ppl${_kld}_result.group${gidx}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
               sweep_group_file="bench_sweep_result.group${gidx}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
 
               ppl_done=false; sweep_done=false
@@ -994,7 +1020,7 @@ run_main_loop() {
         # mark individual per-tensor results too (only if not already marked via a group)
         for t in "${!tensor_to_shard[@]}"; do
           if [[ -z "${PROCESSED_TENSOR[$t]:-}" ]]; then
-            ppl_indf="bench_ppl_result.${t}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+            ppl_indf="bench_ppl${_kld}_result.${t}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
             sweep_indf="bench_sweep_result.${t}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
 
             ppl_done=false; sweep_done=false
@@ -1026,11 +1052,11 @@ run_main_loop() {
                 group_idx_for_tensor=$(find_group_index_for_tensor "$tensor_name")
                 if (( group_idx_for_tensor >= 0 )); then
                   # group path
-                  result_file_ppl="bench_ppl_result.group${group_idx_for_tensor}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+                  result_file_ppl="bench_ppl${_kld}_result.group${group_idx_for_tensor}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
                   result_file_sweep="bench_sweep_result.group${group_idx_for_tensor}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
                 else
                   # individual
-                  result_file_ppl="bench_ppl_result.${tensor_name}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+                  result_file_ppl="bench_ppl${_kld}_result.${tensor_name}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
                   result_file_sweep="bench_sweep_result.${tensor_name}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
                 fi
 
@@ -1151,21 +1177,30 @@ run_main_loop() {
                   fi
 
                   # Run benchmark(s) for the group depending on mode
-                  group_result_file_ppl="bench_ppl_result.group${group_idx_for_tensor}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+                  group_result_file_ppl="bench_ppl${_kld}_result.group${group_idx_for_tensor}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
                   group_result_file_sweep="bench_sweep_result.group${group_idx_for_tensor}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
 
-                  # Run PPL first if required
+                  # Run PPL+KLD first if required
                   if need_run_ppl; then
                     echo "[$(timestamp)] Running PPL for group #${group_idx_for_tensor} -> $group_result_file_ppl"
                     cmd="${PPL_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
+                    if [[ "$NO_KLD" == "false" ]]; then
+                      if [[ -z "${baseline_kld_file:-}" ]]; then
+                        echo "[$(timestamp)] ❌ Error: KLD baseline file var not defined or empty." >&2; exit 10
+                      elif [[ ! -f "$baseline_kld_file" ]]; then
+                        echo "[$(timestamp)] ❌ Error: KLD baseline file '$baseline_kld_file' not found." >&2; exit 11
+                      else
+                        cmd="${cmd//\{KLD_PARAMETER\}/--kl-divergence-base \"$baseline_kld_file\" --kl-divergence}"
+                      fi
+                    fi
                     if eval "$cmd" > "$group_result_file_ppl" 2>&1 < /dev/null; then
-                      echo "[$(timestamp)] Group PPL finished and saved to $group_result_file_ppl"
+                      echo "[$(timestamp)] Group PPL$PLUS_KLD finished and saved to $group_result_file_ppl"
                     else
-                      echo "[$(timestamp)] ⚠️ Warning: Group PPL command exited non-zero. See $group_result_file_ppl for details." >&2
+                      echo "[$(timestamp)] ⚠️ Warning: Group PPL$PLUS_KLD command exited non-zero. See $group_result_file_ppl for details." >&2
                     fi
                   fi
 
-                  # Run SWEEP if required (and after PPL if mode==2)
+                  # Run SWEEP if required (and after PPL+KLD if mode==2)
                   if need_run_sweep; then
                     echo "[$(timestamp)] Running SWEEP for group #${group_idx_for_tensor} -> $group_result_file_sweep"
                     cmd="${SWEEP_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
@@ -1209,7 +1244,7 @@ run_main_loop() {
 
                 # Fallback to original single-tensor behaviour
                 # Recompute per-tensor result_file (non-group)
-                result_file_ppl="bench_ppl_result.${tensor_name}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+                result_file_ppl="bench_ppl${_kld}_result.${tensor_name}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
                 result_file_sweep="bench_sweep_result.${tensor_name}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
 
                 # If both required results are already present, skip
@@ -1327,14 +1362,23 @@ run_main_loop() {
                 echo "[$(timestamp)] Replaced original shard with downloaded shard."
 
                 # Run benchmark(s) according to mode
-                # PPL:
+                # PPL+KLD:
                 if need_run_ppl; then
-                  echo "[$(timestamp)] Running PPL command for tensor='$tensor_name', qtype='$qtype'... output into $result_file_ppl"
+                  echo "[$(timestamp)] Running PPL$PLUS_KLD command for tensor='$tensor_name', qtype='$qtype'... output into $result_file_ppl"
                   cmd="${PPL_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
+                  if [[ "$NO_KLD" == "false" ]]; then
+                    if [[ -z "${baseline_kld_file:-}" ]]; then
+                      echo "[$(timestamp)] ❌ Error: KLD baseline file var not defined or empty." >&2; exit 10
+                    elif [[ ! -f "$baseline_kld_file" ]]; then
+                      echo "[$(timestamp)] ❌ Error: KLD baseline file '$baseline_kld_file' not found." >&2; exit 11
+                    else
+                      cmd="${cmd//\{KLD_PARAMETER\}/--kl-divergence-base \"$baseline_kld_file\" --kl-divergence}"
+                    fi
+                  fi
                   if eval "$cmd" > "$result_file_ppl" 2>&1 < /dev/null; then
-                    echo "[$(timestamp)] 👀 PPL output (stdout+stderr) saved to $result_file_ppl"
+                    echo "[$(timestamp)] 👀 PPL$PLUS_KLD output (stdout+stderr) saved to $result_file_ppl"
                   else
-                    echo "[$(timestamp)] ⚠️ Warning: PPL command exited with non-zero status for tensor='$tensor_name'. See $result_file_ppl for details." >&2
+                    echo "[$(timestamp)] ⚠️ Warning: PPL$PLUS_KLD command exited with non-zero status for tensor='$tensor_name'. See $result_file_ppl for details." >&2
                   fi
                 fi
 

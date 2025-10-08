@@ -5,7 +5,7 @@
 #** for ppl bench purpose. Adjust $1 in $custom!              **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Sep-24-2025 -------------------- **#
+#** --------------- Updated: Oct-05-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -36,32 +36,32 @@ custom="
 ## Quant mix recipe created using Thireus' GGUF Tool Suite - https://gguf.thireus.com/
 
 ## Model head & embeddings — qbits: 32 16 
-token_embd\.weight=$1
-output\.weight=$1
-output_norm\.weight=f32
+^token_embd\.weight$=$1
+^output_norm\.weight$=f32
+^output\.weight$=$1
 
 ## Multi-headed attention parameters — qbits: 32 16 
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_v\.weight=$1
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_output\.weight=$1
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_k_norm\.weight=f32
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_q\.weight=$1
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_norm\.weight=f32
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_k\.weight=$1
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_q_norm\.weight=f32
+^blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_v\.weight$=$1
+^blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_q\.weight$=$1
+^blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_output\.weight$=$1
+^blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_k\.weight$=$1
+^blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_q_norm\.weight$=f32
+^blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_k_norm\.weight$=f32
+^blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_norm\.weight$=f32
 
 ## Core FFN weights — qbits: 32 
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_norm\.weight=f32
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_gate_inp\.weight=f32
+^blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_gate_inp\.weight$=f32
+^blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_norm\.weight$=f32
 
-## CPU-loaded ffn_*_exps
+## CPU-friendly ffn_*_exps
 # ffn_down_exps (down-extraction) — qbits: 16 
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_down_exps\.weight=$1
+^blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_down_exps\.weight$=$1
 
 # ffn_up_exps (up-extraction) — qbits: 16 
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_up_exps\.weight=$1
+^blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_up_exps\.weight$=$1
 
 # ffn_gate_exps (gate-extraction) — qbits: 16 
-blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_gate_exps\.weight=$1
+^blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_gate_exps\.weight$=$1
 
 
 
@@ -481,7 +481,7 @@ ulimit -n 99999
 mkdir Qwen3-VL-235B-A22B-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
     --custom-q "$custom" \
     --imatrix imatrix_ubergarm.dat \
-    Qwen3-VL-235B-A22B-Instruct-THIREUS-BF16-SPECIAL_SPLIT/Qwen3-VL-235B-A22B-Instruct-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01498.gguf \
+    Qwen3-VL-235B-A22B-Instruct-THIREUS-BF16-SPECIAL_SPLIT/Qwen3-VL-235B-A22B-Instruct-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01132.gguf \
     Qwen3-VL-235B-A22B-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/Qwen3-VL-235B-A22B-Instruct-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
     ${1^^} \
     32 && chmod 444 Qwen3-VL-235B-A22B-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
