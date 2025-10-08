@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** Qwen3-VL-235B-A22B-Thinking-THIREUS-ANY-SPECIAL.sh used   **#
-#** for ppl bench purpose. Adjust $1 in $custom!              **#
+#** GLM-4.6-THIREUS-ANY-SPECIAL_SMOL.sh used for iq1_m*       **#
+#** qyptes only. Adjust $1 in $custom!                        **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Oct-05-2025 -------------------- **#
+#** --------------- Updated: Oct-04-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -31,41 +31,70 @@ _debug() {
   printf '[DEBUG] %s\n' "$*" >&2
 }
 
-# cat tensors.map | cut -d: -f 3,5 | sed 's/\:dtype//g' | sed 's/\./\\\./g' | ./quants_regex_merger.sh 
+# echo "$(for f in `ls GLM-4.6-DQ4_K_R4-*.gguf`; do gguf_info.py "$f"; done)" | grep 'dtype=' | awk -F $'\t' '{print $1 "=" $3}' | sed 's/=dtype=/=/g' | sed 's/\./\\./g'
 custom="
 ## Quant mix recipe created using Thireus' GGUF Tool Suite - https://gguf.thireus.com/
 
-## Model head & embeddings — qbits: 32 16 
+## Model head & embeddings
 ^token_embd\.weight$=$1
-^output_norm\.weight$=f32
 ^output\.weight$=$1
+^output_norm\.weight$=f32
 
-## Multi-headed attention parameters — qbits: 32 16 
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_v\.weight$=$1
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_q\.weight$=$1
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_output\.weight$=$1
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_k\.weight$=$1
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_q_norm\.weight$=f32
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_k_norm\.weight$=f32
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.attn_norm\.weight$=f32
+## Multi-headed attention parameters
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_v\.bias$=f32
+^blk\.([0-9]|[1-8][0-9]|9[0-1])\.attn_v\.weight$=$1
+^blk\.(92)\.attn_v\.weight$=iq2_ks
+^blk\.([0-9]|[1-8][0-9]|9[0-1])\.attn_q\.weight$=$1
+^blk\.(92)\.attn_q\.weight$=iq2_ks
+^blk\.([0-9]|[1-8][0-9]|9[0-1])\.attn_output\.weight$=$1
+^blk\.(92)\.attn_output\.weight$=iq2_ks
+^blk\.([0-9]|[1-8][0-9]|9[0-1])\.attn_k\.weight$=$1
+^blk\.(92)\.attn_k\.weight$=iq2_ks
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q\.bias$=f32
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q_norm\.weight$=f32
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k_norm\.weight$=f32
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k\.bias$=f32
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_norm\.weight$=f32
 
-## Core FFN weights — qbits: 32 
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_gate_inp\.weight$=f32
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_norm\.weight$=f32
+## Core FFN weights
+^blk\.[0-2]\.ffn_down\.weight$=$1
+^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_inp\.weight$=f32
+^blk\.[0-2]\.ffn_gate\.weight$=$1
+^blk\.[0-2]\.ffn_up\.weight$=$1
+
+## Other tensors
+^blk\.92\.nextn\.shared_head_norm\.weight$=f32
+^blk\.92\.nextn\.enorm\.weight$=f32
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.post_attention_norm\.weight$=f32
+^blk\.([3-9]|[1-8][0-9]|9[0-2])\.exp_probs_b\.bias$=f32
+^blk\.92\.nextn\.eh_proj\.weight$=iq2_ks
+^blk\.92\.nextn\.hnorm\.weight$=f32
+
+## GPU-loaded ffn_*_shexp
+# ffn_down_shexp (down-projection)
+^blk\.([3-9]|[1-8][0-9]|9[0-1])\.ffn_down_shexp\.weight$=$1
+^blk\.(92)\.ffn_down_shexp\.weight$=iq2_ks
+
+# ffn_up_shexp (up-projection)
+^blk\.([3-9]|[1-8][0-9]|9[0-1])\.ffn_up_shexp\.weight$=$1
+^blk\.(92)\.ffn_up_shexp\.weight$=iq2_ks
+
+# ffn_gate_shexp (gate-projection)
+^blk\.([3-9]|[1-8][0-9]|9[0-1])\.ffn_gate_shexp\.weight$=$1
+^blk\.(92)\.ffn_gate_shexp\.weight$=iq2_ks
 
 ## CPU-friendly ffn_*_exps
-# ffn_down_exps (down-extraction) — qbits: 16 
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_down_exps\.weight$=$1
+# ffn_down_exps (down-extraction)
+^blk\.([3-9]|[1-8][0-9]|9[0-1])\.ffn_down_exps\.weight$=$1
+^blk\.(92)\.ffn_down_exps\.weight$=iq2_ks
 
-# ffn_up_exps (up-extraction) — qbits: 16 
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_up_exps\.weight$=$1
+# ffn_up_exps (up-extraction)
+^blk\.([3-9]|[1-8][0-9]|9[0-1])\.ffn_up_exps\.weight$=$1
+^blk\.(92)\.ffn_up_exps\.weight$=iq2_ks
 
-# ffn_gate_exps (gate-extraction) — qbits: 16 
-^blk\.([0-9]|[1-8][0-9]|9[0-3])\.ffn_gate_exps\.weight$=$1
-
-
-
-## THE END!
+# ffn_gate_exps (gate-extraction)
+^blk\.([3-9]|[1-8][0-9]|9[0-1])\.ffn_gate_exps\.weight$=$1
+^blk\.(92)\.ffn_gate_exps\.weight$=iq2_ks
 "
 
 #custom="
@@ -477,12 +506,11 @@ custom=$(
 ulimit -S -s unlimited
 ulimit -n 99999
 
-# Qwen3-VL-235B-A22B-Thinking-THIREUS-TEMPLATE.gguf is too big and not worth using it because Q8_0 quanitsation is fast!
-mkdir Qwen3-VL-235B-A22B-Thinking-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
+# GLM-4.6-THIREUS-TEMPLATE.gguf is too big and not worth using it because Q8_0 quanitsation is fast!
+mkdir GLM-4.6-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
     --custom-q "$custom" \
     --imatrix imatrix_ubergarm.dat \
-    Qwen3-VL-235B-A22B-Thinking-THIREUS-BF16-SPECIAL_SPLIT/Qwen3-VL-235B-A22B-Thinking-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01132.gguf \
-    Qwen3-VL-235B-A22B-Thinking-THIREUS-${1^^}-SPECIAL_SPLIT/Qwen3-VL-235B-A22B-Thinking-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
+    GLM-4.6-THIREUS-BF16-SPECIAL_SPLIT/GLM-4.6-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01760.gguf \
+    GLM-4.6-THIREUS-${1^^}-SPECIAL_SPLIT/GLM-4.6-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
     ${1^^} \
-    32 && chmod 444 Qwen3-VL-235B-A22B-Thinking-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
-    
+    32 && chmod 444 GLM-4.6-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"

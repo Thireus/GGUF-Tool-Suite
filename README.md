@@ -33,14 +33,16 @@ Here's how DeepSeek-R1-0528 quantized with **Thireus' GGUF Tool Suite** compares
 | [DeepSeek-V3.2-Exp](https://huggingface.co/collections/Thireus/deepseek-v32-exp-thireus-special-split-68db895852d3c475d39e3ab3) | ⚠️ Not Started | ⚠️ Not Started | ⚠️ Untested | ⚠️ Not evaluated | Similar to DeepSeek-V3.1-Terminus |
 | [Kimi-K2-Instruct](https://huggingface.co/collections/Thireus/kimi-k2-instruct-thireus-special-split-68778e3701cf3e80574185e2) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Yes | Examples provided. It would appear that it does really well on _kt quants, likely because this is the target quant that was used for the calibration data. I may need to redo the calibration data using iq1_s_r4 to verify this theory. |
 | [Kimi-K2-Instruct-0905](https://huggingface.co/collections/Thireus/kimi-k2-instruct-0905-thireus-special-split-68bacdbc888c9a411d8a1a4c) | ✅ Complete | ✅ Complete | ⚠️ Untested | ⚠️ Not evaluated | Similar to Kimi-K2-Instruct. |
-| [Qwen3-VL-235B-A22B-Thinking](https://huggingface.co/collections/Thireus/qwen3-vl-235b-a22b-thinking-thireus-special-split-68d39cfb2e741c6b8b8e0175) | ⚠️ Not Started | ⚠️ Not Started | ⚠️ Untested | ⚠️ Not evaluated | Similar to Qwen3-235B-A22B-Thinking-2507 |
-| [Qwen3-VL-235B-A22B-Instruct](https://huggingface.co/collections/Thireus/qwen3-vl-235b-a22b-instruct-thireus-special-split-68d39d005b9f820e74698e5c) | ⚠️ Not Started | ⚠️ Not Started | ⚠️ Untested | ⚠️ Not evaluated | Similar to Qwen3-235B-A22B-Instruct-2507 |
+| [Qwen3-VL-235B-A22B-Thinking](https://huggingface.co/collections/Thireus/qwen3-vl-235b-a22b-thinking-thireus-special-split-68d39cfb2e741c6b8b8e0175) | ⚠️ Not Started | ⚠️ In progress... | ⚠️ Untested | ⚠️ Not evaluated | Similar to Qwen3-235B-A22B-Thinking-2507 |
+| [mmproj-Qwen3-VL-235B-A22B-Thinking](https://huggingface.co/collections/Thireus/mmproj-qwen3-235b-a22b-thinking-2507-thireus-special-split-68e24b96cb032d78f0a2f35f) | ⚠️ Not Started | ⚠️ In progress... | ⚠️ Untested | ⚠️ Not evaluated | [mmproj](https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal.md) for Qwen3-VL-235B-A22B-Thinking |
+| [Qwen3-VL-235B-A22B-Instruct](https://huggingface.co/collections/Thireus/qwen3-vl-235b-a22b-instruct-thireus-special-split-68d39d005b9f820e74698e5c) | ⚠️ Not Started | ⚠️ In progress... | ⚠️ Untested | ⚠️ Not evaluated | Similar to Qwen3-235B-A22B-Instruct-2507 |
+| [mmproj-Qwen3-VL-235B-A22B-Instruct](https://huggingface.co/collections/Thireus/mmproj-qwen3-vl-235b-a22b-instruct-thireus-special-split-68e24b78990e499348ff6649) | ⚠️ Not Started | ⚠️ In progress... | ⚠️ Untested | ⚠️ Not evaluated | [mmproj](https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal.md) for Qwen3-VL-235B-A22B-Instruct |
 | [Qwen3-235B-A22B-Thinking-2507](https://huggingface.co/collections/Thireus/qwen3-235b-a22b-thinking-2507-thireus-special-split-688368c416e0f03b1853b10f) | ✅ Complete | ✅ Best effort (a few quants are still missing) | ✅ Tested and Working | ✅ Yes | Best to use at most two quant types for `quant_assign` to choose from per tensor group. Weak coding abilities but excellent compatibility with [Cline](https://github.com/cline/cline)/[Kilo Code](https://github.com/Kilo-Org/kilocode)/[Roo Code](https://github.com/RooCodeInc/Roo-Code) for [Visual Studio Code](https://code.visualstudio.com/Download) using "Openai Compatible" API provider. |
 | [Qwen3-235B-A22B-Instruct-2507](https://huggingface.co/collections/Thireus/qwen3-235b-a22b-instruct-2507-thireus-special-split-68813c81fa03b52fe0d6f4e9) | ✅ Complete | ✅ Best effort (a few quants are still missing) | ⚠️ Untested | ⚠️ Not evaluated | All you need is available to produce quant mixes, but not personally tested. |
 | [Qwen3-4B-Instruct-2507](https://huggingface.co/collections/Thireus/Qwen3-4B-Instruct-2507-thireus-special-split-68813c81fa03b52fe0d6f4e9) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Tested and Working | Just a proof of concept that this tool suite isn't limited to massive models. |
 | [Qwen3-4B-Thinking-2507](https://huggingface.co/collections/Thireus/qwen3-4b-thinking-2507-thireus-special-split-68b06916ebfbd7e282b2d7a3) | ✅ Complete | ✅ Complete | ⚠️ Untested | ⚠️ Not evaluated | Just a proof of concept that this tool suite isn't limited to massive models. |
 | [Qwen3-Coder-480B-A35B-Instruct](https://huggingface.co/collections/Thireus/qwen3-coder-480b-a35b-instruct-thireus-special-split-68813cb65745c166d0386e91) | ✅ Complete | ✅ Best effort (a few quants are still missing) | ✅ Tested and Working | ✅ Yes | Looks like [iq3_k is faulty](https://huggingface.co/Thireus/Qwen3-Coder-480B-A35B-Instruct-THIREUS-IQ3_K-SPECIAL_SPLIT/discussions/1) - avoid using it. Good coding abilities and excellent compatibility with [Cline](https://github.com/cline/cline)/[Kilo Code](https://github.com/Kilo-Org/kilocode)/[Roo Code](https://github.com/RooCodeInc/Roo-Code) for [Visual Studio Code](https://code.visualstudio.com/Download) using "Openai Compatible" API provider. |
-| [GLM-4.6](https://huggingface.co/collections/Thireus/glm-46-thireus-special-split-68dd82a76c24f0e5b1dfd7ae) | ⚠️ In Progress... | ⚠️ In Progress... | ⚠️ Untested | ⚠️ Not evaluated | Similar to GLM-4.5 |
+| [GLM-4.6](https://huggingface.co/collections/Thireus/glm-46-thireus-special-split-68dd82a76c24f0e5b1dfd7ae) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Yes | Less constraining to quantize than GLM-4.5 or GLM-4.5-Air, and recipes are straightforward. |
 | [GLM-4.5](https://huggingface.co/collections/Thireus/glm-45-thireus-special-split-6888e23853f18dd2d57a295b) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Yes | Users are encouraged to read [the following methodology](https://huggingface.co/ubergarm/GLM-4.5-GGUF/discussions/6#68c786f1d0c6560e153b786a) which provides advanced techniques and tips to produce high quality GLM-4.5 recipes using this tool suite. |
 | [GLM-4.5-Air](https://huggingface.co/collections/Thireus/glm-45-air-thireus-special-split-688f9936d839ef353d92426a) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Yes | Similar to GLM-4.5. |
 
@@ -148,7 +150,7 @@ Examples of recipes are included in the `recipe_examples` folder. Have a look at
 ## 📥 Download Model Shards from a Recipe
 
 ```bash
-git clone https://github.com/Thireus/GGUF-Tool-Suite
+GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/Thireus/GGUF-Tool-Suite
 cd GGUF-Tool-Suite
 # Make sure to copy the relevant download.conf for the model before running quant_assign.py
 rm -f download.conf
@@ -282,11 +284,17 @@ Big thanks to **ubergarm** for his support and for providing the invaluable **`i
 📄 Ubergarm's `imatrix` for Kimi-K2-Instruct-0905 can be found here:  
 🔗 [imatrix_Kimi-K2-Instruct-0905_ubergarm.dat](https://huggingface.co/ubergarm/Kimi-K2-Instruct-0905-GGUF/blob/main/imatrix-Kimi-K2-Instruct-0905-Q8_0.dat)
 
+📄 Thireus's computed Ubergarm's `imatrix` for Qwen3-VL-235B-A22B-Instruct can be found in the model directory:  
+🔗 [imatrix_Qwen3-VL-235B-A22B-Instruct_ubergarm.dat](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/models/Qwen3-VL-235B-A22B-Instruct/imatrix_ubergarm.dat)
+
 📄 Ubergarm's `imatrix` for Qwen3-235B-A22B-Instruct-2507 can be found here:  
 🔗 [imatrix_Qwen3-235B-A22B-Instruct-2507_ubergarm.dat](https://huggingface.co/ubergarm/Qwen3-235B-A22B-Instruct-2507-GGUF/blob/main/imatrix-eaddario-combined-all-medium-Qwen3-235B-A22B-Instruct-2507-BF16.dat)
 
 📄 Thireus's computed Ubergarm's `imatrix` for Qwen3-4B-Instruct-2507 can be found in the model directory:  
 🔗 [imatrix_Qwen3-4B-Instruct-2507_ubergarm.dat](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/models/Qwen3-4B-Instruct-2507/imatrix_ubergarm.dat)
+
+📄 Thireus's computed Ubergarm's `imatrix` for Qwen3-VL-235B-A22B-Thinking can be found in the model directory:  
+🔗 [imatrix_Qwen3-VL-235B-A22B-Thinking_ubergarm.dat](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/models/Qwen3-VL-235B-A22B-Thinking/imatrix_ubergarm.dat)
 
 📄 Ubergarm's `imatrix` for Qwen3-235B-A22B-Thinking-2507 can be found here:  
 🔗 [imatrix_Qwen3-235B-A22B-Thinking-2507_ubergarm.dat](https://huggingface.co/ubergarm/Qwen3-235B-A22B-Thinking-2507-GGUF/blob/main/imatrix-Qwen3-235B-A22B-Thinking-2507-BF16.dat)

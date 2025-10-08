@@ -3,14 +3,18 @@ license: mit
 ---
 ## ⚠️ Cautionary Notice
 
-These GGUF files are **experimental** and subject to change. The code used to produce them is currently in **draft** status.
+These GGUF files are **experimental** and subject to change. The code used to produce them is currently in **draft** status. The llama.cpp code patch used to produce these shards can be found at https://huggingface.co/yairpatch/Qwen3-VL-30B-A3B-Thinking-GGUF.
 
-- ⚠️ **Support in `llama.cpp` is not available yet** – see [ggml-org/llama.cpp Issue #16207](https://github.com/ggml-org/llama.cpp/issues/16207).
-- ⚠️ **Vision support in `ik_llama.cpp` is not available yet** – see [ikawrakow/ik_llama.cpp Issue #792](https://github.com/ikawrakow/ik_llama.cpp/issues/792).
+- ⚠️ **Official support in `llama.cpp` is not available yet** – see [ggml-org/llama.cpp Issue #16207](https://github.com/ggml-org/llama.cpp/issues/16207). Test builds are available at https://github.com/Thireus/llama.cpp/releases (`tr-qwen3-vl` tag).
+- ⚠️ **Official support in `ik_llama.cpp` is not available yet**. Test builds are available at https://github.com/Thireus/ik_llama.cpp/releases (`tr-qwen3-vl` tag).
+
 **Unless you are confident in what you're doing, and until support is officially confirmed,**  
+
 > 🔒 **Do not use these quantized models for production**  
 > 🔬 **Do not use them to assess the quality of the Qwen3-VL models**
+
 Proceed with caution and keep an eye on the upstream PRs for any updates that could affect compatibility or performance.
+
 ---
 
 # Qwen3-VL-235B-A22B-Thinking
@@ -43,7 +47,7 @@ cmake --build build --config Release -j16
 cd ..
 
 # Obtain Thireus' GGUF-Tool-Suite
-git clone https://github.com/Thireus/GGUF-Tool-Suite
+GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/Thireus/GGUF-Tool-Suite
 
 # Download model quant mix from recipe file:
 cd GGUF-Tool-Suite
