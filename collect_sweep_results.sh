@@ -187,6 +187,7 @@ fi
 
 # Discover qtypes
 declare -a QTYPES
+qtype=""
 if [[ -n "$qtypes" ]]; then
   IFS=',' read -r -a QTYPES <<< "$qtypes"
 else

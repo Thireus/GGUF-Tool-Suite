@@ -5,7 +5,7 @@
 #** Colab pipeline parameters for quant_recipe_pipeline.ipynb **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-31-2025 -------------------- **#
+#** --------------- Updated: Oct-08-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -64,6 +64,7 @@ DEFAULTS: Dict[str, Any] = {
     "gpu_assign_tensors": [r"^blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight$=q8_0"],
     "harmonize_tensors": [[r"^blk\..*\.ffn_up_exps.*", r"blk\..*\.ffn_gate_exps.*"]],
     "harmonization_technique": 3,
+    "csv_filename": "",
     "qtype": "",
     "debug": False,
     "info": False,
@@ -230,7 +231,10 @@ def emit_parameters(params: Dict[str, Any]) -> str:
     lines.append("# harmonization_technique: 0=disabled, 1=max, 2=mean, 3=min (default)")
     lines.append(f'harmonization_technique = {params["harmonization_technique"]}    #@param {{type:"integer"}}')
     lines.append("")
-    lines.append("# calibration data qtype (leave empty for auto-selection which will choose the lowest bpw) - list of available qtypes can be found in the ppl_results.csv file")
+    lines.append("# calibration data filename (\"ppl_results.csv\" or \"ppl_results_partial.csv\" are automatically used by default when empty)")
+    lines.append(f'csv_filename = "{params["csv_filename"]}" #@param {{type:"string"}}')
+    lines.append("")
+    lines.append("# calibration data qtype (leave empty for auto-selection which will choose the lowest bpw) - list of available qtypes can be found in the calibration data file")
     lines.append(f'qtype = "{params["qtype"]}"                  #@param {{type:"string"}}')
     lines.append("")
     lines.append("# additional flags (advanced and optional)")
@@ -304,6 +308,13 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
     cmd = extract_command_used_block(recipe_text)
     if cmd:
         tokens = tokenize_command(cmd)
+        # Capture the first positional CSV filename (e.g. "ppl_results.csv" or "kld_results_partial_...csv")
+        if 'csv_filename' not in params:
+            for t in tokens:
+                # accept .csv files (allow relative paths)
+                if re.search(r"\.csv$", t, flags=re.IGNORECASE):
+                    params['csv_filename'] = t
+                    break
         multi_flags = {
             '--cpu-tensors': 'cpu_tensors',
             '--gpu-tensors': 'gpu_tensors',

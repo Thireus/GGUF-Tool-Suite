@@ -5,7 +5,7 @@
 #** tensor ppl benchmarks.                                    **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-10-2025 -------------------- **#
+#** --------------- Updated: Oct-07-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -385,7 +385,7 @@ def main(input_csv, output_csv=None):
     # Determine output filename
     if output_csv is None:
         base, ext = os.path.splitext(input_csv)
-        output_csv = f"{base}_{int(round(pct)):02d}percent_interpolated{ext}"
+        output_csv = f"{base}_{int(round(pct)):02d}percent_interpolated.csv"
 
     print(f"Writing to {output_csv}")
     filled_df.to_csv(output_csv, index=False)
