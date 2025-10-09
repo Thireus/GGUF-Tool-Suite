@@ -1490,6 +1490,7 @@ def main():
     parser.add_argument('--gpu-tensors-max-size', type=str, help='Max GPU-friendly tensors size in GiB or percent (e.g., 80%%)')
     parser.add_argument('--exponential-factor', type=float, default=1.0,
                         help='Exponent controlling midpoint adjustment aggressiveness during stretch sweeps for default quant assignment method. Higher values push quantization toward extremes; default is 1.0. When using --use-greedy-quant-assign, the exponent is used to try to map per-tensor degradation values into a additively linear space. Recommended range for greedy quant assign is 1.0 to 2.0 when using KLD metrics with 1.5 being a good starting point.')
+    parser.add_argument('--quant-degradation-csv', type=str, help='Path to CSV file containing quant degradation values for use by greed quant assing method (overrides bundled quants_graphs/kld_results.csv)')
     parser.add_argument('--ignore-f32', action='store_true', help='Ignore f32 tensors (default: not ignored)')
     parser.add_argument('--tensors-from-csv', action='store_true', help='Obtains list of tensors from csv file only (default: tensors are obtained from map file)')
     parser.add_argument('--skip-gpg', action='store_true',
@@ -1505,7 +1506,7 @@ def main():
                         help=('Harmonization technique to use when --harmonize-tensors is set: 0=disabled, 1=max, 2=mean, 3=min (default). ' 
                             'Values are applied element-wise per layer across the matched tensors.'
                             'Max ensures calibration data ppl measurement is not negatively degraded. Min will degrade calibration data accuracy but appears to give the best PPL results. Mean is a compromise in-between. Disabled means harmonization is disabled.'))
-    parser.add_argument('--use-greedy-quant-assign', action='store_true', help='Use greedy priority-queue quant assignment instead of default spread/midpoint method. The method tries to minimize overall PPL degradation by prioritizing quant downgrades that yield the least degradation per byte saved. This method requires per-tensor degradation data (e.g. KLD) to be present in the CSV file. It is recommended to use --exponential-factor between 1.0 and 2.0 when using this method to try to map per-tensor degradation values into a more linear space.')
+    parser.add_argument('--use-greedy-quant-assign', action='store_true', help='Use greedy priority-queue quant assignment instead of default spread/midpoint method. The method tries to minimize overall degradation by prioritizing quant downgrades that yield the least degradation per byte saved. This method requires per-tensor degradation data (e.g. KLD) to be present in the CSV file - perplexity data only works suboptimally. It also requires per quant type degradation estimates; per default KLD values are used from a qwen 3 4b benchmark. override with --quant-degradation-csv. It is recommended to use --exponential-factor between 1.0 and 2.0 when using this method to try to map per-tensor degradation values into a more linear space.')
 
     args = parser.parse_args()
 
@@ -1543,8 +1544,9 @@ def main():
     INFO = args.info or DEBUG
 
     here = os.path.dirname(os.path.abspath(__file__))
-    default_quant_degradation_path = os.path.join(here, "quants_graphs", "ppl_results.csv")
-    quant_degradation_values = load_quant_degradation_values(default_quant_degradation_path)
+    default_quant_degradation_path = os.path.join(here, "quants_graphs", "kld_results.csv")
+    quant_degradation_path = args.degradation_csv if getattr(args, 'quant_degradation_csv', None) else default_quant_degradation_path
+    quant_degradation_values = load_quant_degradation_values(quant_degradation_path)
 
     if INFO:
         print(f"[Info] Loaded degradation values for ({len(quant_degradation_values)} quant types)")
