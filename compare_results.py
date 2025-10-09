@@ -5,7 +5,7 @@
 #** qtypes that provide the best quality/speed/compression.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-31-2025 -------------------- **#
+#** --------------- Updated: Oct-09-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -24,22 +24,23 @@
 #***************************************************************#
 
 # Example:
-# ../compare_results.py --ppl-results ppl_results.csv --pp-results pp_results_cpu-Intel-7980XE.csv,pp_results_cuda-RTX-6000-Pro.csv --tg-results tg_results_cpu-Intel-7980XE.csv,tg_results_cuda-RTX-6000-Pro.csv --group-tensors '.*' --show --export-csv quant_score --export-dir .
+# ../compare_results.py --metric-results metric_results.csv --pp-results pp_results_cpu-Intel-7980XE.csv,pp_results_cuda-RTX-6000-Pro.csv --tg-results tg_results_cpu-Intel-7980XE.csv,tg_results_cuda-RTX-6000-Pro.csv --group-tensors '.*' --show --export-csv quant_score --export-dir .
 
 """
 compare_results.py
 
-Compare PPL / PP / TG CSVs, compute weight reductions from tensors.*.map (using bytes= field),
+Compare METRIC / PP / TG CSVs, compute weight reductions from tensors.*.map (using bytes= field),
 compute combined scores and plot.
 
 Usage example:
   python compare_results.py \
-    --ppl-results ppl_results.csv \
+    --metric-results metric_results.csv \
     --pp-results pp_results_cpu.csv,pp_results_cuda.csv \
     --tg-results tg_results_cpu.csv,tg_results_cuda.csv \
     --group-tensors '.*' \
     --export-dir ./plots \
     --export-csv combined_scores \
+    --metric-name "ppl" \
     --show
 """
 from __future__ import annotations
@@ -64,6 +65,9 @@ USER_REGEX = [
 ]
 # =========== End USER CONFIGURATION ============
 
+
+def warning(msg: str, exit_code: int = 1) -> None:
+    print(f"WARNING: {msg}", file=sys.stderr)
 
 def error(msg: str, exit_code: int = 1) -> None:
     print(f"ERROR: {msg}", file=sys.stderr)
@@ -229,31 +233,33 @@ def format_pct(v: Optional[float]) -> str:
 
 def main(argv: Optional[List[str]] = None) -> None:
     parser = argparse.ArgumentParser(
-        description="Compare PPL/PP/TG CSVs, compute weight reductions and combined scores, and plot."
+        description="Compare METRIC/PP/TG CSVs, compute weight reductions and combined scores, and plot."
     )
-    parser.add_argument('--ppl-results', required=True, help='PPL results CSV (required)')
+    parser.add_argument('--metric-results', required=True, help='METRIC results CSV (required)')
     parser.add_argument('--pp-results', default='', help='Comma-separated list of PP results CSV files (optional)')
     parser.add_argument('--tg-results', default='', help='Comma-separated list of TG results CSV files (optional)')
     parser.add_argument('--group-tensors', nargs='*', default=[], help="One or more group specs (each is a comma-separated list of regexes).")
-    parser.add_argument('--ppl-factor', type=float, default=1.0, help='Weight for PPL in score (default 1.0)')
+    parser.add_argument('--metric-factor', type=float, default=1.0, help='Weight for metric in score (default 1.0)')
     parser.add_argument('--tg-factor', type=float, default=1.0, help='Weight for TG in score (default 1.0)')
     parser.add_argument('--pp-factor', type=float, default=1.0, help='Weight for PP in score (default 1.0)')
     parser.add_argument('--score-cutoff', type=float, default=-100.0, help='Minimum score cutoff; scores below this are clamped (default -100.0)')
     parser.add_argument('--export-dir', default='', help='Directory to save plots (optional)')
     parser.add_argument('--export-csv', default='', help='Base filename to export per-suffix CSVs (optional). Example: --export-csv combined_scores')
+    parser.add_argument('--metric-name', default='', help='Name of the metric which will appear in the csv and plot files (default obtains it from filename if possible, otherwise uses "ppl")')
     parser.add_argument('--show', action='store_true', help='Display plots interactively (all at once, blocking)')
     parser.add_argument('--verbose', action='store_true', help='Verbose debug output')
 
     args = parser.parse_args(argv)
 
-    ppl_csv = args.ppl_results
+    metric_csv = args.metric_results
     pp_csvs = [s.strip() for s in args.pp_results.split(',') if s.strip()] if args.pp_results else []
     tg_csvs = [s.strip() for s in args.tg_results.split(',') if s.strip()] if args.tg_results else []
     group_specs_raw = args.group_tensors or []
-    ppl_factor, tg_factor, pp_factor = args.ppl_factor, args.tg_factor, args.pp_factor
+    metric_factor, tg_factor, pp_factor = args.metric_factor, args.tg_factor, args.pp_factor
     score_cutoff = args.score_cutoff
     export_dir = args.export_dir or None
     export_csv_base = args.export_csv or None
+    metric_name = args.metric_name
     show = args.show
     verbose = args.verbose
 
@@ -261,8 +267,8 @@ def main(argv: Optional[List[str]] = None) -> None:
         os.makedirs(export_dir, exist_ok=True)
 
     if verbose:
-        print(f"[INFO] Loading PPL CSV: {ppl_csv}", file=sys.stderr)
-    ppl_cols, ppl_rows = parse_csv_file(ppl_csv)
+        print(f"[INFO] Loading metric CSV: {metric_csv}", file=sys.stderr)
+    metric_cols, metric_rows = parse_csv_file(metric_csv)
 
     pp_colsets = {}
     for fn in pp_csvs:
@@ -278,7 +284,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         cols, rows = parse_csv_file(fn)
         tg_colsets[fn] = (cols, rows)
 
-    all_csvs = [(ppl_csv, ppl_cols, ppl_rows)]
+    all_csvs = [(metric_csv, metric_cols, metric_rows)]
     all_csvs += [(fn, *pp_colsets[fn]) for fn in pp_colsets]
     all_csvs += [(fn, *tg_colsets[fn]) for fn in tg_colsets]
 
@@ -290,18 +296,23 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     # QTYPE set equality
     qtype_sets = {fn: set(rows.keys()) for fn, cols, rows in all_csvs}
-    base_qtypes = qtype_sets[ppl_csv]
+    base_qtypes = qtype_sets[metric_csv]
     for fn, s in qtype_sets.items():
         if s != base_qtypes:
             missing_in_fn = base_qtypes - s
             missing_in_base = s - base_qtypes
             msg = []
             if missing_in_fn:
-                msg.append(f"QTYPEs {sorted(missing_in_fn)} present in {ppl_csv} but missing in {fn}")
+                msg.append(f"QTYPEs {sorted(missing_in_fn)} present in {metric_csv} but missing in {fn}")
             if missing_in_base:
-                msg.append(f"QTYPEs {sorted(missing_in_base)} present in {fn} but missing in {ppl_csv}")
-            error("QTYPE mismatch between CSVs: " + "; ".join(msg))
+                msg.append(f"QTYPEs {sorted(missing_in_base)} present in {fn} but missing in {metric_csv}")
+            warning("QTYPE mismatch between CSVs: " + "; ".join(msg))
+            # Keep only the intersection of valid QTYPEs across all files
+            valid_qtypes = base_qtypes & s
+            qtype_sets[fn] = valid_qtypes
 
+    # Update base_qtypes to reflect only those present in *all* CSVs
+    base_qtypes = set.intersection(*qtype_sets.values())
     QTYPES = sorted(base_qtypes)
     if verbose:
         print(f"[INFO] QTYPEs: {QTYPES}", file=sys.stderr)
@@ -315,6 +326,16 @@ def main(argv: Optional[List[str]] = None) -> None:
                     error(f"Empty value found in {fn} for QTYPE='{q}', column='{col}'")
                 if not val.endswith('%'):
                     error(f"Non-percent value found in {fn} for QTYPE='{q}', column='{col}': '{val}'")
+
+    # Obtain metric name
+    if not metric_name:
+        # Try to extract metric name from filename pattern like "metricname_results.csv"
+        filename = os.path.basename(metric_csv)
+        match = re.match(r"([a-zA-Z0-9_-]+)_results", filename)
+        if match:
+            metric_name = match.group(1)
+        else:
+            metric_name = "ppl"
 
     # build suffix maps
     suffixes: Set[str] = set()
@@ -330,7 +351,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         tg_by_suffix[suff] = (cols, rows)
         suffixes.add(suff)
     if len(suffixes) == 0:
-        suffixes = {'ppl-only'}
+        suffixes = {f'{metric_name.lower()}-only'}
 
     # compile user regexes
     compiled_user_regexes = []
@@ -426,21 +447,21 @@ def main(argv: Optional[List[str]] = None) -> None:
             pp_rows_for_suffix = pp_by_suffix.get(suff, (None, None))[1]
             tg_rows_for_suffix = tg_by_suffix.get(suff, (None, None))[1]
 
-            ppl_pct_map: Dict[str, float] = {}
+            metric_pct_map: Dict[str, float] = {}
             pp_pct_map: Dict[str, float] = {}
             tg_pct_map: Dict[str, float] = {}
 
             for q in QTYPES:
                 # pre-declare to satisfy static analyzers
-                ppl_val: float = 0.0
+                metric_val: float = 0.0
                 pp_val: Optional[float] = None
                 tg_val: Optional[float] = None
 
                 try:
-                    ppl_val = parse_pct_value(ppl_rows[q][header_columns[0]])
+                    metric_val = parse_pct_value(metric_rows[q][header_columns[0]])
                 except Exception as e:
-                    error(f"PPL parse error for QTYPE={q}: {e}")
-                ppl_pct_map[q] = ppl_val
+                    error(f"{metric_name.upper()} PARSE ERROR FOR QTYPE={q}: {e}")
+                metric_pct_map[q] = metric_val
 
                 if pp_rows_for_suffix:
                     try:
@@ -458,7 +479,7 @@ def main(argv: Optional[List[str]] = None) -> None:
 
             scores: Dict[str, float] = {}
             for q in QTYPES:
-                ppl = ppl_pct_map.get(q, 0.0)
+                metric = metric_pct_map.get(q, 0.0)
                 ppv = pp_pct_map.get(q, None)
                 tgv = tg_pct_map.get(q, None)
                 speed_sum = 0.0
@@ -470,7 +491,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                     speed_sum += pp_factor * ppv
                     speed_count += 1
                 avg_speed = speed_sum / speed_count if speed_count > 0 else 0.0
-                raw_score = (-ppl_factor * ppl + avg_speed) / 2.0
+                raw_score = (-metric_factor * metric + avg_speed) / 2.0
                 # clamp to cutoff
                 score = raw_score if raw_score >= score_cutoff else score_cutoff
                 scores[q] = score
@@ -484,20 +505,20 @@ def main(argv: Optional[List[str]] = None) -> None:
 
             sorted_qtypes = sorted(QTYPES, key=lambda qq: avg_reduction_per_q[qq], reverse=True)
 
-            # Print table to stdout — note order now: ppl_factor, pp_factor, tg_factor, score_cutoff
-            print(f"\n=== Scores for suffix '{suff}' (ppl_factor={ppl_factor}, pp_factor={pp_factor}, tg_factor={tg_factor}, score_cutoff={score_cutoff}) ===")
-            print(f"{'QTYPE':20s} {'avg_reduction%':>14s} {'score':>12s} {'ppl%':>10s} {'pp%':>10s} {'tg%':>10s}")
+            # Print table to stdout — note order now: metric_factor, pp_factor, tg_factor, score_cutoff
+            print(f"\n=== Scores for suffix '{suff}' (metric_factor={metric_factor}, pp_factor={pp_factor}, tg_factor={tg_factor}, score_cutoff={score_cutoff}) ===")
+            print(f"{'QTYPE':20s} {'avg_reduction%':>14s} {'score':>12s} {f'{metric_name.lower()}%':>10s} {'pp%':>10s} {'tg%':>10s}")
             for q in sorted_qtypes:
                 sc = scores[q]
                 red = avg_reduction_per_q[q]
-                pplv = ppl_pct_map.get(q, float('nan'))
+                metricv = metric_pct_map.get(q, float('nan'))
                 ppv = pp_pct_map.get(q, float('nan')) if pp_pct_map else float('nan')
                 tgv = tg_pct_map.get(q, float('nan')) if tg_pct_map else float('nan')
-                print(f"{q:20s} {red:14.2f}% {sc:12.4f} {pplv:10.2f}% {ppv:10.2f}% {tgv:10.2f}%")
+                print(f"{q:20s} {red:14.2f}% {sc:12.4f} {metricv:10.2f}% {ppv:10.2f}% {tgv:10.2f}%")
 
             # CSV export per suffix (if requested)
             if export_csv_base:
-                if len(suffixes) > 1 or (len(suffixes) == 1 and next(iter(suffixes)) != 'ppl-only'):
+                if len(suffixes) > 1 or (len(suffixes) == 1 and next(iter(suffixes)) != f'{metric_name.lower()}-only'):
                     out_csv_name = f"{export_csv_base.rstrip('.csv')}_{suff}.csv"
                 else:
                     out_csv_name = f"{export_csv_base if export_csv_base.endswith('.csv') else export_csv_base + '.csv'}"
@@ -507,14 +528,14 @@ def main(argv: Optional[List[str]] = None) -> None:
                     out_csv_path = out_csv_name
                 with open(out_csv_path, 'w', newline='', encoding='utf-8') as fh:
                     writer = csv.writer(fh)
-                    hdr = ['QTYPE', 'avg_reduction%', 'score', 'ppl%', 'pp%', 'tg%']
+                    hdr = ['QTYPE', 'avg_reduction%', 'score', f'{metric_name.lower()}%', 'pp%', 'tg%']
                     writer.writerow(hdr)
                     for q in sorted_qtypes:
                         writer.writerow([
                             q,
                             f"{avg_reduction_per_q[q]:.2f}",
                             f"{scores[q]:.4f}",
-                            format_pct(ppl_pct_map.get(q)),
+                            format_pct(metric_pct_map.get(q)),
                             format_pct(pp_pct_map.get(q)) if pp_pct_map else "",
                             format_pct(tg_pct_map.get(q)) if tg_pct_map else ""
                         ])
@@ -551,10 +572,10 @@ def main(argv: Optional[List[str]] = None) -> None:
 
             # show formula and factors as textbox inside plot
             formula_lines = []
-            formula_lines.append(f"score = (-{ppl_factor} * ppl + avg_speed) / 2")
+            formula_lines.append(f"score = (-{metric_factor} * {metric_name.lower()} + avg_speed) / 2")
             formula_lines.append(f"avg_speed = sum(factor*metric)/count_metrics")
             # show pp_factor before tg_factor as requested, and include cutoff
-            formula_lines.append(f"ppl_factor={ppl_factor}, pp_factor={pp_factor}, tg_factor={tg_factor}, score_cutoff={score_cutoff}")
+            formula_lines.append(f"metric_factor={metric_factor}, pp_factor={pp_factor}, tg_factor={tg_factor}, score_cutoff={score_cutoff}")
             textbox = "\n".join(formula_lines)
             ax.text(0.01, 0.99, textbox, transform=ax.transAxes, fontsize=9,
                     verticalalignment='top', bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.6))

@@ -150,7 +150,7 @@ Examples of recipes are included in the `recipe_examples` folder. Have a look at
 ## 📥 Download Model Shards from a Recipe
 
 ```bash
-git clone https://github.com/Thireus/GGUF-Tool-Suite
+GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/Thireus/GGUF-Tool-Suite
 cd GGUF-Tool-Suite
 # Make sure to copy the relevant download.conf for the model before running quant_assign.py
 rm -f download.conf
@@ -283,6 +283,9 @@ Big thanks to **ubergarm** for his support and for providing the invaluable **`i
 
 📄 Ubergarm's `imatrix` for Kimi-K2-Instruct-0905 can be found here:  
 🔗 [imatrix_Kimi-K2-Instruct-0905_ubergarm.dat](https://huggingface.co/ubergarm/Kimi-K2-Instruct-0905-GGUF/blob/main/imatrix-Kimi-K2-Instruct-0905-Q8_0.dat)
+
+📄 Thireus's computed Ubergarm's `imatrix` for Qwen3-VL-235B-A22B-Instruct can be found in the model directory:  
+🔗 [imatrix_Qwen3-VL-235B-A22B-Instruct_ubergarm.dat](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/models/Qwen3-VL-235B-A22B-Instruct/imatrix_ubergarm.dat)
 
 📄 Ubergarm's `imatrix` for Qwen3-235B-A22B-Instruct-2507 can be found here:  
 🔗 [imatrix_Qwen3-235B-A22B-Instruct-2507_ubergarm.dat](https://huggingface.co/ubergarm/Qwen3-235B-A22B-Instruct-2507-GGUF/blob/main/imatrix-eaddario-combined-all-medium-Qwen3-235B-A22B-Instruct-2507-BF16.dat)
