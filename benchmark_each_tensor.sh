@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Oct-07-2025 -------------------- **#
+#** --------------- Updated: Oct-09-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -318,7 +318,7 @@ MAIN_SHARD_PATTERN="*-00001-of-*.gguf"
 # =============== End USER CONFIGURATION ===============
 
 # Add KLD parameter placeholder to PPL_COMMAND_TEMPLATE if necessary
-if [[ "$NO_KLD" == "false" ]]; then
+if [[ "$NO_KLD" == "false" ]] && [[ "$BENCH_MODE" -ne 1 ]]; then
   PPL_COMMAND_TEMPLATE="${PPL_COMMAND_TEMPLATE} {KLD_PARAMETER}"
   PLUS_KLD='+KLD'
   _kld='_kld'
@@ -624,10 +624,10 @@ if [[ "$BENCH_MODE" -eq 0 || "$BENCH_MODE" -eq 2 ]]; then
       echo "Baseline PPL$PLUS_KLD benchmark completed for chunks=$PPL_COMMAND_CHUNKS_TO_PROCESS: $estimate"
   else
       estimate=$(grep "Final estimate" "$baseline_result_file" || true)
-      echo "[$(timestamp)] Baseline PPL$PLUS_KLD already exists for BASELINE_QTYPE='$BASELINE_QTYPE', chunks=$PPL_COMMAND_CHUNKS_TO_PROCESS: $estimate"
+      echo "[$(timestamp)] Baseline PPL$PLUS_KLD benchmark already exists for BASELINE_QTYPE='$BASELINE_QTYPE', chunks=$PPL_COMMAND_CHUNKS_TO_PROCESS: $estimate"
   fi
 else
-  echo "[$(timestamp)] Skipping baseline PPL$PLUS_KLD because --mode=${BENCH_MODE} (PPL$PLUS_KLD disabled)."
+  echo "[$(timestamp)] Skipping baseline PPL$PLUS_KLD benchmark because --mode=${BENCH_MODE} (PPL$PLUS_KLD disabled)."
 fi
 
 # Baseline for SWEEP if sweep is enabled
@@ -641,7 +641,7 @@ if [[ "$BENCH_MODE" -eq 1 || "$BENCH_MODE" -eq 2 ]]; then
       eval "$sweep_baseline_cmd" > "$sweep_baseline_result_file" 2>&1 < /dev/null
       echo "Baseline SWEEP benchmark completed for context=$BENCH_COMMAND_CONTEXT_TO_PROCESS."
   else
-      echo "Baseline SWEEP already exists for BASELINE_QTYPE='$BASELINE_QTYPE', context=$BENCH_COMMAND_CONTEXT_TO_PROCESS."
+      echo "Baseline SWEEP benchmark already exists for BASELINE_QTYPE='$BASELINE_QTYPE', context=$BENCH_COMMAND_CONTEXT_TO_PROCESS."
   fi
 fi
 
