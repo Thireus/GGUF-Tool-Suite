@@ -247,9 +247,10 @@ The file `ppl_results.csv` present in each model directory contains **individual
 rm -f download.conf
 # Use the download.conf of the chosen model
 cp -f models/DeepSeek-R1-0528/download.conf .
-# Make sure to adjust all configuration settings from both of these scripts, such as the most important USER_REGEX variable
+# Make sure to adjust all configuration settings from both of the two scripts below, such as the most important USER_REGEX variable
 ./benchmark_each_tensor.sh --qtypes iq1_m_r4
-./collect_ppl_results.sh --chunks 250 --qtypes iq1_m_r4
+# Collects PPL, KLD and TOP P - Remember to adjust the USER_REGEX variable
+./collect_ppl_results.sh --chunks 250 --qtypes iq1_m_r4 --regex '.*Same top p[[:space:]]*:[[:space:]]*([0-9]+(\.[0-9]+)?).*' --output-regex-csv topp_results.csv
 ```
 
 📄 An article explaining this methodology in detail is **coming soon**.

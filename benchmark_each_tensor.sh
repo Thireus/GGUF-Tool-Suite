@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Oct-09-2025 -------------------- **#
+#** --------------- Updated: Oct-10-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -196,15 +196,24 @@ fi
 # Resolve script directory for locating tensor_downloader.sh
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TENSOR_DOWNLOADER="$SCRIPT_DIR/tensor_downloader.sh"
+QUANT_DOWNLOADER="$SCRIPT_DIR/quant_downloader.sh"
 
 if [[ ! -x "$TENSOR_DOWNLOADER" ]]; then
     echo "Error: tensor_downloader.sh not found or not executable at $TENSOR_DOWNLOADER" >&2
     exit 1
 fi
 
-run_downloader() {
+run_tensor_downloader() {
   set +e
   "$TENSOR_DOWNLOADER" "$@"
+  local ret=$?
+  set -e
+  return $ret
+}
+
+run_quant_downloader() {
+  set +e
+  "$QUANT_DOWNLOADER" "$@"
   local ret=$?
   set -e
   return $ret
@@ -434,7 +443,7 @@ find_main_model_file() {
     local f
     f=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "$MAIN_SHARD_PATTERN" | head -n1 || true)
     if [[ -z "$f" ]]; then
-        return "$f"
+        return 1
     else
         echo "$f"
         return 0
@@ -458,6 +467,7 @@ shopt -u nullglob
 echo "[$(timestamp)] Pre-flight restoration complete."
 
 # Initial fetch and validation for each LOCAL_QTYPE
+DEFAULT_BASE_FILENAME="" # Helper to obtain the base filename in case no model files present in the working directory
 echo "[$(timestamp)] Starting initial validation for _LOCAL_QTYPES='${_LOCAL_QTYPES[*]}'"
 declare -a tasks=()
 for LOCAL_QTYPE in "${_LOCAL_QTYPES[@]}"; do
@@ -468,11 +478,11 @@ for LOCAL_QTYPE in "${_LOCAL_QTYPES[@]}"; do
   fi
   echo "[$(timestamp)] Fetching initial tensors.map for LOCAL_QTYPE='$LOCAL_QTYPE'..."
   local_tensors_map="tensors.${LOCAL_QTYPE}.map"
-  if run_downloader "${LOCAL_QTYPE^^}" "0" "." "${local_tensors_map}"; then
+  if run_tensor_downloader "${LOCAL_QTYPE^^}" "0" "." "${local_tensors_map}"; then
     echo "[$(timestamp)] Retrieved initial tensors map: $local_tensors_map"
     # Download the signature
     if [[ "$SKIP_GPG" != "true" ]]; then
-      if ! run_downloader "${LOCAL_QTYPE^^}" -1 . "$local_tensors_map.sig"; then
+      if ! run_tensor_downloader "${LOCAL_QTYPE^^}" -1 . "$local_tensors_map.sig"; then
           echo "[$(timestamp)] ❌ Error: failed to fetch map gpg signature for ${LOCAL_QTYPE^^}" >&2
           [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
           exit 2
@@ -505,41 +515,37 @@ for LOCAL_QTYPE in "${_LOCAL_QTYPES[@]}"; do
       fi
     done
   done < "$local_tensors_map"
+  # Helper to attempt obtaining the actual name of the file matching BASELINE_QTYPE
+  ideal_basename_found=false
+  if [[ "${LOCAL_QTYPE^^}" == "${BASELINE_QTYPE^^}" ]]; then
+    DEFAULT_BASE_FILENAME="$fname" # Use a filename that corresponds to the BASELINE_QTYPE
+    ideal_basename_found=true
+  elif [[ "$ideal_basename_found" == false ]] && [[ "${LOCAL_QTYPE^^}" == "BF16" ]]; then
+    DEFAULT_BASE_FILENAME="$fname" # Revert to BF16 filename if possible
+  elif [[ -z "$DEFAULT_BASE_FILENAME" ]]; then
+    DEFAULT_BASE_FILENAME="$fname" # Revert to any filename
+  fi
 done
 # Deduplicate tasks (just in case, but there shouldn't be any...)
 mapfile -t tasks < <(printf "%s\n" "${tasks[@]}" | sort -u)
 
-# Function to process a single shard line
-# Now takes: filename, expected_hash, qtype
-process_line() {
+# Attempts to download a shard into LOCAL_DOWNLOAD_DIR and verify its sha256.
+# Parameters:
+#   $1 = fname
+#   $2 = expected_hash
+#   $3 = qtype
+#   $4 = chunk_id
+#   $5 = local_file   (final destination path; used for mv on success)
+fetch_and_verify_shard() {
   local fname="$1"
   local expected_hash="$2"
   local qtype="$3"
-  local local_file_prefix="$(echo $(find_main_model_file) | sed -E 's/-[0-9]{5}-of-[0-9]{5}\.gguf$//')"
-  local local_file_suffix="$(echo $fname | sed -nE 's/.*(-[0-9]{5}-of-[0-9]{5}\.gguf)$/\1/p')"
-  local chunk_id="$(echo $local_file_suffix | sed -nE 's/.*-([0-9]{5})-of-[0-9]{5}\.gguf$/\1/p')"
-  local local_file="$local_file_prefix$local_file_suffix"
-
-  [[ ! -f "$local_file" ]] && return
-
-  echo "[$(timestamp)] Checking $fname (qtype=$qtype)…" >&2
-
-  if ! command -v _sha256sum &>/dev/null; then
-    echo "[$(timestamp)] _sha256sum missing; skipping check for $fname." >&2
-    return
-  fi
-
-  local actual_hash
-  actual_hash=$(_sha256sum "$local_file" | cut -d' ' -f1)
-  if [[ "$actual_hash" == "$expected_hash" ]]; then
-    echo "[$(timestamp)] Hash OK for $fname." >&2
-    return
-  fi
-
-  echo "[$(timestamp)] Hash mismatch ($actual_hash ≠ $expected_hash). Re-fetching $fname…" >&2
+  local chunk_id="$4"
+  local local_file="$5"
 
   local tmp="${LOCAL_DOWNLOAD_DIR}/$fname"
   local -a candidates
+
   if [[ "$qtype" == "f32" ]]; then
     # when f32, first try bf16, then all local qtypes
     candidates=( bf16 "${LOCAL_QTYPES[@]}" )
@@ -549,21 +555,32 @@ process_line() {
   fi
 
   while true; do
-    rm -f "$tmp"
+    rm -f -- "$tmp"
 
     for try_q in "${candidates[@]}"; do
       echo "[$(timestamp)] Trying remote path with qtype=$try_q…" >&2
 
-      if run_downloader "${try_q^^}" "$chunk_id" "${LOCAL_DOWNLOAD_DIR}" "${fname}"; then
+      # run_tensor_downloader expects an uppercased qtype in the original code
+      if run_tensor_downloader "${try_q^^}" "$chunk_id" "${LOCAL_DOWNLOAD_DIR}" "${fname}"; then
 
         local new_hash
+        # ensure _sha256sum exists (original process_line checked this earlier;
+        # keeping a quick check here is defensive but optional)
+        if ! command -v _sha256sum &>/dev/null; then
+          echo "[$(timestamp)] _sha256sum missing after download; cannot verify $fname." >&2
+          rm -f -- "$tmp"
+          break  # try next qtype
+        fi
+
         new_hash=$(_sha256sum "$tmp" | cut -d' ' -f1)
         if [[ "$new_hash" == "$expected_hash" ]]; then
-          mv -f "$tmp" "$local_file"
+          # move into place (atomic replace)
+          mv -f -- "$tmp" "$local_file"
           echo "[$(timestamp)] Restored $fname with correct checksum via qtype=$try_q." >&2
-          return
+          return 0
         else
           echo "[$(timestamp)] Post-fetch mismatch with qtype=$try_q ($new_hash ≠ $expected_hash)." >&2
+          rm -f -- "$tmp"
         fi
 
       else
@@ -576,6 +593,113 @@ process_line() {
   done
 }
 
+# Define global lock file for recipe/download
+RECIPE_LOCK_FILE=".recipe_download.lock"
+# Remove old lock before declaring function
+rm -f "$RECIPE_LOCK_FILE"
+
+process_line() {
+    local fname="$1"
+    local expected_hash="$2"
+    local qtype="$3"
+    local main_model_file
+    main_model_file="$(find_main_model_file 2>/dev/null || true)"
+
+    # Only try to create lock if main model file is missing and lock does not exist
+    if [[ -z "$main_model_file" ]]; then
+        local created_lock=false
+
+        # Try to create the lock file only if it does not exist
+        if ( set -o noclobber; >"$RECIPE_LOCK_FILE" ) 2>/dev/null; then
+            # This process successfully created the lock
+            echo "[$(timestamp)] First shard 00001 missing, creating recipe and downloading shards…" >&2
+            created_lock=true
+        else
+            # Lock already exists — this process must wait until it's removed
+            while [[ -f "$RECIPE_LOCK_FILE" ]]; do
+                sleep 0.1
+            done
+        fi
+
+        # If this process created the lock, enter critical section
+        if [[ "$created_lock" == true ]]; then
+            if [[ ! -x "$QUANT_DOWNLOADER" ]]; then
+                echo "Error: quant_downloader.sh not found or not executable at $QUANT_DOWNLOADER" >&2
+                rm -f "$RECIPE_LOCK_FILE"
+                exit 1
+            fi
+
+            local TMPDIR
+            TMPDIR=$(mktemp -d)
+            local OUTPUT_FILE="$TMPDIR/${BASELINE_QTYPE}.recipe"
+            for entry in "${USER_REGEX[@]}"; do
+                echo "${entry//=locked/}" >> "$OUTPUT_FILE"
+            done
+
+            if [[ "$SKIP_GPG" != "false" ]]; then
+                _skip_gpg="--skip-gpg"
+            else
+                _skip_gpg=""
+            fi
+
+            # Run the downloader safely, capturing its exit status
+            if ! run_quant_downloader "$OUTPUT_FILE" "${_skip_gpg}"; then
+                echo "[$(timestamp)] Error: Failed to download model shards!" >&2
+                rm -f "$RECIPE_LOCK_FILE"   # release lock
+                exit 12
+            fi
+
+            # If we reach here, download succeeded
+            echo "[$(timestamp)] Model shards successfully downloaded." >&2
+
+            # Download complete — remove lock permanently
+            rm -f "$RECIPE_LOCK_FILE"
+        fi
+
+        # After waiting or completing critical section, refresh main_model_file
+        main_model_file="$(find_main_model_file)"
+    fi
+
+    # BASELINE_QTYPE / local file prefix
+    local local_file_prefix
+    local_file_prefix="$(echo "$main_model_file" | sed -E 's/-[0-9]{5}-of-[0-9]{5}\.gguf$//')"
+
+    # Rest of process_line continues normally
+    local local_file_suffix
+    local_file_suffix="$(echo "$fname" | sed -nE 's/.*(-[0-9]{5}-of-[0-9]{5}\.gguf)$/\1/p')"
+    local chunk_id
+    chunk_id="$(echo "$local_file_suffix" | sed -nE 's/.*-([0-9]{5})-of-[0-9]{5}\.gguf$/\1/p')"
+    local local_file="$local_file_prefix$local_file_suffix"
+
+    if [[ -f "$local_file" ]]; then
+        echo "[$(timestamp)] Checking $fname (qtype=$qtype)…" >&2
+
+        if ! command -v _sha256sum &>/dev/null; then
+            echo "[$(timestamp)] _sha256sum missing; skipping check for $fname." >&2
+            return
+        fi
+
+        local actual_hash
+        actual_hash=$(_sha256sum "$local_file" | cut -d' ' -f1)
+        if [[ "$actual_hash" == "$expected_hash" ]]; then
+            echo "[$(timestamp)] Hash OK for $fname." >&2
+            return
+        fi
+
+        echo "[$(timestamp)] Hash mismatch ($actual_hash ≠ $expected_hash). Re-fetching $fname…" >&2
+    else
+        if [[ -z "$local_file_prefix" ]]; then
+            echo "[$(timestamp)] Error: First shard 00001 still couldn't be found in the current working directory!" >&2
+            exit 13
+        else
+            echo "[$(timestamp)] Shard $chunk_id is missing. Fetching $fname…" >&2
+        fi
+    fi
+
+    # Externalized: attempt to fetch & verify
+    fetch_and_verify_shard "$fname" "$expected_hash" "$qtype" "$chunk_id" "$local_file"
+}
+
 echo "[$(timestamp)] Validating ${#tasks[@]} shards with up to $N_THREADS threads…"
 
 for entry in "${tasks[@]}"; do
@@ -584,7 +708,7 @@ for entry in "${tasks[@]}"; do
 
   {
     process_line "$fname" "$expected_hash" "$qtype"
-  } 2>&1 | sed -u 's/^/    /' &
+  } 2>&1 &
 
   # throttle concurrency
   while (( $(jobs -p | wc -l) >= N_THREADS )); do
@@ -593,6 +717,7 @@ for entry in "${tasks[@]}"; do
 done
 
 wait
+rm -f "$RECIPE_LOCK_FILE" # release lock file if still present
 
 echo "[$(timestamp)] Initial validation complete."
 
@@ -916,11 +1041,11 @@ run_main_loop() {
         rm -f "$local_tensors_map"
         rm -f "$local_tensors_map.sig"
         echo "[$(timestamp)] Fetching remote tensors.map..."
-        if run_downloader "${qtype^^}" "0" "." "${local_tensors_map}"; then
+        if run_tensor_downloader "${qtype^^}" "0" "." "${local_tensors_map}"; then
             echo "[$(timestamp)] Retrieved tensors.map to $local_tensors_map"
             # Download the signature
             if [[ "$SKIP_GPG" != "true" ]]; then
-              if ! run_downloader "${qtype^^}" -1 . "$local_tensors_map.sig"; then
+              if ! run_tensor_downloader "${qtype^^}" -1 . "$local_tensors_map.sig"; then
                   echo "[$(timestamp)] ❌ Error: failed to fetch map gpg signature for ${qtype^^}" >&2
                   [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
                   exit 2
@@ -1102,7 +1227,7 @@ run_main_loop() {
                     fetched=false
                     while true; do
                       echo "[$(timestamp)] Group: fetching shard '$s' (qtype=$qtype) ..."
-                      if run_downloader "${qtype^^}" "${chunk_id}" "${LOCAL_DOWNLOAD_DIR}" "${s}"; then
+                      if run_tensor_downloader "${qtype^^}" "${chunk_id}" "${LOCAL_DOWNLOAD_DIR}" "${s}"; then
                         echo "[$(timestamp)] Group: fetched $local_shard_tmp"
                       else
                         echo "[$(timestamp)] ⚠️ Warning: Could not fetch shard '$s' from remote while processing group. Aborting group." >&2
@@ -1290,7 +1415,7 @@ run_main_loop() {
                 retry_before_delete=3
                 while true; do
                     echo "[$(timestamp)] Fetching shard from remote: $shard_fname"
-                    if run_downloader "${qtype^^}" "${chunk_id}" "${LOCAL_DOWNLOAD_DIR}" "${shard_fname}"; then
+                    if run_tensor_downloader "${qtype^^}" "${chunk_id}" "${LOCAL_DOWNLOAD_DIR}" "${shard_fname}"; then
                         echo "[$(timestamp)] Fetched to $local_shard_tmp"
                     else
                         echo "[$(timestamp)] ⚠️ Warning: Could not fetch shard '$shard_fname' from remote. Skipping this tensor." >&2
