@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regexe entries.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-08-2025 -------------------- **#
+#** --------------- Updated: Oct-10-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -467,9 +467,9 @@ if [[ "$VERIFY_ONLY" == "true" ]]; then
   wait_for_slot
   (
     _find=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-*-of-*.gguf")
-    total=$(echo ${_find} | head -n1 | sed -E 's/.*-[0-9]{5}-of-([0-9]{5})\.gguf/\1/')
-    gguf_first=$(basename "$(echo ${_find} | head -n1 \
-      | sed "s/-[0-9]\{5\}-of-$total\.gguf$/-00001-of-$total.gguf/")")
+    first=$(printf '%s\n' "$_find" | head -n1)
+    total=$(printf '%s\n' "$first" | sed -E 's/.*-[0-9]{5}-of-([0-9]{5})\.gguf/\1/')
+    gguf_first=$(basename "$(printf '%s\n' "$first" | sed "s/-[0-9]\{5\}-of-$total\.gguf$/-00001-of-$total.gguf/")")
     if [[ "$total" != "" && "$gguf_first" != "" && -f "$LOCAL_MODEL_DIR/$gguf_first" ]]; then
       if [[ ! "$gguf_first" =~ "-BF16-" && "${QTYPE}" == "BF16" ]]; then
         echo "[$(timestamp)] VERIFY_ONLY: Error - Non-BF16 qtype detected for first shard, please re-run using the --qtype option!!!"
@@ -566,8 +566,9 @@ done
 wait
 
 _find=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-*-of-*.gguf")
-total=$(echo ${_find} | head -n1 | sed -E 's/.*-[0-9]{5}-of-([0-9]{5})\.gguf/\1/')
-gguf_first=$(basename "$(echo ${_find} | head -n1 | sed "s/-[0-9]\{5\}-of-$total\.gguf$/-00001-of-$total.gguf/")")
+first=$(printf '%s\n' "$_find" | head -n1)
+total=$(printf '%s\n' "$first" | sed -E 's/.*-[0-9]{5}-of-([0-9]{5})\.gguf/\1/')
+gguf_first=$(basename "$(printf '%s\n' "$first" | sed "s/-[0-9]\{5\}-of-$total\.gguf$/-00001-of-$total.gguf/")")
 
 # ------------- FINAL FIRST-SHARD FETCH (non-verify) -----
 if [[ "$VERIFY_ONLY" != true ]]; then
