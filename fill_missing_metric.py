@@ -26,6 +26,7 @@
 # Requires: pip install pandas numpy scipy tqdm
 
 import os
+import sys
 import pandas as pd
 import numpy as np
 from scipy import stats, interpolate
@@ -36,6 +37,11 @@ import re
 # Global counters
 NB_FILLED = 0
 NB_EXISTS = 0
+
+# Default float precision (number of digits after decimal) used across the script
+FLOAT_PRECISION_DEFAULT = 8
+# runtime-configurable precision (will be set in main from CLI)
+FLOAT_PRECISION = FLOAT_PRECISION_DEFAULT
 
 def parse_pct(val):
     """
@@ -242,7 +248,8 @@ def transform_to_pct_if_needed(df):
                 # preserve missing
                 transformed_output.at[i, col] = np.nan
             else:
-                transformed_output.at[i, col] = f"{transformed.at[i, col]:.8f}%"
+                # use runtime FLOAT_PRECISION
+                transformed_output.at[i, col] = f"{transformed.at[i, col]:.{FLOAT_PRECISION}f}%"
 
     # Ensure QTYPE columns are preserved and merge transformed results
     df[metric_columns] = transformed_output
@@ -257,7 +264,7 @@ def process_dataframe(df):
     Ignore outliers >3x avg before fitting.
     Logs detailed diagnostics for each row/metric.
     """
-    global NB_FILLED, NB_EXISTS
+    global NB_FILLED, NB_EXISTS, FLOAT_PRECISION
 
     metric_columns = [col for col in df.columns if not col.startswith("QTYPE")]
     contains_pct = df[metric_columns].apply(lambda col: col.map(lambda v: isinstance(v, str) and '%' in v)).values.any()
@@ -374,30 +381,30 @@ def process_dataframe(df):
                 if best_pred is None:
                     if not np.all(np.isnan(arr)):
                         best_pred = arr
-                        print(f"      {d}: best source origin, mse={best_err:.8f}")
+                        print(f"      {d}: best source origin, mse={best_err:.{FLOAT_PRECISION}f}")
                     else:
                         # fallback to zeros if nothing selected
                         best_pred = np.zeros_like(_x)
                         print(f"      Warning: no prediction for {dirs[d]}, defaulting to zero")
                 else:
-                    print(f"      {d}: best source {best_name}, mse={best_err:.8f}")
+                    print(f"      {d}: best source {best_name}, mse={best_err:.{FLOAT_PRECISION}f}")
                 # fill
                 for i, c in enumerate(cols):
                     orig = parse_pct(row[c])
                     if np.isnan(orig):
-                        val = f"{best_pred[i]:.8f}%"
+                        val = f"{best_pred[i]:.{FLOAT_PRECISION}f}%"
                         out.at[idx, c] = val
                         print(f"        filled {c} = {val}")
                         NB_FILLED += 1
                     else:
-                        val = f"{orig:.8f}%"
+                        val = f"{orig:.{FLOAT_PRECISION}f}%"
                         out.at[idx, c] = val
                         print(f"        exists {c} = {val}")
                         NB_EXISTS += 1
     return out
 
 
-def main(input_csv, output_csv=None, no_percentage=False):
+def main(input_csv, output_csv=None, no_percentage=False, float_precision=FLOAT_PRECISION_DEFAULT):
     """
     Load the input CSV, process missing METRIC% entries,
     and write filled output CSV. If output_csv is not provided,
@@ -410,7 +417,10 @@ def main(input_csv, output_csv=None, no_percentage=False):
     cell that originally existed (not '404'), the original numeric
     value will be reused instead of the reverse-transformed one.
     """
-    global NB_FILLED, NB_EXISTS
+    global NB_FILLED, NB_EXISTS, FLOAT_PRECISION
+
+    # set the runtime precision
+    FLOAT_PRECISION = int(float_precision)
 
     print(f"Loading {input_csv}")
     df = pd.read_csv(input_csv)
@@ -441,14 +451,14 @@ def main(input_csv, output_csv=None, no_percentage=False):
                     # if this cell originally existed (not 404), reuse that original numeric value
                     try:
                         if orig_present_mask.at[i, col]:
-                            reverted_df.at[i, col] = original_numeric_df.at[i, col]
+                            reverted_df.at[i, col] = f"{original_numeric_df.at[i, col]:.{FLOAT_PRECISION}f}"
                         else:
                             out_val = (pct / 100.0) * baseline + baseline
-                            reverted_df.at[i, col] = round(out_val, 8)
+                            reverted_df.at[i, col] = float(round(out_val, FLOAT_PRECISION))
                     except Exception as e:
                         # fallback: attempt arithmetic regardless
                         out_val = (pct / 100.0) * baseline + baseline
-                        reverted_df.at[i, col] = round(out_val, 8)
+                        reverted_df.at[i, col] = float(round(out_val, FLOAT_PRECISION))
             filled_df = reverted_df
             print("Reversion complete.")
 
@@ -479,5 +489,13 @@ if __name__ == '__main__':
                               "convert the interpolated percentage strings back into floating "
                               "METRIC values using the baseline. Original (non-404) values will "
                               "be preserved where present."))
+    parser.add_argument('--float-precision', type=int, default=FLOAT_PRECISION_DEFAULT,
+                        help=(f'Number of decimal places to use when writing reverted float METRIC values '
+                              f'(default: {FLOAT_PRECISION_DEFAULT}). Also controls formatting for percent outputs and MSE prints.'))
+    # show help if no args provided
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
+
     args = parser.parse_args()
-    main(args.input_csv, args.output_csv, no_percentage=args.no_percentage)
+    main(args.input_csv, args.output_csv, no_percentage=args.no_percentage, float_precision=args.float_precision)
