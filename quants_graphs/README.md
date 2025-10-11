@@ -46,7 +46,7 @@ USER_REGEX=(
 BASELINE_QTYPE="bf16"
 ```
 
-### Tensors considered in collect_sweep_results.sh:
+### Tensors considered in collect_ppl_results.sh and collect_sweep_results.sh:
 ```
 USER_REGEX=(
   ## Core FFN weights
