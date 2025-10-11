@@ -1,3 +1,31 @@
+## ⚠️ Notice: Temporary Upload Restriction on HuggingFace
+
+Due to an automated storage restriction placed on my HuggingFace Pro account, I am currently **unable to upload new quantised models or update existing repositories**. I have already contacted the HuggingFace team to verify my account and restore access.
+
+⚠️ **Important:** There is a possibility that some existing repositories or model files may be removed or become unavailable on HuggingFace during this restriction period.  
+To ensure continued access, users are encouraged to **download and keep local copies** of any quantised models they rely on.
+
+### 🔧 How to Download Models Locally
+
+You can download and store desired quantised models locally using the following example:
+
+```bash
+mkdir GLM-4.6_q4_K \
+&& cd GLM-4.6_q4_K \
+&& echo '.*=q4_K' > q4_K.recipe \
+&& ../quant_downloader.sh q4_K.recipe
+```
+
+Be sure to adjust your `download.conf` file appropriately.  
+It can be configured to download from **local directories** by setting the `COPY` option.
+
+### 💡 Note on bf16 Models
+
+Please note that the **bf16 models are the most important ones**, as they serve as the **reference base models** from which all other quantised variants can be derived using `llama-quantize`.  
+If possible, make sure to preserve local copies of these bf16 models, as they are essential for generating new quantisations or reproducing existing ones.
+
+---
+
 # GGUF Tool Suite - [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Thireus/GGUF-Tool-Suite/blob/main/quant_recipe_pipeline.ipynb)
 
 **GGUF Tool Suite** is a set of flexible utilities that enables users to experiment with and create custom GGUF quantization blends. It simplifies the process of mixing quant formats (like `iq3_xxs`, `iq4_nl`, etc.) to:
