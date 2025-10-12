@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** fill_missing_ppl.py is a tool that interpolates partial   **#
-#** tensor ppl benchmarks.                                    **#
+#** fill_missing_metric.py is a tool that interpolates        **#
+#** partial tensor metric benchmarks.                         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Oct-07-2025 -------------------- **#
+#** --------------- Updated: Oct-10-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -26,6 +26,7 @@
 # Requires: pip install pandas numpy scipy tqdm
 
 import os
+import sys
 import pandas as pd
 import numpy as np
 from scipy import stats, interpolate
@@ -36,6 +37,11 @@ import re
 # Global counters
 NB_FILLED = 0
 NB_EXISTS = 0
+
+# Default float precision (number of digits after decimal) used across the script
+FLOAT_PRECISION_DEFAULT = 8
+# runtime-configurable precision (will be set in main from CLI)
+FLOAT_PRECISION = FLOAT_PRECISION_DEFAULT
 
 def parse_pct(val):
     """
@@ -178,57 +184,92 @@ def evaluate_methods(x, y, methods, min_points=3):
 
 
 def transform_to_pct_if_needed(df):
-    ppl_columns = [col for col in df.columns if not col.startswith("QTYPE")]
+    """
+    If the input dataframe already contains percentage strings, return it as-is.
+    Otherwise:
+      - remember which entries were originally present (not '404' / missing)
+      - remember the original numeric dataframe (floats, NaN for 404)
+      - compute baseline = min value across numeric metric columns
+      - transform numeric metric values to percentage strings using:
+            transformed = ((numeric_df - baseline) / baseline) * 100
+      - store transformed strings back into df and return additional metadata
+    Returns:
+      df (possibly modified), contains_pct (bool),
+      baseline (float or None),
+      original_numeric_df (DataFrame or None),
+      orig_present_mask (DataFrame of bool or None)
+    """
+    metric_columns = [col for col in df.columns if not col.startswith("QTYPE")]
+
+    # make a copy of original raw values to detect which were originally present
+    original_raw = df[metric_columns].copy()
+
+    # orig_present_mask: True where original value was not 404/404% and not missing
+    def was_present(v):
+        if pd.isna(v):
+            return False
+        s = str(v).strip()
+        if s in ('404', '404%'):
+            return False
+        return True
+
+    orig_present_mask = original_raw.applymap(was_present)
 
     # Always filter out missing codes 404 (str or float) and '404%'
-    df[ppl_columns] = df[ppl_columns].replace({"404": np.nan, "404%": np.nan, 404.0: np.nan})
+    df[metric_columns] = df[metric_columns].replace({"404": np.nan, "404%": np.nan, 404.0: np.nan})
 
     # Check for any existing percent strings
-    contains_pct = df[ppl_columns].apply(
+    contains_pct = df[metric_columns].apply(
         lambda col: col.map(lambda v: isinstance(v, str) and '%' in v)
     ).values.any()
     if contains_pct:
-        return df, True
+        # nothing to convert; return with metadata placeholders
+        return df, True, None, None, None
 
     print("Transforming to percentage scale...")
-    numeric_df = df[ppl_columns].copy()
+    numeric_df = df[metric_columns].copy()
     # After replacing '404', convert to float directly
     numeric_df = numeric_df.astype(float)
+
+    # Keep a copy of the cleaned numeric values (NaN where 404)
+    original_numeric_df = numeric_df.copy()
+
     baseline = numeric_df.min().min()
-    print(f"Baseline PPL: {baseline}")
+    print(f"Baseline METRIC: {baseline}")
 
     transformed = ((numeric_df - baseline) / baseline) * 100
 
     # Prepare output with object dtype to allow strings
-    transformed_output = pd.DataFrame(index=df.index, columns=ppl_columns, dtype=object)
+    transformed_output = pd.DataFrame(index=df.index, columns=metric_columns, dtype=object)
 
-    for col in ppl_columns:
+    for col in metric_columns:
         for i, val in enumerate(df[col]):
             if pd.isna(df.at[i, col]):
                 # preserve missing
                 transformed_output.at[i, col] = np.nan
             else:
-                transformed_output.at[i, col] = f"{transformed.at[i, col]:.4f}%"
+                # use runtime FLOAT_PRECISION
+                transformed_output.at[i, col] = f"{transformed.at[i, col]:.{FLOAT_PRECISION}f}%"
 
     # Ensure QTYPE columns are preserved and merge transformed results
-    df[ppl_columns] = transformed_output
-    return df, False
+    df[metric_columns] = transformed_output
+    return df, False, baseline, original_numeric_df, orig_present_mask
 
 
 def process_dataframe(df):
     """
-    For each row (qtype), group its PPL%% columns by metric and direction.
+    For each row (qtype), group its METRIC%% columns by metric and direction.
     Compute group mean curves (up+down, up+gate, down+gate, all three) and individual series fits.
     For each series, select the interpolation (group or individual) with minimal deviation.
     Ignore outliers >3x avg before fitting.
     Logs detailed diagnostics for each row/metric.
     """
-    global NB_FILLED, NB_EXISTS
+    global NB_FILLED, NB_EXISTS, FLOAT_PRECISION
 
-    ppl_columns = [col for col in df.columns if not col.startswith("QTYPE")]
-    contains_pct = df[ppl_columns].apply(lambda col: col.map(lambda v: isinstance(v, str) and '%' in v)).values.any()
+    metric_columns = [col for col in df.columns if not col.startswith("QTYPE")]
+    contains_pct = df[metric_columns].apply(lambda col: col.map(lambda v: isinstance(v, str) and '%' in v)).values.any()
     
-    classes, layers = detect_classes_and_layers(ppl_columns)
+    classes, layers = detect_classes_and_layers(metric_columns)
     # x = np.array(layers) # Not used anymore
     out = df.astype(object)
     methods = {'piecewise': fit_piecewise_linear, 'spline': fit_spline}
@@ -237,7 +278,7 @@ def process_dataframe(df):
 
     for idx, row in tqdm(df_iter, total=len(df), desc="Filling rows"):
         # skip qtypes with no available values
-        row_vals = np.array([parse_pct(row[c]) for c in ppl_columns])
+        row_vals = np.array([parse_pct(row[c]) for c in metric_columns])
         if np.all(np.isnan(row_vals)):
             print(f"Row {idx}: no data available, skipping")
             continue
@@ -269,14 +310,14 @@ def process_dataframe(df):
             # Stack arrays into a 2D array: shape = (num_arrays, array_length)
             stacked = np.stack(list(arrs.values()))
             # Mean is used in case we face lone tensors
-            mean_ppl = []
+            mean_metric = []
             for i in range(stacked.shape[1]):  # iterate over columns (positions)
                 col = stacked[:, i]
                 valid = col[~np.isnan(col)]
                 if valid.size == 0:
-                    mean_ppl.append(np.nan)
+                    mean_metric.append(np.nan)
                 else:
-                    mean_ppl.append(valid.mean())
+                    mean_metric.append(valid.mean())
             # single individual series also considered
             for d in all_dirs:
                 arr = np.asarray(arrs[d])
@@ -284,14 +325,14 @@ def process_dataframe(df):
                     print(
                         f"Warning: No value for lone tensor '{dirs[d]}', attempting to use mean value of other dirs (which is the wrong approach, but we have no other option)."
                     )
-                    # Replace arr values with corresponding values from mean_ppl
-                    arr[:] = mean_ppl  # in-place assignment
+                    # Replace arr values with corresponding values from mean_metric
+                    arr[:] = mean_metric  # in-place assignment
                     arrs[d] = arr      # update the dictionary (optional, but safe)
                     best_pred = arrs[d]
                     combos.append((f"ind_{d}", [d], best_pred))
                     if arr.size > 0 and np.all(np.isnan(arr)):
                         print(
-                            f"Error: Lone tensor '{dirs[d]}' cannot be interpolated, incomplete mean value of other dirs... Either exlude these tensors from the dataset or compute their ppl."
+                            f"Error: Lone tensor '{dirs[d]}' cannot be interpolated, incomplete mean value of other dirs... Either exlude these tensors from the dataset or compute their metric."
                         )
                         exit(1)
                     continue
@@ -340,43 +381,86 @@ def process_dataframe(df):
                 if best_pred is None:
                     if not np.all(np.isnan(arr)):
                         best_pred = arr
-                        print(f"      {d}: best source origin, mse={best_err:.4f}")
+                        print(f"      {d}: best source origin, mse={best_err:.{FLOAT_PRECISION}f}")
                     else:
                         # fallback to zeros if nothing selected
                         best_pred = np.zeros_like(_x)
                         print(f"      Warning: no prediction for {dirs[d]}, defaulting to zero")
                 else:
-                    print(f"      {d}: best source {best_name}, mse={best_err:.4f}")
+                    print(f"      {d}: best source {best_name}, mse={best_err:.{FLOAT_PRECISION}f}")
                 # fill
                 for i, c in enumerate(cols):
                     orig = parse_pct(row[c])
                     if np.isnan(orig):
-                        val = f"{best_pred[i]:.4f}%"
+                        val = f"{best_pred[i]:.{FLOAT_PRECISION}f}%"
                         out.at[idx, c] = val
                         print(f"        filled {c} = {val}")
                         NB_FILLED += 1
                     else:
-                        val = f"{orig:.4f}%"
+                        val = f"{orig:.{FLOAT_PRECISION}f}%"
                         out.at[idx, c] = val
                         print(f"        exists {c} = {val}")
                         NB_EXISTS += 1
     return out
 
 
-def main(input_csv, output_csv=None):
+def main(input_csv, output_csv=None, no_percentage=False, float_precision=FLOAT_PRECISION_DEFAULT):
     """
-    Load the input CSV, process missing PPL% entries,
+    Load the input CSV, process missing METRIC% entries,
     and write filled output CSV. If output_csv is not provided,
     append the interpolation percentage to the input filename.
+
+    If no_percentage is True and the input file DID NOT originally
+    contain percentage values, the script will convert interpolated
+    percentage strings back into floating METRIC values using the
+    baseline that was used for the percentage transform. For any
+    cell that originally existed (not '404'), the original numeric
+    value will be reused instead of the reverse-transformed one.
     """
-    global NB_FILLED, NB_EXISTS
+    global NB_FILLED, NB_EXISTS, FLOAT_PRECISION
+
+    # set the runtime precision
+    FLOAT_PRECISION = int(float_precision)
 
     print(f"Loading {input_csv}")
     df = pd.read_csv(input_csv)
-    df, contains_pct = transform_to_pct_if_needed(df)
+    df, contains_pct, baseline, original_numeric_df, orig_present_mask = transform_to_pct_if_needed(df)
 
     print("Processing...")
     filled_df = process_dataframe(df)
+
+    # If requested, convert back percentages to original floats (only if we had performed the initial transform)
+    if no_percentage and not contains_pct:
+        if baseline is None or original_numeric_df is None or orig_present_mask is None:
+            print("ERROR: missing metadata required to reverse percentage transform. Skipping --no-percentage conversion.")
+        else:
+            print("Reverting percentages back to original float METRIC values (using baseline and original values where present)...")
+            metric_columns = [col for col in filled_df.columns if not col.startswith("QTYPE")]
+            reverted_df = filled_df.astype(object).copy()
+            for col in metric_columns:
+                for i in range(len(reverted_df)):
+                    val = reverted_df.at[i, col]
+                    # preserve missing
+                    if pd.isna(val):
+                        reverted_df.at[i, col] = np.nan
+                        continue
+                    pct = parse_pct(val)
+                    if np.isnan(pct):
+                        reverted_df.at[i, col] = np.nan
+                        continue
+                    # if this cell originally existed (not 404), reuse that original numeric value
+                    try:
+                        if orig_present_mask.at[i, col]:
+                            reverted_df.at[i, col] = f"{original_numeric_df.at[i, col]:.{FLOAT_PRECISION}f}"
+                        else:
+                            out_val = (pct / 100.0) * baseline + baseline
+                            reverted_df.at[i, col] = float(round(out_val, FLOAT_PRECISION))
+                    except Exception as e:
+                        # fallback: attempt arithmetic regardless
+                        out_val = (pct / 100.0) * baseline + baseline
+                        reverted_df.at[i, col] = float(round(out_val, FLOAT_PRECISION))
+            filled_df = reverted_df
+            print("Reversion complete.")
 
     # Compute summary
     total = NB_FILLED + NB_EXISTS
@@ -395,10 +479,23 @@ def main(input_csv, output_csv=None):
     print("Done.")
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Interpolate missing PPL% in CSV files.")
+    parser = argparse.ArgumentParser(description="Interpolate missing METRIC% in CSV files.")
     parser.add_argument('input_csv', help='Path to the input CSV file')
     parser.add_argument('output_csv', nargs='?', default=None,
                         help=('Optional path for the output CSV. '  
                               'If omitted, will append interpolation percentage to input filename.'))
+    parser.add_argument('--no-percentage', action='store_true',
+                        help=("If the input file did NOT originally contain percentages, "
+                              "convert the interpolated percentage strings back into floating "
+                              "METRIC values using the baseline. Original (non-404) values will "
+                              "be preserved where present."))
+    parser.add_argument('--float-precision', type=int, default=FLOAT_PRECISION_DEFAULT,
+                        help=(f'Number of decimal places to use when writing reverted float METRIC values '
+                              f'(default: {FLOAT_PRECISION_DEFAULT}). Also controls formatting for percent outputs and MSE prints.'))
+    # show help if no args provided
+    if len(sys.argv) == 1:
+        parser.print_help()
+        sys.exit(0)
+
     args = parser.parse_args()
-    main(args.input_csv, args.output_csv)
+    main(args.input_csv, args.output_csv, no_percentage=args.no_percentage, float_precision=args.float_precision)
