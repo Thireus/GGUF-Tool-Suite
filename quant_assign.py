@@ -1662,7 +1662,7 @@ def main():
             'typically improving quality without strictly enforcing identical qtypes.'
         )
     )
-    parser.add_argument('--synergy-strength',type=float,default=0.75,help='Strength of synergy-based loss adjustment (0 = disabled, 1 = fully averaged losses). Default: 0.75')
+    parser.add_argument('--synergy-strength',type=float,default=0.0,help='Strength of synergy-based loss adjustment (0 = disabled, 1 = fully averaged losses). Default: 0')
 
     args = parser.parse_args()
 
