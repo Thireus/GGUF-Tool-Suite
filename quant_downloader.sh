@@ -405,6 +405,7 @@ if [[ -n "$SPECIAL_NODE_ID" ]]; then
   # try to read MODEL_NAME from $SCRIPT_DIR/download.conf
   CONFIG_FILE="$SCRIPT_DIR/download.conf"
   MODEL_NAME=""
+  MAINTAINER=""
   if [[ -f "$CONFIG_FILE" ]]; then
     # shellcheck source=/dev/null
     source "$CONFIG_FILE"
@@ -423,13 +424,13 @@ if [[ -n "$SPECIAL_NODE_ID" ]]; then
   fi
 
   # should_process_chunk: returns 0 if this node should process the provided chunk_id
-  # Uses: printf '%s' "${MODEL_NAME}$((10#$chunk_id))" | xxhsum -H3
+  # Uses: printf '%s' "${MODEL_NAME}-${MAINTAINER}-${QTYPE^^}-SPECIAL_SPLIT${chunk_id}" | xxhsum -H3
   should_process_chunk() {
     local chunk_id="$1"
     chunk_id=$((10#$chunk_id))
 
     # Concatenate model name + chunk_id (no separator; deterministic)
-    local input="${MODEL_NAME}${chunk_id}"
+    local input="${MODEL_NAME}-${MAINTAINER}-${QTYPE^^}-SPECIAL_SPLIT${chunk_id}"
 
     # Example: echo abc | xxhsum -H3
     local out
