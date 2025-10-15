@@ -433,13 +433,11 @@ if [[ -n "$SPECIAL_NODE_ID" ]]; then
     local input="${MODEL_NAME}-${MAINTAINER}-${QTYPE^^}-SPECIAL_SPLIT${chunk_id}"
 
     # Example: echo abc | xxhsum -H3
-    local out
-    out=$(printf '%s' "$input" | xxhsum -H3 2>/dev/null) || true
+    local out=$(printf '%s' "$input" | xxhsum -H3 2>/dev/null) || true
 
     # Extract a hex-like token from the output robustly.
     # Require at least 12 hex chars, then take the first 12.
-    local hex
-    hex=$(printf '%s' "$out" | grep -oE '[0-9a-fA-F]{12,}' | head -n1 || true)
+    local hex=$(printf '%s' "$out" | grep -oE '[0-9a-fA-F]{12,}' | head -n1 || true)
 
     if [[ -z "$hex" ]]; then
       echo "[$(timestamp)] ❌ Warning: failed to parse xxhsum output for chunk_id=$chunk_id; output='$out'." >&2
@@ -454,13 +452,11 @@ if [[ -n "$SPECIAL_NODE_ID" ]]; then
       echo "[$(timestamp)] ❌ Warning: invalid hex digest ('$hex') for chunk_id=$chunk_id." >&2
       return 1
     fi
-    # example conversion (48-bit fits in bash integer): 
-    dec=$((16#$hex))
 
     local dec=$((16#$hex))
     local mod=$(( dec % TOTAL_NODES ))
 
-    # We choose the rule: this node handles chunk if mod == 0
+    # We choose the rule: this node handles chunk if mod == SPECIAL_NODE_ID
     if (( mod == SPECIAL_NODE_ID )); then
       return 0
     else

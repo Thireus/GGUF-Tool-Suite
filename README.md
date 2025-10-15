@@ -1,9 +1,31 @@
 ## ⚠️ Notice: Temporary Upload Restriction on HuggingFace
 
-Due to an automated storage restriction placed on my HuggingFace Pro account, I am currently **unable to upload new quantised models or update existing repositories**. I have already contacted the HuggingFace team to verify my account and restore access.
+Due to an automated storage restriction placed on my HuggingFace Pro account, I am currently **unable to upload new quantised models or update existing repositories**. I am in the process of hosting shards on self-hosted servers.
 
-⚠️ **Important:** There is a possibility that some existing repositories or model files may be removed or become unavailable on HuggingFace during this restriction period.  
-To ensure continued access, users are encouraged to **download and keep local copies** of any quantised models they rely on.
+⚠️ **Important:** There is a possibility that some existing repositories or model files may be removed or become unavailable on HuggingFace.  
+To ensure continued access, users are encouraged to **download and keep local copies** of any quantised model shards they rely on.
+
+---
+
+<h2 align="center">💖 Support GGUF-Tool-Suite</h2>
+
+<p align="center">
+  <a href="https://www.patreon.com/Thireus" target="_blank">
+    <img src="https://img.shields.io/badge/Support%20on-Patreon-F96854?style=for-the-badge&logo=patreon&logoColor=white" alt="Support on Patreon">
+  </a>
+</p>
+
+<p align="center">
+  Hosting over <b>250 TB</b> of pre-quantised LLM tensor shards costs around <b>£400 per month</b>.<br>
+  Additional costs include compute for calibrated data generation and active project improvements and support for new models.<br>
+  If this tool saves you time, compute, or helps your research, please consider supporting its development on Patreon.
+</p>
+
+<p align="center">
+  <a href="https://www.patreon.com/Thireus">👉 Become a Patron</a>
+</p>
+
+---
 
 ### 🔧 How to Download Models Locally
 
