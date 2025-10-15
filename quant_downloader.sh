@@ -146,7 +146,7 @@ echo "[INFO] Model dir: $LOCAL_MODEL_DIR"
 echo "[INFO] Max jobs: $MAX_JOBS, Obtain new map: $NEW_MAP, Force redownload: $FORCE_REDOWNLOAD, Verify only: $VERIFY_ONLY, Skip signature verification: $SKIP_GPG"
 if [[ -n "$SPECIAL_NODE_ID" ]]; then
   if [[ -n "$TOTAL_NODES" ]]; then
-    echo "[INFO] special-node-id/total-nodes set to: $SPECIAL_NODE_ID/$TOTAL_NODES (only shards assigned to this model/node pair will be downloaded)"
+    echo "[INFO] special-node-id/(total-nodes - 1) set to: $SPECIAL_NODE_ID/$((TOTAL_NODES-1)) (only shards assigned to this model/node pair will be downloaded)"
   else
     echo "❌ Error: --total-nodes N must be specified when using the --special-node-id option!" >&2
     exit 1
@@ -397,7 +397,7 @@ done
 # The function below returns success (0) when the chunk should be downloaded by this node.
 if [[ -n "$SPECIAL_NODE_ID" ]]; then
   # validate SPECIAL_NODE_ID
-  if ! [[ "$SPECIAL_NODE_ID" =~ ^[0-9]+$ ]] || (( SPECIAL_NODE_ID < 1 )); then
+  if ! [[ "$SPECIAL_NODE_ID" =~ ^[0-9]+$ ]] || (( SPECIAL_NODE_ID < 0 )); then
     echo "❌ Error: --special-node-id must be a positive integer." >&2
     exit 1
   fi
