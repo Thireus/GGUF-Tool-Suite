@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** plot_ppl.py a useful ppl/kld/topP visualisation utility   **#
+#** plot_ppl.py a useful ppl/kld/topP plot utility designed   **#
 #** to visualise tensor quantisation sensitiveness patterns.  **#
 #**                                                           **#
 #** ********************************************************* **#
