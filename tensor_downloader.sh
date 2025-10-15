@@ -5,7 +5,7 @@
 #** downloads pre-quantised tensors/shards to cook recipes.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-23-2025 -------------------- **#
+#** --------------- Updated: Oct-15-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -50,9 +50,13 @@ CHUNKS_TOTAL=1148 # Total number of chunks of the model
 RSYNC_SERVERS=(
   #"thireus:65.108.205.124:22:~/AI/DeepSeek-R1-0528-BF16-GGUF/SPECIAL/"
 )
-# CURL_ORGS: Hugging Face org/user and branch (org_or_user:branch)
-CURL_ORGS=(
+# HUGGINGFACE_ORGS: Hugging Face org/user and branch (org_or_user:branch)
+HUGGINGFACE_ORGS=(
   "Thireus:main"
+)
+# CURL_URLS: Complete URL where model shard repos can be found
+CURL_URLS=(
+  "https://gguf{0..4}.thireus.com/"
 )
 
 # Local fallbacks:
@@ -66,8 +70,7 @@ SYMLINK_FOLDERS=(
 )
 
 # Default download order if DOWNLOAD_ORDER is unset or empty:
-#   RSYNC first, then CURL, then COPY, then SYMLINK
-DEFAULT_ORDER=(SYMLINK COPY RSYNC CURL)
+DEFAULT_ORDER=(SYMLINK COPY RSYNC HUGGINGFACE CURL)
 
 # -----------------------------------------------------------------------------
 # Load user config if present (must be in same directory)
@@ -319,11 +322,126 @@ do_rsync() {
 }
 
 # -----------------------------------------------------------------------------
-# Curl attempts
-do_curl() {
-  for crl in "${CURL_ORGS[@]}"; do
+# HuggingFace attempts
+do_huggingface() {
+  for crl in "${HUGGINGFACE_ORGS[@]}"; do
     IFS=":" read -r ORG BRANCH <<< "$crl"
     URL="https://huggingface.co/${ORG}/${REPOSITORY_NAME}/resolve/${BRANCH}/${FILENAME}?download=true"
+    DST="${DEST}/${CUSTOM_FILENAME}"
+
+    if [ -f "${DST}" ]; then
+      log "File already exists, verifying…"
+      if verify_download "${DST}"; then
+        log "✓ Verified; no need to download it again - ${DST} (${QUANT_U})"
+        chmod 444 "${DST}"
+        return 0
+      else
+        log "✗ Verification failed; removing and downloading it"
+        rm -f "${DST}"
+      fi
+    fi
+
+    log "Trying huggingface from ${URL}"
+    if [ "${SHOW_PROGRESS:-false}" = true ]; then
+      CURL_OPTS="--progress-bar"
+    else
+      CURL_OPTS="--silent"
+    fi
+    curl --fail -L --retry 3 -C - ${CURL_OPTS} -R \
+      "${URL}" -o "${DST}"
+
+    if [ $? -eq 0 ]; then
+      log "Download complete, verifying…"
+      if verify_download "${DST}"; then
+        log "✓ Verified and saved via huggingface (org: ${ORG}, banch: ${BRANCH}) - ${DST} (${QUANT_U})"
+        chmod 444 "${DST}"
+        return 0
+      else
+        log "✗ Verification failed; removing and trying next"
+        rm -f "${DST}"
+      fi
+    else
+      log "✗ Huggingface failed; trying next"
+    fi
+  done
+  return 1
+}
+
+# -----------------------------------------------------------------------------
+# node_id: returns the server node_id
+node_id() {
+  local input="$1"
+  local chunk_id="$2"
+  local total_nodes="$3"
+
+  # If xxhsum not found, then just random node is returned
+  if ! command -v xxhsum >/dev/null 2>&1; then
+    echo $((RANDOM % total_nodes)) # It's ok to return a random node
+    return 1
+  fi
+
+  if [[ $chunk_id =~ ^0*[1-9][0-9]*$ ]]; then
+    chunk_id=$((10#$chunk_id))
+  fi
+
+  # Example: echo abc | xxhsum -H3
+  local out=$(printf '%s' "$input$chunk_id" | xxhsum -H3 2>/dev/null) || true
+
+  # Extract a hex-like token from the output robustly.
+  # Require at least 12 hex chars, then take the first 12.
+  local hex=$(printf '%s' "$out" | grep -oE '[0-9a-fA-F]{12,}' | head -n1 || true)
+
+  if [[ -z "$hex" ]]; then
+    echo "Warning: failed to parse xxhsum output for chunk_id=$chunk_id; output='$out'." >&2
+    echo $((RANDOM % total_nodes)) # It's ok to return a random node
+    return 1
+  fi
+
+  # Use only the first 12 hex chars to avoid integer overflow in bash arithmetic
+  hex="${hex:0:12}"
+
+  # Convert to decimal and modulo
+  if ! [[ "$hex" =~ ^[0-9a-fA-F]+$ ]]; then
+    echo "Warning: invalid hex digest ('$hex') for chunk_id=$chunk_id." >&2
+    echo $((RANDOM % total_nodes)) # It's ok to return a random node
+    return 1
+  fi
+
+  local dec=$((16#$hex))
+
+  echo $(( dec % total_nodes ))
+  return 0
+}
+# Curl attempts
+do_curl() {
+  for crl in "${CURL_URLS[@]}"; do
+    crl="$(echo "$crl" | sed -E 's|([^:])/+|\1/|g; s|/+$||')"
+    # Defaults
+    N=1
+    TOTAL_NODES=""
+    placeholder=""
+
+    # Extract {N:H} if present
+    if [[ $crl =~ (\{([0-9]+):([0-9]+)\}) ]]; then
+      placeholder="${BASH_REMATCH[1]}"  # full {N:H}
+      if [[ "${QUANT_U}" == "BF16" ]]; then
+        TOTAL_NODES=${BASH_REMATCH[2]}
+      else
+        N=${BASH_REMATCH[2]}
+        TOTAL_NODES=${BASH_REMATCH[3]}
+      fi
+    fi
+
+    _URL=""
+    if [[ -n "$TOTAL_NODES" ]]; then
+      nid=$(node_id "${REPOSITORY_NAME}" "${FileID}" ${TOTAL_NODES})
+      [[ "${QUANT_U}" == "BF16" ]] || nid=$((nid * N / TOTAL_NODES))
+      _URL="$(echo "$crl" | sed "s|$placeholder|$nid|g")"
+    else
+      _URL="$crl"
+    fi
+
+    URL="${_URL}/${REPOSITORY_NAME}/${FILENAME}"
     DST="${DEST}/${CUSTOM_FILENAME}"
 
     if [ -f "${DST}" ]; then
@@ -350,7 +468,7 @@ do_curl() {
     if [ $? -eq 0 ]; then
       log "Download complete, verifying…"
       if verify_download "${DST}"; then
-        log "✓ Verified and saved via curl (org: ${ORG}, banch: ${BRANCH}) - ${DST} (${QUANT_U})"
+        log "✓ Verified and saved via curl (${DST} (${QUANT_U})"
         chmod 444 "${DST}"
         return 0
       else
@@ -455,6 +573,9 @@ for method in "${ORDER[@]}"; do
   case "$method" in
     RSYNC)
       do_rsync && exit 0
+      ;;
+    HUGGINGFACE)
+      do_huggingface && exit 0
       ;;
     CURL)
       do_curl && exit 0
