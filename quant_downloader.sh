@@ -588,7 +588,7 @@ if [[ "$VERIFY_ONLY" == "true" ]]; then
     gguf_first=""
     # Determine whether we should perform first-shard GPG download/verification under special-node-mode (does it by default for BF16 models)
     should_verify_first=true
-    if [[ -n "$SPECIAL_NODE_ID" || (! "$first" =~ "-BF16-" && "${QTYPE}" != "BF16") ]]; then
+    if [[ -n "$SPECIAL_NODE_ID" || (! "$first" =~ "-BF16-" && "${QTYPE^^}" != "BF16") ]]; then
       if ! should_process_chunk 1; then
         should_verify_first=false
       fi
@@ -717,7 +717,7 @@ total=$(printf '%s\n' "$first" | sed -E 's/.*-[0-9]{5}-of-([0-9]{5})\.gguf/\1/')
 gguf_first=""
 # Determine whether we should perform first-shard GPG download/verification under special-node-mode (does it by default for BF16 models)
 should_verify_first=true
-if [[ -n "$SPECIAL_NODE_ID" || (! "$first" =~ "-BF16-" && "${QTYPE}" != "BF16") ]]; then
+if [[ -n "$SPECIAL_NODE_ID" || (! "$first" =~ "-BF16-" && "${QTYPE^^}" != "BF16") ]]; then
   if ! should_process_chunk 1; then
     should_verify_first=false
   fi
@@ -844,7 +844,7 @@ fi
 if [[ "$SKIP_GPG" != "true" ]]; then
   # Decide whether to run final GPG verification for first-shard
   should_verify_first=true
-  if [[ -n "$SPECIAL_NODE_ID" || (! "$first" =~ "-BF16-" && "${QTYPE}" != "BF16") ]]; then
+  if [[ -n "$SPECIAL_NODE_ID" || (! "$first" =~ "-BF16-" && "${QTYPE^^}" != "BF16") ]]; then
     if ! should_process_chunk 1; then
       should_verify_first=false
     fi
