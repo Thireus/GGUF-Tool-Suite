@@ -423,9 +423,10 @@ if [[ -n "$SPECIAL_NODE_ID" ]]; then
   fi
 
   # should_process_chunk: returns 0 if this node should process the provided chunk_id
-  # Uses: printf '%s' "${MODEL_NAME}${chunk_id}" | xxhsum -H3
+  # Uses: printf '%s' "${MODEL_NAME}$((10#$chunk_id))" | xxhsum -H3
   should_process_chunk() {
     local chunk_id="$1"
+    chunk_id=$((10#$chunk_id))
 
     # Concatenate model name + chunk_id (no separator; deterministic)
     local input="${MODEL_NAME}${chunk_id}"
@@ -458,7 +459,7 @@ if [[ -n "$SPECIAL_NODE_ID" ]]; then
     local dec=$((16#$hex))
     local mod=$(( dec % TOTAL_NODES ))
 
-    # We choose the rule: this node handles chunk iff mod == 0
+    # We choose the rule: this node handles chunk if mod == 0
     if (( mod == SPECIAL_NODE_ID )); then
       return 0
     else
@@ -808,8 +809,7 @@ else
   # iterate the *full* range and test each index with should_process_chunk
   while IFS= read -r idx_z; do
     # convert to integer for should_process_chunk
-    idx_num=$((10#$idx_z))
-    if should_process_chunk "$idx_num"; then
+    if should_process_chunk "$idx_z"; then
       expected_for_node+=("$idx_z")
     fi
   done < <(seq -f "%05g" "$full_first" "$full_last")
@@ -817,8 +817,7 @@ else
   # Build actual present-for-node list by filtering full_indices with should_process_chunk
   present_for_node=()
   for idx_z in "${full_indices[@]}"; do
-    idx_num=$((10#$idx_z))
-    if should_process_chunk "$idx_num"; then
+    if should_process_chunk "$idx_z"; then
       present_for_node+=("$idx_z")
     fi
   done
