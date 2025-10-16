@@ -16,7 +16,7 @@ To ensure continued access, users are encouraged to **download and keep local co
 </p>
 
 <p align="center">
-  Hosting over <b>250 TB</b> of pre-quantised LLM tensor shards costs around <b>£400 per month</b>.<br>
+  Hosting over <b>250 TB</b> of pre-quantised LLM tensor shards costs around <b>400€ per month</b>.<br>
   Additional costs include compute for calibrated data generation and active project improvements and support for new models.<br>
   If this tool saves you time, compute, or helps your research, please consider supporting its development on Patreon.
 </p>
