@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regexe entries.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Oct-15-2025 -------------------- **#
+#** --------------- Updated: Oct-17-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -280,6 +280,7 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
     echo "[$(timestamp)] Force redownload: removing existing map $mapfile and $mapfile.sig"
     rm -f "$mapfile"
     rm -f "$mapfile.sig"
+    sync || true
   fi
   if [[ "$NEW_MAP" == true ]]; then
       if [[ -f "$mapfile" ]]; then
@@ -324,6 +325,7 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
               # Download the signature
               if [[ "$SKIP_GPG" != "true" ]]; then
                 rm -f "$LOCAL_MODEL_DIR/$mapfile.sig"
+                sync || true
                 if ! run_downloader "$_qtype" -1 . "$mapfile.sig"; then
                     echo "❌ Error: failed to fetch map gpg signature for $_qtype" >&2
                     [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
@@ -509,6 +511,7 @@ download_shard() {
       if [[ "$FORCE_REDOWNLOAD" == true ]]; then
           echo "[$(timestamp)] Force redownload: removing existing shard $shard_file"
           rm -f "$dl_path" "$local_path" || true
+          sync || true
           skip_mv=false
       else
           skip_mv=true
@@ -527,6 +530,7 @@ download_shard() {
                 if [[ "$got" != "$exp" ]]; then
                     echo "[$(timestamp)] Will redownload due to hash mismatch for '$shard_file' - tensor '$tensor' of qtype: '$qtype' ($got != $exp)"
                     rm -f "$dl_path" "$local_path" || true
+                    sync || true
                     need_download=true
                 else
                     echo "[$(timestamp)] File id '$shard_id' - tensor '$tensor' of qtype: '$qtype' hash is valid!"
@@ -729,6 +733,7 @@ if [[ "$should_verify_first" == true ]]; then
         echo "[$(timestamp)] Force redownload: removing existing first shard (and gpg signature)"
         rm -f "$LOCAL_MODEL_DIR/$gguf_first" "$LOCAL_DOWNLOAD_DIR/$gguf_first" || true
         rm -f "$LOCAL_MODEL_DIR/$gguf_first.sig" "$LOCAL_DOWNLOAD_DIR/$gguf_first.sig" || true
+        sync || true
       fi
       if ! [ -f "$LOCAL_MODEL_DIR/$gguf_first" ]; then
         until run_downloader "${QTYPE}" 1 "$LOCAL_DOWNLOAD_DIR" "$(basename "$gguf_first")"; do

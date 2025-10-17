@@ -1,6 +1,6 @@
 ## ⚠️ Notice: Temporary Upload Restriction on HuggingFace
 
-Due to an automated storage restriction placed on my HuggingFace Pro account, I am currently **unable to upload new quantised models or update existing repositories**. I am in the process of hosting shards on self-hosted servers.
+Due to an automated storage restriction placed on my HuggingFace Pro account, I am currently **unable to upload new quantised models or update existing repositories**. I am in the process of hosting shards on self-managed servers.
 
 ⚠️ **Important:** There is a possibility that some existing repositories or model files may be removed or become unavailable on HuggingFace.  
 To ensure continued access, users are encouraged to **download and keep local copies** of any quantised model shards they rely on.
