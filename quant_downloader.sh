@@ -263,19 +263,47 @@ done
 readarray -t UNIQUE_QTYPES < <(printf "%s
 " "${PATTERN_QTYPES[@]}" | sort -u)
 
-# Ensure QTYPE included first
-if [[ " ${UNIQUE_QTYPES[*]} " != *"${QTYPE}"* ]]; then
+# Ensure QTYPE is present and is the first element (case-insensitive)
+if [[ " ${UNIQUE_QTYPES[*]^^} " != *" ${QTYPE^^} "* ]]; then
+  # not present -> prepend
   UNIQUE_QTYPES=("${QTYPE}" "${UNIQUE_QTYPES[@]}")
+else
+  # present, ensure it's first (case-insensitive match; preserve original casing)
+  for i in "${!UNIQUE_QTYPES[@]}"; do
+    if [[ "${UNIQUE_QTYPES[$i]^^}" == "${QTYPE^^}" ]]; then
+      if [[ $i -ne 0 ]]; then
+        val="${UNIQUE_QTYPES[$i]}"
+        unset 'UNIQUE_QTYPES[i]'
+        UNIQUE_QTYPES=("$val" "${UNIQUE_QTYPES[@]}")
+      fi
+      break
+    fi
+  done
 fi
 
 # --------------- FETCH MAPS & COLLECT ----------------
-declare -a TENSORS_TO_FETCH BF16_SHARDS
+declare -a TENSORS_TO_FETCH SHARD_FILENAMES
+# Keep track of which mapfiles we've already processed (case-insensitive)
+declare -A PROCESSED_MAPFILES=()
 for _q in "${UNIQUE_QTYPES[@]}"; do
   qtype=${_q^^}
   _qtype=$qtype
   [[ "$qtype" == "F32" ]] && _qtype="${QTYPE}"
   echo "[$(timestamp)] Fetching ${_qtype} tensor map (and gpg signature if enabled) for ${qtype} quants"
+
+  # canonical mapfile name (lowercase) used as key to prevent duplicate processing
   mapfile="tensors.${_qtype,,}.map"
+  mapkey="${mapfile,,}"    # normalized key (all-lowercase)
+
+  # If we've already processed this mapfile, skip the rest of the loop.
+  if [[ -n "${PROCESSED_MAPFILES[$mapkey]:-}" ]]; then
+    echo "[$(timestamp)] Skipping already-processed mapfile: $mapfile"
+    continue
+  fi
+
+  # Mark it as being processed now (prevents re-entrance if UNIQUE_QTYPES had duplicates)
+  PROCESSED_MAPFILES["$mapkey"]=1
+
   if [[ "$FORCE_REDOWNLOAD" == true ]]; then
     echo "[$(timestamp)] Force redownload: removing existing map $mapfile and $mapfile.sig"
     rm -f "$mapfile"
@@ -380,8 +408,9 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
       shard_id=$((10#${BASH_REMATCH[1]}))
       set_shard_id "$tname" "$shard_id"
       set_t_hash "$qtype" "$tname" "$hash"
+      # Filling these lists should only happen once now
       if [[ "$qtype" == "${QTYPE}" ]]; then
-        BF16_SHARDS+=("$fname")
+        SHARD_FILENAMES+=("$fname")
         TENSORS_TO_FETCH+=("$tname")
       fi
     else
@@ -479,7 +508,7 @@ download_shard() {
   local idx="$1"
   local tensor="${TENSORS_TO_FETCH[$idx]}"
 
-  chunk_id=$(get_shard_id "$tensor")
+  local chunk_id=$(get_shard_id "$tensor")
 
   # If special node assignment is enabled, skip shards not assigned to this node
   if [[ -n "$SPECIAL_NODE_ID" ]]; then
@@ -494,29 +523,29 @@ download_shard() {
   fi
 
   for i in "${!PATTERNS[@]}"; do
-    pat="${PATTERNS[$i]}"
+    local pat="${PATTERNS[$i]}"
     if [[ "$tensor" =~ $pat ]]; then
-      qtype="${PATTERN_QTYPES[$i]^^]}"
-      dl_type="$qtype"
+      local qtype="${PATTERN_QTYPES[$i]^^]}"
+      local dl_type="$qtype"
       [[ "${qtype^^}" == "F32" ]] && dl_type="${QTYPE}"
 
-      local shard_file="${BF16_SHARDS[$idx]}"
+      local shard_file="${SHARD_FILENAMES[$idx]}"
       local local_path="$LOCAL_MODEL_DIR/$shard_file"
       local dl_path="$LOCAL_DOWNLOAD_DIR/$shard_file"
 
       local shard_id=$(echo "$shard_file" | sed -E 's/.*-([0-9]{5})-of-[0-9]{5}\.gguf/\1/')
 
-      got=""
-      need_download=false
-      failed_hash=0
+      local got=""
+      local need_download=false
+      local failed_hash=0
+      local skip_mv=true
       if [[ "$FORCE_REDOWNLOAD" == true ]]; then
           echo "[$(timestamp)] Force redownload: removing existing shard $shard_file"
           rm -f "$dl_path" "$local_path" || true
           sync || true
           skip_mv=false
-      else
-          skip_mv=true
       fi
+      local _path=""
       while [[ "$need_download" == false ]] && [[ "$got" == "" ]]; do
         if [[ -f "$local_path" ]] || [[ -f "$dl_path" ]]; then
             if [[ -f "$local_path" ]]; then
@@ -528,7 +557,7 @@ download_shard() {
             if command -v _sha256sum &>/dev/null; then
                 [ "$failed_hash" -gt 0 ] && sync || true
                 got=$(_sha256sum "$_path" | cut -d' ' -f1)
-                exp=$(get_t_hash "$qtype" "$tensor")
+                local exp=$(get_t_hash "$qtype" "$tensor")
                 if [[ "$got" != "$exp" ]]; then
                     failed_hash=$((failed_hash + 1))
                     echo "[$(timestamp)] Will redownload due to hash mismatch (count: $failed_hash) for '$shard_file' - tensor '$tensor' of qtype: '$qtype' ($got != $exp)"
@@ -665,7 +694,7 @@ if [[ "$VERIFY_ONLY" == "true" ]]; then
           pat="${PATTERNS[$i]}"
           if [[ "$tensor" =~ $pat ]]; then
             qtype="${PATTERN_QTYPES[$i]^^]}"
-            shardfile="${BF16_SHARDS[$idx]}"
+            shardfile="${SHARD_FILENAMES[$idx]}"
             local_path="$LOCAL_MODEL_DIR/$shardfile"
 
             if [[ -f "$local_path" ]] && command -v _sha256sum &>/dev/null; then
