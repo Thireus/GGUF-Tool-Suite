@@ -508,6 +508,7 @@ download_shard() {
 
       got=""
       need_download=false
+      failed_hash=0
       if [[ "$FORCE_REDOWNLOAD" == true ]]; then
           echo "[$(timestamp)] Force redownload: removing existing shard $shard_file"
           rm -f "$dl_path" "$local_path" || true
@@ -525,10 +526,12 @@ download_shard() {
                 skip_mv=false
             fi
             if command -v _sha256sum &>/dev/null; then
+                [ "$failed_hash" -gt 0 ] && sync || true
                 got=$(_sha256sum "$_path" | cut -d' ' -f1)
                 exp=$(get_t_hash "$qtype" "$tensor")
                 if [[ "$got" != "$exp" ]]; then
-                    echo "[$(timestamp)] Will redownload due to hash mismatch for '$shard_file' - tensor '$tensor' of qtype: '$qtype' ($got != $exp)"
+                    failed_hash=$((failed_hash + 1))
+                    echo "[$(timestamp)] Will redownload due to hash mismatch (count: $failed_hash) for '$shard_file' - tensor '$tensor' of qtype: '$qtype' ($got != $exp)"
                     rm -f "$dl_path" "$local_path" || true
                     sync || true
                     need_download=true
