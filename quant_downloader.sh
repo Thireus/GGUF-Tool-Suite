@@ -40,16 +40,17 @@ trap_handler() {
 trap trap_handler SIGINT SIGTERM
 
 # ----------------- DEFAULTS & INITIALIZATION -----------------
-MAX_JOBS=8             # Default concurrency level
-NEW_MAP=true           # Whether to try obtain the latest map files
-FORCE_REDOWNLOAD=false # Whether to redownload all files (maps, shards, first shard)
-VERIFY_ONLY=false      # If true, only verify hashes and report errors
-BASE_DIR="."           # Base directory for model and download dirs
-QTYPE="BF16"           # Default quantization type used for the first shard and filenames
-SKIP_GPG=false         # If true, skip the gpg signature verification of the signed files
-SPECIAL_NODE_ID=""     # Optional: number of nodes (see --special-node-id). If non-empty, only shards assigned to the deterministic node are downloaded.
-TOTAL_NODES=""         # Optional: Total number of nodes (see --total-nodes).
-MODEL_NAME=""          # Will be read from $SCRIPT_DIR/download.conf when --special-node-id is used.
+MAX_JOBS=8              # Default concurrency level
+NEW_MAP=true            # Whether to try obtain the latest map files
+FORCE_REDOWNLOAD=false  # Whether to redownload all files (maps, shards, first shard)
+VERIFY_ONLY=false       # If true, only verify hashes and report errors
+BASE_DIR="."            # Base directory for model and download dirs
+QTYPE="BF16"            # Default quantization type used for the first shard and filenames
+SKIP_GPG=false          # If true, skip the gpg signature verification of the signed files
+SPECIAL_NODE_ID=""      # Optional: number of nodes (see --special-node-id). If non-empty, only shards assigned to the deterministic node are downloaded.
+TOTAL_NODES=""          # Optional: Total number of nodes (see --total-nodes).
+RM_SKIPPED_SHARDS=false # Optional: Remove shards that are skipped for this node (not performed in --verify mode).
+MODEL_NAME=""           # Will be read from $SCRIPT_DIR/download.conf when --special-node-id is used.
 
 # --------------------- USAGE & ARG PARSING -------------------
 usage() {
@@ -62,13 +63,14 @@ usage() {
   echo "      --skip-gpg          Do not verify the gpg signature of the downloaded files" >&2
   echo "      --special-node-id N Only process shards assigned to this node for this model." >&2
   echo "      --total-nodes N     Total number of nodes." >&2
+  echo "      --rm-skipped-shards Remove shards not assigned to this node if present." >&2
   echo "  -d, --dest DIR          Base path for model and download dirs (default: .)" >&2
   echo "  <recipe-file>: path to recipe containing USER_REGEX lines (one per tensor; must have .recipe extension)" >&2
   exit 1
 }
 
 # Parse arguments (supports GNU long options)
-PARSED_OPTS=$(getopt -n "$0" -o j:d: -l max-jobs:,no-new-map,force-redownload,verify,qtype:,skip-gpg,dest:,destination:,special-node-id:,total-nodes: -- "$@") || usage
+PARSED_OPTS=$(getopt -n "$0" -o j:d: -l max-jobs:,no-new-map,force-redownload,verify,qtype:,skip-gpg,dest:,destination:,special-node-id:,total-nodes:,rm-skipped-shards -- "$@") || usage
 eval set -- "$PARSED_OPTS"
 while true; do
   case "$1" in
@@ -103,6 +105,10 @@ while true; do
     --total-nodes)
       TOTAL_NODES="$2"
       shift 2
+      ;;
+    --rm-skipped-shards)
+      RM_SKIPPED_SHARDS=true
+      shift
       ;;
     -d|--dest|--destination)
       BASE_DIR="$2"
@@ -510,10 +516,16 @@ download_shard() {
 
   local chunk_id=$(get_shard_id "$tensor")
 
+  local shard_file="${SHARD_FILENAMES[$idx]}"
+  local local_path="$LOCAL_MODEL_DIR/$shard_file"
+  local dl_path="$LOCAL_DOWNLOAD_DIR/$shard_file"
+
   # If special node assignment is enabled, skip shards not assigned to this node
   if [[ -n "$SPECIAL_NODE_ID" ]]; then
     if ! should_process_chunk "$chunk_id"; then
-      echo "[$(timestamp)] Skipping tensor='$tensor' chunk_id=$chunk_id not assigned to this node (xxhsum-based selection)."
+      _del=""
+      [[ "$RM_SKIPPED_SHARDS" == "true" ]] && _del=" and deleting (if present)" && rm -f "$dl_path" "$local_path" || true
+      echo "[$(timestamp)] Skipping$_del tensor='$tensor' chunk_id=$chunk_id not assigned to this node (xxhsum-based selection)."
       return 0
     else
       echo "[$(timestamp)] Tensor='$tensor' chunk_id=$chunk_id assigned to this node (xxhsum-based selection) — proceeding to HASH verification"
@@ -528,10 +540,6 @@ download_shard() {
       local qtype="${PATTERN_QTYPES[$i]^^]}"
       local dl_type="$qtype"
       [[ "${qtype^^}" == "F32" ]] && dl_type="${QTYPE}"
-
-      local shard_file="${SHARD_FILENAMES[$idx]}"
-      local local_path="$LOCAL_MODEL_DIR/$shard_file"
-      local dl_path="$LOCAL_DOWNLOAD_DIR/$shard_file"
 
       local shard_id=$(echo "$shard_file" | sed -E 's/.*-([0-9]{5})-of-[0-9]{5}\.gguf/\1/')
 
@@ -796,8 +804,10 @@ total=$(printf '%s\n' "$first" | sed -E 's/.*-[0-9]{5}-of-([0-9]{5})\.gguf/\1/')
 gguf_first=""
 # Determine whether we should perform first-shard GPG download/verification under special-node-mode (does it by default for BF16 models)
 should_verify_first=true
+_del=""
 if [[ -n "$SPECIAL_NODE_ID" && (! "$first" =~ "-BF16-" && "${QTYPE^^}" != "BF16") ]]; then
   if ! should_process_chunk 1; then
+    [[ "$RM_SKIPPED_SHARDS" == "true" ]] && _del=" and deleting (if present)" && rm -f "$LOCAL_MODEL_DIR/$gguf_first" "$LOCAL_DOWNLOAD_DIR/$gguf_first" "$LOCAL_MODEL_DIR/$gguf_first.sig" "$LOCAL_DOWNLOAD_DIR/$gguf_first.sig" || true
     should_verify_first=false
   fi
 fi
@@ -847,7 +857,7 @@ if [[ "$should_verify_first" == true ]]; then
     fi
   fi
 else
-  echo "[$(timestamp)] Skipping first-shard signature download/verification due to special-node-id/xxhsum assignment (not BF16 or assigned node)."
+  echo "[$(timestamp)] Skipping$_del first-shard signature download/verification due to special-node-id/xxhsum assignment (not BF16 or assigned node)."
 fi
 
 # ------------- FINAL VERIFICATION & SHARD SEQUENCE --------
