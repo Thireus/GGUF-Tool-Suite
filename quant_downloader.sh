@@ -801,7 +801,7 @@ fi
 _find=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-*-of-*.gguf")
 first=$(printf '%s\n' "$_find" | head -n1)
 total=$(printf '%s\n' "$first" | sed -E 's/.*-[0-9]{5}-of-([0-9]{5})\.gguf/\1/')
-gguf_first=""
+gguf_first=$(basename "$(printf '%s\n' "$first" | sed "s/-[0-9]\{5\}-of-$total\.gguf$/-00001-of-$total.gguf/")")
 # Determine whether we should perform first-shard GPG download/verification under special-node-mode (does it by default for BF16 models)
 should_verify_first=true
 _del=""
@@ -814,7 +814,6 @@ fi
 if [[ "$should_verify_first" == true ]]; then
   if [[ "$VERIFY_ONLY" != true ]]; then
     echo "[$(timestamp)] Fetching first shard separately"
-    gguf_first=$(basename "$(printf '%s\n' "$first" | sed "s/-[0-9]\{5\}-of-$total\.gguf$/-00001-of-$total.gguf/")")
     if [[ "$total" != "" ]] && [[ "$gguf_first" != "" ]]; then
       if [[ "$FORCE_REDOWNLOAD" == true ]]; then
         echo "[$(timestamp)] Force redownload: removing existing first shard (and gpg signature)"
