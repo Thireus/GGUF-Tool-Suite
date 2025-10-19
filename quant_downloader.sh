@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regexe entries.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Oct-18-2025 -------------------- **#
+#** --------------- Updated: Oct-19-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -737,12 +737,57 @@ if [[ "$VERIFY_ONLY" == "true" ]]; then
   fi
 fi
 
-# ------------------ MAIN DOWNLOAD LOOP -------------------
+# ------------------ MAIN DOWNLOAD LOOP (retry-until-success wrappers) -------------------
+pids=()
+declare -A PID_INFO=()
+
 for idx in "${!TENSORS_TO_FETCH[@]}"; do
- wait_for_slot
- download_shard "$idx" &
+  wait_for_slot
+
+  # compute tensor & chunk_id in parent so we can record them for pid -> info mapping
+  tensor="${TENSORS_TO_FETCH[$idx]:-}"
+  chunk_id="$(get_shard_id "$tensor")"
+
+  (
+    attempts=0
+    # Each wrapper will keep trying until download_shard returns success (0)
+    while true; do
+      attempts=$((attempts + 1))
+      if download_shard "$idx"; then
+        # succeeded
+        break
+      else
+        rc=$?
+        # use the parent-computed tensor/chunk_id (visible inside subshell)
+        echo "[$(timestamp)] WARNING: Tensor='$tensor' chunk_id=$chunk_id download failed with exit $rc (attempt $attempts). Retrying in 10s..." >&2
+        sleep 10
+      fi
+    done
+  ) &
+
+  pid=$!
+  PID_INFO[$pid]="${idx}:${tensor}:${chunk_id}"
+  pids+=("$pid")
 done
-wait
+
+# Wait for all background wrapper jobs to finish
+rc=0
+set +e
+for pid in "${pids[@]}"; do
+  if ! wait "$pid"; then
+    status=$?
+    info="${PID_INFO[$pid]:-unknown:unknown:unknown}"
+    IFS=':' read -r failed_idx failed_tensor failed_chunk <<< "$info"
+    echo "❌ ERROR: download wrapper for idx=${failed_idx:-?} tensor='${failed_tensor:-?}' chunk_id=${failed_chunk:-?} exited with status $status" >&2
+    rc=1
+  fi
+done
+set -e
+
+if (( rc != 0 )); then
+  echo "❌ ERROR: one or more download wrappers exited abnormally." >&2
+  exit $rc
+fi
 
 # ------------- FINAL FIRST-SHARD FETCH (non-verify) -----
 _find=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-*-of-*.gguf")
