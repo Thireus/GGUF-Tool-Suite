@@ -1,12 +1,5 @@
 ## ⚠️ Notice: Temporary Upload Restriction on HuggingFace
 
-Due to an automated storage restriction placed on my HuggingFace Pro account, I am currently **unable to upload new quantised models or update existing repositories**. I am in the process of hosting shards on self-managed servers.
-
-⚠️ **Important:** There is a possibility that some existing repositories or model files may be removed or become unavailable on HuggingFace.  
-To ensure continued access, users are encouraged to **download and keep local copies** of any quantised model shards they rely on.
-
----
-
 <h2 align="center">💖 Support GGUF-Tool-Suite</h2>
 
 <p align="center">
@@ -16,7 +9,7 @@ To ensure continued access, users are encouraged to **download and keep local co
 </p>
 
 <p align="center">
-  Hosting over <b>250 TB</b> of pre-quantised LLM tensor shards costs around <b>400€ per month</b>.<br>
+  Producing over <b>250 TB</b> of pre-quantised LLM tensor shards costs both time and money.<br>
   Additional costs include compute for calibrated data generation and active project improvements and support for new models.<br>
   If this tool saves you time, compute, or helps your research, please consider supporting its development on Patreon.
 </p>
