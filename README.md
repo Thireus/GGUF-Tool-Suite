@@ -1,5 +1,3 @@
-## ⚠️ Notice: Temporary Upload Restriction on HuggingFace
-
 <h2 align="center">💖 Support GGUF-Tool-Suite</h2>
 
 <p align="center">
