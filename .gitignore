@@ -1,2 +1,3 @@
 helpers
 models/*/maps
+.DS_Store
