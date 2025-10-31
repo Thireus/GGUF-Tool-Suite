@@ -7,7 +7,7 @@
 </p>
 
 <p align="center">
-  Producing over <b>250 TB</b> of pre-quantised LLM tensor shards costs both time and money.<br>
+  Producing over <b>250 TB</b> of <a href="https://gguf.thireus.com/">pre-quantised LLM tensor</a> shards costs both time and money.<br>
   Additional costs include compute for calibrated data generation and active project improvements and support for new models.<br>
   If this tool saves you time, compute, or helps your research, please consider supporting its development on Patreon.
 </p>
@@ -63,6 +63,8 @@ Here's how DeepSeek-R1-0528 quantized with **Thireus' GGUF Tool Suite** compares
 ### ✅ Supported models
 
 *In theory, any model supported by llama.cpp is also supported by this tool suite. However, models that are not explicitely in the models/ folder would require additional efforts such as benchmarking and quantizing the model tensors. This table provides an overview of the models officially supported.*
+
+> All Thireus' model shards can be found on https://huggingface.co/Thireus/collections and on https://gguf.thireus.com/.
 
 | **Model** | **Calibration Data** | **Quantized Shards** | **Google Colabs** | **Evaluated** | **Comments** |
 |---|---|---|---|---|---|
