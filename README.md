@@ -7,14 +7,14 @@
 </p>
 
 <p align="center">
-  Producing over <b>250 TB</b> of <a href="https://gguf.thireus.com/">pre-quantised LLM tensor</a> shards costs both time and money.<br>
+  Producing over <b>250 TB</b> of <a href="https://gguf.thireus.com/" target="_blank">pre-quantised LLM tensor</a> shards costs both time and money.<br>
   Additional costs include compute for calibrated data generation and active project improvements and support for new models.<br>
   If this tool saves you time, compute, or helps your research, please consider supporting its development on Patreon.
 </p>
 
 <p align="center">
-  <a href="https://www.patreon.com/Thireus">👉 Become a Patron</a><br>
-  <a href="https://donate.thireus.com/">Other ways to help</a>
+  <a href="https://www.patreon.com/Thireus" target="_blank">👉 Become a Patron</a><br>
+  <a href="https://donate.thireus.com/" target="_blank">Other ways to help</a>
 </p>
 
 ---
