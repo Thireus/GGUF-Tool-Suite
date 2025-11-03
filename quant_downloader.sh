@@ -853,9 +853,6 @@ cleanup_wrapper_pipe() {
 trap cleanup_wrapper_pipe EXIT
 # ---------------------------------------------------------------------------
 
-pids=()
-declare -A PID_INFO=()
-
 for idx in "${!TENSORS_TO_FETCH[@]}"; do
   wait_for_slot
 
