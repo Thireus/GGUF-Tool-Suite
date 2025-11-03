@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regexe entries.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Oct-19-2025 -------------------- **#
+#** --------------- Updated: Nov-03-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -25,6 +25,82 @@
 
 # Exit on error, undefined variable, or pipe failure
 set -euo pipefail
+
+# ----- Debugging: verbose ERR trap -----
+# Capture the exact command line used to start the script (script name + all args).
+# We build this safely so it works on Bash 3.2 and preserves arguments with spaces.
+ORIGINAL_INVOCATION="$0"
+for __arg in "$@"; do
+  ORIGINAL_INVOCATION="${ORIGINAL_INVOCATION} ${__arg//$/\\$}"  # simple safe concatenation
+done
+# Also save the raw args array if you want to inspect individual params later
+ORIGINAL_ARGS=("$@")
+
+error_reporting() {
+  # save exit status immediately
+  local _err="$?"
+  # save the command that caused the trap
+  local _cmd="${BASH_COMMAND:-}"
+  # save shell flags and pid info
+  local _shellflags="$-"
+  local _pid=$$
+  local _ppid=$PPID
+  # avoid set -e in trap doing weird things; make trap body robust
+  set +e
+
+  {
+    printf '\n===== ERR-TRAP - PLEASE REPORT THE ISSUE HERE: https://github.com/Thireus/GGUF-Tool-Suite/issues =====\n' >&2
+    printf 'Timestamp: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" >&2
+    printf 'Exit status: %s\n' "$_err" >&2
+    printf 'Failed command: %s\n' "$_cmd" >&2
+
+    # Print the exact invocation that started this script (script + parameters)
+    printf 'Script invocation (user command): %s\n' "${ORIGINAL_INVOCATION:-unknown}" >&2
+    # show the raw args as an indexed list (useful if args contain spaces)
+    if [[ ${#ORIGINAL_ARGS[@]} -gt 0 ]]; then
+      printf 'Script args (one per line):\n' >&2
+      local __i=0
+      for __a in "${ORIGINAL_ARGS[@]}"; do
+        printf '  [%d] %s\n' "$__i" "$__a" >&2
+        __i=$((__i + 1))
+      done
+    else
+      printf 'Script args: (none)\n' >&2
+    fi
+
+    # try to show source file and line number where the error happened
+    local src="${BASH_SOURCE[1]:-${BASH_SOURCE[0]:-unknown}}"
+    local lineno="${BASH_LINENO[0]:-unknown}"
+    printf 'Location: %s:%s\n' "$src" "$lineno" >&2
+
+    # Print function/stack trace (if any). Compatible with bash 3.2.
+    printf 'Stack trace (most recent call first):\n' >&2
+    local i
+    for i in "${!FUNCNAME[@]}"; do
+      # FUNCNAME[0] is the current function (error_reporting); skip it if desired
+      printf '  %d: %s()  at %s:%s\n' "$i" "${FUNCNAME[$i]:-MAIN}" "${BASH_SOURCE[$i]:-?}" "${BASH_LINENO[$i-1]:-?}" >&2
+    done
+
+    printf 'Shell flags: %s\n' "$_shellflags" >&2
+    printf 'PID: %s  PPID: %s\n' "$_pid" "$_ppid" >&2
+
+    # show active background jobs (if any)
+    printf 'Background jobs (jobs -rp): %s\n' "$(jobs -rp 2>/dev/null || true)" >&2
+
+    # dump some useful shell variables for debugging (avoid unbound vars)
+    printf 'BASH_COMMAND (raw): %s\n' "$BASH_COMMAND" >&2
+    printf 'Last pipeline status: %s\n' "${PIPESTATUS[*]:-unknown}" >&2
+
+    printf '===== END ERR-TRAP =====\n\n' >&2
+  } || true
+
+  # restore errexit behaviour for the rest of the script
+  set -e
+}
+
+# Install the trap. Use single quotes so expansion occurs at trap time, not now.
+trap 'error_reporting' ERR
+# ----------------------------------------------------------------
 
 # ---------------- SIGNAL HANDLING ----------------
 # Ensure child processes are killed on interrupt
@@ -625,7 +701,7 @@ if [[ "$VERIFY_ONLY" == "true" ]]; then
   wait_for_slot
   (
     _find=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-*-of-*.gguf")
-    first=$(printf '%s\n' "$_find" | head -n1)
+    IFS= read -r first <<< "$_find"
     total=$(printf '%s\n' "$first" | sed -E 's/.*-[0-9]{5}-of-([0-9]{5})\.gguf/\1/')
     gguf_first=""
     # Determine whether we should perform first-shard GPG download/verification under special-node-mode (does it by default for BF16 models)
@@ -746,8 +822,36 @@ if [[ "$VERIFY_ONLY" == "true" ]]; then
 fi
 
 # ------------------ MAIN DOWNLOAD LOOP (retry-until-success wrappers) -------------------
-pids=()
-declare -A PID_INFO=()
+
+# -------------------- IN-MEMORY IPC: mkfifo (named pipe) --------------------
+WRAPPER_PIPE="$LOCAL_DOWNLOAD_DIR/.wrapper_pipe"
+
+# Remove any stale pipe
+rm -f "$WRAPPER_PIPE" 2>/dev/null || true
+
+# Create FIFO
+if ! mkfifo "$WRAPPER_PIPE"; then
+  echo "❌ Error: failed to create fifo $WRAPPER_PIPE" >&2
+  exit 1
+fi
+
+# Open the FIFO in read+write mode in the parent so open() doesn't block.
+# This uses O_RDWR on the pipe which is supported on Linux and macOS.
+# FD 3 will be used for both reading (parent) and children will inherit FD 3 for writing.
+if ! exec 3<> "$WRAPPER_PIPE"; then
+  echo "❌ Error: failed to open fifo $WRAPPER_PIPE for read/write." >&2
+  rm -f "$WRAPPER_PIPE"
+  exit 1
+fi
+
+# Ensure we remove the pipe and close FD 3 on exit
+cleanup_wrapper_pipe() {
+  # DONT close FD 3 in parent - causes the script to exit
+  #exec 3<&- 2>/dev/null || true
+  rm -f "$WRAPPER_PIPE" 2>/dev/null || true
+}
+trap cleanup_wrapper_pipe EXIT
+# ---------------------------------------------------------------------------
 
 for idx in "${!TENSORS_TO_FETCH[@]}"; do
   wait_for_slot
@@ -757,6 +861,11 @@ for idx in "${!TENSORS_TO_FETCH[@]}"; do
   chunk_id="$(get_shard_id "$tensor")"
 
   (
+    # Ensure we always write our exit status to the parent's FIFO (fd 3) on EXIT.
+    # Use a single-line "idx:status" message so parent can parse atomically.
+    # This trap will run for normal exit and in many signal-exit cases.
+    trap 'ret=$?; printf "%s:%d\n" "$idx" "$ret" >&3' EXIT
+
     attempts=0
     # Each wrapper will keep trying until download_shard returns success (0)
     while true; do
@@ -765,9 +874,9 @@ for idx in "${!TENSORS_TO_FETCH[@]}"; do
         # succeeded
         break
       else
-        rc=$?
+        rc_inner=$?
         # use the parent-computed tensor/chunk_id (visible inside subshell)
-        echo "[$(timestamp)] WARNING: Tensor='$tensor' chunk_id=$chunk_id download failed with exit $rc (attempt $attempts). Retrying in 10s..." >&2
+        echo "[$(timestamp)] ⚠️ Warning: Tensor='$tensor' chunk_id=$chunk_id download failed with exit $rc_inner (attempt $attempts). Retrying in 10s..." >&2
         sleep 10
       fi
     done
@@ -778,28 +887,69 @@ for idx in "${!TENSORS_TO_FETCH[@]}"; do
   pids+=("$pid")
 done
 
-# Wait for all background wrapper jobs to finish
+# ------------------ COLLECT WRAPPER STATUSES VIA FIFO (fileless) ----------------
 rc=0
 set +e
-for pid in "${pids[@]}"; do
-  if ! wait "$pid"; then
-    status=$?
-    info="${PID_INFO[$pid]:-unknown:unknown:unknown}"
-    IFS=':' read -r failed_idx failed_tensor failed_chunk <<< "$info"
-    echo "❌ ERROR: download wrapper for idx=${failed_idx:-?} tensor='${failed_tensor:-?}' chunk_id=${failed_chunk:-?} exited with status $status" >&2
+
+expected=${#TENSORS_TO_FETCH[@]}
+received=0
+
+# In-memory indexed array; index is numeric idx and value is status
+# (no 'declare -A' used — indexed array semantics)
+WRAPPER_STATUS=()
+
+# Read exactly $expected lines of "idx:status" from the FIFO (fd 3).
+# This will block until writers (children) write their status lines.
+while (( received < expected )); do
+  # read will block until a line is available; read from fd 3 which the parent opened earlier
+  if read -r line <&3; then
+    idx="${line%%:*}"
+    status="${line##*:}"
+    # sanity: ensure numeric
+    if ! [[ "$idx" =~ ^[0-9]+$ ]]; then
+      # malformed line: ignore and continue (but do not increment received)
+      echo "[$(timestamp)] ⚠️ Warning: malformed status line from FIFO: '$line' — ignoring." >&2
+      continue
+    fi
+    if ! [[ "$status" =~ ^[0-9]+$ ]]; then
+      status=127
+    fi
+    WRAPPER_STATUS[$idx]="$status"
+    received=$((received+1))
+  else
+    # read failed (shouldn't normally happen); break to avoid infinite loop
+    break
+  fi
+done
+
+# Reap any remaining child processes (wait with no args)
+wait 2>/dev/null || true
+
+# DONT Close fd3 and remove FIFO (cleanup_wrapper_pipe trap will also run on exit) - causes the script to exit
+#exec 3<&- 2>/dev/null || true
+rm -f "$WRAPPER_PIPE" 2>/dev/null || true
+
+# Inspect wrapper statuses
+for idx in "${!TENSORS_TO_FETCH[@]}"; do
+  tensor="${TENSORS_TO_FETCH[$idx]:-}"
+  chunk_id="$(get_shard_id "$tensor")"
+  status="${WRAPPER_STATUS[$idx]:-127}"
+  if (( status != 0 )); then
+    echo "❌ Error: download wrapper for idx=${idx:-?} tensor='${tensor:-?}' chunk_id=${chunk_id:-?} exited with status ${status}" >&2
     rc=1
   fi
 done
 set -e
+# ---------------------------------------------------------------------------
 
 if (( rc != 0 )); then
-  echo "❌ ERROR: one or more download wrappers exited abnormally." >&2
+  echo "❌ Error: one or more download wrappers exited abnormally." >&2
   exit $rc
 fi
 
 # ------------- FINAL FIRST-SHARD FETCH (non-verify) -----
 _find=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-*-of-*.gguf")
-first=$(printf '%s\n' "$_find" | head -n1)
+IFS= read -r first <<< "$_find"
 total=$(printf '%s\n' "$first" | sed -E 's/.*-[0-9]{5}-of-([0-9]{5})\.gguf/\1/')
 gguf_first=$(basename "$(printf '%s\n' "$first" | sed "s/-[0-9]\{5\}-of-$total\.gguf$/-00001-of-$total.gguf/")")
 # Determine whether we should perform first-shard GPG download/verification under special-node-mode (does it by default for BF16 models)
