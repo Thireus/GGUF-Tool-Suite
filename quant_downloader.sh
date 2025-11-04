@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regexe entries.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Oct-19-2025 -------------------- **#
+#** --------------- Updated: Nov-04-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -26,18 +26,142 @@
 # Exit on error, undefined variable, or pipe failure
 set -euo pipefail
 
-# ---------------- SIGNAL HANDLING ----------------
-# Ensure child processes are killed on interrupt
-# Trap SIGINT and SIGTERM, kill the entire group, but never let kill’s
-# “no such process group” error exit the script.
-trap_handler() {
-  # ignore further SIGTERM so our kill -- -$$ won't re-enter this handler
-  trap '' SIGTERM
-  echo "[$(timestamp)] Signal caught, forwarding to process group..." >&2
-  kill -- -$$ 2>/dev/null || true
-  exit 1
+# ----- Debugging: verbose ERR trap -----
+# Capture the exact command line used to start the script (script name + all args).
+# We build this safely so it works on Bash 3.2 and preserves arguments with spaces.
+ORIGINAL_INVOCATION="$0"
+for __arg in "$@"; do
+  ORIGINAL_INVOCATION="${ORIGINAL_INVOCATION} ${__arg//$/\\$}"  # simple safe concatenation
+done
+# Also save the raw args array if you want to inspect individual params later
+ORIGINAL_ARGS=("$@")
+
+error_reporting() {
+  # save exit status immediately
+  local _err="$?"
+  # save the command that caused the trap
+  local _cmd="${BASH_COMMAND:-}"
+  # save shell flags and pid info
+  local _shellflags="$-"
+  local _pid=$$
+  local _ppid=$PPID
+  # avoid set -e in trap doing weird things; make trap body robust
+  set +e
+
+  {
+    printf '\n===== ERR-TRAP - PLEASE REPORT THE ISSUE HERE: https://github.com/Thireus/GGUF-Tool-Suite/issues =====\n' >&2
+    printf 'Timestamp: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" >&2
+    printf 'Exit status: %s\n' "$_err" >&2
+    printf 'Failed command: %s\n' "$_cmd" >&2
+
+    # Print the exact invocation that started this script (script + parameters)
+    printf 'Script invocation (user command): %s\n' "${ORIGINAL_INVOCATION:-unknown}" >&2
+    # show the raw args as an indexed list (useful if args contain spaces)
+    if [[ ${#ORIGINAL_ARGS[@]} -gt 0 ]]; then
+      printf 'Script args (one per line):\n' >&2
+      local __i=0
+      for __a in "${ORIGINAL_ARGS[@]}"; do
+        printf '  [%d] %s\n' "$__i" "$__a" >&2
+        __i=$((__i + 1))
+      done
+    else
+      printf 'Script args: (none)\n' >&2
+    fi
+
+    # try to show source file and line number where the error happened
+    local src="${BASH_SOURCE[1]:-${BASH_SOURCE[0]:-unknown}}"
+    local lineno="${BASH_LINENO[0]:-unknown}"
+    printf 'Location: %s:%s\n' "$src" "$lineno" >&2
+
+    # Print function/stack trace (if any). Compatible with bash 3.2.
+    printf 'Stack trace (most recent call first):\n' >&2
+    local i
+    for i in "${!FUNCNAME[@]}"; do
+      # FUNCNAME[0] is the current function (error_reporting); skip it if desired
+      printf '  %d: %s()  at %s:%s\n' "$i" "${FUNCNAME[$i]:-MAIN}" "${BASH_SOURCE[$i]:-?}" "${BASH_LINENO[$i-1]:-?}" >&2
+    done
+
+    printf 'Shell flags: %s\n' "$_shellflags" >&2
+    printf 'PID: %s  PPID: %s\n' "$_pid" "$_ppid" >&2
+
+    # show active background jobs (if any)
+    printf 'Background jobs (jobs -rp): %s\n' "$(jobs -rp 2>/dev/null || true)" >&2
+
+    # dump some useful shell variables for debugging (avoid unbound vars)
+    printf 'BASH_COMMAND (raw): %s\n' "$BASH_COMMAND" >&2
+    printf 'Last pipeline status: %s\n' "${PIPESTATUS[*]:-unknown}" >&2
+
+    printf '===== END ERR-TRAP =====\n\n' >&2
+  } || true
+
+  # restore errexit behaviour for the rest of the script
+  set -e
 }
-trap trap_handler SIGINT SIGTERM
+
+# Install the trap. Use single quotes so expansion occurs at trap time, not now.
+trap 'error_reporting' ERR
+# ----------------------------------------------------------------
+
+# DEBUG function
+if [[ -n "${DEBUG:-}" ]]; then
+  DEBUG() { printf "DEBUG: %s\n" "$*" >&2; }
+else
+  DEBUG() { :; }
+fi
+
+# ---------------- SIGNAL HANDLING ----------------
+# Graceful shutdown on Ctrl+C / SIGTERM
+INTERRUPTED=0
+
+shutdown_on_signal() {
+  local rc=130  # conventional exit code for SIGINT
+  INTERRUPTED=1
+  DEBUG "shutdown_on_signal: received signal, initiating graceful shutdown (exit $rc)" >&2
+
+  # Get running child PIDs started by this shell (jobs -rp)
+  local pids
+  pids="$(jobs -rp 2>/dev/null || true)"
+
+  if [[ -n "${pids:-}" ]]; then
+    DEBUG "shutdown_on_signal: killing child PIDs: $pids"
+
+    # ask nicely first
+    kill $pids 2>/dev/null || true
+    # give them a second to exit gracefully
+    sleep 1
+
+    # force-kill any remaining
+    pids="$(jobs -rp 2>/dev/null || true)"
+    if [[ -n "${pids:-}" ]]; then
+      DEBUG "shutdown_on_signal: force-killing remaining PIDs: $pids"
+      kill -KILL $pids 2>/dev/null || true
+    fi
+
+    # Reap all children (wait without args waits for all children)
+    # Use set +e to avoid aborting if wait returns non-zero.
+    set +e
+    wait
+    set -e
+  else
+    DEBUG "shutdown_on_signal: no running child jobs found"
+  fi
+
+  # Optionally print partial state if you maintain WRAPPER_STATUS/WRAPPER_RAW
+  if declare -p WRAPPER_STATUS >/dev/null 2>&1; then
+    DEBUG "shutdown_on_signal: current WRAPPER_STATUS snapshot:"
+    for k in "${!WRAPPER_STATUS[@]:-}"; do
+      printf "DEBUG: idx=%s status=%s raw=%s\n" "$k" "${WRAPPER_STATUS[$k]:-}" "${WRAPPER_RAW[$k]:-}" >&2
+    done
+  fi
+
+  # If you have any cleanup traps for FIFOs etc, they will run because we exit now.
+  echo "❗️ Killed: received signal, initiating graceful shutdown (exit $rc)... Some sub-processes might still be ongoing for a short while after this script ends!" >&2
+  exit "$rc"
+}
+
+# install the trap for INT and TERM
+trap 'shutdown_on_signal' INT TERM
+# ------------------------------------------------------------
 
 # ----------------- DEFAULTS & INITIALIZATION -----------------
 MAX_JOBS=8              # Default concurrency level
@@ -191,10 +315,10 @@ fi
 # _sha256sum reads either from file (if you pass an arg) or from stdin
 _sha256sum() {
   if (( $# > 0 )); then
-    # file‑mode: pass filename as $1
+    # file-mode: pass filename as $1
     "${sha256tool[@]}" "${args[@]}" "$1" | awk '{print $1}'
   else
-    # stdin‑mode: read data from pipe
+    # stdin-mode: read data from pipe
     "${sha256tool[@]}" "${args[@]}" | awk '{print $1}'
   fi
 }
@@ -477,7 +601,7 @@ if [[ -n "$SPECIAL_NODE_ID" ]]; then
     local hex=$(printf '%s' "$out" | grep -oE '[0-9a-fA-F]{12,}' | head -n1 || true)
 
     if [[ -z "$hex" ]]; then
-      echo "[$(timestamp)] ❌ Warning: failed to parse xxhsum output for chunk_id=$chunk_id; output='$out'." >&2
+      echo "[$(timestamp)] ⚠️ Warning: failed to parse xxhsum output for chunk_id=$chunk_id; output='$out'." >&2
       return 1
     fi
 
@@ -486,7 +610,7 @@ if [[ -n "$SPECIAL_NODE_ID" ]]; then
 
     # Convert to decimal and modulo
     if ! [[ "$hex" =~ ^[0-9a-fA-F]+$ ]]; then
-      echo "[$(timestamp)] ❌ Warning: invalid hex digest ('$hex') for chunk_id=$chunk_id." >&2
+      echo "[$(timestamp)] ⚠️ Warning: invalid hex digest ('$hex') for chunk_id=$chunk_id." >&2
       return 1
     fi
 
@@ -625,7 +749,7 @@ if [[ "$VERIFY_ONLY" == "true" ]]; then
   wait_for_slot
   (
     _find=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-*-of-*.gguf")
-    first=$(printf '%s\n' "$_find" | head -n1)
+    IFS= read -r first <<< "$_find"
     total=$(printf '%s\n' "$first" | sed -E 's/.*-[0-9]{5}-of-([0-9]{5})\.gguf/\1/')
     gguf_first=""
     # Determine whether we should perform first-shard GPG download/verification under special-node-mode (does it by default for BF16 models)
@@ -745,61 +869,65 @@ if [[ "$VERIFY_ONLY" == "true" ]]; then
   fi
 fi
 
-# ------------------ MAIN DOWNLOAD LOOP (retry-until-success wrappers) -------------------
-pids=()
-declare -A PID_INFO=()
+# ------------------ MAIN DOWNLOAD LOOP (retry-until-success wrappers, no PID bookkeeping) -------------------
 
 for idx in "${!TENSORS_TO_FETCH[@]}"; do
   wait_for_slot
 
-  # compute tensor & chunk_id in parent so we can record them for pid -> info mapping
+  # compute tensor & chunk_id in parent so we can record them for the subshell
   tensor="${TENSORS_TO_FETCH[$idx]:-}"
   chunk_id="$(get_shard_id "$tensor")"
+
+  # capture loop variables for the subshell to avoid race / duplication
+  current_idx="$idx"
+  current_tensor="$tensor"
+  current_chunk="$chunk_id"
 
   (
     attempts=0
     # Each wrapper will keep trying until download_shard returns success (0)
     while true; do
       attempts=$((attempts + 1))
-      if download_shard "$idx"; then
+      if download_shard "$current_idx"; then
         # succeeded
+        DEBUG "child idx=$current_idx download_shard succeeded (attempt $attempts)"
         break
       else
         rc=$?
         # use the parent-computed tensor/chunk_id (visible inside subshell)
-        echo "[$(timestamp)] WARNING: Tensor='$tensor' chunk_id=$chunk_id download failed with exit $rc (attempt $attempts). Retrying in 10s..." >&2
+        echo "[$(timestamp)] ⚠️ Warning: Tensor='${current_tensor}' chunk_id=${current_chunk} download failed with exit $rc (attempt $attempts). Retrying in 10s..." >&2
         sleep 10
       fi
     done
   ) &
 
+  # Optionally show the child's PID in debug, but we do NOT save it anywhere.
   pid=$!
-  PID_INFO[$pid]="${idx}:${tensor}:${chunk_id}"
-  pids+=("$pid")
+  DEBUG "spawned wrapper idx=$idx pid=$pid"
 done
 
 # Wait for all background wrapper jobs to finish
 rc=0
 set +e
-for pid in "${pids[@]}"; do
-  if ! wait "$pid"; then
-    status=$?
-    info="${PID_INFO[$pid]:-unknown:unknown:unknown}"
-    IFS=':' read -r failed_idx failed_tensor failed_chunk <<< "$info"
-    echo "❌ ERROR: download wrapper for idx=${failed_idx:-?} tensor='${failed_tensor:-?}' chunk_id=${failed_chunk:-?} exited with status $status" >&2
-    rc=1
-  fi
-done
+# Single wait with no args waits for all child processes started in this shell.
+# Its exit status is that of the last process waited for; treat any non-zero as error.
+if ! wait; then
+  status=$?
+  echo "❌ Error: one or more download wrapper children exited with non-zero status (wait returned $status). Check child stderr logs for details (each child prints its tensor and chunk on retry/error)." >&2
+  rc=1
+fi
 set -e
 
 if (( rc != 0 )); then
-  echo "❌ ERROR: one or more download wrappers exited abnormally." >&2
+  echo "❌ Error: one or more download wrappers exited abnormally." >&2
   exit $rc
 fi
 
+# ------------------ END MAIN DOWNLOAD LOOP (retry-until-success wrappers, no PID bookkeeping) -------------------
+
 # ------------- FINAL FIRST-SHARD FETCH (non-verify) -----
 _find=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-*-of-*.gguf")
-first=$(printf '%s\n' "$_find" | head -n1)
+IFS= read -r first <<< "$_find"
 total=$(printf '%s\n' "$first" | sed -E 's/.*-[0-9]{5}-of-([0-9]{5})\.gguf/\1/')
 gguf_first=$(basename "$(printf '%s\n' "$first" | sed "s/-[0-9]\{5\}-of-$total\.gguf$/-00001-of-$total.gguf/")")
 # Determine whether we should perform first-shard GPG download/verification under special-node-mode (does it by default for BF16 models)
