@@ -1149,7 +1149,7 @@ run_main_loop() {
 
               if [[ "$ppl_done" == "true" && "$sweep_done" == "true" ]]; then
                 for mt in "${tmp_members_group[@]}"; do PROCESSED_TENSOR["$mt"]=1; done
-                echo "[$(timestamp)] Found existing group result(s): marking ${#tmp_members_group[@]} member(s) as processed."
+                echo "[$(timestamp)] Found existing group result(s): group${gidx} -> marking ${#tmp_members_group[@]} member(s) as processed."
               fi
             fi
           done
