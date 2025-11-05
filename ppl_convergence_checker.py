@@ -1,4 +1,28 @@
 #!/usr/bin/env python3
+#***************************************************************#
+#** This script is part of Thireus' GGUF Tool Suite.          **#
+#** ppl_convergence_checker.py helps identify the min chunks  **#
+#** required to produce quality calibration data.             **#
+#**                                                           **#
+#** ********************************************************* **#
+#** --------------- Updated: Nov-05-2025 -------------------- **#
+#** ********************************************************* **#
+#**                                                           **#
+#** Author: Thireus <gguf@thireus.com>                        **#
+#**                                                           **#
+#** https://gguf.thireus.com/                                 **#
+#** Thireus' GGUF Tool Suite - Quantize LLMs Like a Chef       **#
+#**                                  ·     ·       ·~°          **#
+#**     Λ,,Λ             ₚₚₗ  ·° ᵍᵍᵐˡ   · ɪᴋ_ʟʟᴀᴍᴀ.ᴄᴘᴘ°   ᴮᶠ¹⁶ ·  **#
+#**    (:·ω·)       。··°      ·   ɢɢᴜғ   ·°·  ₕᵤ𝓰𝓰ᵢₙ𝓰𝒻ₐ𝒸ₑ   ·°   **#
+#**    /    o―ヽニニフ))             · · ɪǫ3_xxs      ~·°        **#
+#**    し―-J                                                   **#
+#**                                                           **#
+#** Copyright © 2025 - Thireus. ₚₗₑₐₛₑ ₛᵢᵣ, 𝒸ₐₙ ᵢ ₕₐₛ ₛₒₘₑ ᵥᵣₐₘ? **#
+#***************************************************************#
+#**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
+#***************************************************************#
+
 """
 convergence_checker.py
 
@@ -17,7 +41,7 @@ Usage examples:
     python convergence_checker.py --qtype iq1_kt --chunks 250
 
 Outputs:
- - <out_prefix>_resemblance.png  : resemblance % vs chunk (global)
+ - <out_prefix>_resemblance.png : resemblance % vs chunk (global)
  - <out_prefix>_summary.csv     : per-tensor suggested chunk + global suggestion
  - <interactive_out>            : interactive HTML (requires plotly)
 
