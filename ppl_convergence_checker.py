@@ -257,44 +257,203 @@ def compute_per_tensor_resemblance(val_df_norm: pd.DataFrame, metric: str = 'mea
 
 
 # ----------------- interactive HTML -----------------
-def create_interactive_tensor_comparison(val_df: pd.DataFrame, out_html: str, normalize: bool, resemblance_series: pd.Series, title_prefix: str = 'Tensor comparison') -> None:
+def create_interactive_tensor_comparison(
+    val_df: pd.DataFrame,
+    out_html: str,
+    normalize: bool,
+    resemblance_series: pd.Series,
+    title_prefix: str = 'Tensor comparison',
+    metric_name: Optional[str] = None
+) -> None:
+    """
+    Interactive HTML with a mode toggle:
+      - Per-Tensor view (default): x = tensor names, y = metric values (final vs selected chunk)
+      - Correlation view: x = selected chunk metric values, y = final chunk metric values (shows identity line y = x)
+    """
     chunks = list(val_df.index.astype(int))
     tensors_unsorted = val_df.columns.tolist()
     tensors = sort_tensors_by_blk(tensors_unsorted)
     val_df = val_df[tensors]
 
+    # final (max) chunk values (y in correlation mode)
     final_vals = val_df.iloc[-1].values.astype(float)
 
+    # compute overall min/max for identity/reference line (for correlation view)
+    all_vals = val_df.values.astype(float)
+    all_vals_min = float(np.nanmin(all_vals))
+    all_vals_max = float(np.nanmax(all_vals))
+    padding = (all_vals_max - all_vals_min) * 0.02 if all_vals_max > all_vals_min else 0.01
+    min_range = all_vals_min - padding
+    max_range = all_vals_max + padding
+
+    # Build frames: each frame contains all traces so animation swaps them cleanly.
     frames = []
     for c in chunks:
         selected_vals = val_df.loc[c].values.astype(float)
         r = float(resemblance_series.loc[c]) if c in resemblance_series.index else float('nan')
         frame_title = f"{title_prefix} - chunk {c} - {r:.3f}% resemblance"
-        frames.append(go.Frame(data=[go.Scatter(x=tensors, y=final_vals), go.Scatter(x=tensors, y=selected_vals)], name=str(c), layout=go.Layout(title=frame_title)))
 
-    init_vals = val_df.iloc[0].values.astype(float)
-    blue_trace = go.Scatter(x=tensors, y=final_vals, mode='markers', name='final_chunk', marker=dict(color='blue', size=8), hovertemplate='%{x}<br>final=%{y:.6f}')
-    red_trace = go.Scatter(x=tensors, y=init_vals, mode='markers', name=('normalized selected_chunk' if normalize else 'selected_chunk'), marker=dict(color='red', size=8), hovertemplate='%{x}<br>selected=%{y:.6f}')
+        # final (per-tensor) trace: x=tensors, y=final_vals
+        final_tensor_trace = go.Scatter(
+            x=tensors,
+            y=final_vals,
+            mode='markers',
+            name='final_chunk',
+            marker=dict(size=8),
+            hovertemplate='%{x}<br>final=%{y:.6f}<extra></extra>'
+        )
 
-    fig = go.Figure(data=[blue_trace, red_trace], frames=frames)
+        # selected (per-tensor) trace: x=tensors, y=selected_vals
+        selected_tensor_trace = go.Scatter(
+            x=tensors,
+            y=selected_vals,
+            mode='markers',
+            name=('normalized selected_chunk' if normalize else 'selected_chunk'),
+            marker=dict(size=8),
+            hovertemplate='%{x}<br>selected=%{y:.6f}<extra></extra>'
+        )
 
+        # identity/reference line y = x (for correlation mode)
+        identity_trace = go.Scatter(
+            x=[min_range, max_range],
+            y=[min_range, max_range],
+            mode='lines',
+            name='y = x',
+            line=dict(dash='dash'),
+            hoverinfo='skip'
+        )
+
+        # correlation points - x=selected_vals, y=final_vals
+        corr_trace = go.Scatter(
+            x=selected_vals,
+            y=final_vals,
+            mode='markers',
+            name='selected_vs_final',
+            customdata=tensors,
+            hovertemplate='%{customdata}<br>selected=%{x:.6f}<br>final=%{y:.6f}<extra></extra>'
+        )
+
+        frames.append(go.Frame(
+            data=[final_tensor_trace, selected_tensor_trace, identity_trace, corr_trace],
+            name=str(c),
+            layout=go.Layout(title=frame_title)
+        ))
+
+    # initial data = first chunk frame
+    init_frame = frames[0].data
+    fig = go.Figure(data=list(init_frame), frames=frames)
+
+    # Slider steps (animate by chunk)
     steps = []
     for c in chunks:
-        steps.append(dict(method='animate', label=str(c), args=[[str(c)], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))]))
+        steps.append(dict(
+            method='animate',
+            label=str(c),
+            args=[[str(c)], dict(mode='immediate', frame=dict(duration=0, redraw=True), transition=dict(duration=0))]
+        ))
 
-    slider = dict(active=0, pad={'t': 18}, steps=steps, currentvalue={'prefix': 'Selected chunk: '}, x=0.03, y=0.0, len=0.94, xanchor='left', yanchor='bottom')
+    slider = dict(
+        active=0,
+        pad={'t': 18},
+        steps=steps,
+        currentvalue={'prefix': 'Selected chunk: '},
+        x=0.03, y=0.0, len=0.94, xanchor='left', yanchor='bottom'
+    )
 
-    legend = dict(orientation='v', x=1.02, xanchor='left', y=0.5, yanchor='middle')
-    updatemenus = [dict(type='buttons', showactive=False, y=0.94, x=1.18, xanchor='left', yanchor='top', pad={'t': 0, 'r': 10}, buttons=[dict(label='Play', method='animate', args=[None, dict(frame=dict(duration=200, redraw=True), transition=dict(duration=0), fromcurrent=True, mode='immediate')]), dict(label='Pause', method='animate', args=[[None], dict(frame=dict(duration=0, redraw=False), mode='immediate')])])]
+    # Play/Pause buttons (anchored to the right, same vertical band as mode buttons)
+    play_pause_updatemenu = dict(
+        type='buttons',
+        showactive=False,
+        direction='right',   # horizontal layout for Play/Pause
+        y=0.92,              # horizontal band shared with mode buttons
+        x=0.98,              # far right
+        xanchor='right',
+        yanchor='bottom',
+        pad={'t': 0, 'r': 10},
+        buttons=[
+            dict(label='Play', method='animate', args=[None, dict(frame=dict(duration=200, redraw=True), transition=dict(duration=0), fromcurrent=True, mode='immediate')]),
+            dict(label='Pause', method='animate', args=[[None], dict(frame=dict(duration=0, redraw=False), mode='immediate')])
+        ]
+    )
 
-    initial_r = float(resemblance_series.iloc[0]) if len(resemblance_series) > 0 else float('nan')
-    fig.update_layout(title=f"{title_prefix} - chunk {chunks[0]} - {initial_r:.3f}% resemblance", xaxis_title='Tensor', yaxis_title='', sliders=[slider], updatemenus=updatemenus, legend=legend, margin=dict(t=80, r=220, b=90))
+    # Mode toggle: Tensor vs Correlation
+    # Trace indices in each frame: 0=final_tensor, 1=selected_tensor, 2=identity, 3=corr_points
+    tensor_mode_visible = [True, True, False, False]
+    corr_mode_visible = [False, False, True, True]
 
+    # Decide tickangle in Per-Tensor mode for readability
+    tensor_tickangle = 45 if len(tensors) > 20 else 0
+
+    # metric (y-axis) title: prefer metric_name if provided, else a short fallback
+    metric_y_title = metric_name if metric_name is not None else ''
+
+    # Mode toggle buttons
+    # IMPORTANT: do NOT mix parent 'xaxis' dict and dotted 'xaxis.tickangle' keys in the same args.
+    mode_toggle = dict(
+        type='buttons',
+        showactive=True,
+        direction='left',
+        x=0.03,
+        y=0.92,            # lowered slightly to avoid overlapping title
+        xanchor='left',
+        yanchor='bottom',
+        pad={'r': 10, 't': 6},
+        buttons=[
+            dict(
+                label='Per-Tensor view',
+                method='update',
+                args=[
+                    {'visible': tensor_mode_visible},
+                    {
+                        # intentionally do not set 'title' here so the current frame title remains visible
+                        'xaxis': {'title': '', 'tickangle': tensor_tickangle},
+                        'yaxis': {'title': metric_y_title},
+                        'legend': {'orientation': 'v', 'x': 1.01, 'xanchor': 'left', 'y': 0.5}
+                    }
+                ]
+            ),
+            dict(
+                label='Correlation view',
+                method='update',
+                args=[
+                    {'visible': corr_mode_visible},
+                    {
+                        # keep title untouched (so it shows current chunk/frame title)
+                        'xaxis': {'title': 'Selected chunk metric value', 'tickangle': 0},
+                        'yaxis': {'title': 'Final chunk metric value'},
+                        'legend': {'orientation': 'v', 'x': 1.01, 'xanchor': 'left', 'y': 0.5}
+                    }
+                ]
+            )
+        ]
+    )
+
+    # Put the mode toggle and play/pause updatemenus on the same horizontal band
+    updatemenus = [mode_toggle, play_pause_updatemenu]
+
+    # Layout: start in Per-Tensor mode. Note xaxis title intentionally blank to save space.
+    initial_title = frames[0].layout.title.text if hasattr(frames[0].layout, 'title') else f"{title_prefix} - chunk {chunks[0]}"
+    fig.update_layout(
+        title=initial_title,
+        xaxis_title='',  # intentionally empty to save vertical space (Per-Tensor mode)
+        yaxis_title=metric_y_title,
+        sliders=[slider],
+        updatemenus=updatemenus,
+        legend=dict(orientation='v', x=1.01, xanchor='left', y=0.5),
+        margin=dict(t=40, r=120, b=50)
+    )
+
+    # If many tensors, angle labels for readability (applies in Per-Tensor mode)
     if len(tensors) > 20:
         fig.update_xaxes(tickangle=45)
 
-    pio.write_html(fig, file=out_html, auto_open=False)
+    # Make sure initial visibility corresponds to Per-Tensor mode
+    for i, vis in enumerate(tensor_mode_visible):
+        if i < len(fig.data):
+            fig.data[i].visible = vis
 
+    # Save HTML
+    pio.write_html(fig, file=out_html, auto_open=False)
 
 # ----------------- main -----------------
 def main(argv=None):
@@ -339,7 +498,7 @@ def main(argv=None):
 
     common_idx = np.arange(1, args.chunks + 1)
     val_df = pd.DataFrame({t: s.reindex(common_idx).values for t, s in per_tensor_series.items()}, index=common_idx)
-    val_df = val_df.fillna(method='ffill').fillna(method='bfill')
+    val_df = val_df.ffill().bfill()
 
     normalize = not args.no_normalisation
     if normalize:
