@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Oct-10-2025 -------------------- **#
+#** --------------- Updated: Nov-05-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -794,8 +794,21 @@ if [[ "$GROUP_TENSORS_DISABLED" == "true" ]]; then
   echo "Group tensors: DISABLED"
 else
   echo "Group tensors: ENABLED; groups:"
+  group_mapping_file="bench_ppl${_kld}_group_mapping.${BASELINE_QTYPE}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+  if [ -e "$group_mapping_file" ]; then
+      read -p "[$(timestamp)] ⚠️ Warning: Group mapping file '$group_mapping_file' already exists. Overwrite? [y/N] " answer
+      case "$answer" in
+          [Yy]*) : ;;  # continue
+          *) echo "Operation cancelled by user. No changes made to '$group_mapping_file'." >&2; exit 14 ;;
+      esac
+  fi
+  # Now safe to clear or create the file
+  > "$group_mapping_file"
+  gid=0
   for g in "${GROUP_TENSORS_RAW[@]}"; do
-    echo "  - $g"
+    echo "  - group$gid: $g"
+    echo "group$gid:$g" >> "$group_mapping_file"
+    gid=$((gid + 1))
   done
 fi
 

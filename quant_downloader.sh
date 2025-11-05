@@ -155,7 +155,7 @@ shutdown_on_signal() {
   fi
 
   # If you have any cleanup traps for FIFOs etc, they will run because we exit now.
-  echo "❗️ Killed: received signal, initiating graceful shutdown (exit $rc)... Some sub-processes might still be ongoing for a short while after this script terminates!" >&2
+  echo "💀 Received termination signal; initiating graceful shutdown (exit $rc)... Some sub-processes might still be ongoing for a short while after this script terminates!" >&2
   exit "$rc"
 }
 
