@@ -5,7 +5,7 @@
 #** used for 1-bit qtypes except iq1_s*. Adapt $1 in $custom! **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-19-2025 -------------------- **#
+#** --------------- Updated: Nov-06-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -496,4 +496,4 @@ mkdir DeepSeek-TNG-R1T2-Chimera-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize 
     DeepSeek-TNG-R1T2-Chimera-THIREUS-BF16-SPECIAL_SPLIT/DeepSeek-TNG-R1T2-Chimera-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
     DeepSeek-TNG-R1T2-Chimera-THIREUS-${1^^}-SPECIAL_SPLIT/DeepSeek-TNG-R1T2-Chimera-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
     ${1^^} \
-    32 && chmod 444 DeepSeek-TNG-R1T2-Chimera-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
+    $(nproc) && chmod 444 DeepSeek-TNG-R1T2-Chimera-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"

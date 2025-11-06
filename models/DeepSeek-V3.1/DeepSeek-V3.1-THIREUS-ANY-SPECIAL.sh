@@ -5,7 +5,7 @@
 #** benchmarking purpose. Adjust $1 in $custom to your needs! **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-24-2025 -------------------- **#
+#** --------------- Updated: Nov-06-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -498,4 +498,4 @@ mkdir DeepSeek-V3.1-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split
     DeepSeek-V3.1-THIREUS-BF16-SPECIAL_SPLIT/DeepSeek-V3.1-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01087.gguf \
     DeepSeek-V3.1-THIREUS-${1^^}-SPECIAL_SPLIT/DeepSeek-V3.1-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
     ${1^^} \
-    32 && chmod 444 DeepSeek-V3.1-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
+    $(nproc) && chmod 444 DeepSeek-V3.1-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
