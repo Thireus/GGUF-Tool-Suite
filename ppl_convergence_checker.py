@@ -5,7 +5,7 @@
 #** required to produce quality calibration data.             **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-05-2025 -------------------- **#
+#** --------------- Updated: Nov-06-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -461,7 +461,7 @@ def main(argv=None):
     p.add_argument('--qtype', required=True, help='TARGETQTYPE present in filenames (required)')
     p.add_argument('--chunks', type=int, default=250, help='CHUNKS value in filenames (default: 250)')
     p.add_argument('--category', default='KLD', choices=list(CATEGORY_KEYS.keys()), help='Which metric/category to analyze (default: KLD)')
-    p.add_argument('--accept_percent', type=float, default=95.0, help='Acceptance resemblance percent (0-100). Default 95 = 95% similar to final chunk')
+    p.add_argument('--accept_percent', type=float, default=95.0, help='Acceptance resemblance percent (0-100). Default 95 = 95%% similar to final chunk')
     p.add_argument('--out_prefix', default='convergence', help='Prefix for output files')
     p.add_argument('--interactive_out', default='convergence_interactive.html', help='Path to save interactive HTML')
     p.add_argument('--no-normalisation', action='store_true', help='Disable normalization')
