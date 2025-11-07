@@ -3,14 +3,13 @@ license: mit
 ---
 ## ⚠️ Cautionary Notice
 
-These GGUF files are **experimental** and subject to change. The code used to produce them is currently in **draft** status. The llama.cpp code patch used to produce these shards can be found at https://huggingface.co/yairpatch/Qwen3-VL-30B-A3B-Thinking-GGUF.
+The metadata of these quants has been updated and is now compatible with the latest version of `llama.cpp` (and `ik_llama.cpp`).
 
-- ⚠️ **Official support in `llama.cpp` is not available yet** – see [ggml-org/llama.cpp Issue #16207](https://github.com/ggml-org/llama.cpp/issues/16207). Test builds are available at https://github.com/Thireus/llama.cpp/releases (`tr-qwen3-vl` tag).
-- ⚠️ **Official support in `ik_llama.cpp` is not available yet**. Test builds are available at https://github.com/Thireus/ik_llama.cpp/releases (`tr-qwen3-vl` tag).
-**Unless you are confident in what you're doing, and until support is officially confirmed,**  
-> 🔒 **Do not use these quantized models for production**  
-> 🔬 **Do not use them to assess the quality of the Qwen3-VL models**
-Proceed with caution and keep an eye on the upstream PRs for any updates that could affect compatibility or performance.
+- ⚠️ **Official support in `llama.cpp` was recently made available** – see [ggml-org/llama.cpp PR #16780](http://github.com/ggml-org/llama.cpp/pull/16780).
+- ⚠️ **Official support in `ik_llama.cpp` was recently made available** – see [ggml-org/llama.cpp PR #883](https://github.com/ikawrakow/ik_llama.cpp/pull/883).
+
+Proceed with caution and keep an eye on the upstream PRs for any additional updates that could affect compatibility or performance.
+
 ---
 
 # mmproj-Qwen3-VL-235B-A22B-Thinking
