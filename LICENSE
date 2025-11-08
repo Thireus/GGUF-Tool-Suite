@@ -6,10 +6,10 @@ copy, merge, publish, distribute, sublicense, and/or sell copies of the
 Software, subject to the following condition:
 
   • Any use, reproduction, or modification of the Software must give clear
-    and visible credit to “Thireus” and “GGUF Tool Suite.” This credit must
-    appear in all copies, substantial portions, or public-facing materials
-    (including documentation, help text, UI, or advertisements) where the
-    Software is used.
+    and visible credit to “Thireus”, “GGUF Tool Suite” and “its contributors”.
+    This credit must appear in all copies, substantial portions, or
+    public-facing materials (including documentation, help text, UI, or
+    advertisements) where the Software is used.
 
 THE SOFTWARE IS PROVIDED “AS IS”, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
