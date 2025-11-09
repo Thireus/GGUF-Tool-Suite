@@ -5,7 +5,7 @@
 #** benchmark PPL and KLD results of benchmark_each_tensor.sh **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Oct-09-2025 -------------------- **#
+#** --------------- Updated: Nov-09-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -42,6 +42,9 @@ Options:
   --auto-baseline QTYPE                 Automatically read bench_ppl(_kld)_result.baseline.QTYPE.<CHUNKS>.txt and use it
   --group-tensors REG1[,REG2] [REG3,..] Specify one or more group specifications (same syntax as benchmark_each_tensor.sh).
                                           Each argument is a group: comma-separated regexes. If omitted, grouping disabled.
+  --group-tensors-map FILE              Path to a group mapping file (each line "groupN:regex[,regex2]" or "regex[,regex2]").
+                                          This replicates --group-tensors but reads groups from a file. Mutually exclusive
+                                          with --group-tensors.
   --expand-groups                       When present, expand groups into individual tensor columns (default: disabled)
   --hide-empty                          Don't include empty benchmark results to the output csv
   --output-ppl-csv FILE                 Path to output PPL CSV file (default: $OUTPUT_PPL_CSV)
@@ -100,6 +103,7 @@ GROUP_TENSORS_RAW=()
 GROUP_TENSORS_DISABLED=true
 EXPAND_GROUPS=false
 NO_KLD=false
+GROUP_TENSORS_MAP_FILE=""
 
 # Parse command-line arguments
 while [[ $# -gt 0 ]]; do
@@ -202,6 +206,13 @@ while [[ $# -gt 0 ]]; do
         shift
       done
       ;;
+    --group-tensors-map)
+      if [[ -z "${2:-}" || "${2:0:2}" == "--" ]]; then
+        echo "Error: --group-tensors-map requires a filename argument" >&2; usage; exit 1
+      fi
+      GROUP_TENSORS_MAP_FILE="$2"
+      shift 2
+      ;;
     --expand-groups)
       EXPAND_GROUPS=true
       shift
@@ -220,6 +231,79 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Ensure user didn't supply both --group-tensors and --group-tensors-map
+if [[ -n "${GROUP_TENSORS_MAP_FILE:-}" && ${#GROUP_TENSORS_RAW[@]} -gt 0 ]]; then
+  echo "Error: --group-tensors and --group-tensors-map are mutually exclusive. Please provide only one of them." >&2
+  exit 1
+fi
+
+# If a group mapping file was provided, read it and populate GROUP_TENSORS_RAW.
+# File lines can be:
+#   group0:^blk\.0\.attn_(k|v)\.weight$
+#   group1:^another_regex1$,^another_regex2$
+#   or simply:
+#   ^blk\.0\.attn_(k|v)\.weight$
+# blank lines and lines starting with '#' are ignored.
+if [[ -n "${GROUP_TENSORS_MAP_FILE:-}" ]]; then
+  if [[ ! -f "$GROUP_TENSORS_MAP_FILE" ]]; then
+    echo "Error: group mapping file '$GROUP_TENSORS_MAP_FILE' not found." >&2
+    exit 1
+  fi
+
+  # Read file, collect named group indices and/or unnamed groups preserving order.
+  declare -A __GTMP_idx_map=()
+  declare -a __GTMP_idx_list=()
+  declare -a __GTMP_ordered_unnamed=()
+
+  while IFS= read -r __line || [[ -n "$__line" ]]; do
+    # Trim whitespace
+    __line="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$__line")"
+    # skip empty or comment lines
+    [[ -z "$__line" ]] && continue
+    [[ "${__line:0:1}" == "#" ]] && continue
+
+    if [[ "$__line" == *:* ]]; then
+      __prefix="${__line%%:*}"
+      __rest="${__line#*:}"
+      __rest="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$__rest")"
+      if [[ "$__prefix" =~ ^group([0-9]+)$ ]]; then
+        __idx="${BASH_REMATCH[1]}"
+        __GTMP_idx_map["$__idx"]="$__rest"
+        __GTMP_idx_list+=("$__idx")
+      else
+        # no groupN prefix, treat entire line after first colon as a single group spec
+        __GTMP_ordered_unnamed+=("$__rest")
+      fi
+    else
+      # whole line is a group regex list
+      __GTMP_ordered_unnamed+=("$__line")
+    fi
+  done < "$GROUP_TENSORS_MAP_FILE"
+
+  # Sort numeric indices ascending and build GROUP_TENSORS_RAW
+  if [[ ${#__GTMP_idx_list[@]} -gt 0 ]]; then
+    # remove duplicates and sort numeric
+    IFS=$'\n' __sorted_idx=($(printf '%s\n' "${__GTMP_idx_list[@]}" | sort -n -u))
+    unset IFS
+    for __i in "${__sorted_idx[@]}"; do
+      GROUP_TENSORS_RAW+=("${__GTMP_idx_map[$__i]}")
+    done
+  fi
+  # Append unnamed groups preserving file order
+  for __u in "${__GTMP_ordered_unnamed[@]}"; do
+    GROUP_TENSORS_RAW+=("$__u")
+  done
+
+  # cleanup temp variables
+  unset __GTMP_idx_map __GTMP_idx_list __GTMP_ordered_unnamed __sorted_idx __i __u __prefix __rest __line __idx
+
+  if [[ ${#GROUP_TENSORS_RAW[@]} -eq 0 ]]; then
+    echo "Warning: group mapping file '$GROUP_TENSORS_MAP_FILE' parsed but no groups found." >&2
+  else
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Loaded ${#GROUP_TENSORS_RAW[@]} group(s) from mapping file: $GROUP_TENSORS_MAP_FILE"
+  fi
+fi
 
 # Echo chosen settings
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting collection of PPL results."
@@ -286,31 +370,33 @@ declare -A TENSOR_SET    # key: tensor_name or groupN => 1
 declare -A PROCESSED_GROUP_QTYPE  # key: "qtype|groupidx" => 1/MISSING
 
 # gather list of ppl (and ppl_kld) result files in current dir matching chunks (includes group and baseline files)
+bench_files_list=$(
+  for f in ./* ./.?*; do
+    [ -e "$f" ] || continue    # skip non-matching globs
+    [ -f "$f" ] && printf '%s\n' "${f##*/}"
+  done 2>/dev/null
+)
 if [[ "$NO_KLD" == "true" ]]; then
     # Try to find bench_ppl_result files first
     _kld=''
-    all_bench_ppl_result_files=$(find . -maxdepth 1 -type f -printf "%f\n" 2>/dev/null \
-        | grep -E "^bench_ppl${_kld}_result\..*\.${PPL_CHUNKS}\.txt$" 2>/dev/null || true)
+    all_bench_ppl_result_files=$(printf '%s\n' "$bench_files_list" | grep -E "^bench_ppl${_kld}_result\..*\.${PPL_CHUNKS}\.txt$" 2>/dev/null || true)
 
     # If none found, fall back to bench_ppl_kld_result files
     if [[ -z "$all_bench_ppl_result_files" ]]; then
         echo "Warning: No bench_ppl${_kld}_result.*.txt found in current directory - PPL will be collected from the PPL+KLD bench result files."
         _kld='_kld'
-        all_bench_ppl_result_files=$(find . -maxdepth 1 -type f -printf "%f\n" 2>/dev/null \
-            | grep -E "^bench_ppl${_kld}_result\..*\.${PPL_CHUNKS}\.txt$" 2>/dev/null || true)
+        all_bench_ppl_result_files=$(printf '%s\n' "$bench_files_list" | grep -E "^bench_ppl${_kld}_result\..*\.${PPL_CHUNKS}\.txt$" 2>/dev/null || true)
     fi
 else
     # First try bench_ppl_kld_result
     _kld='_kld'
-    all_bench_ppl_result_files=$(find . -maxdepth 1 -type f -printf "%f\n" 2>/dev/null \
-        | grep -E "^bench_ppl${_kld}_result\..*\.${PPL_CHUNKS}\.txt$" 2>/dev/null || true)
+    all_bench_ppl_result_files=$(printf '%s\n' "$bench_files_list" | grep -E "^bench_ppl${_kld}_result\..*\.${PPL_CHUNKS}\.txt$" 2>/dev/null || true)
 
     # Fallback to bench_ppl_result if none found, but also disable KLD collection because these files won't contain KLD
     if [[ -z "$all_bench_ppl_result_files" ]]; then
         echo "Warning: No bench_ppl${_kld}_result.*.txt found in current directory - KLD collection is now disabled!"
         _kld=''
-        all_bench_ppl_result_files=$(find . -maxdepth 1 -type f -printf "%f\n" 2>/dev/null \
-            | grep -E "^bench_ppl${_kld}_result\..*\.${PPL_CHUNKS}\.txt$" 2>/dev/null || true)
+        all_bench_ppl_result_files=$(printf '%s\n' "$bench_files_list" | grep -E "^bench_ppl${_kld}_result\..*\.${PPL_CHUNKS}\.txt$" 2>/dev/null || true)
         NO_KLD=true
     fi
 fi
