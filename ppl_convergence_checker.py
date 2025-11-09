@@ -5,7 +5,7 @@
 #** required to produce quality calibration data.             **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-06-2025 -------------------- **#
+#** --------------- Updated: Nov-09-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -51,7 +51,7 @@ import argparse
 import os
 import re
 import sys
-from typing import Dict, List, Tuple, Optional
+from typing import Dict, List, Union, Tuple, Optional
 
 try:
     import numpy as np
@@ -92,6 +92,8 @@ CATEGORY_FULLNAME = {
 }
 
 BLK_RE = re.compile(r'blk\.?([0-9]+)', flags=re.IGNORECASE)
+GROUP_RE = re.compile(r'group\.?([0-9]+)', flags=re.IGNORECASE)
+_SPLIT_DIGITS_RE = re.compile(r'(\d+)')
 
 
 # ----------------- file discovery & parsing -----------------
@@ -126,12 +128,43 @@ def parse_file(path: str) -> pd.DataFrame:
     return df
 
 
-def sort_tensors_by_blk(tensors: List[str]) -> List[str]:
+def _nat_tokens(s: str):
+    """
+    Turn a string into a list of tokens where digit sequences become ints
+    and non-digits become lowercase strings. Useful for natural/alphanumeric sort.
+    Example: "ffn_up12.weight" -> ["ffn_up", 12, ".weight"]
+    """
+    parts = _SPLIT_DIGITS_RE.split(s)
+    tokens = []
+    for p in parts:
+        if not p:
+            continue
+        if p.isdigit():
+            tokens.append(int(p))
+        else:
+            tokens.append(p.lower())
+    return tokens
+
+def sort_tensors_by_id(tensors: List[str]) -> List[str]:
     def key_fn(name: str):
+        # Try blk first
         m = BLK_RE.search(name)
         if m:
-            return (0, int(m.group(1)), name.lower())
-        return (1, name.lower())
+            blk_id = int(m.group(1))
+            # remainder: everything after the matched "blk..."; use the portion following the numeric id
+            # find index of where the numeric id ends to get remainder consistently
+            endpos = m.end()
+            remainder = name[endpos:]  # could be like ".ffn_up_exps.weight"
+            return (0, blk_id, _nat_tokens(remainder), name.lower())
+        # Try group
+        m = GROUP_RE.search(name)
+        if m:
+            grp_id = int(m.group(1))
+            endpos = m.end()
+            remainder = name[endpos:]
+            return (1, grp_id, _nat_tokens(remainder), name.lower())
+        # fallback: leave others after blk/group, sorted case-insensitively
+        return (2, name.lower())
     return sorted(tensors, key=key_fn)
 
 
@@ -272,7 +305,7 @@ def create_interactive_tensor_comparison(
     """
     chunks = list(val_df.index.astype(int))
     tensors_unsorted = val_df.columns.tolist()
-    tensors = sort_tensors_by_blk(tensors_unsorted)
+    tensors = sort_tensors_by_id(tensors_unsorted)
     val_df = val_df[tensors]
 
     # final (max) chunk values (y in correlation mode)
