@@ -5,7 +5,7 @@
 #** the S_PP and S_TG values from bench_sweep_result.* files. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-31-2025 -------------------- **#
+#** --------------- Updated: Nov-09-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -211,7 +211,13 @@ QTYPES=("${sorted_qtypes[@]}")
 echo "Found qtypes: ${QTYPES[*]}"
 
 # gather list of sweep result files in current dir matching context (includes group files)
-all_bench_sweep_result_files=$(find . -maxdepth 1 -type f -printf "%f\n" 2>/dev/null | grep -E "^bench_sweep_result\..*\.${CONTEXT}\.txt$" 2>/dev/null || true)
+bench_files_list=$(
+  for f in ./* ./.?*; do
+    [ -e "$f" ] || continue    # skip non-matching globs
+    [ -f "$f" ] && printf '%s\n' "${f##*/}"
+  done 2>/dev/null
+)
+all_bench_sweep_result_files=$(printf '%s\n' "$bench_files_list" | grep -E "^bench_sweep_result\..*\.${CONTEXT}\.txt$" 2>/dev/null || true)
 
 declare -A PP_VALUES   # key: "qtype|tensor_or_group" => S_PP value or "404"
 declare -A TG_VALUES   # key: "qtype|tensor_or_group" => S_TG value or "404"
