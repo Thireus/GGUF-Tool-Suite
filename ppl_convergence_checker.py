@@ -5,7 +5,7 @@
 #** required to produce quality calibration data.             **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-09-2025 -------------------- **#
+#** --------------- Updated: Nov-10-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -500,6 +500,7 @@ def main(argv=None):
     p.add_argument('--no-normalisation', action='store_true', help='Disable normalization')
     p.add_argument('--mad-threshold', type=float, default=3.5, help='MAD threshold for outlier filtering during normalization')
     p.add_argument('--resemblance_metric', choices=['mean_abs', 'rms', 'median_abs'], default='mean_abs', help='Metric used to compute resemblance to final chunk')
+    p.add_argument('--comp-topp', action='store_true', help='(Only for SAME_TOP_P) transform SAME_TOP_P values to complementary: 100 - SAME_TOP_P')
     args = p.parse_args(argv)
 
     files = find_files(args.qtype, args.chunks)
@@ -529,6 +530,17 @@ def main(argv=None):
         print("No parseable tensors found. Exiting.")
         sys.exit(1)
 
+    # If user requested complementary SAME_TOP_P transformation, apply it here.
+    if args.comp_topp:
+        if args.category != 'SAME_TOP_P':
+            print("Warning: --comp-topp ignored because category is not SAME_TOP_P.")
+        else:
+            # transform each per-tensor series: complementary percent = 100 - value
+            for t in list(per_tensor_series.keys()):
+                s = per_tensor_series[t]
+                # preserve index and NaNs; clip to [0,100] to be safe
+                per_tensor_series[t] = (100.0 - s).clip(lower=0.0, upper=100.0)
+
     common_idx = np.arange(1, args.chunks + 1)
     val_df = pd.DataFrame({t: s.reindex(common_idx).values for t, s in per_tensor_series.items()}, index=common_idx)
     val_df = val_df.ffill().bfill()
@@ -554,6 +566,13 @@ def main(argv=None):
     idxs = np.where(resemblance_series.values >= args.accept_percent)[0]
     global_suggest = int(resemblance_series.index[idxs[0]]) if idxs.size > 0 else None
 
+    # Determine labels and titles, include "Complementary" when comp-topp is active for SAME_TOP_P
+    comp_prefix = ''
+    if args.comp_topp and args.category == 'SAME_TOP_P':
+        comp_prefix = 'Complementary '
+    y_label = f"{comp_prefix}{CATEGORY_FULLNAME.get(args.category, args.category)}"
+    title_prefix_interactive = f'{comp_prefix}{CATEGORY_FULLNAME.get(args.category, args.category)} comparison'
+
     # Save resemblance PNG
     out_png = f"{args.out_prefix}_resemblance.png"
     plt.figure(figsize=(10, 6))
@@ -562,8 +581,8 @@ def main(argv=None):
     if global_suggest is not None:
         plt.axvline(global_suggest, color='green', linestyle=':', linewidth=1.5, label=f'suggested chunk {global_suggest}')
     plt.xlabel('Chunk')
-    plt.ylabel(f"{CATEGORY_FULLNAME.get(args.category, args.category)}")
-    plt.title(f'Resemblance curve (normalized={"ON" if normalize else "OFF"}) for {CATEGORY_FULLNAME.get(args.category, args.category)} (qtype={args.qtype})')
+    plt.ylabel(y_label)
+    plt.title(f'Resemblance curve (normalized={"ON" if normalize else "OFF"}) for {y_label} (qtype={args.qtype})')
     plt.legend(loc='best')
     plt.grid(alpha=0.2)
     plt.tight_layout()
@@ -580,7 +599,8 @@ def main(argv=None):
     # Interactive HTML
     try:
         create_interactive_tensor_comparison(val_df_norm if normalize else val_df, args.interactive_out, normalize, resemblance_series,
-                                             title_prefix=f'{CATEGORY_FULLNAME.get(args.category, args.category)} comparison')
+                                             title_prefix=title_prefix_interactive,
+                                             metric_name=y_label)
         print(f"Interactive HTML saved to {args.interactive_out}")
     except Exception as e:
         print("Warning: failed to create interactive HTML:", e)
