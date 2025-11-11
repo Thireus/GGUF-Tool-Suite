@@ -353,7 +353,7 @@ do_huggingface() {
     if [ $? -eq 0 ]; then
       log "Download complete, verifying…"
       if verify_download "${DST}"; then
-        log "✓ Verified and saved via huggingface (org: ${ORG}, banch: ${BRANCH}) - ${DST} (${QUANT_U})"
+        log "✓ Verified and saved via huggingface (org: ${ORG}, branch: ${BRANCH}) - ${DST} (${QUANT_U})"
         chmod 444 "${DST}"
         return 0
       else

@@ -425,112 +425,110 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
   mapfile="tensors.${_qtype,,}.map"
   mapkey="${mapfile,,}"    # normalized key (all-lowercase)
 
-  # If we've already processed this mapfile, skip the rest of the loop.
-  if [[ -n "${PROCESSED_MAPFILES[$mapkey]:-}" ]]; then
-    echo "[$(timestamp)] Skipping already-processed mapfile: $mapfile"
-    continue
-  fi
-
-  # Mark it as being processed now (prevents re-entrance if UNIQUE_QTYPES had duplicates)
-  PROCESSED_MAPFILES["$mapkey"]=1
-
-  if [[ "$FORCE_REDOWNLOAD" == true ]]; then
-    echo "[$(timestamp)] Force redownload: removing existing map $mapfile and $mapfile.sig"
-    rm -f "$mapfile"
-    rm -f "$mapfile.sig"
-    sync || true
-  fi
-  if [[ "$NEW_MAP" == true ]]; then
-      if [[ -f "$mapfile" ]]; then
-          mv -f "$mapfile" "$mapfile.bak"
-          if [[ -f "$mapfile.sig" ]]; then
-            mv -f "$mapfile.sig" "$mapfile.sig.bak"
-          else
-            rm -f "$mapfile.sig.bak" # Delete the backup because now the backup may not correspond to the $mapfile.bak
-          fi
-          if ! run_downloader "$_qtype" 0 . "$mapfile"; then
-              echo "⚠️ Warning: failed to fetch map for $_qtype. Using existing map file." >&2
-              mv -f "$mapfile.bak" "$mapfile"
-              if [[ -f "$mapfile.sig.bak" ]]; then
-                mv -f "$mapfile.sig.bak" "$mapfile.sig"
-              fi
-          else
-              # Success: optionally remove backup or keep it
-              rm -f "$mapfile.bak"
-              # Download the signature
-              if [[ "$SKIP_GPG" != "true" ]]; then
-                if ! run_downloader "$_qtype" -1 . "$mapfile.sig"; then
-                    if [[ -f "$mapfile.sig.bak" ]]; then
-                        echo "⚠️ Warning: failed to fetch map gpg signature for $_qtype. Using existing map gpg signature file." >&2
-                        mv -f "$mapfile.sig.bak" "$mapfile.sig"
-                    else
-                        echo "❌ Error: failed to fetch map gpg signature for $_qtype and no existing map gpg signature file present!" >&2
-                        [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
-                        exit 3
-                    fi
-                else
-                    # Success: optionally remove backup or keep it
-                    rm -f "$mapfile.sig.bak"
-                fi
-              fi
-          fi
-      else
-          # $mapfile does not exist; just try downloading
-          if ! run_downloader "$_qtype" 0 . "$mapfile"; then
-              echo "❌ Error: failed to fetch map for $_qtype" >&2
-              exit 1
-          else
-              # Download the signature
-              if [[ "$SKIP_GPG" != "true" ]]; then
-                rm -f "$LOCAL_MODEL_DIR/$mapfile.sig"
-                sync || true
-                if ! run_downloader "$_qtype" -1 . "$mapfile.sig"; then
-                    echo "❌ Error: failed to fetch map gpg signature for $_qtype" >&2
-                    [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
-                    exit 3
-                fi
-              fi
-          fi
-      fi
-  else
-      # NEW_MAP is false; just download normally (which will only happen if the file doesn't already exist)
-      if ! run_downloader "$_qtype" 0 . "$mapfile"; then
-          echo "❌ Error: failed to fetch map for $_qtype" >&2
-          exit 1
-      fi
-      # Download the signature
-      if [[ "$SKIP_GPG" != "true" ]]; then
-        if ! run_downloader "$_qtype" -1 . "$mapfile.sig"; then
-            echo "❌ Error: failed to fetch map gpg signature for $_qtype" >&2
-            [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
-            exit 3
-        fi
-      fi
-  fi
-
-  if [[ "$SKIP_GPG" != "true" ]]; then
-    if command -v gpg >/dev/null 2>&1; then
-      if [ ! -f "$mapfile" ]; then
-          echo "❌ Error: Map file '$mapfile' not found."
-          [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
-          exit 5
-      fi
-      if [ ! -f "$mapfile.sig" ]; then
-          echo "❌ Error: Signature file '$mapfile.sig' is missing."
-          echo "Hint: To skip GPG verification, re-run this script with the --skip-gpg option."
-          [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
-          exit 5
-      fi
-      if gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --verify "$mapfile.sig" "$mapfile" > /dev/null 2>&1; then
-          echo "[$(timestamp)] GPG signature verification successful."
-      else
-          echo "❌ Error: GPG signature verification failed for '$mapfile.sig'."
-          [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
-          exit 4
-      fi
-    else
-      echo "⚠️ Warning: 'gpg' command not found. Signature verification skipped." >&2
+  # If we've already downloaded this mapfile, skip downloading but still reuse the data
+  if [[ -z "${PROCESSED_MAPFILES[$mapkey]:-}" ]]; then
+    if [[ "$FORCE_REDOWNLOAD" == true ]]; then
+      echo "[$(timestamp)] Force redownload: removing existing map $mapfile and $mapfile.sig"
+      rm -f "$mapfile"
+      rm -f "$mapfile.sig"
+      sync || true
     fi
+    if [[ "$NEW_MAP" == true ]]; then
+        if [[ -f "$mapfile" ]]; then
+            mv -f "$mapfile" "$mapfile.bak"
+            if [[ -f "$mapfile.sig" ]]; then
+              mv -f "$mapfile.sig" "$mapfile.sig.bak"
+            else
+              rm -f "$mapfile.sig.bak" # Delete the backup because now the backup may not correspond to the $mapfile.bak
+            fi
+            if ! run_downloader "$_qtype" 0 . "$mapfile"; then
+                echo "⚠️ Warning: failed to fetch map for $_qtype. Using existing map file." >&2
+                mv -f "$mapfile.bak" "$mapfile"
+                if [[ -f "$mapfile.sig.bak" ]]; then
+                  mv -f "$mapfile.sig.bak" "$mapfile.sig"
+                fi
+            else
+                # Success: optionally remove backup or keep it
+                rm -f "$mapfile.bak"
+                # Download the signature
+                if [[ "$SKIP_GPG" != "true" ]]; then
+                  if ! run_downloader "$_qtype" -1 . "$mapfile.sig"; then
+                      if [[ -f "$mapfile.sig.bak" ]]; then
+                          echo "⚠️ Warning: failed to fetch map gpg signature for $_qtype. Using existing map gpg signature file." >&2
+                          mv -f "$mapfile.sig.bak" "$mapfile.sig"
+                      else
+                          echo "❌ Error: failed to fetch map gpg signature for $_qtype and no existing map gpg signature file present!" >&2
+                          [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+                          exit 3
+                      fi
+                  else
+                      # Success: optionally remove backup or keep it
+                      rm -f "$mapfile.sig.bak"
+                  fi
+                fi
+            fi
+        else
+            # $mapfile does not exist; just try downloading
+            if ! run_downloader "$_qtype" 0 . "$mapfile"; then
+                echo "❌ Error: failed to fetch map for $_qtype" >&2
+                exit 1
+            else
+                # Download the signature
+                if [[ "$SKIP_GPG" != "true" ]]; then
+                  rm -f "$LOCAL_MODEL_DIR/$mapfile.sig"
+                  sync || true
+                  if ! run_downloader "$_qtype" -1 . "$mapfile.sig"; then
+                      echo "❌ Error: failed to fetch map gpg signature for $_qtype" >&2
+                      [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+                      exit 3
+                  fi
+                fi
+            fi
+        fi
+    else
+        # NEW_MAP is false; just download normally (which will only happen if the file doesn't already exist)
+        if ! run_downloader "$_qtype" 0 . "$mapfile"; then
+            echo "❌ Error: failed to fetch map for $_qtype" >&2
+            exit 1
+        fi
+        # Download the signature
+        if [[ "$SKIP_GPG" != "true" ]]; then
+          if ! run_downloader "$_qtype" -1 . "$mapfile.sig"; then
+              echo "❌ Error: failed to fetch map gpg signature for $_qtype" >&2
+              [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+              exit 3
+          fi
+        fi
+    fi
+
+    if [[ "$SKIP_GPG" != "true" ]]; then
+      if command -v gpg >/dev/null 2>&1; then
+        if [ ! -f "$mapfile" ]; then
+            echo "❌ Error: Map file '$mapfile' not found."
+            [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+            exit 5
+        fi
+        if [ ! -f "$mapfile.sig" ]; then
+            echo "❌ Error: Signature file '$mapfile.sig' is missing."
+            echo "Hint: To skip GPG verification, re-run this script with the --skip-gpg option."
+            [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+            exit 5
+        fi
+        if gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --verify "$mapfile.sig" "$mapfile" > /dev/null 2>&1; then
+            echo "[$(timestamp)] GPG signature verification successful."
+        else
+            echo "❌ Error: GPG signature verification failed for '$mapfile.sig'."
+            [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+            exit 4
+        fi
+      else
+        echo "⚠️ Warning: 'gpg' command not found. Signature verification skipped." >&2
+      fi
+    fi
+    # Mark it as being downloaded now
+    PROCESSED_MAPFILES["$mapkey"]=1
+  else
+    echo "[$(timestamp)] Skipping already-downloaded mapfile: $mapfile"
   fi
 
   while IFS=: read -r fname hash tname _; do
@@ -538,7 +536,6 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
       shard_id=$((10#${BASH_REMATCH[1]}))
       set_shard_id "$tname" "$shard_id"
       set_t_hash "$qtype" "$tname" "$hash"
-      # Filling these lists should only happen once now
       if [[ "$qtype" == "${QTYPE}" ]]; then
         SHARD_FILENAMES+=("$fname")
         TENSORS_TO_FETCH+=("$tname")
