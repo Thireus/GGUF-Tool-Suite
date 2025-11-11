@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regexe entries.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-04-2025 -------------------- **#
+#** --------------- Updated: Nov-11-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -169,7 +169,7 @@ NEW_MAP=true            # Whether to try obtain the latest map files
 FORCE_REDOWNLOAD=false  # Whether to redownload all files (maps, shards, first shard)
 VERIFY_ONLY=false       # If true, only verify hashes and report errors
 BASE_DIR="."            # Base directory for model and download dirs
-QTYPE="BF16"            # Default quantization type used for the first shard and filenames
+QTYPE="BF16"            # Default quantization type used for the first shard and filenames - also used for F32 tensors
 SKIP_GPG=false          # If true, skip the gpg signature verification of the signed files
 SPECIAL_NODE_ID=""      # Optional: number of nodes (see --special-node-id). If non-empty, only shards assigned to the deterministic node are downloaded.
 TOTAL_NODES=""          # Optional: Total number of nodes (see --total-nodes).
@@ -378,8 +378,8 @@ fi
 
 # -------------------- HASH & SHARD STORAGE -------------------
 declare -A T_HASHES SHARD_ID
-set_t_hash() { local key="${1,,}::${2,,}"; T_HASHES["$key"]="$3"; }
-get_t_hash() { echo "${T_HASHES["${1,,}::${2,,}"]}"; }
+set_t_hash() { local key="${1,,}::${2,,}"; T_HASHES["$key"]="$3"; DEBUG "set_t_hash T_HASHES["$key"]=${T_HASHES["$key"]}"; }
+get_t_hash() { [[ "${1^^}" == "F32" ]] && local key="${QTYPE,,}::${2,,}" || local key="${1,,}::${2,,}"; echo "${T_HASHES["$key"]}"; DEBUG "get_t_hash T_HASHES["$key"]=${T_HASHES["$key"]}"; }
 set_shard_id() { SHARD_ID["${1,,}"]="$2"; }
 get_shard_id() { echo "${SHARD_ID["${1,,}"]}"; }
 
