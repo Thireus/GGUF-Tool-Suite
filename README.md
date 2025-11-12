@@ -78,7 +78,7 @@ Here's how DeepSeek-R1-0528 quantized with **Thireus' GGUF Tool Suite** compares
 | [Kimi-K2-Instruct](https://huggingface.co/collections/Thireus/kimi-k2-instruct-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶✅ Tested and Working<br>🅴✅ Yes | Examples provided. It would appear that it does really well on \_kt quants, likely because this is the target quant that was used for the calibration data. I may need to redo the calibration data using iq1\_s\_r4 to verify this theory. |
 | [Kimi-K2-Thinking](https://huggingface.co/collections/Thireus/kimi-k2-thinking-thireus-special-split) |🅲⚠️ Not Started<br>🆀⚠️ Not Started<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | https://github.com/Thireus/GGUF-Tool-Suite/issues/39 |
 | [Kimi-K2-Instruct-0905](https://huggingface.co/collections/Thireus/kimi-k2-instruct-0905-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | Similar to Kimi-K2-Instruct. |
-| [Qwen3-VL-235B-A22B-Thinking](https://huggingface.co/collections/Thireus/qwen3-vl-235b-a22b-thinking-thireus-special-split) |🅲⚠️ Not Started<br>🆀⚠️ In progress...<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | Similar to Qwen3-235B-A22B-Thinking-2507 |
+| [Qwen3-VL-235B-A22B-Thinking](https://huggingface.co/collections/Thireus/qwen3-vl-235b-a22b-thinking-thireus-special-split) |🅲⚠️ In progress...<br>🆀⚠️ In progress...<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | Similar to Qwen3-235B-A22B-Thinking-2507 |
 | [mmproj-Qwen3-VL-235B-A22B-Thinking](https://huggingface.co/collections/Thireus/mmproj-qwen3-235b-a22b-thinking-2507-thireus-special-split) |🅲❌ Not planned<br>🆀✅ Complete<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | [mmproj](https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal.md) for Qwen3-VL-235B-A22B-Thinking. No plan to quantise below BF16. Consider converting it to FP32 if your hardware doesn't support BF16 to keep this model lossless! |
 | [Qwen3-VL-235B-A22B-Instruct](https://huggingface.co/collections/Thireus/qwen3-vl-235b-a22b-instruct-thireus-special-split) |🅲⚠️ Not Started<br>🆀⚠️ In progress...<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | Similar to Qwen3-235B-A22B-Instruct-2507 |
 | [mmproj-Qwen3-VL-235B-A22B-Instruct](https://huggingface.co/collections/Thireus/mmproj-qwen3-235b-a22b-instruct-thireus-special-split) |🅲❌ Not planned<br>🆀✅ Complete<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | [mmproj](https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal.md) for Qwen3-VL-235B-A22B-Instruct. No plan to quantise below BF16. Consider converting it to FP32 if your hardware doesn't support BF16 to keep this model lossless! |
@@ -156,7 +156,7 @@ I would strongly encourage users to assess the TG and PP speed of both `ik_llama
 
         </details>
     
-      > Did you know? Windows binaries can be executed from WSL2, that includes `llama.cpp` and `ik_llama.cpp` Windows binaries. Which should give better model loading time and improved perfs. For example: `/mnt/c/Users/Thireus/Desktop/llama-server.exe -m "d:models/GLM-4.5-Air/GLM-4.5-Air.gguf" -fa -ctk f16 -c 4096 -ngl 99 --no-mmap --threads 8 --main-gpu 0` - Loads model stored in `D:\models\GLM-4.5-Air\GLM-4.5-Air.gguf` using the `llama-server.exe` Windows binary located on `C:\Users\Thireus\Desktop`.
+      > Did you know? Windows binaries can be executed from WSL2, that includes `llama.cpp` and `ik_llama.cpp` Windows binaries. Which should give better model loading time and improved perfs. For example: `/mnt/c/Users/Thireus/Desktop/llama-server.exe -m "d:models/GLM-4.5-Air/GLM-4.5-Air.gguf" -ctk f16 -c 4096 -ngl 99 --no-mmap --threads 8 --main-gpu 0` - Loads model stored in `D:\models\GLM-4.5-Air\GLM-4.5-Air.gguf` using the `llama-server.exe` Windows binary located on `C:\Users\Thireus\Desktop`.
 
    - Source code and builds:  
      👉 https://github.com/Thireus/ik_llama.cpp/releases  
@@ -221,7 +221,7 @@ mkdir -p kitchen && cd kitchen
 ulimit -n 9999 # Required on Linux - Also make sure you have compiled ik_llama.cpp with -DGGML_MAX_CONTEXTS=2048
 ~/ik_llama-main-b3904-41a9c8a-bin-win-cuda-12.8-x64-avx512/llama-cli \
   -m DeepSeek-R1-0528-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
-  -mla 3 -fa -amb 1024 -fmoe -ctk f16 -c 16384 -ngl 99 \
+  -mla 3 -amb 1024 -ctk f16 -c 16384 -ngl 99 \
   -ot "blk\.(3|4|5|6)\.ffn_.*=CUDA0" \
   -ot "blk\.(7|8|9)\.ffn_.*=CUDA1" \
   -ot "blk\.(10|11|12)\.ffn_.*=CUDA2" \

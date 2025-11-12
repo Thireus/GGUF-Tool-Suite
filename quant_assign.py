@@ -1069,7 +1069,7 @@ def main():
                             "Example: --harmonize-tensors blk\\..\\*\\.ffn_up_exps.\\*,blk\\..\\*\\.ffn_gate_exps.\\* ... 'another_pat1,another_pat2'. "
                             "Use --harmonize-tensors \"\" to disable harmonization. Or use --harmonization-technique 0. "
                             "Note: harmonizing tensors to allow for fused ffn_up_exps and ffn_gate_exps can improve PP and TG speed, at the cost of slim restrictive dynamic quantization flexibility. "
-                            "It is highly recommended to leave this parameter value default when using ik_llama.cpp for significant speed improvements (can be as high as +20%% speed gain) with MoE models - when using ik_llama.cpp with -fmoe 1 these tensors are fused, which can only happen if they are of the same qtype. " 
+                            "It is highly recommended to leave this parameter value default when using ik_llama.cpp for significant speed improvements (can be as high as +20%% speed gain) with MoE models - when using ik_llama.cpp with fmoe these tensors are fused, which can only happen if they are of the same qtype. " 
                             "Future versions of ik_llama.cpp may also take advantage of fused ffn_up_shexp and ffn_gate_shexp tensors. " ) )
     parser.add_argument('--harmonization-technique', type=int, default=3, choices=[0,1,2,3],
                         help=('Harmonization technique to use when --harmonize-tensors is set: 0=disabled, 1=max, 2=mean, 3=min (default). ' 
