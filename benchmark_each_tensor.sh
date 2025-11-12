@@ -310,14 +310,14 @@ BASELINE_QTYPE="iq3_xxs"
 # 9. PPL command template:
 # Do not add KLD parameters, they will be automatically added if necessary at the end of this template - See "Add KLD parameter placeholder" section
 PPL_COMMAND_TEMPLATE='CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0,2,1 ~/ik_llama-main-b3833-65dd65c-bin-win-cuda-12.8-x64/llama-perplexity \
--m {MODEL_FILE} -mla 3 -fa -amb 1024 -fmoe -ctk f16 -c 512 -ngl 99 \
+-m {MODEL_FILE} -mla 3 -amb 1024 -ctk f16 -c 512 -ngl 99 \
 -ot "blk\.(3|4|5)\.ffn_.*=CUDA0" -ot "blk\.(6|7|8)\.ffn_.*=CUDA1" -ot "blk\.(9|10)\.ffn_.*=CUDA2" \
 -ot exps=CPU -b 4096 -ub 4096 --warmup-batch --no-mmap --threads 36 --main-gpu 0 --seed 1337 \
 -f ../../imatrix-calibration-corpus-v02.txt --chunks ${PPL_COMMAND_CHUNKS_TO_PROCESS}'
 
 # 10. SWEEP command template
 SWEEP_COMMAND_TEMPLATE='CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0 ~/ik_llama-main-b4123-ee719cc-bin-win-cuda-12.8-x64-avx512/llama-sweep-bench \
--m {MODEL_FILE} -mla 3 -fa -amb 1024 -fmoe -ctk f16 -ngl 99 \
+-m {MODEL_FILE} -mla 3 -amb 1024 -ctk f16 -ngl 99 \
 -b 4096 -ub 4096 --warmup-batch --no-mmap --threads 36 --main-gpu 0 --seed 1337 \
 -c ${BENCH_COMMAND_CONTEXT_TO_PROCESS}'
 
