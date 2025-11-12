@@ -280,17 +280,41 @@ python quant_assign.py ppl_results.csv \
 
 ---
 
+## 📊 About `kld_results.csv`
+
+The data calibration file `kld_results.csv` present in some model directories contains **individual tensor-level KLD (Kullback–Leibler Divergence) benchmarks**, it is the new preferred calibration data of each model. Evaluation results show that a data calibration file based on KLD leads to better quant mix results than PPL-based (old way) calibration data files.
+
+For example for **GLM-4.6**:
+- Baseline quant: `iq6_k` for all tensors
+- Quantization degradation reference: `iq1_kt`
+- 814 chunks (although overkill, 250 chunks is more than enough)
+- @ubergarm's [imatrix-calibration-corpus-v02.txt](https://gist.github.com/ubergarm/edfeb3ff9c6ec8b49e88cdf627b0711a) dataset is used for KLD benchmarking - found to produce better calibration data files than ![wikitext](wiki.test.raw).
+- Command used for benchmarking: https://github.com/Thireus/GGUF-Tool-Suite/issues/34#issuecomment-3488743872
+- Command used to produce the calibration data: https://github.com/Thireus/GGUF-Tool-Suite/issues/34#issuecomment-3519187690
+
+`kld_results.csv` is the **core calibration data file** used to determine the optimal quant mix for any given VRAM/RAM requirement. The KLD of the model is computed after the quant of each tensor is individually dropped to `iq1_kt` (or whichever quantization degradation reference chosen by the user) - the kld metrics obtained help identify which tensors are more sensitive to quantization than others.  
+> ⚠️ Generating this CSV usually takes **several days of GPU + CPU compute time** for big models.
+
+Note that `iq3_xxs` or similar smaller quant may often be chosen the baseline as it helps reduce the model size to fit the hardware that benchmarks it, without degrading KLD excessively
+
+Additional research refs:
+- https://github.com/Thireus/GGUF-Tool-Suite/issues/34
+- https://github.com/Thireus/GGUF-Tool-Suite/discussions/23
+
 ## 📊 About `ppl_results.csv`
 
-The file `ppl_results.csv` present in each model directory contains **individual tensor-level PPL benchmarks**, for example for **DeepSeek-R1-0528**:
+The file `ppl_results.csv` present in some model directories contains **individual tensor-level PPL benchmarks**. It has since been replaced in favour of `kld_results.csv` which results in better recipes.
 
+<details>
+For example for **DeepSeek-R1-0528**:
 - Baseline quant: `q8_0` (for GPU-friendly tensors) + `iq3_xxs` (for CPU-friendly tensors)
 - Quantization degradation reference: `iq1_m_r4`
 
 `ppl_results.csv` is the **core calibration data file** used to determine the optimal quant mix for any given VRAM/RAM requirement. The perplexity of the model is computed after the quant of each tensor is individually dropped to `iq1_m_r4` (or whichever quantization degradation reference chosen by the user) - the ppl metrics obtained help identify which tensors are more sensitive to quantization than others.  
 > ⚠️ Generating this CSV usually takes **several days of GPU + CPU compute time** for big models.
 
-- `iq3_xxs` was chosen for CPU-friendly tensors as it helped fit the model within **256GB RAM** and isn't degrading PPL too much
+- `iq3_xxs` was chosen for CPU-friendly tensors baseline as it helped fit the model within **256GB RAM** and isn't degrading PPL excessively
+- ![wikitext](wiki.test.raw) is used as the dataset file for perplexity compute
 - Scripts used to produce this file (edit the "USER CONFIGURATION" section in the bash scripts as needed):
 
 ```bash
@@ -303,8 +327,7 @@ cp -f models/DeepSeek-R1-0528/download.conf .
 # Collects PPL, KLD and TOP P - Remember to adjust the USER_REGEX variable
 ./collect_ppl_results.sh --chunks 250 --qtypes iq1_m_r4 --regex '.*Same top p[[:space:]]*:[[:space:]]*([0-9]+(\.[0-9]+)?).*' --output-regex-csv topp_results.csv
 ```
-
-📄 An article explaining this methodology in detail is **coming soon**.
+</details>
 
 ---
 
