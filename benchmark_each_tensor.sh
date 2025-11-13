@@ -1086,10 +1086,6 @@ get_result_file_for_tensor() {
 # Instead of a raw `while true; do ... done`, wrap the main body in a function and control
 # whether it runs infinitely or just once based on the INFINITE_LOOP flag.
 run_main_loop() {
-
-    # track processed group combos by a concise hash (cksum preferred)
-    declare -A PROCESSED_GROUP_COMBOS=()
-
     # helper: compute a stable, order-independent hash for a group's sorted member list
     # uses: cksum if available (produces "<checksum> <bytes>"), otherwise falls back to _sha256sum
     compute_group_hash() {
@@ -1199,7 +1195,12 @@ run_main_loop() {
         # Organise shards so that the ones with tensors that have less layers come first because these tensors cannot be interpolated easily, so it's best to process them first
         shuffle_shards_by_tensor_patterns shard_to_tensors shuffled_shard_keys
 
+
+        # track individually processed tensors
         declare -A PROCESSED_TENSOR=()
+        # track processed group combos by a concise hash (cksum preferred)
+        declare -A PROCESSED_GROUP_COMBOS=()
+
         if [[ "$GROUP_TENSORS_DISABLED" != "true" ]]; then
           for gidx in "${!GROUP_TENSORS_RAW[@]}"; do
             # collect group members that exist in this tensor_to_shard set
