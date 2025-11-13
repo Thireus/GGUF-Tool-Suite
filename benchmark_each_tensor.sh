@@ -173,6 +173,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     --benchmark-groups-only)
       # require --group-tensors to be set (validated later after parsing defaults)
+      # In this mode, even if individual tensors or all tensors from a different larger group have been benchmarked, the script will still benchmark the group
+      # When this mode is not used, the groups will only be benchmarked if both of these statements are true:
+      # 1. No other group that contains all the tensors of that group has been benchmarked
+      # 2. All individual tensors of that group have never been benchmarked
+      # Example: if 
       BENCH_GROUPS_ONLY=true
       shift
       ;;
@@ -1203,7 +1208,8 @@ run_main_loop() {
               if need_run_sweep; then [[ -f "$sweep_group_file" ]] && sweep_done=true || sweep_done=false; else sweep_done=true; fi
 
               if [[ "$ppl_done" == "true" && "$sweep_done" == "true" ]]; then
-                for mt in "${tmp_members_group[@]}"; do PROCESSED_TENSOR["$mt"]=1; done
+                # Only flag individual tensors as already processed when not in --benchmark-groups-only mode
+                if [[ "$BENCH_GROUPS_ONLY" != "true" ]] && for mt in "${tmp_members_group[@]}"; do PROCESSED_TENSOR["$mt"]=1; done
                 # record combo hash so identical exact combos won't be re-run
                 combo_hash=$(compute_group_hash tmp_members_group)
                 PROCESSED_GROUP_COMBOS["${qtype}|${combo_hash}"]=1
@@ -1214,20 +1220,8 @@ run_main_loop() {
         fi
 
         # mark individual per-tensor results too (only if not already marked via a group)
-        # If user requested groups-only benchmarking, mark non-group tensors as "processed" so that they are skipped later.
         if [[ "$BENCH_GROUPS_ONLY" == "true" ]]; then
-          for t in "${!tensor_to_shard[@]}"; do
-            if [[ -z "${PROCESSED_TENSOR[$t]:-}" ]]; then
-              gid=$(find_group_index_for_tensor "$t")
-              if (( gid == -1 )); then
-                PROCESSED_TENSOR["$t"]=1
-                echo "[$(timestamp)] Skipping individual tensor '$t' because --benchmark-groups-only is enabled; it will not be benchmarked."
-              else
-                # if grouped, leave it alone (it may be marked above if results already exist)
-                :
-              fi
-            fi
-          done
+          echo "[$(timestamp)] Skipping all individual tensor benchmarking because --benchmark-groups-only is enabled."
         else
           for t in "${!tensor_to_shard[@]}"; do
             if [[ -z "${PROCESSED_TENSOR[$t]:-}" ]]; then
@@ -1255,8 +1249,8 @@ run_main_loop() {
             shuffle_tensors_by_pattern tensor_list shuffled_tensor_list
             
             for tensor_name in "${shuffled_tensor_list[@]}"; do
-                # If this tensor was pre-marked as processed, skip
-                if [[ "${PROCESSED_TENSOR[$tensor_name]:-}" == "1" ]]; then
+                # If this tensor was pre-marked as processed, skip but only if we are not in --benchmark-groups-only mode
+                if [[ "$BENCH_GROUPS_ONLY" != "true" ]] && [[ "${PROCESSED_TENSOR[$tensor_name]:-}" == "1" ]]; then
                   continue
                 fi
 
