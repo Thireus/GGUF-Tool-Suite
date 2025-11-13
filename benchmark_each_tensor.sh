@@ -1019,13 +1019,15 @@ shuffle_tensors_by_pattern() {
   eval "${out_name}=(\"\${__result[@]}\")"
 }
 
-# find_group_index_for_tensor <tensor> -> prints group index (0-based) or -1
-find_group_index_for_tensor() {
+# find_group_indexes_for_tensor <tensor> -> prints zero-or-more group indices (one per line)
+find_group_indexes_for_tensor() {
   local tensor="$1"
   if [[ "$GROUP_TENSORS_DISABLED" == "true" ]]; then
-    printf '%s\n' -1
+    # print nothing -> caller receives an empty array
     return
   fi
+
+  local -a idxs=()
   for idx in "${!GROUP_TENSORS_RAW[@]}"; do
     local group_raw="${GROUP_TENSORS_RAW[$idx]}"
     IFS=',' read -r -a regs <<< "$group_raw"
@@ -1034,12 +1036,17 @@ find_group_index_for_tensor() {
       reg="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$reg")"
       [[ -z "$reg" ]] && continue
       if [[ $tensor =~ $reg ]]; then
-        printf '%s\n' "$idx"
-        return
+        idxs+=("$idx")
+        # one matching regex per group is enough -> move to next group
+        break
       fi
     done
   done
-  printf '%s\n' -1
+
+  # print them newline-separated (or nothing if empty)
+  for i in "${idxs[@]}"; do
+    printf '%s\n' "$i"
+  done
 }
 
 # collect_group_members <group_idx> <out_array_name>
@@ -1061,26 +1068,6 @@ collect_group_members() {
       fi
     done
   done
-}
-
-# get_result_file_for_tensor <tensor> <qtype> -> prints both result filenames (PPL, KLD and SWEEP) and sets LAST_GROUP_IDX
-LAST_GROUP_IDX=-1
-get_result_file_for_tensor() {
-  local tensor="$1"; local qtype="$2"
-  gid=$(find_group_index_for_tensor "$tensor")
-  if (( gid >= 0 )); then
-    ppl="bench_ppl${_kld}_result.group${gid}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
-    #kld="bench_kld_result.group${gid}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.bin"
-    sweep="bench_sweep_result.group${gid}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
-    LAST_GROUP_IDX=$gid
-  else
-    ppl="bench_ppl${_kld}_result.${tensor}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
-    #kld="bench_kld_result.${tensor}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.bin"
-    sweep="bench_sweep_result.${tensor}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
-    LAST_GROUP_IDX=-1
-  fi
-  # print: <ppl_filename> <sweep_filename> # <kld_filename>
-  printf '%s %s\n' "$ppl" "$sweep" # "$kld"
 }
 
 # Instead of a raw `while true; do ... done`, wrap the main body in a function and control
@@ -1217,9 +1204,9 @@ run_main_loop() {
                 # Only flag individual tensors as already processed when not in --benchmark-groups-only mode
                 [[ "$BENCH_GROUPS_ONLY" != "true" ]] && for mt in "${tmp_members_group[@]}"; do PROCESSED_TENSOR["$mt"]=1; done
                 # record combo hash so identical exact combos won't be re-run
-                combo_hash=$(compute_group_hash tmp_members_group)
-                PROCESSED_GROUP_COMBOS["${qtype}|${combo_hash}"]=1
-                echo "[$(timestamp)] Found existing group result(s): group${gidx} -> marking ${#tmp_members_group[@]} member(s) as processed and recording combo (${combo_hash})."
+                group_hash=$(compute_group_hash tmp_members_group)
+                PROCESSED_GROUP_COMBOS["${group_hash}"]=1
+                echo "[$(timestamp)] Found existing group result(s): group${gidx} -> marking ${#tmp_members_group[@]} member(s) as processed and recording combo (${group_hash})."
               fi
             fi
           done
@@ -1260,214 +1247,201 @@ run_main_loop() {
                   continue
                 fi
 
-                # Determine result file for this tensor (group-aware)
-                group_idx_for_tensor=$(find_group_index_for_tensor "$tensor_name")
-                if (( group_idx_for_tensor >= 0 )); then
-                  # group path
-                  result_file_ppl="bench_ppl${_kld}_result.group${group_idx_for_tensor}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
-                  result_file_sweep="bench_sweep_result.group${group_idx_for_tensor}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
-                else
-                  # individual
-                  result_file_ppl="bench_ppl${_kld}_result.${tensor_name}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
-                  result_file_sweep="bench_sweep_result.${tensor_name}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
-                fi
+                # Determine all group indices for this tensor (could be zero..N)
+                mapfile -t group_idxs_for_tensor < <(find_group_indexes_for_tensor "$tensor_name")
+                
+                # If tensor belongs to one or more groups and grouping is enabled, handle group processing
+                if (( ${#group_idxs_for_tensor[@]} > 0 )); then
+                  # iterate over all groups this tensor belongs to and handle each group separately
+                  for group_idx_for_tensor in "${group_idxs_for_tensor[@]}"; do
 
-                # If tensor belongs to a group and grouping is enabled, handle group processing
-                if (( group_idx_for_tensor >= 0 )); then
-                  # collect all group members present in tensor_to_shard
-                  collect_group_members "$group_idx_for_tensor" group_members
+                    # collect all group members present in tensor_to_shard
+                    collect_group_members "$group_idx_for_tensor" group_members
 
-                  # if group has no members in this qtype, skip
-                  if (( ${#group_members[@]} == 0 )); then
-                    continue
-                  fi
-
-                  # build canonical sorted group hash (order independent)
-                  combo_hash=$(compute_group_hash group_members)
-                  combo_key="${qtype}|${combo_hash}"
-
-                  # if this exact combination for this qtype was processed earlier, mark members and skip
-                  if [[ -n "${PROCESSED_GROUP_COMBOS[$combo_key]:-}" ]]; then
-                    for gm in "${group_members[@]}"; do PROCESSED_TENSOR["$gm"]=1; done
-                    echo "[$(timestamp)] Skipping group #${group_idx_for_tensor} (qtype=$qtype) because identical member combo (${combo_hash}) was already processed."
-                    continue
-                  fi
-
-                  # determine which members still need benchmarking (not already processed)
-                  to_bench=()
-                  for gm in "${group_members[@]}"; do
-                    if [[ -z "${PROCESSED_TENSOR[$gm]:-}" ]]; then
-                      to_bench+=("$gm")
+                    # if group has no members in this qtype, skip
+                    if (( ${#group_members[@]} == 0 )); then
+                      echo "[$(timestamp)] Skipping group #${group_idx_for_tensor} (qtype=$qtype) because no matching member found."
+                      continue
                     fi
-                  done
 
-                  # NOTE: We will process the group even if to_bench is empty,
-                  # provided the exact combo hasn't been processed before. This ensures
-                  # a group whose members were processed earlier via a superset group
-                  # will still get its own group benchmark run (unless that exact
-                  # combination was already run).
-                  echo "[$(timestamp)] Tensor '$tensor_name' belongs to group #$group_idx_for_tensor; group has ${#group_members[@]} member(s), to_bench=${#to_bench[@]} (combo=${combo_hash})."
+                    # build canonical sorted group hash (order independent)
+                    group_hash=$(compute_group_hash group_members)
 
-                  # compute unique shards needed for the group (use the full group_members list)
-                  declare -A shards_needed_map=()
-                  declare -A shard_expected_hash=()
-                  for t in "${group_members[@]}"; do
-                    s="${tensor_to_shard[$t]}"
-                    shards_needed_map["$s"]=1
-                    shard_expected_hash["$s"]="${shard_to_hash[$s]:-}"
-                  done
-                  shards_needed=("${!shards_needed_map[@]}")
+                    # if this exact combination for this qtype was processed earlier, mark members and skip
+                    if [[ -n "${PROCESSED_GROUP_COMBOS[$group_hash]:-}" ]]; then
+                      [[ "$BENCH_GROUPS_ONLY" != "true" ]] && for gm in "${group_members[@]}"; do PROCESSED_TENSOR["$gm"]=1; done
+                      echo "[$(timestamp)] Result(s) already exist for group #${group_idx_for_tensor} with tensor='$tensor_name' (combo ${group_hash}), qtype='$qtype' -> skipping."
+                      continue
+                    fi
 
-                  # Download all required shards for the group (with verification)
-                  group_fetch_ok=true
-                  downloaded_shards=()
-                  for s in "${shards_needed[@]}"; do
-                    local_shard_tmp="${LOCAL_DOWNLOAD_DIR}/${s}"
-                    rm -f "$local_shard_tmp"
-                    chunk_id="$(echo $s | sed -nE 's/.*-([0-9]{5})-of-[0-9]{5}\.gguf$/\1/p')"
-                    expected_hash="${shard_expected_hash[$s]:-}"
+                    # NOTE: We will process the group even if never_benched is empty,
+                    # provided the exact combo hasn't been processed before. This ensures
+                    # a group whose members were processed earlier via a superset group
+                    # will still get its own group benchmark run (unless that exact
+                    # combination was already run).
+                    echo "[$(timestamp)] Tensor '$tensor_name' belongs to group #$group_idx_for_tensor; group has ${#group_members[@]} member(s) (combo=${group_hash})."
 
-                    fetched=false
-                    while true; do
-                      echo "[$(timestamp)] Group #${group_idx_for_tensor}: fetching shard '$s' (qtype=$qtype) ..."
-                      if run_tensor_downloader "${qtype^^}" "${chunk_id}" "${LOCAL_DOWNLOAD_DIR}" "${s}"; then
-                        echo "[$(timestamp)] Group #${group_idx_for_tensor}: fetched $local_shard_tmp"
-                      else
-                        echo "[$(timestamp)] ⚠️ Warning: Could not fetch shard '$s' from remote while processing group #${group_idx_for_tensor}. Aborting group." >&2
-                        break
-                      fi
+                    # compute unique shards needed for the group (use the full group_members list)
+                    declare -A shards_needed_map=()
+                    declare -A shard_expected_hash=()
+                    for t in "${group_members[@]}"; do
+                      s="${tensor_to_shard[$t]}"
+                      shards_needed_map["$s"]=1
+                      shard_expected_hash["$s"]="${shard_to_hash[$s]:-}"
+                    done
+                    shards_needed=("${!shards_needed_map[@]}")
 
-                      if [[ -n "$expected_hash" && "$USE_SHA256" == "true" ]]; then
-                        actual_hash="$(_sha256sum "$local_shard_tmp" | awk '{print $1}')"
-                        if [[ "$actual_hash" == "$expected_hash" ]]; then
+                    # Download all required shards for the group (with verification)
+                    group_fetch_ok=true
+                    downloaded_shards=()
+                    for s in "${shards_needed[@]}"; do
+                      local_shard_tmp="${LOCAL_DOWNLOAD_DIR}/${s}"
+                      rm -f "$local_shard_tmp"
+                      chunk_id="$(echo $s | sed -nE 's/.*-([0-9]{5})-of-[0-9]{5}\.gguf$/\1/p')"
+                      expected_hash="${shard_expected_hash[$s]:-}"
+
+                      fetched=false
+                      while true; do
+                        echo "[$(timestamp)] Group #${group_idx_for_tensor}: fetching shard '$s' (qtype=$qtype) ..."
+                        if run_tensor_downloader "${qtype^^}" "${chunk_id}" "${LOCAL_DOWNLOAD_DIR}" "${s}"; then
+                          echo "[$(timestamp)] Group #${group_idx_for_tensor}: fetched $local_shard_tmp"
+                        else
+                          echo "[$(timestamp)] ⚠️ Warning: Could not fetch shard '$s' from remote while processing group #${group_idx_for_tensor}. Aborting group." >&2
+                          break
+                        fi
+
+                        if [[ -n "$expected_hash" && "$USE_SHA256" == "true" ]]; then
+                          actual_hash="$(_sha256sum "$local_shard_tmp" | awk '{print $1}')"
+                          if [[ "$actual_hash" == "$expected_hash" ]]; then
+                            fetched=true
+                            break
+                          else
+                            echo "[$(timestamp)] Group #${group_idx_for_tensor}: SHA256 mismatch for $s: got $actual_hash, expected $expected_hash. Retrying in 10s..." >&2
+                            sleep 10
+                            continue
+                          fi
+                        else
                           fetched=true
                           break
-                        else
-                          echo "[$(timestamp)] Group #${group_idx_for_tensor}: SHA256 mismatch for $s: got $actual_hash, expected $expected_hash. Retrying in 10s..." >&2
-                          sleep 10
-                          continue
                         fi
-                      else
-                        fetched=true
+                      done
+
+                      if [[ "$fetched" != true ]]; then
+                        group_fetch_ok=false
                         break
                       fi
+                      downloaded_shards+=("$local_shard_tmp")
                     done
 
-                    if [[ "$fetched" != true ]]; then
-                      group_fetch_ok=false
-                      break
+                    if [[ "$group_fetch_ok" != true ]]; then
+                      echo "[$(timestamp)] ⚠️ Group fetch failed; skipping group #${group_idx_for_tensor} and restoring any partial downloads." >&2
+                      for df in "${downloaded_shards[@]:-}"; do rm -f "$df"; done
+                      continue
                     fi
-                    downloaded_shards+=("$local_shard_tmp")
-                  done
 
-                  if [[ "$group_fetch_ok" != true ]]; then
-                    echo "[$(timestamp)] ⚠️ Group fetch failed; skipping group #${group_idx_for_tensor} and restoring any partial downloads." >&2
-                    for df in "${downloaded_shards[@]:-}"; do rm -f "$df"; done
-                    continue
-                  fi
-
-                  # Backup originals and replace with downloaded files for all required shards
-                  declare -A backups_made=()
-                  replace_ok=true
-                  for s in "${shards_needed[@]}"; do
-                    if [[ $s =~ -([0-9]{5}-of-[0-9]{5})\.gguf$ ]]; then
-                      suffix="${BASH_REMATCH[1]}.gguf"
-                      original_file=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-${suffix}" | grep -vF "$LOCAL_DOWNLOAD_DIR/" | head -n1 || true)
-                      if [[ -z "$original_file" ]]; then
-                        echo "[$(timestamp)] ⚠️ Warning: Could not find local original shard matching '*-${suffix}' in $LOCAL_MODEL_DIR. Aborting group #${group_idx_for_tensor}." >&2
+                    # Backup originals and replace with downloaded files for all required shards
+                    declare -A backups_made=()
+                    replace_ok=true
+                    for s in "${shards_needed[@]}"; do
+                      if [[ $s =~ -([0-9]{5}-of-[0-9]{5})\.gguf$ ]]; then
+                        suffix="${BASH_REMATCH[1]}.gguf"
+                        original_file=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-${suffix}" | grep -vF "$LOCAL_DOWNLOAD_DIR/" | head -n1 || true)
+                        if [[ -z "$original_file" ]]; then
+                          echo "[$(timestamp)] ⚠️ Warning: Could not find local original shard matching '*-${suffix}' in $LOCAL_MODEL_DIR. Aborting group #${group_idx_for_tensor}." >&2
+                          replace_ok=false
+                          break
+                        fi
+                        backup_file="${original_file}.bak"
+                        if [[ -f "$backup_file" ]]; then
+                          echo "[$(timestamp)] Note: Backup already exists: $backup_file of group #${group_idx_for_tensor}. Overwriting."
+                          rm -f "$backup_file"
+                        fi
+                        mv -f "$original_file" "$backup_file"
+                        backups_made["$original_file"]="$backup_file"
+                        # Move downloaded file into place
+                        mv -f "${LOCAL_DOWNLOAD_DIR}/${s}" "$original_file"
+                        echo "[$(timestamp)] Replaced original shard $original_file with downloaded shard for group #${group_idx_for_tensor}."
+                      else
+                        echo "[$(timestamp)] ⚠️ Warning: Could not extract suffix from shard '$s'. Aborting group #${group_idx_for_tensor}." >&2
                         replace_ok=false
                         break
                       fi
-                      backup_file="${original_file}.bak"
-                      if [[ -f "$backup_file" ]]; then
-                        echo "[$(timestamp)] Note: Backup already exists: $backup_file of group #${group_idx_for_tensor}. Overwriting."
-                        rm -f "$backup_file"
-                      fi
-                      mv -f "$original_file" "$backup_file"
-                      backups_made["$original_file"]="$backup_file"
-                      # Move downloaded file into place
-                      mv -f "${LOCAL_DOWNLOAD_DIR}/${s}" "$original_file"
-                      echo "[$(timestamp)] Replaced original shard $original_file with downloaded shard for group #${group_idx_for_tensor}."
-                    else
-                      echo "[$(timestamp)] ⚠️ Warning: Could not extract suffix from shard '$s'. Aborting group #${group_idx_for_tensor}." >&2
-                      replace_ok=false
-                      break
-                    fi
-                  done
+                    done
 
-                  if [[ "$replace_ok" != true ]]; then
-                    # restore any backups
+                    if [[ "$replace_ok" != true ]]; then
+                      # restore any backups
+                      for orig in "${!backups_made[@]}"; do
+                        mv -f "${backups_made[$orig]}" "$orig"
+                        echo "[$(timestamp)] Restored $orig from backup after failed group #${group_idx_for_tensor} replace."
+                      done
+                      continue
+                    fi
+
+                    # Run benchmark(s) for the group depending on mode
+                    group_result_file_ppl="bench_ppl${_kld}_result.group${group_idx_for_tensor}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+                    group_result_file_sweep="bench_sweep_result.group${group_idx_for_tensor}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
+
+                    # Run PPL+KLD first if required
+                    if need_run_ppl; then
+                      echo "[$(timestamp)] Running PPL for group #${group_idx_for_tensor} -> $group_result_file_ppl"
+                      cmd="${PPL_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
+                      if [[ "$NO_KLD" == "false" ]]; then
+                        if [[ -z "${baseline_kld_file:-}" ]]; then
+                          echo "[$(timestamp)] ❌ Error: KLD baseline file var not defined or empty." >&2; exit 10
+                        elif [[ ! -f "$baseline_kld_file" ]]; then
+                          echo "[$(timestamp)] ❌ Error: KLD baseline file '$baseline_kld_file' not found." >&2; exit 11
+                        else
+                          cmd="${cmd//\{KLD_PARAMETER\}/--kl-divergence-base \"$baseline_kld_file\" --kl-divergence}"
+                        fi
+                      fi
+                      if eval "$cmd" > "$group_result_file_ppl" 2>&1 < /dev/null; then
+                        echo "[$(timestamp)] Group #${group_idx_for_tensor} PPL$PLUS_KLD finished and saved to $group_result_file_ppl"
+                      else
+                        echo "[$(timestamp)] ⚠️ Warning: Group #${group_idx_for_tensor} PPL$PLUS_KLD command exited non-zero. See $group_result_file_ppl for details." >&2
+                      fi
+                    fi
+
+                    # Run SWEEP if required (and after PPL+KLD if mode==2)
+                    if need_run_sweep; then
+                      echo "[$(timestamp)] Running SWEEP for group #${group_idx_for_tensor} -> $group_result_file_sweep"
+                      cmd="${SWEEP_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
+                      if eval "$cmd" > "$group_result_file_sweep" 2>&1 < /dev/null; then
+                        echo "[$(timestamp)] Group #${group_idx_for_tensor} SWEEP finished and saved to $group_result_file_sweep"
+                      else
+                        echo "[$(timestamp)] ⚠️ Warning: Group #${group_idx_for_tensor} SWEEP command exited non-zero. See $group_result_file_sweep for details." >&2
+                      fi
+                    fi
+
+                    # Mark all group members as processed only if all required outputs exist
+                    all_done=true
+                    if need_run_ppl; then [[ -f "$group_result_file_ppl" ]] || all_done=false; fi
+                    if need_run_sweep; then [[ -f "$group_result_file_sweep" ]] || all_done=false; fi
+
+                    if [[ "$all_done" == "true" ]]; then
+                      [[ "$BENCH_GROUPS_ONLY" != "true" ]] && for t in "${group_members[@]}"; do PROCESSED_TENSOR["$t"]=1; done
+                      # record that this exact combo (sorted member-list) has been processed for this qtype
+                      PROCESSED_GROUP_COMBOS["$group_hash"]=1
+                      echo "[$(timestamp)] Recorded processed combo for group #${group_idx_for_tensor} (qtype=${qtype}) => ${group_hash}"
+                    else
+                      echo "[$(timestamp)] ⚠️ Warning: Not all required group result files produced; group #${group_idx_for_tensor} members will remain unmarked for re-run."
+                    fi
+
+                    # Restore originals from backups
                     for orig in "${!backups_made[@]}"; do
                       mv -f "${backups_made[$orig]}" "$orig"
-                      echo "[$(timestamp)] Restored $orig from backup after failed group #${group_idx_for_tensor} replace."
+                      echo "[$(timestamp)] Restored original shard $orig from backup for group #${group_idx_for_tensor}."
                     done
-                    continue
-                  fi
 
-                  # Run benchmark(s) for the group depending on mode
-                  group_result_file_ppl="bench_ppl${_kld}_result.group${group_idx_for_tensor}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
-                  group_result_file_sweep="bench_sweep_result.group${group_idx_for_tensor}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
+                    # Clean up any leftover temp files
+                    for df in "${downloaded_shards[@]:-}"; do rm -f "$df"; done
 
-                  # Run PPL+KLD first if required
-                  if need_run_ppl; then
-                    echo "[$(timestamp)] Running PPL for group #${group_idx_for_tensor} -> $group_result_file_ppl"
-                    cmd="${PPL_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
-                    if [[ "$NO_KLD" == "false" ]]; then
-                      if [[ -z "${baseline_kld_file:-}" ]]; then
-                        echo "[$(timestamp)] ❌ Error: KLD baseline file var not defined or empty." >&2; exit 10
-                      elif [[ ! -f "$baseline_kld_file" ]]; then
-                        echo "[$(timestamp)] ❌ Error: KLD baseline file '$baseline_kld_file' not found." >&2; exit 11
-                      else
-                        cmd="${cmd//\{KLD_PARAMETER\}/--kl-divergence-base \"$baseline_kld_file\" --kl-divergence}"
-                      fi
+                    # If termination requested, exit now
+                    if [[ "$EXIT_PENDING" -eq 1 ]]; then
+                      echo "[$(timestamp)] 💀 Termination flag detected; exiting group #${group_idx_for_tensor} benchmarking after finishing current operation."
+                      [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+                      exit 0
                     fi
-                    if eval "$cmd" > "$group_result_file_ppl" 2>&1 < /dev/null; then
-                      echo "[$(timestamp)] Group #${group_idx_for_tensor} PPL$PLUS_KLD finished and saved to $group_result_file_ppl"
-                    else
-                      echo "[$(timestamp)] ⚠️ Warning: Group #${group_idx_for_tensor} PPL$PLUS_KLD command exited non-zero. See $group_result_file_ppl for details." >&2
-                    fi
-                  fi
-
-                  # Run SWEEP if required (and after PPL+KLD if mode==2)
-                  if need_run_sweep; then
-                    echo "[$(timestamp)] Running SWEEP for group #${group_idx_for_tensor} -> $group_result_file_sweep"
-                    cmd="${SWEEP_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
-                    if eval "$cmd" > "$group_result_file_sweep" 2>&1 < /dev/null; then
-                      echo "[$(timestamp)] Group #${group_idx_for_tensor} SWEEP finished and saved to $group_result_file_sweep"
-                    else
-                      echo "[$(timestamp)] ⚠️ Warning: Group #${group_idx_for_tensor} SWEEP command exited non-zero. See $group_result_file_sweep for details." >&2
-                    fi
-                  fi
-
-                  # Mark all group members as processed only if all required outputs exist
-                  all_done=true
-                  if need_run_ppl; then [[ -f "$group_result_file_ppl" ]] || all_done=false; fi
-                  if need_run_sweep; then [[ -f "$group_result_file_sweep" ]] || all_done=false; fi
-
-                  if [[ "$all_done" == "true" ]]; then
-                    for t in "${group_members[@]}"; do PROCESSED_TENSOR["$t"]=1; done
-                    # record that this exact combo (sorted member-list) has been processed for this qtype
-                    PROCESSED_GROUP_COMBOS["$combo_key"]=1
-                    echo "[$(timestamp)] Recorded processed combo for group #${group_idx_for_tensor} (qtype=${qtype}) => ${combo_hash}"
-                  else
-                    echo "[$(timestamp)] ⚠️ Warning: Not all required group result files produced; group #${group_idx_for_tensor} members will remain unmarked for re-run."
-                  fi
-
-                  # Restore originals from backups
-                  for orig in "${!backups_made[@]}"; do
-                    mv -f "${backups_made[$orig]}" "$orig"
-                    echo "[$(timestamp)] Restored original shard $orig from backup for group #${group_idx_for_tensor}."
                   done
-
-                  # Clean up any leftover temp files
-                  for df in "${downloaded_shards[@]:-}"; do rm -f "$df"; done
-
-                  # If termination requested, exit now
-                  if [[ "$EXIT_PENDING" -eq 1 ]]; then
-                    echo "[$(timestamp)] 💀 Termination flag detected; exiting group #${group_idx_for_tensor} benchmarking after finishing current operation."
-                    [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
-                    exit 0
-                  fi
 
                   # done group processing; move to next tensor
                   continue
