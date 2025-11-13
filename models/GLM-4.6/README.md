@@ -55,7 +55,7 @@ mkdir -p kitchen && cd kitchen
 ulimit -n 9999 # Lifts "too many open files" limitation on Linux
 ~/ik_llama.cpp/build/bin/llama-server \
   -m GLM-4.6-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01762.gguf \
-  -ctk f16 -c 4096 -ngl 99 \
+  -fa auto -ctk f16 -c 4096 -ngl 99 \
   -ot "blk\.([0-9]|[1-2][0-9]|3[0-6])\.ffn_.*=CUDA0" \
   -ot "blk\.(37|38|39|[4-6][0-9]|7[0-2])\.ffn_.*=CUDA1" \
   -ot "blk\.(7[3-9])\.ffn_.*=CUDA2" \
