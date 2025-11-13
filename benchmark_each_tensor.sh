@@ -849,6 +849,12 @@ else
       # file doesn't exist -> create it from temp
       mv "$tmp_mapping" "$group_mapping_file"
   fi
+  
+  if [[ "$BENCH_GROUPS_ONLY" == "true" ]]; then
+    echo "Benchmark groups only: ENABLED; In this mode, even if all tensors of a group have been benchmarked via another group, the group will still be benchmarked!"
+  else
+    echo "Benchmark groups only: DISABLED; In this mode, if all tensors of a group have already been benchmarked (either individually or via another group) then the group will not be benchmarked!"
+  fi
 fi
 
 # helper checks for enabled runs
@@ -1464,6 +1470,9 @@ run_main_loop() {
                   fi
 
                   # done group processing; move to next tensor
+                  continue
+                elif [[ "$BENCH_GROUPS_ONLY" == "true" ]]; then
+                  echo '[$(timestamp)] Skipping tensor='$tensor_name' because --benchmark-groups-only mode is used and this tensor is not part of any group.'
                   continue
                 fi
 
