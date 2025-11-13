@@ -69,6 +69,7 @@ for i in "${BATCH_SIZES[@]}"; do
 
         "$BENCH_PATH" \
             -m "$MODEL" \
+            -fa on \
             -amb 1024 \
             -ctk f16 \
             -c 65536 \
