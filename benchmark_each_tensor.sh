@@ -1209,7 +1209,7 @@ run_main_loop() {
 
               if [[ "$ppl_done" == "true" && "$sweep_done" == "true" ]]; then
                 # Only flag individual tensors as already processed when not in --benchmark-groups-only mode
-                if [[ "$BENCH_GROUPS_ONLY" != "true" ]] && for mt in "${tmp_members_group[@]}"; do PROCESSED_TENSOR["$mt"]=1; done
+                [[ "$BENCH_GROUPS_ONLY" != "true" ]] && for mt in "${tmp_members_group[@]}"; do PROCESSED_TENSOR["$mt"]=1; done
                 # record combo hash so identical exact combos won't be re-run
                 combo_hash=$(compute_group_hash tmp_members_group)
                 PROCESSED_GROUP_COMBOS["${qtype}|${combo_hash}"]=1
