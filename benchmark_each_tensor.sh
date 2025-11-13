@@ -1246,7 +1246,7 @@ run_main_loop() {
                     continue
                   fi
 
-                  echo "[$(timestamp)] Tensor '$tensor_name' belongs to group #$group_idx_for_tensor; will benchmark group of ${#to_bench[@]} tensor(s)."
+                  echo "[$(timestamp)] Tensor '$tensor_name' belongs to group #${group_idx_for_tensor}; will benchmark group of ${#to_bench[@]} tensor(s)."
 
                   # compute unique shards needed for the group
                   declare -A shards_needed_map=()
@@ -1269,11 +1269,11 @@ run_main_loop() {
 
                     fetched=false
                     while true; do
-                      echo "[$(timestamp)] Group: fetching shard '$s' (qtype=$qtype) ..."
+                      echo "[$(timestamp)] Group #${group_idx_for_tensor}: fetching shard '$s' (qtype=$qtype) ..."
                       if run_tensor_downloader "${qtype^^}" "${chunk_id}" "${LOCAL_DOWNLOAD_DIR}" "${s}"; then
-                        echo "[$(timestamp)] Group: fetched $local_shard_tmp"
+                        echo "[$(timestamp)] Group #${group_idx_for_tensor}: fetched $local_shard_tmp"
                       else
-                        echo "[$(timestamp)] ⚠️ Warning: Could not fetch shard '$s' from remote while processing group. Aborting group." >&2
+                        echo "[$(timestamp)] ⚠️ Warning: Could not fetch shard '$s' from remote while processing group #${group_idx_for_tensor}. Aborting group." >&2
                         break
                       fi
 
@@ -1283,7 +1283,7 @@ run_main_loop() {
                           fetched=true
                           break
                         else
-                          echo "[$(timestamp)] Group: SHA256 mismatch for $s: got $actual_hash, expected $expected_hash. Retrying in 10s..." >&2
+                          echo "[$(timestamp)] Group #${group_idx_for_tensor}: SHA256 mismatch for $s: got $actual_hash, expected $expected_hash. Retrying in 10s..." >&2
                           sleep 10
                           continue
                         fi
@@ -1301,7 +1301,7 @@ run_main_loop() {
                   done
 
                   if [[ "$group_fetch_ok" != true ]]; then
-                    echo "[$(timestamp)] ⚠️ Group fetch failed; skipping group and restoring any partial downloads." >&2
+                    echo "[$(timestamp)] ⚠️ Group fetch failed; skipping group #${group_idx_for_tensor} and restoring any partial downloads." >&2
                     for df in "${downloaded_shards[@]:-}"; do rm -f "$df"; done
                     continue
                   fi
@@ -1314,22 +1314,22 @@ run_main_loop() {
                       suffix="${BASH_REMATCH[1]}.gguf"
                       original_file=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-${suffix}" | grep -vF "$LOCAL_DOWNLOAD_DIR/" | head -n1 || true)
                       if [[ -z "$original_file" ]]; then
-                        echo "[$(timestamp)] ⚠️ Warning: Could not find local original shard matching '*-${suffix}' in $LOCAL_MODEL_DIR. Aborting group." >&2
+                        echo "[$(timestamp)] ⚠️ Warning: Could not find local original shard matching '*-${suffix}' in $LOCAL_MODEL_DIR. Aborting group #${group_idx_for_tensor}." >&2
                         replace_ok=false
                         break
                       fi
                       backup_file="${original_file}.bak"
                       if [[ -f "$backup_file" ]]; then
-                        echo "[$(timestamp)] Note: Backup already exists: $backup_file. Overwriting."
+                        echo "[$(timestamp)] Note: Backup already exists: $backup_file of group #${group_idx_for_tensor}. Overwriting."
                         rm -f "$backup_file"
                       fi
                       mv -f "$original_file" "$backup_file"
                       backups_made["$original_file"]="$backup_file"
                       # Move downloaded file into place
                       mv -f "${LOCAL_DOWNLOAD_DIR}/${s}" "$original_file"
-                      echo "[$(timestamp)] Replaced original shard $original_file with downloaded shard."
+                      echo "[$(timestamp)] Replaced original shard $original_file with downloaded shard for group #${group_idx_for_tensor}."
                     else
-                      echo "[$(timestamp)] ⚠️ Warning: Could not extract suffix from shard '$s'. Aborting group." >&2
+                      echo "[$(timestamp)] ⚠️ Warning: Could not extract suffix from shard '$s'. Aborting group #${group_idx_for_tensor}." >&2
                       replace_ok=false
                       break
                     fi
@@ -1339,7 +1339,7 @@ run_main_loop() {
                     # restore any backups
                     for orig in "${!backups_made[@]}"; do
                       mv -f "${backups_made[$orig]}" "$orig"
-                      echo "[$(timestamp)] Restored $orig from backup after failed group replace."
+                      echo "[$(timestamp)] Restored $orig from backup after failed group #${group_idx_for_tensor} replace."
                     done
                     continue
                   fi
@@ -1362,9 +1362,9 @@ run_main_loop() {
                       fi
                     fi
                     if eval "$cmd" > "$group_result_file_ppl" 2>&1 < /dev/null; then
-                      echo "[$(timestamp)] Group PPL$PLUS_KLD finished and saved to $group_result_file_ppl"
+                      echo "[$(timestamp)] Group #${group_idx_for_tensor} PPL$PLUS_KLD finished and saved to $group_result_file_ppl"
                     else
-                      echo "[$(timestamp)] ⚠️ Warning: Group PPL$PLUS_KLD command exited non-zero. See $group_result_file_ppl for details." >&2
+                      echo "[$(timestamp)] ⚠️ Warning: Group #${group_idx_for_tensor} PPL$PLUS_KLD command exited non-zero. See $group_result_file_ppl for details." >&2
                     fi
                   fi
 
@@ -1373,9 +1373,9 @@ run_main_loop() {
                     echo "[$(timestamp)] Running SWEEP for group #${group_idx_for_tensor} -> $group_result_file_sweep"
                     cmd="${SWEEP_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
                     if eval "$cmd" > "$group_result_file_sweep" 2>&1 < /dev/null; then
-                      echo "[$(timestamp)] Group SWEEP finished and saved to $group_result_file_sweep"
+                      echo "[$(timestamp)] Group #${group_idx_for_tensor} SWEEP finished and saved to $group_result_file_sweep"
                     else
-                      echo "[$(timestamp)] ⚠️ Warning: Group SWEEP command exited non-zero. See $group_result_file_sweep for details." >&2
+                      echo "[$(timestamp)] ⚠️ Warning: Group #${group_idx_for_tensor} SWEEP command exited non-zero. See $group_result_file_sweep for details." >&2
                     fi
                   fi
 
@@ -1387,13 +1387,13 @@ run_main_loop() {
                   if [[ "$all_done" == "true" ]]; then
                     for t in "${group_members[@]}"; do PROCESSED_TENSOR["$t"]=1; done
                   else
-                    echo "[$(timestamp)] ⚠️ Warning: Not all required group result files produced; group members will remain unmarked for re-run."
+                    echo "[$(timestamp)] ⚠️ Warning: Not all required group result files produced; group #${group_idx_for_tensor} members will remain unmarked for re-run."
                   fi
 
                   # Restore originals from backups
                   for orig in "${!backups_made[@]}"; do
                     mv -f "${backups_made[$orig]}" "$orig"
-                    echo "[$(timestamp)] Restored original shard $orig from backup."
+                    echo "[$(timestamp)] Restored original shard $orig from backup for group #${group_idx_for_tensor}."
                   done
 
                   # Clean up any leftover temp files
@@ -1401,7 +1401,7 @@ run_main_loop() {
 
                   # If termination requested, exit now
                   if [[ "$EXIT_PENDING" -eq 1 ]]; then
-                    echo "[$(timestamp)] 💀 Termination flag detected; exiting after finishing current operation."
+                    echo "[$(timestamp)] 💀 Termination flag detected; exiting group #${group_idx_for_tensor} benchmarking after finishing current operation."
                     [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
                     exit 0
                   fi
@@ -1581,7 +1581,7 @@ run_main_loop() {
 
                 # If a termination was requested, exit now
                 if [[ "$EXIT_PENDING" -eq 1 ]]; then
-                  echo "[$(timestamp)] 💀 Termination flag detected; exiting after finishing current operation."
+                  echo "[$(timestamp)] 💀 Termination flag detected; exiting '$tensor_name' benchmarking after finishing current operation."
                   [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
                   exit 0
                 fi
