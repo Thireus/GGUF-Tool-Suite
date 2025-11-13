@@ -1195,7 +1195,6 @@ run_main_loop() {
         # Organise shards so that the ones with tensors that have less layers come first because these tensors cannot be interpolated easily, so it's best to process them first
         shuffle_shards_by_tensor_patterns shard_to_tensors shuffled_shard_keys
 
-
         # track individually processed tensors
         declare -A PROCESSED_TENSOR=()
         # track processed group combos by a concise hash (cksum preferred)
