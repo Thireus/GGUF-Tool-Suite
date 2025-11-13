@@ -132,6 +132,9 @@ INFINITE_LOOP=false
 # Defines if Kullback–Leibler divergence (KLD) must not be computed (defaults to false)
 NO_KLD=false
 
+# Only benchmark groups (requires --group-tensors to be provided)
+BENCH_GROUPS_ONLY=false
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --benchmark-worst-tensors)
@@ -168,6 +171,11 @@ while [[ $# -gt 0 ]]; do
       NO_KLD=true
       shift
       ;;
+    --benchmark-groups-only)
+      # require --group-tensors to be set (validated later after parsing defaults)
+      BENCH_GROUPS_ONLY=true
+      shift
+      ;;
     *) echo "Unknown argument: $1" >&2; exit 1;;
   esac
 done
@@ -176,6 +184,12 @@ done
 if (( ${#GROUP_TENSORS_RAW[@]} == 0 )) || ((( ${#GROUP_TENSORS_RAW[@]} == 1 )) && [[ "${GROUP_TENSORS_RAW[0]}" == "[]" ]]); then
   GROUP_TENSORS_DISABLED=true
   GROUP_TENSORS_RAW=()
+fi
+
+# Validate that if user asked to benchmark groups only, they passed --group-tensors
+if [[ "$BENCH_GROUPS_ONLY" == "true" && "$GROUP_TENSORS_DISABLED" == "true" ]]; then
+  echo "Error: --benchmark-groups-only requires --group-tensors to be set (provide one or more group regex specifications)." >&2
+  exit 1
 fi
 
 if [[ -n "$BENCH_CSV" && -z "$BENCH_FROM_QTYPE" ]]; then
@@ -796,7 +810,7 @@ else
   echo "Group tensors: ENABLED; groups:"
   group_mapping_file="bench_ppl${_kld}_group_mapping.${BASELINE_QTYPE}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
   if [ -e "$group_mapping_file" ]; then
-      read -p "[$(timestamp)] ⚠️ Warning: Group mapping file '$group_mapping_file' already exists. Overwrite? [y/N] " answer
+      read -p "[$(timestamp)] ❓ Question: Group mapping file '$group_mapping_file' already exists. Overwrite? [y/N] " answer
       case "$answer" in
           [Yy]*) : ;;  # continue
           *) echo "Operation cancelled by user. No changes made to '$group_mapping_file'." >&2; exit 14 ;;
@@ -1156,21 +1170,37 @@ run_main_loop() {
         fi
 
         # mark individual per-tensor results too (only if not already marked via a group)
-        for t in "${!tensor_to_shard[@]}"; do
-          if [[ -z "${PROCESSED_TENSOR[$t]:-}" ]]; then
-            ppl_indf="bench_ppl${_kld}_result.${t}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
-            sweep_indf="bench_sweep_result.${t}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
-
-            ppl_done=false; sweep_done=false
-            if need_run_ppl; then [[ -f "$ppl_indf" ]] && ppl_done=true || ppl_done=false; else ppl_done=true; fi
-            if need_run_sweep; then [[ -f "$sweep_indf" ]] && sweep_done=true || sweep_done=false; else sweep_done=true; fi
-
-            if [[ "$ppl_done" == "true" && "$sweep_done" == "true" ]]; then
-              PROCESSED_TENSOR["$t"]=1
-              echo "[$(timestamp)] Found existing individual result(s): $t -> marking processed."
+        # If user requested groups-only benchmarking, mark non-group tensors as "processed" so that they are skipped later.
+        if [[ "$BENCH_GROUPS_ONLY" == "true" ]]; then
+          for t in "${!tensor_to_shard[@]}"; do
+            if [[ -z "${PROCESSED_TENSOR[$t]:-}" ]]; then
+              gid=$(find_group_index_for_tensor "$t")
+              if (( gid == -1 )); then
+                PROCESSED_TENSOR["$t"]=1
+                echo "[$(timestamp)] Skipping individual tensor '$t' because --benchmark-groups-only is enabled; it will not be benchmarked."
+              else
+                # if grouped, leave it alone (it may be marked above if results already exist)
+                :
+              fi
             fi
-          fi
-        done
+          done
+        else
+          for t in "${!tensor_to_shard[@]}"; do
+            if [[ -z "${PROCESSED_TENSOR[$t]:-}" ]]; then
+              ppl_indf="bench_ppl${_kld}_result.${t}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+              sweep_indf="bench_sweep_result.${t}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
+
+              ppl_done=false; sweep_done=false
+              if need_run_ppl; then [[ -f "$ppl_indf" ]] && ppl_done=true || ppl_done=false; else ppl_done=true; fi
+              if need_run_sweep; then [[ -f "$sweep_indf" ]] && sweep_done=true || sweep_done=false; else sweep_done=true; fi
+
+              if [[ "$ppl_done" == "true" && "$sweep_done" == "true" ]]; then
+                PROCESSED_TENSOR["$t"]=1
+                echo "[$(timestamp)] Found existing individual result(s): $t -> marking processed."
+              fi
+            fi
+          done
+        fi
 
         # Loop over each shard filename and its tensor names
         for shard_fname in "${shuffled_shard_keys[@]}"; do
