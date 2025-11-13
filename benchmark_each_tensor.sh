@@ -809,21 +809,41 @@ if [[ "$GROUP_TENSORS_DISABLED" == "true" ]]; then
 else
   echo "Group tensors: ENABLED; groups:"
   group_mapping_file="bench_ppl${_kld}_group_mapping.${BASELINE_QTYPE}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
-  if [ -e "$group_mapping_file" ]; then
-      read -p "[$(timestamp)] ❓ Question: Group mapping file '$group_mapping_file' already exists. Overwrite? [y/N] " answer
-      case "$answer" in
-          [Yy]*) : ;;  # continue
-          *) echo "Operation cancelled by user. No changes made to '$group_mapping_file'." >&2; exit 14 ;;
-      esac
-  fi
-  # Now safe to clear or create the file
-  > "$group_mapping_file"
+
+  # Build the planned mapping content in a temp file (also print the human-friendly lines)
+  tmp_mapping="$(mktemp)" || { echo "[$(timestamp)] ❌ Error: mktemp failed."; exit 1; }
   gid=0
   for g in "${GROUP_TENSORS_RAW[@]}"; do
     echo "  - group$gid: $g"
-    echo "group$gid:$g" >> "$group_mapping_file"
+    echo "group$gid:$g" >> "$tmp_mapping"
     gid=$((gid + 1))
   done
+
+  if [ -e "$group_mapping_file" ]; then
+      # If the existing file is byte-equal to the planned content, skip asking and do nothing
+      if cmp -s "$tmp_mapping" "$group_mapping_file"; then
+          echo "[$(timestamp)] Group mapping file '$group_mapping_file' is identical to planned content; no changes necessary."
+          rm -f "$tmp_mapping"
+      else
+          # different content -> ask user
+          read -p "[$(timestamp)] ❓ Question: Group mapping file '$group_mapping_file' already exists and differs. Overwrite? [y/N] " answer
+          case "$answer" in
+              [Yy]*)
+                # overwrite atomically
+                mv "$tmp_mapping" "$group_mapping_file"
+                echo "[$(timestamp)] Overwrote '$group_mapping_file' with new group mapping."
+                ;;
+              *)
+                echo "Operation cancelled by user. No changes made to '$group_mapping_file'." >&2
+                rm -f "$tmp_mapping"
+                exit 14
+                ;;
+          esac
+      fi
+  else
+      # file doesn't exist -> create it from temp
+      mv "$tmp_mapping" "$group_mapping_file"
+  fi
 fi
 
 # helper checks for enabled runs
@@ -1056,6 +1076,27 @@ get_result_file_for_tensor() {
 # whether it runs infinitely or just once based on the INFINITE_LOOP flag.
 run_main_loop() {
 
+    # track processed group combos by a concise hash (cksum preferred)
+    declare -A PROCESSED_GROUP_COMBOS=()
+
+    # helper: compute a stable, order-independent hash for a group's sorted member list
+    # uses: cksum if available (produces "<checksum> <bytes>"), otherwise falls back to _sha256sum
+    compute_group_hash() {
+      # $1 = name of array var (passed by name)
+      local -n _arr=$1
+      # produce sorted newline-separated canonical representation
+      local sorted
+      mapfile -t sorted < <(printf '%s\n' "${_arr[@]}" | sort)
+      # join with newline preserving newlines via printf
+      if command -v cksum >/dev/null 2>&1; then
+        # use cksum output: "<checksum> <bytes>"
+        printf '%s\n' "${sorted[@]}" | cksum | awk '{print $1 "-" $2}'
+      else
+        # fallback to sha256 text digest
+        printf '%s\n' "${sorted[@]}" | _sha256sum | awk '{print $1}'
+      fi
+    }
+
     for qtype in "${QTYPES[@]}"; do
         # Uppercase version for remote directory name
         qtype_up="${qtype^^}"
@@ -1163,7 +1204,10 @@ run_main_loop() {
 
               if [[ "$ppl_done" == "true" && "$sweep_done" == "true" ]]; then
                 for mt in "${tmp_members_group[@]}"; do PROCESSED_TENSOR["$mt"]=1; done
-                echo "[$(timestamp)] Found existing group result(s): group${gidx} -> marking ${#tmp_members_group[@]} member(s) as processed."
+                # record combo hash so identical exact combos won't be re-run
+                combo_hash=$(compute_group_hash tmp_members_group)
+                PROCESSED_GROUP_COMBOS["${qtype}|${combo_hash}"]=1
+                echo "[$(timestamp)] Found existing group result(s): group${gidx} -> marking ${#tmp_members_group[@]} member(s) as processed and recording combo (${combo_hash})."
               fi
             fi
           done
@@ -1232,6 +1276,23 @@ run_main_loop() {
                 if (( group_idx_for_tensor >= 0 )); then
                   # collect all group members present in tensor_to_shard
                   collect_group_members "$group_idx_for_tensor" group_members
+
+                  # if group has no members in this qtype, skip
+                  if (( ${#group_members[@]} == 0 )); then
+                    continue
+                  fi
+
+                  # build canonical sorted group hash (order independent)
+                  combo_hash=$(compute_group_hash group_members)
+                  combo_key="${qtype}|${combo_hash}"
+
+                  # if this exact combination for this qtype was processed earlier, mark members and skip
+                  if [[ -n "${PROCESSED_GROUP_COMBOS[$combo_key]:-}" ]]; then
+                    for gm in "${group_members[@]}"; do PROCESSED_TENSOR["$gm"]=1; done
+                    echo "[$(timestamp)] Skipping group #${group_idx_for_tensor} (qtype=$qtype) because identical member combo (${combo_hash}) was already processed."
+                    continue
+                  fi
+
                   # determine which members still need benchmarking (not already processed)
                   to_bench=()
                   for gm in "${group_members[@]}"; do
@@ -1240,18 +1301,17 @@ run_main_loop() {
                     fi
                   done
 
-                  if (( ${#to_bench[@]} == 0 )); then
-                    # nothing to do (maybe already processed by another tensor)
-                    for gm in "${group_members[@]}"; do PROCESSED_TENSOR["$gm"]=1; done
-                    continue
-                  fi
+                  # NOTE: We will process the group even if to_bench is empty,
+                  # provided the exact combo hasn't been processed before. This ensures
+                  # a group whose members were processed earlier via a superset group
+                  # will still get its own group benchmark run (unless that exact
+                  # combination was already run).
+                  echo "[$(timestamp)] Tensor '$tensor_name' belongs to group #$group_idx_for_tensor; group has ${#group_members[@]} member(s), to_bench=${#to_bench[@]} (combo=${combo_hash})."
 
-                  echo "[$(timestamp)] Tensor '$tensor_name' belongs to group #${group_idx_for_tensor}; will benchmark group of ${#to_bench[@]} tensor(s)."
-
-                  # compute unique shards needed for the group
+                  # compute unique shards needed for the group (use the full group_members list)
                   declare -A shards_needed_map=()
                   declare -A shard_expected_hash=()
-                  for t in "${to_bench[@]}"; do
+                  for t in "${group_members[@]}"; do
                     s="${tensor_to_shard[$t]}"
                     shards_needed_map["$s"]=1
                     shard_expected_hash["$s"]="${shard_to_hash[$s]:-}"
@@ -1386,6 +1446,9 @@ run_main_loop() {
 
                   if [[ "$all_done" == "true" ]]; then
                     for t in "${group_members[@]}"; do PROCESSED_TENSOR["$t"]=1; done
+                    # record that this exact combo (sorted member-list) has been processed for this qtype
+                    PROCESSED_GROUP_COMBOS["$combo_key"]=1
+                    echo "[$(timestamp)] Recorded processed combo for group #${group_idx_for_tensor} (qtype=${qtype}) => ${combo_hash}"
                   else
                     echo "[$(timestamp)] ⚠️ Warning: Not all required group result files produced; group #${group_idx_for_tensor} members will remain unmarked for re-run."
                   fi
