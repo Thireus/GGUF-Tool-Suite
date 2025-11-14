@@ -5,7 +5,7 @@
 #** benchmark PPL and KLD results of benchmark_each_tensor.sh **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-09-2025 -------------------- **#
+#** --------------- Updated: Nov-14-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -45,6 +45,7 @@ Options:
   --group-tensors-map FILE              Path to a group mapping file (each line "groupN:regex[,regex2]" or "regex[,regex2]").
                                           This replicates --group-tensors but reads groups from a file. Mutually exclusive
                                           with --group-tensors.
+  --groups-only.                        When present, will only collect the group metrics (default: disabled)
   --expand-groups                       When present, expand groups into individual tensor columns (default: disabled)
   --hide-empty                          Don't include empty benchmark results to the output csv
   --output-ppl-csv FILE                 Path to output PPL CSV file (default: $OUTPUT_PPL_CSV)
@@ -65,17 +66,33 @@ USER_REGEX=(
   ## Model head & embeddings
   '^token_embd\.weight$'
   '^output\.weight$'
+  '^output_norm\.weight$'
 
   ## Multi-headed attention parameters
+  '^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_v\.bias$'
   '^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_v\.weight$'
   '^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q\.weight$'
   '^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_output\.weight$'
   '^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k\.weight$'
+  '^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q\.bias$'
+  '^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q_norm\.weight$'
+  '^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k_norm\.weight$'
+  '^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k\.bias$'
+  '^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_norm\.weight$'
 
   ## Core FFN weights
   '^blk\.[0-2]\.ffn_down\.weight$'
+  '^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_inp\.weight$'
   '^blk\.[0-2]\.ffn_gate\.weight$'
   '^blk\.[0-2]\.ffn_up\.weight$'
+
+  ## Other tensors
+  '^blk\.92\.nextn\.shared_head_norm\.weight$'
+  '^blk\.92\.nextn\.enorm\.weight$'
+  '^blk\.([0-9]|[1-8][0-9]|9[0-2])\.post_attention_norm\.weight$'
+  '^blk\.([3-9]|[1-8][0-9]|9[0-2])\.exp_probs_b\.bias$'
+  '^blk\.92\.nextn\.eh_proj\.weight$'
+  '^blk\.92\.nextn\.hnorm\.weight$'
 
   ## GPU-loaded ffn_*_shexp
   '^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_down_shexp\.weight$'
@@ -106,6 +123,7 @@ REGEX=""
 qtypes=""
 GROUP_TENSORS_RAW=()
 GROUP_TENSORS_DISABLED=true
+GROUPS_ONLY=false
 EXPAND_GROUPS=false
 NO_KLD=false
 GROUP_TENSORS_MAP_FILE=""
@@ -218,6 +236,10 @@ while [[ $# -gt 0 ]]; do
       GROUP_TENSORS_MAP_FILE="$2"
       shift 2
       ;;
+    --groups-only)
+      GROUPS_ONLY=true
+      shift
+      ;;
     --expand-groups)
       EXPAND_GROUPS=true
       shift
@@ -310,6 +332,19 @@ if [[ -n "${GROUP_TENSORS_MAP_FILE:-}" ]]; then
   fi
 fi
 
+# Validate that if user asked to collect groups only, they passed --group-tensors or --group-tensors-map
+if [[ "$GROUPS_ONLY" == "true" ]] && [[ ! (-n "${GROUP_TENSORS_MAP_FILE:-}" || ${#GROUP_TENSORS_RAW[@]} -gt 0) ]]; then
+  echo "Error: --groups-only requires --group-tensors or --group-tensors-map to be set." >&2
+  exit 1
+fi
+
+# If the single token '[]' is passed, grouping disabled (mirror benchmark_each_tensor behaviour)
+if (( ${#GROUP_TENSORS_RAW[@]} == 0 )) || ( (( ${#GROUP_TENSORS_RAW[@]} == 1 )) && [[ "${GROUP_TENSORS_RAW[0]}" == "[]" ]] ); then
+  GROUP_TENSORS_DISABLED=true
+else
+  GROUP_TENSORS_DISABLED=false
+fi
+
 # Echo chosen settings
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting collection of PPL results."
 [[ -n "$PPL_CHUNKS" ]] && echo "Using PPL chunks: $PPL_CHUNKS"
@@ -328,18 +363,19 @@ if [[ "$GROUP_TENSORS_DISABLED" != "true" ]]; then
   for g in "${GROUP_TENSORS_RAW[@]}"; do echo "  - $g"; done
   if [[ "$EXPAND_GROUPS" == "true" ]]; then
     echo "Group expansion: ENABLED (show all member tensors)"
+    if [[ "$GROUPS_ONLY" == "true" ]]; then
+      echo "⚠️  Warning! If a group contains tensor(s) presents in other groups the metrics for that tensor will be overwritten by the latest group processed."
+    fi
   else
     echo "Group expansion: DISABLED (show one column per group)"
   fi
+  if [[ "$GROUPS_ONLY" == "true" ]]; then
+    echo "Collecting group metrics only: ENABLED"
+  else
+    echo "Collecting group metrics only: DISABLED"
+  fi
 fi
 [[ "$NO_KLD" == "false" ]] && echo "KLD collection disabled: $NO_KLD"
-
-# If the single token '[]' is passed, grouping disabled (mirror benchmark_each_tensor behaviour)
-if (( ${#GROUP_TENSORS_RAW[@]} == 0 )) || ( (( ${#GROUP_TENSORS_RAW[@]} == 1 )) && [[ "${GROUP_TENSORS_RAW[0]}" == "[]" ]] ); then
-  GROUP_TENSORS_DISABLED=true
-else
-  GROUP_TENSORS_DISABLED=false
-fi
 
 # 1. Discover qtypes by finding tensors.{qtype}.map files in current directory
 declare -a QTYPES=()
@@ -406,13 +442,15 @@ else
     fi
 fi
 
-# Helper: find_group_index_for_tensor <tensor> -> prints group index (0-based) or -1
-find_group_index_for_tensor() {
+# find_group_indexes_for_tensor <tensor> -> prints zero-or-more group indices (one per line)
+find_group_indexes_for_tensor() {
   local tensor="$1"
   if [[ "$GROUP_TENSORS_DISABLED" == "true" ]]; then
-    printf '%s\n' -1
+    # print nothing -> caller receives an empty array
     return
   fi
+
+  local -a idxs=()
   for idx in "${!GROUP_TENSORS_RAW[@]}"; do
     local group_raw="${GROUP_TENSORS_RAW[$idx]}"
     IFS=',' read -r -a regs <<< "$group_raw"
@@ -421,12 +459,17 @@ find_group_index_for_tensor() {
       reg="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$reg")"
       [[ -z "$reg" ]] && continue
       if [[ $tensor =~ $reg ]]; then
-        printf '%s\n' "$idx"
-        return
+        idxs+=("$idx")
+        # one matching regex per group is enough -> move to next group
+        break
       fi
     done
   done
-  printf '%s\n' -1
+
+  # print them newline-separated (or nothing if empty)
+  for i in "${idxs[@]}"; do
+    printf '%s\n' "$i"
+  done
 }
 
 # Helper to extract PPL from a result file (returns numeric PPL or empty)
@@ -575,26 +618,21 @@ for qtype in "${QTYPES[@]}"; do
         done
         [[ "$matched" == true ]] || continue
 
-        # Determine group membership (if any) for this tensor
-        gid=$(find_group_index_for_tensor "$tensor_name")
+        # Determine all group indices for this tensor (could be zero..N)
+        mapfile -t group_idxs_for_tensor < <(find_group_indexes_for_tensor "$tensor_name")
 
-        # Decide whether to add a column placeholder based on grouping & expansion & hide-empty
-        if (( gid >= 0 )); then
+        # If grouping is enabled and this tensor belongs to one or more group, attempt to process the groups
+        if (( ${#group_idxs_for_tensor[@]} > 0 )); then
+
+          # Decide whether to add a column placeholder based on grouping & expansion & hide-empty
           if [[ "$EXPAND_GROUPS" == "true" ]]; then
             # user wants member columns: include the individual tensor as a column unless hide-empty==true
             [[ "$HIDE_EMPTY" == "false" ]] && TENSOR_SET["$tensor_name"]=1
-          else
-            # user wants group columns: ensure group column is present (unless hide-empty==true)
-            [[ "$HIDE_EMPTY" == "false" ]] && TENSOR_SET["group${gid}"]=1
           fi
-        else
-          # not in a group -> individual tensor column
-          [[ "$HIDE_EMPTY" == "false" ]] && TENSOR_SET["$tensor_name"]=1
-        fi
 
-        # If grouping is enabled and this tensor belongs to a group, attempt to process the group
-        if (( gid >= 0 )); then
-            proc_key="${qtype}|${gid}"
+          # iterate over all groups this tensor belongs to and handle each group separately
+          for group_idx_for_tensor in "${group_idxs_for_tensor[@]}"; do
+            proc_key="${qtype}|${group_idx_for_tensor}"
             # If this group for this qtype has already been processed (value '1'), skip individual handling.
             # We do NOT skip when the marker is 'MISSING' — that allows falling back to per-tensor files.
             if [[ "${PROCESSED_GROUP_QTYPE[$proc_key]:-}" == "1" ]]; then
@@ -602,9 +640,9 @@ for qtype in "${QTYPES[@]}"; do
             fi
 
             # collect all group members present in this qtype's map
-            group_raw="${GROUP_TENSORS_RAW[$gid]}"
+            group_raw="${GROUP_TENSORS_RAW[$group_idx_for_tensor]}"
             IFS=',' read -r -a regs <<< "$group_raw"
-            declare -a group_members=()
+            declare -a group_members=() # IMPORTANT: If there is more than one group, this array will be overwritten, which is fine, just make sure to inform the user!
             for reg in "${regs[@]}"; do
               reg="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$reg")"
               [[ -z "$reg" ]] && continue
@@ -618,10 +656,15 @@ for qtype in "${QTYPES[@]}"; do
             done
 
             if (( ${#group_members[@]} == 0 )); then
-              echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: no group members found in map for group #${gid} (qtype=${qtype}). Skipping group." >&2
+              echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: no group members found in map for group #${group_idx_for_tensor} (qtype=${qtype}). Skipping group." >&2
               PROCESSED_GROUP_QTYPE["$proc_key"]=1
               continue
             fi
+          done
+        # Decide whether to add a column placeholder based on grouping & expansion & hide-empty
+        else
+          # not in a group -> individual tensor column
+          ([[ "$HIDE_EMPTY" == "false" ]] && [[ "$GROUPS_ONLY" != "true" ]]) && TENSOR_SET["$tensor_name"]=1
         fi
 
         # If this qtype is the injected-baseline qtype, handle specially
@@ -632,14 +675,17 @@ for qtype in "${QTYPES[@]}"; do
                 PPL_VALUES["${qtype}|${tensor_name}"]="$BASELINE_PPL_VALUE"
                 if [[ "$NO_KLD" == "false" ]]; then 
                   # If grouping is enabled and this tensor belongs to a group
-                  if (( gid >= 0 )); then
-                    if [[ "$EXPAND_GROUPS" == "true" ]]; then
-                      for gm in "${group_members[@]}"; do
-                        KLD_VALUES["${qtype}|${gm}"]=0
-                      done
-                    else
-                      KLD_VALUES["${qtype}|group${gid}"]=0
-                    fi
+                  if (( ${#group_idxs_for_tensor[@]} > 0 )); then
+                    # iterate over all groups this tensor belongs to and handle each group separately
+                    for group_idx_for_tensor in "${group_idxs_for_tensor[@]}"; do
+                      if [[ "$EXPAND_GROUPS" == "true" ]]; then
+                        for gm in "${group_members[@]}"; do
+                          KLD_VALUES["${qtype}|${gm}"]=0
+                        done
+                      else
+                        KLD_VALUES["${qtype}|group${group_idx_for_tensor}"]=0
+                      fi
+                    done
                   else
                     KLD_VALUES["${qtype}|${tensor_name}"]=0
                   fi
@@ -651,14 +697,17 @@ for qtype in "${QTYPES[@]}"; do
                 REGEX_VALUES["${qtype}|${tensor_name}"]="$BASELINE_REGEX_VALUE"
                 if [[ "$NO_KLD" == "false" ]]; then 
                   # If grouping is enabled and this tensor belongs to a group
-                  if (( gid >= 0 )) && [[ -z "${BASELINE_PPL_VALUE:-}" ]]; then
-                    if [[ "$EXPAND_GROUPS" == "true" ]]; then
-                      for gm in "${group_members[@]}"; do
-                        KLD_VALUES["${qtype}|${gm}"]=0
-                      done
-                    else
-                      KLD_VALUES["${qtype}|group${gid}"]=0
-                    fi
+                  if (( ${#group_idxs_for_tensor[@]} > 0 )) && [[ -z "${BASELINE_PPL_VALUE:-}" ]]; then
+                    # iterate over all groups this tensor belongs to and handle each group separately
+                    for group_idx_for_tensor in "${group_idxs_for_tensor[@]}"; do
+                      if [[ "$EXPAND_GROUPS" == "true" ]]; then
+                        for gm in "${group_members[@]}"; do
+                          KLD_VALUES["${qtype}|${gm}"]=0
+                        done
+                      else
+                        KLD_VALUES["${qtype}|group${group_idx_for_tensor}"]=0
+                      fi
+                    done
                   else
                     KLD_VALUES["${qtype}|${tensor_name}"]=0
                   fi
@@ -678,14 +727,17 @@ for qtype in "${QTYPES[@]}"; do
                     PPL_VALUES["${qtype}|${tensor_name}"]="$bpplval"
                     if [[ "$NO_KLD" == "false" ]]; then 
                       # If grouping is enabled and this tensor belongs to a group
-                      if (( gid >= 0 )); then
-                        if [[ "$EXPAND_GROUPS" == "true" ]]; then
-                          for gm in "${group_members[@]}"; do
-                            KLD_VALUES["${qtype}|${gm}"]=0
-                          done
-                        else
-                          KLD_VALUES["${qtype}|group${gid}"]=0
-                        fi
+                      if (( ${#group_idxs_for_tensor[@]} > 0 )); then
+                        # iterate over all groups this tensor belongs to and handle each group separately
+                        for group_idx_for_tensor in "${group_idxs_for_tensor[@]}"; do
+                          if [[ "$EXPAND_GROUPS" == "true" ]]; then
+                            for gm in "${group_members[@]}"; do
+                              KLD_VALUES["${qtype}|${gm}"]=0
+                            done
+                          else
+                            KLD_VALUES["${qtype}|group${group_idx_for_tensor}"]=0
+                          fi
+                        done
                       else
                         KLD_VALUES["${qtype}|${tensor_name}"]=0
                       fi
@@ -699,13 +751,13 @@ for qtype in "${QTYPES[@]}"; do
                     REGEX_VALUES["${qtype}|${tensor_name}"]="$bregexval"
                     if [[ "$NO_KLD" == "false" ]] && [[ -z "${bpplval:-}" ]]; then 
                       # If grouping is enabled and this tensor belongs to a group
-                      if (( gid >= 0 )); then
+                      if (( ${#group_idxs_for_tensor[@]} > 0 )); then
                         if [[ "$EXPAND_GROUPS" == "true" ]]; then
                           for gm in "${group_members[@]}"; do
                             KLD_VALUES["${qtype}|${gm}"]=0
                           done
                         else
-                          KLD_VALUES["${qtype}|group${gid}"]=0
+                          KLD_VALUES["${qtype}|group${group_idxs_for_tensor[0]}"]=0
                         fi
                       else
                         KLD_VALUES["${qtype}|${tensor_name}"]=0
@@ -721,18 +773,20 @@ for qtype in "${QTYPES[@]}"; do
         fi
 
         # If grouping is enabled and this tensor belongs to a group, attempt to process the group (continuation)
-        if (( gid >= 0 )); then
-
-            # Look for group result file: bench_ppl${_kld}_result.group{gid}.{qtype}.{PPL_CHUNKS}.txt
-            group_result_filename="bench_ppl${_kld}_result.group${gid}.${qtype}.${PPL_CHUNKS}.txt"
+        if (( ${#group_idxs_for_tensor[@]} > 0 )); then
+          # iterate over all groups this tensor belongs to and handle each group separately
+          for group_idx_for_tensor in "${group_idxs_for_tensor[@]}"; do
+            proc_key="${qtype}|${group_idx_for_tensor}"
+            # Look for group result file: bench_ppl${_kld}_result.group{group_idx_for_tensor}.{qtype}.{PPL_CHUNKS}.txt
+            group_result_filename="bench_ppl${_kld}_result.group${group_idx_for_tensor}.${qtype}.${PPL_CHUNKS}.txt"
             if ! printf '%s\n' "$all_bench_ppl_result_files" | grep -qF -- "$group_result_filename"; then
                 # Only log missing once per (qtype,group)
                 if [[ -z "${PROCESSED_GROUP_QTYPE[$proc_key]:-}" ]]; then
-                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] No group PPL result file found for group #${gid}, qtype=${qtype}: expected '$group_result_filename'. Will fall back to individual tensor files."
+                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] No group PPL result file found for group #${group_idx_for_tensor}, qtype=${qtype}: expected '$group_result_filename'. Will fall back to individual tensor files (unless --groups-only is enabled)."
                     PROCESSED_GROUP_QTYPE["$proc_key"]="MISSING"
                 fi
                 # fall back to per-tensor
-            else
+            elif [[ -z "${PROCESSED_GROUP_QTYPE[$proc_key]:-}" ]]; then
                 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Found group PPL result file: $group_result_filename -> applying to ${#group_members[@]} member(s)."
                 result_file="./${group_result_filename}"
 
@@ -745,7 +799,7 @@ for qtype in "${QTYPES[@]}"; do
                     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: Could not extract PPL from $result_file. Marking 404 for group."
                     val_ppl="404"
                 else
-                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracted group #${gid} (qtype=${qtype}): PPL=$val_ppl"
+                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracted group #${group_idx_for_tensor} (qtype=${qtype}): PPL=$val_ppl"
                 fi
 
                 # Extract KLD
@@ -758,7 +812,7 @@ for qtype in "${QTYPES[@]}"; do
                       echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: Could not extract KLD from $result_file. Marking 404 for group."
                       val_kld="404"
                   else
-                      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracted group #${gid} (qtype=${qtype}): KLD=$val_kld"
+                      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracted group #${group_idx_for_tensor} (qtype=${qtype}): KLD=$val_kld"
                   fi
                 fi
 
@@ -772,7 +826,7 @@ for qtype in "${QTYPES[@]}"; do
                       echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: Could not extract REGEX from $result_file. Marking 404 for group."
                       val_regex="404"
                   else
-                      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracted group #${gid} (qtype=${qtype}): REGEX=$val_regex"
+                      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracted group #${group_idx_for_tensor} (qtype=${qtype}): REGEX=$val_regex"
                   fi
                 fi
 
@@ -784,16 +838,20 @@ for qtype in "${QTYPES[@]}"; do
                     [[ "$HIDE_EMPTY" == true ]] && TENSOR_SET["$gm"]=1
                   done
                 else
-                  PPL_VALUES["${qtype}|group${gid}"]="$val_ppl"
-                  [[ "$NO_KLD" == "false" ]] && KLD_VALUES["${qtype}|group${gid}"]="$val_kld"
-                  [[ "$REGEX" != "" ]] && REGEX_VALUES["${qtype}|group${gid}"]="$val_regex"
-                  [[ "$HIDE_EMPTY" == true ]] && TENSOR_SET["group${gid}"]=1
+                  PPL_VALUES["${qtype}|group${group_idx_for_tensor}"]="$val_ppl"
+                  [[ "$NO_KLD" == "false" ]] && KLD_VALUES["${qtype}|group${group_idx_for_tensor}"]="$val_kld"
+                  [[ "$REGEX" != "" ]] && REGEX_VALUES["${qtype}|group${group_idx_for_tensor}"]="$val_regex"
+                  [[ "$HIDE_EMPTY" == true ]] && TENSOR_SET["group${group_idx_for_tensor}"]=1
                 fi
 
                 PROCESSED_GROUP_QTYPE["$proc_key"]=1
                 continue
             fi
+          done
         fi
+
+        # Skip individual tensors fallback if groups only is used.
+        [[ "$GROUPS_ONLY" == "true" ]] && continue
 
         # Fallback: look for individual per-tensor result
         result_file="bench_ppl${_kld}_result.${tensor_name}.${qtype}.${PPL_CHUNKS}.txt"
