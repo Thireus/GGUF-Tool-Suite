@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-14-2025 -------------------- **#
+#** --------------- Updated: Nov-15-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -246,46 +246,54 @@ LOCAL_MODEL_DIR="./"
 
 # 3. USER_REGEX entries include original qtype after first '=', second '=' ensures the script doesn't benchmark those entries but still fetches the right qtype for these tensors
 USER_REGEX=(
-  ## Model head & embeddings
-  '^token_embd\.weight$=iq6_k'
-  '^output\.weight$=iq6_k'
+  # Tensors set to f32 are supposed to be found in any qtype because they are always left unquantised, make sure they are always locked
+
+  # Token embedding and output tensors (GPU)
+  # note token_embd cannot be repacked quant type
+  '^output\.weight$=q8_0'
   '^output_norm\.weight$=f32=locked'
+  # Be extremely careful about this one, especially if benchmarking below iq1_m, since it cannot be quantised to something lower than iq1_m, which is what will be used during benchmarking! Which will introduce incorrect ppl benchmark.
+  '^token_embd\.weight$=q8_0'
 
-  ## Multi-headed attention parameters
-  '^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_v\.bias$=f32=locked'
-  '^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_v\.weight$=iq6_k'
-  '^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q\.weight$=iq6_k'
-  '^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_output\.weight$=iq6_k'
-  '^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k\.weight$=iq6_k'
-  '^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q\.bias$=f32=locked=locked'
-  '^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q_norm\.weight$=f32=locked'
-  '^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k_norm\.weight$=f32=locked'
-  '^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k\.bias$=f32=locked'
-  '^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_norm\.weight$=f32=locked'
+  # GPU Only - not divisible by 256 so only supports qN_0
+  # I recommend against unlocking this tensor, especially since it cannot be quantised to lower quants by llama, so the benchmark will be incorrect as it will use llama's auto-assigned fallback qtype without clear warning during the benchmark
+  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight$=q8_0=locked'
 
-  ## Core FFN weights
-  '^blk\.[0-2]\.ffn_down\.weight$=iq6_k'
-  '^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_inp\.weight$=f32=locked'
-  '^blk\.[0-2]\.ffn_gate\.weight$=iq6_k'
-  '^blk\.[0-2]\.ffn_up\.weight$=iq6_k'
+  # GPU Only
+  # Best to keep this one locked for Kimi-K2 because it cannot be quantised lower than iq2_ks, so any benchmark using lower quant than this will be faulty for this tensor
+  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_v_b\.weight$=q8_0=locked'
 
-  ## Other tensors
-  '^blk\.92\.nextn\.shared_head_norm\.weight$=f32=locked'
-  '^blk\.92\.nextn\.enorm\.weight$=f32=locked'
-  '^blk\.([0-9]|[1-8][0-9]|9[0-2])\.post_attention_norm\.weight$=f32=locked'
-  '^blk\.([3-9]|[1-8][0-9]|9[0-2])\.exp_probs_b\.bias$=f32=locked'
-  '^blk\.92\.nextn\.eh_proj\.weight$=iq6_k=locked'
-  '^blk\.92\.nextn\.hnorm\.weight$=f32=locked'
+  # GPU Only
+  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_b\.weight$=q8_0=locked'
+
+  # GPU Only
+  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_norm\.weight$=f32=locked'
+  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a\.weight$=q8_0=locked'
+  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a_norm\.weight$=f32=locked'
+  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_b\.weight$=q8_0=locked'
+  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_norm\.weight$=f32=locked'
+  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_output\.weight$=q8_0=locked'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.exp_probs_b\.bias$=f32=locked'
+
+  # GPU Only
+  '^blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_mqa\.weight$=q8_0=locked'
+
+  # GPU Only
+  '^blk\.[0-2]\.ffn_down\.weight$=q8_0'
+  '^blk\.[0-2]\.ffn_up\.weight$=q8_0'
+  '^blk\.[0-2]\.ffn_gate\.weight$=q8_0'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_inp\.weight$=q8_0=locked'
+  '^blk\.([0-9]|[1-5][0-9]|60)\.ffn_norm\.weight$=q8_0=locked'
 
   ## GPU-loaded ffn_*_shexp
-  '^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_down_shexp\.weight$=iq6_k'
-  '^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_up_shexp\.weight$=iq6_k'
-  '^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_shexp\.weight$=iq6_k'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_shexp\.weight$=iq3_xxs'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_shexp\.weight$=iq3_xxs'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_shexp\.weight$=iq3_xxs'
 
   ## CPU-friendly ffn_*_exps
-  '^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_down_exps\.weight$=iq6_k'
-  '^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_up_exps\.weight$=iq6_k'
-  '^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_exps\.weight$=iq6_k'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight$=iq3_xxs'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight$=iq3_xxs'
+  '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight$=iq3_xxs'
 )
 
 # Extract patterns and associated qtypes
@@ -1375,7 +1383,7 @@ run_main_loop() {
 
                     # Run PPL+KLD first if required
                     if need_run_ppl; then
-                      echo "[$(timestamp)] Running PPL for group #${group_idx_for_tensor} -> $group_result_file_ppl"
+                      echo "[$(timestamp)] Running PPL$PLUS_KLD for group #${group_idx_for_tensor} -> $group_result_file_ppl"
                       cmd="${PPL_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
                       if [[ "$NO_KLD" == "false" ]]; then
                         if [[ -z "${baseline_kld_file:-}" ]]; then
