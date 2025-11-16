@@ -5,7 +5,7 @@
 #** Colab pipeline parameters for quant_recipe_pipeline.ipynb **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Oct-08-2025 -------------------- **#
+#** --------------- Updated: Nov-12-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -231,7 +231,7 @@ def emit_parameters(params: Dict[str, Any]) -> str:
     lines.append("# harmonization_technique: 0=disabled, 1=max, 2=mean, 3=min (default)")
     lines.append(f'harmonization_technique = {params["harmonization_technique"]}    #@param {{type:"integer"}}')
     lines.append("")
-    lines.append("# calibration data filename (\"ppl_results.csv\" or \"ppl_results_partial.csv\" are automatically used by default when empty)")
+    lines.append("# calibration data filename (\"kld_results.csv\" or \"kld_results_partial.csv\" or \"ppl_results.csv\" or \"ppl_results_partial.csv\" are automatically used by default in this order when empty)")
     lines.append(f'csv_filename = "{params["csv_filename"]}" #@param {{type:"string"}}')
     lines.append("")
     lines.append("# calibration data qtype (leave empty for auto-selection which will choose the lowest bpw) - list of available qtypes can be found in the calibration data file")

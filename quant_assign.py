@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Sep-25-2025 -------------------- **#
+#** --------------- Updated: Nov-12-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -1607,7 +1607,7 @@ def parse_group_argument(arg_value, arg_name: str, parser, info_flag=False):
 
 def main():
     global DEBUG, INFO, SKIP_GPG, ALL_GPG_SIGS_VALID
-    parser = argparse.ArgumentParser(description="Assign optimal quants per tensor based on PPL CSV.")
+    parser = argparse.ArgumentParser(description="Assign optimal quants per tensor based on the calibration data CSV file.")
     parser.add_argument('--debug', action='store_true', help='Show debug logs')
     parser.add_argument('--info', action='store_true', help='Show info logs')
     parser.add_argument('--tolerance', type=float, default=0.05,
@@ -1617,7 +1617,7 @@ def main():
     parser.add_argument('--gpu-irq-k', type=float, default=1.5,
                         help='IQR multiplier k for GPU-friendly outlier detection')
     parser.add_argument('csv_file', help='Input CSV file')
-    parser.add_argument('--qtype', help='Case-sensitive qtype (e.g. q3_K) to analyze from the PPL CSV file (default: lowest quant)')
+    parser.add_argument('--qtype', help='Case-sensitive qtype (e.g. q3_K) to analyze from the calibration data CSV file (default: lowest quant)')
     parser.add_argument('--cpu-assign-qtype', help='Case-sensitive qtype (e.g. q6_K) to assign to non-measured CPU-friendly tensors or tensors missing from csv (default: highest quant)')
     parser.add_argument('--gpu-assign-qtype', help='Case-sensitive qtype (e.g. q3_K) to assign to non-measured GPU-friendly tensors or tensors missing from csv (default: highest quant)')
     parser.add_argument('--cpu-assign-tensors', nargs='+', default=[], help="List of regex=qtype (case-sensitive, e.g. q6_K) patterns for CPU-friendly tensors to force-assign")
@@ -1641,12 +1641,12 @@ def main():
                             "Example: --harmonize-tensors blk\\..\\*\\.ffn_up_exps.\\*,blk\\..\\*\\.ffn_gate_exps.\\* ... 'another_pat1,another_pat2'. "
                             "Use --harmonize-tensors \"\" to disable harmonization. Or use --harmonization-technique 0. "
                             "Note: harmonizing tensors to allow for fused ffn_up_exps and ffn_gate_exps can improve PP and TG speed, at the cost of slim restrictive dynamic quantization flexibility. "
-                            "It is highly recommended to leave this parameter value default when using ik_llama.cpp for significant speed improvements (can be as high as +20%% speed gain) with MoE models - when using ik_llama.cpp with -fmoe 1 these tensors are fused, which can only happen if they are of the same qtype. " 
+                            "It is highly recommended to leave this parameter value default when using ik_llama.cpp for significant speed improvements (can be as high as +20%% speed gain) with MoE models - when using ik_llama.cpp with fmoe these tensors are fused, which can only happen if they are of the same qtype. " 
                             "Future versions of ik_llama.cpp may also take advantage of fused ffn_up_shexp and ffn_gate_shexp tensors. " ) )
     parser.add_argument('--harmonization-technique', type=int, default=3, choices=[0,1,2,3],
                         help=('Harmonization technique to use when --harmonize-tensors is set: 0=disabled, 1=max, 2=mean, 3=min (default). ' 
                             'Values are applied element-wise per layer across the matched tensors.'
-                            'Max ensures calibration data ppl measurement is not negatively degraded. Min will degrade calibration data accuracy but appears to give the best PPL results. Mean is a compromise in-between. Disabled means harmonization is disabled.'))
+                            'Max ensures calibration data measurement is not negatively degraded. Min will degrade calibration data accuracy but appears to give the best results. Mean is a compromise in-between. Disabled means harmonization is disabled.'))
     parser.add_argument('--use-greedy-quant-assign', action='store_true', help='Use greedy priority-queue quant assignment instead of default spread/midpoint method. The method tries to minimize overall degradation by prioritizing quant downgrades that yield the least degradation per byte saved. This method requires per-tensor degradation data (e.g. KLD) to be present in the CSV file - perplexity data only works suboptimally. It also requires per quant type degradation estimates; per default KLD values are used from a qwen 3 4b benchmark. override with --quant-degradation-csv. It is recommended to use --exponential-factor between 1.0 and 5.0 when using this method to try to map per-tensor degradation values into a more linear space.')
     parser.add_argument(
         '--synergistic-tensors',
@@ -2333,7 +2333,7 @@ def main():
     # Reconstruct a safely quoted command‐line
     quoted_args = [shlex.quote(arg) for arg in sys.argv]
     command_line = ' '.join(quoted_args)
-    # Compute SHA-256 of the ppl_results.csv file (if readable)
+    # Compute SHA-256 of the *_results.csv file (if readable)
     if os.path.isfile(args.csv_file):
         try:
             with open(args.csv_file, 'rb') as f:

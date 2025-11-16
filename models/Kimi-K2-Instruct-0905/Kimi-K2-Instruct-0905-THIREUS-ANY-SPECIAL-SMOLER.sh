@@ -5,7 +5,7 @@
 #** for iq1_s* qtypes only. Adjust $1 in $custom as needed!   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Sep-18-2025 -------------------- **#
+#** --------------- Updated: Nov-06-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -504,4 +504,4 @@ mkdir Kimi-K2-Instruct-0905-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --ke
     Kimi-K2-Instruct-0905-THIREUS-BF16-SPECIAL_SPLIT/Kimi-K2-Instruct-0905-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01097.gguf \
     Kimi-K2-Instruct-0905-THIREUS-${1^^}-SPECIAL_SPLIT/Kimi-K2-Instruct-0905-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
     ${1^^} \
-    32 && chmod 444 Kimi-K2-Instruct-0905-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
+    $(nproc) && chmod 444 Kimi-K2-Instruct-0905-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
