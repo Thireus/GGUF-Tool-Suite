@@ -1,0 +1,1294 @@
+#!/usr/bin/env python3
+#***************************************************************#
+#** This script is part of Thireus' GGUF Tool Suite.          **#
+#** model_tensor_bpw_metric.py is a tool that compares pure   **#
+#** quantized model bpw versus reported metrics such as KLD.  **#
+#**                                                           **#
+#** ********************************************************* **#
+#** --------------- Updated: Nov-16-2025 -------------------- **#
+#** ********************************************************* **#
+#**                                                           **#
+#** Author: Thireus <gguf@thireus.com>                        **#
+#**                                                           **#
+#** https://gguf.thireus.com/                                 **#
+#** Thireus' GGUF Tool Suite - Quantize LLMs Like a Chef       **#
+#**                                  ·     ·       ·~°          **#
+#**     Λ,,Λ             ₚₚₗ  ·° ᵍᵍᵐˡ   · ɪᴋ_ʟʟᴀᴍᴀ.ᴄᴘᴘ°   ᴮᶠ¹⁶ ·  **#
+#**    (:·ω·)       。··°      ·   ɢɢᴜғ   ·°·  ₕᵤ𝓰𝓰ᵢₙ𝓰𝒻ₐ𝒸ₑ   ·°   **#
+#**    /    o―ヽニニフ))             · · ɪǫ3_xxs      ~·°        **#
+#**    し―-J                                                   **#
+#**                                                           **#
+#** Copyright © 2025 - Thireus.          ᵥᵢᵦₑ 𝒸ₒ𝒹ᵢₙ𝑔 ₑₙ𝑔ᵢₙₑₑᵣ **#
+#***************************************************************#
+#**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
+#***************************************************************#
+
+from __future__ import annotations
+import argparse
+import csv
+import math
+import os
+import re
+import sys
+from typing import List, Optional, Dict, Any, Tuple
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# concurrency imports
+import multiprocessing
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
+RE_DTYPE = re.compile(r"\bdtype=([^:]+)", flags=re.IGNORECASE)
+RE_ELEMENTS = re.compile(r"\belements=(\d+)", flags=re.IGNORECASE)
+RE_BYTES = re.compile(r"\bbytes=(\d+)", flags=re.IGNORECASE)
+
+ACCEPT_F32 = {"f32"}  # only accept 'f32' (not 'fp32' or 'float32')
+
+
+# --------------------------
+# utilities & map parsing
+# --------------------------
+
+def parse_map_line(line: str) -> Optional[Tuple[Optional[str], Optional[int], Optional[int], str]]:
+    if not line or not line.strip():
+        return None
+    parts = line.split(":")
+    name = parts[2] if len(parts) >= 3 else parts[0]
+
+    dtype_m = RE_DTYPE.search(line)
+    elems_m = RE_ELEMENTS.search(line)
+    bytes_m = RE_BYTES.search(line)
+
+    dtype = dtype_m.group(1).lower() if dtype_m else None
+    elements = int(elems_m.group(1)) if elems_m else None
+    bytes_ = int(bytes_m.group(1)) if bytes_m else None
+
+    return (dtype, elements, bytes_, name)
+
+
+def infer_qtype_from_filename(path: str) -> Optional[str]:
+    base = os.path.basename(path)
+    m = re.search(r"tensors\.([^.]+)\.map$", base, flags=re.IGNORECASE)
+    if m:
+        return m.group(1).lower()
+    m2 = re.search(r"([iqIQ]\d[_A-Za-z0-9\-]*)", base)
+    if m2:
+        return m2.group(1).lower()
+    return None
+
+
+def family_of(qtoken: Optional[str]) -> Optional[str]:
+    if not qtoken:
+        return None
+    s = qtoken.lower()
+    s = re.sub(r'(_r\d+.*)$', '', s)
+    return s
+
+
+def human_bytes(n: int) -> str:
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024.0:
+            return f"{n:.2f} {unit}"
+        n /= 1024.0
+    return f"{n:.2f} PB"
+
+
+def load_parsed_entries_from_mapfile(path: str) -> Tuple[Optional[str], List[Dict[str, Any]]]:
+    if not os.path.exists(path):
+        raise FileNotFoundError(path)
+    with open(path, "r", encoding="utf-8") as fh:
+        lines = [ln.rstrip("\n") for ln in fh if ln.strip()]
+    qtype = infer_qtype_from_filename(path)
+    parsed = []
+    for ln in lines:
+        p = parse_map_line(ln)
+        if p is None:
+            continue
+        dtype, elements, bytes_, name = p
+        parsed.append({"dtype": dtype, "elements": elements, "bytes": bytes_, "name": name, "line": ln})
+    return qtype, parsed
+
+
+def compute_bpw_for_qtype(parsed_entries: List[Dict[str, Any]],
+                          declared_qtype: Optional[str],
+                          allow_impure_map: bool,
+                          fail_on_missing_bytes: bool) -> Tuple[Optional[float], Dict[str, Any]]:
+    declared_family = family_of(declared_qtype)
+    hard_impure = []
+    soft_impure = []
+    accepted_mask = []
+
+    for e in parsed_entries:
+        dt = e["dtype"]
+        if dt is None:
+            hard_impure.append((e["name"], "<none>"))
+            accepted_mask.append(False)
+            continue
+
+        if any(dt == x or dt.startswith(x + "_") or dt.startswith(x + "-") for x in ACCEPT_F32):
+            accepted_mask.append(True)
+            continue
+
+        if declared_qtype and declared_qtype in dt:
+            accepted_mask.append(True)
+            continue
+
+        dt_family = family_of(dt)
+        if declared_family is not None and dt_family == declared_family:
+            soft_impure.append((e["name"], dt))
+            accepted_mask.append(True)
+            continue
+
+        hard_impure.append((e["name"], dt))
+        accepted_mask.append(False)
+
+    if hard_impure and not allow_impure_map:
+        return None, {
+            "reason": "hard_impure",
+            "hard_impure": hard_impure,
+            "soft_impure": soft_impure,
+            "total_elements_with_bytes": None,
+            "total_bytes": None,
+            "missing_bytes_count": None,
+        }
+
+    total_elements_with_bytes = 0
+    total_bytes = 0
+    missing_bytes_count = 0
+
+    for e, accepted in zip(parsed_entries, accepted_mask):
+        if not accepted:
+            continue
+        elems = e["elements"]
+        b = e["bytes"]
+        if elems is None:
+            continue
+        if b is None:
+            missing_bytes_count += 1
+            continue
+        total_elements_with_bytes += elems
+        total_bytes += b
+
+    if missing_bytes_count and fail_on_missing_bytes:
+        return None, {
+            "reason": "missing_bytes",
+            "hard_impure": hard_impure,
+            "soft_impure": soft_impure,
+            "total_elements_with_bytes": total_elements_with_bytes,
+            "total_bytes": total_bytes,
+            "missing_bytes_count": missing_bytes_count,
+        }
+
+    if total_elements_with_bytes == 0 or total_bytes == 0:
+        return None, {
+            "reason": "no_bytes_available",
+            "hard_impure": hard_impure,
+            "soft_impure": soft_impure,
+            "total_elements_with_bytes": total_elements_with_bytes,
+            "total_bytes": total_bytes,
+            "missing_bytes_count": missing_bytes_count,
+        }
+
+    bpw = (total_bytes * 8) / total_elements_with_bytes
+    return bpw, {
+        "reason": "ok",
+        "hard_impure": hard_impure,
+        "soft_impure": soft_impure,
+        "total_elements_with_bytes": total_elements_with_bytes,
+        "total_bytes": total_bytes,
+        "missing_bytes_count": missing_bytes_count,
+    }
+
+
+# --------------------------
+# transforms & fitter (generalized)
+# --------------------------
+
+def apply_transform(vals: np.ndarray, kind: str, log_base: Optional[float] = None) -> np.ndarray:
+    """Apply transform to vals. kind in {'ln','log10','log2','logn','identity'}.
+    For 'logn', provide log_base (N > 0, N != 1)."""
+    if kind == "ln":
+        return np.log(vals)
+    if kind == "log10":
+        return np.log10(vals)
+    if kind == "log2":
+        return np.log2(vals)
+    if kind == "logn":
+        if log_base is None or log_base <= 0 or log_base == 1:
+            raise ValueError("logn requires a valid base != 1")
+        # compute natural log divided by ln(N)
+        return np.log(vals) / math.log(log_base)
+    if kind == "identity":
+        return vals
+    raise ValueError(f"Unknown transform kind: {kind}")
+
+
+def fit_model_general(xarr: np.ndarray,
+                      yarr: np.ndarray,
+                      d_fixed: Optional[float] = None,
+                      c_fixed: Optional[float] = None,
+                      transforms: Optional[List[str]] = None,
+                      p_grid: Optional[np.ndarray] = None) -> Tuple[Optional[Dict[str, float]], Dict[str, Any]]:
+    """
+    Fit model y = d + a * (T)^{-p} where T = transform(b * (x - c)),
+    trying multiple transforms and exponent p values.
+
+    xarr is bpw (independent variable), yarr is the metric (dependent variable).
+    If d_fixed is provided, d is anchored and we solve for a (and possibly other params).
+    If c_fixed is provided, c is anchored (and b is still searched).
+    Otherwise, c and b are both searched in the grid.
+    Returns params dict containing a,b,c,d,p,transform,r2,sse or None if no fit.
+
+    Notes / Changes:
+      - 'logn' transform is supported: the base N is searched over a small grid to pick the best.
+      - we only require vals > 0 for transforms that need positive inputs (natural/log bases);
+        identity transform accepts negative vals.
+      - warnings from invalid operations (like power of negative non-integer) are suppressed
+        where we explicitly check isfinite after computation.
+    """
+    # default transforms/p grid (added 'logn' to allow variable log base)
+    if transforms is None:
+        transforms = ["ln", "log10", "log2", "logn", "identity"]
+    if p_grid is None:
+        p_grid = np.linspace(0.2, 3.0, 15)  # from 0.2 to 3.0 in 15 steps
+
+    # prepare a grid for log-base N when transform == 'logn'
+    # include commonly useful bases 2 and 10 and some intermediate/exploratory values.
+    N_grid = np.unique(np.concatenate([
+        np.array([2.0, 10.0]),
+        np.logspace(np.log10(2.0), np.log10(100.0), num=8)
+    ]))
+
+    # shift xarr if includes nonpositive values so that logs won't blow up for log transforms; track shift to apply consistently
+    # Note: shifting is still applied to allow some transforms to work; identity transform can accept negatives without shift,
+    # but we keep behaviour consistent with earlier code by shifting entire xarr when min <= 0.
+    if np.min(xarr) <= 0:
+        shift = abs(np.min(xarr)) + 1e-12
+        xfit = xarr + shift
+    else:
+        shift = 0.0
+        xfit = xarr.copy()
+
+    xmin = max(np.min(xfit), 1e-12)
+    xmax = np.max(xfit)
+    x_median = np.median(xfit)
+
+    # b grid (logspace): we search multiplicative scale of b
+    b_min = 0.1 / max(xmax, 1e-12)
+    b_max = 10.0 / max(xmin, 1e-12)
+    b_min = max(b_min, 1e-12)
+    b_max = min(b_max, 1e12)
+    if b_max <= b_min:
+        b_min, b_max = 1e-6, 1e6
+    b_grid = np.logspace(np.log10(b_min), np.log10(b_max), num=60)
+
+    # c multipliers relative to median(x) used only when c is not fixed
+    c_multipliers = np.linspace(-0.9, 10.0, 40)
+
+    best_sse = float("inf")
+    best = None
+
+    # main grid search: when c_fixed is provided, do not iterate over c_grid; use provided c_fixed.
+    for transform in transforms:
+        for b in b_grid:
+            # compute c grid relative to b * median(x) only if c is not fixed
+            if c_fixed is None:
+                bx_med = b * x_median
+                c_grid = bx_med * c_multipliers
+            else:
+                c_grid = [float(c_fixed)]
+
+            for c in c_grid:
+                # compute 'vals' for transform. IMPORTANT: use b * (xfit - c) per requirement.
+                vals = b * (xfit - c)
+
+                # For log-like transforms, we still require vals > 0. For identity we accept any vals.
+                if transform in {"ln", "log10", "log2", "logn"}:
+                    # skip combos where any vals are nonpositive (cannot take log)
+                    if np.any(vals <= 0):
+                        continue
+
+                # Now handle transform-specific processing.
+                if transform == "logn":
+                    # iterate over possible log bases
+                    for Nbase in N_grid:
+                        # apply transform safely (suppress warnings during log)
+                        with np.errstate(divide="ignore", invalid="ignore"):
+                            Tvals = apply_transform(vals, "logn", log_base=float(Nbase))
+                        if not np.all(np.isfinite(Tvals)):
+                            continue
+                        # skip cases where Tvals contains zeros (would blow up when raising to -p)
+                        if np.any(Tvals == 0):
+                            continue
+                        for p in p_grid:
+                            # compute S = Tvals ** (-p) while suppressing invalid warnings (e.g. negative bases)
+                            with np.errstate(invalid="ignore", divide="ignore"):
+                                S = Tvals ** (-p)
+                            if not np.all(np.isfinite(S)):
+                                continue
+                            if d_fixed is None:
+                                # solve for d and a via linear least squares: y = d + a * S
+                                G = np.vstack([np.ones_like(S), S]).T
+                                try:
+                                    coeffs, *_ = np.linalg.lstsq(G, yarr, rcond=None)
+                                except Exception:
+                                    continue
+                                d_est, a_est = float(coeffs[0]), float(coeffs[1])
+                                pred = G.dot(coeffs)
+                            else:
+                                # solve for a in closed form: minimize ||a*S - (y - d)||^2
+                                numer = np.sum((yarr - d_fixed) * S)
+                                denom = np.sum(S * S)
+                                if denom == 0:
+                                    continue
+                                a_est = numer / denom
+                                d_est = float(d_fixed)
+                                pred = d_est + a_est * S
+
+                            sse = float(np.sum((yarr - pred) ** 2))
+                            if sse < best_sse:
+                                best_sse = sse
+                                best = {"a": float(a_est), "b": float(b), "c": float(c), "d": float(d_est),
+                                        "p": float(p), "transform": "logn", "log_base": float(Nbase),
+                                        "sse": sse, "shift": shift}
+
+                else:
+                    # other transforms: ln, log10, log2, identity
+                    with np.errstate(divide="ignore", invalid="ignore"):
+                        Tvals = apply_transform(vals, transform)
+                    if not np.all(np.isfinite(Tvals)):
+                        continue
+                    if np.any(Tvals == 0):
+                        continue
+
+                    for p in p_grid:
+                        # compute S while suppressing invalid-value warnings (user noted harmless warning)
+                        with np.errstate(invalid="ignore", divide="ignore"):
+                            S = Tvals ** (-p)
+                        if not np.all(np.isfinite(S)):
+                            continue
+                        if d_fixed is None:
+                            # solve for d and a via linear least squares: y = d + a * S
+                            G = np.vstack([np.ones_like(S), S]).T
+                            try:
+                                coeffs, *_ = np.linalg.lstsq(G, yarr, rcond=None)
+                            except Exception:
+                                continue
+                            d_est, a_est = float(coeffs[0]), float(coeffs[1])
+                            pred = G.dot(coeffs)
+                        else:
+                            # solve for a in closed form: minimize ||a*S - (y - d)||^2
+                            numer = np.sum((yarr - d_fixed) * S)
+                            denom = np.sum(S * S)
+                            if denom == 0:
+                                continue
+                            a_est = numer / denom
+                            d_est = float(d_fixed)
+                            pred = d_est + a_est * S
+
+                        sse = float(np.sum((yarr - pred) ** 2))
+                        if sse < best_sse:
+                            best_sse = sse
+                            best = {"a": float(a_est), "b": float(b), "c": float(c), "d": float(d_est),
+                                    "p": float(p), "transform": transform, "sse": sse, "shift": shift}
+
+    if best is None:
+        return None, {"reason": "no_valid_fit"}
+
+    # refinement around best parameters (refine b, c, p around best found)
+    t_best = best["transform"]
+    b_center = best["b"]
+    c_center = best["c"]
+    p_center = best["p"]
+    log_base_best = best.get("log_base", None)
+
+    # refine b near center
+    b_low = max(b_center * 0.6, 1e-12)
+    b_high = b_center * 1.6
+    b_refined = np.logspace(math.log10(b_low), math.log10(b_high), num=60)
+
+    # refine c near center - when c_fixed was provided originally, we still refine around it
+    if abs(c_center) > 1e-12:
+        c_low = c_center * 0.7
+        c_high = c_center * 1.3
+    else:
+        # if c_center == 0 use a range relative to b_center * x_median
+        c_low = -0.3 * b_center * x_median
+        c_high = 1.0 * b_center * x_median
+    c_refined = np.linspace(c_low, c_high, num=60)
+
+    # refine p near center
+    p_low = max(0.05, p_center * 0.6)
+    p_high = p_center * 1.6
+    p_refined = np.linspace(p_low, p_high, num=20)
+
+    # If the chosen transform was logn, also prepare a refined N grid centered on log_base_best
+    if t_best == "logn" and log_base_best is not None:
+        # small multiplicative sweep around chosen base
+        N_low = max(1.1, log_base_best * 0.6)
+        N_high = log_base_best * 1.6
+        N_refined = np.unique(np.logspace(math.log10(N_low), math.log10(max(N_high, N_low * 1.001)), num=12))
+    else:
+        N_refined = None
+
+    best_sse2 = float("inf")
+    best2 = None
+
+    for b in b_refined:
+        for c in c_refined:
+            vals = b * (xfit - c)
+            # same positivity requirement for log-like transforms
+            if t_best in {"ln", "log10", "log2", "logn"}:
+                if np.any(vals <= 0):
+                    continue
+
+            if t_best == "logn":
+                # iterate over refined N if available, else try original small grid
+                bases_to_try = N_refined if N_refined is not None else N_grid
+                for Nbase in bases_to_try:
+                    with np.errstate(divide="ignore", invalid="ignore"):
+                        Tvals = apply_transform(vals, "logn", log_base=float(Nbase))
+                    if not np.all(np.isfinite(Tvals)):
+                        continue
+                    if np.any(Tvals == 0):
+                        continue
+                    for p in p_refined:
+                        with np.errstate(invalid="ignore", divide="ignore"):
+                            S = Tvals ** (-p)
+                        if not np.all(np.isfinite(S)):
+                            continue
+                        if d_fixed is None:
+                            G = np.vstack([np.ones_like(S), S]).T
+                            try:
+                                coeffs, *_ = np.linalg.lstsq(G, yarr, rcond=None)
+                            except Exception:
+                                continue
+                            d_est, a_est = float(coeffs[0]), float(coeffs[1])
+                            pred = G.dot(coeffs)
+                        else:
+                            numer = np.sum((yarr - d_fixed) * S)
+                            denom = np.sum(S * S)
+                            if denom == 0:
+                                continue
+                            a_est = numer / denom
+                            d_est = float(d_fixed)
+                            pred = d_est + a_est * S
+                        sse = float(np.sum((yarr - pred) ** 2))
+                        if sse < best_sse2:
+                            best_sse2 = sse
+                            best2 = {"a": float(a_est), "b": float(b), "c": float(c), "d": float(d_est),
+                                     "p": float(p), "transform": "logn", "log_base": float(Nbase),
+                                     "sse": sse, "shift": shift}
+
+            else:
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    Tvals = apply_transform(vals, t_best)
+                if not np.all(np.isfinite(Tvals)):
+                    continue
+                if np.any(Tvals == 0):
+                    continue
+                for p in p_refined:
+                    with np.errstate(invalid="ignore", divide="ignore"):
+                        S = Tvals ** (-p)
+                    if not np.all(np.isfinite(S)):
+                        continue
+                    if d_fixed is None:
+                        G = np.vstack([np.ones_like(S), S]).T
+                        try:
+                            coeffs, *_ = np.linalg.lstsq(G, yarr, rcond=None)
+                        except Exception:
+                            continue
+                        d_est, a_est = float(coeffs[0]), float(coeffs[1])
+                        pred = G.dot(coeffs)
+                    else:
+                        numer = np.sum((yarr - d_fixed) * S)
+                        denom = np.sum(S * S)
+                        if denom == 0:
+                            continue
+                        a_est = numer / denom
+                        d_est = float(d_fixed)
+                        pred = d_est + a_est * S
+                    sse = float(np.sum((yarr - pred) ** 2))
+                    if sse < best_sse2:
+                        best_sse2 = sse
+                        best2 = {"a": float(a_est), "b": float(b), "c": float(c), "d": float(d_est),
+                                 "p": float(p), "transform": t_best, "sse": sse, "shift": shift}
+
+    final = best2 if best2 is not None else best
+
+    # compute final R^2
+    shift = final.get("shift", 0.0)
+    if shift != 0.0:
+        xfit_final = xarr + shift
+    else:
+        xfit_final = xarr
+    vals = final["b"] * (xfit_final - final["c"])
+
+    # apply final transform and compute S_final safely, suppressing invalid-value warnings as harmless.
+    if final["transform"] == "logn":
+        log_base = final.get("log_base", 10.0)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            Tvals_final = apply_transform(vals, "logn", log_base=float(log_base))
+    else:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            Tvals_final = apply_transform(vals, final["transform"])
+
+    with np.errstate(invalid="ignore", divide="ignore"):
+        S_final = Tvals_final ** (-final["p"])
+    pred = final["d"] + final["a"] * S_final
+    # remove any non-finite predictions from residual calc by masking
+    finite_mask = np.isfinite(pred) & np.isfinite(yarr)
+    if not np.any(finite_mask):
+        return None, {"reason": "no_finite_predictions"}
+    ss_res = np.sum((yarr[finite_mask] - pred[finite_mask]) ** 2)
+    ss_tot = np.sum((yarr[finite_mask] - np.mean(yarr[finite_mask])) ** 2)
+    r2 = 1.0 - ss_res / ss_tot if ss_tot != 0 else float("nan")
+    final["r2"] = float(r2)
+    final["sse"] = float(np.sum((yarr[finite_mask] - pred[finite_mask]) ** 2))
+    return final, {"reason": "ok", "r2": final["r2"], "sse": final["sse"]}
+
+
+# --------------------------
+# outlier utilities
+# --------------------------
+
+def modified_z_score(values: np.ndarray) -> np.ndarray:
+    """
+    Compute the modified z-score (based on median absolute deviation).
+    Returns absolute modified z-scores for each value.
+    """
+    # Use float conversion
+    vals = np.asarray(values, dtype=float)
+    med = np.median(vals)
+    mad = np.median(np.abs(vals - med))
+    if mad == 0:
+        # fallback to standard z-score if MAD is zero
+        mean = np.mean(vals)
+        std = np.std(vals)
+        if std == 0:
+            return np.zeros_like(vals)
+        return np.abs((vals - mean) / std)
+    # constant 0.6745 makes modified z comparable to Z for normal dist.
+    mod_z = 0.6745 * (vals - med) / mad
+    return np.abs(mod_z)
+
+
+# --------------------------
+# plotting & CSV integration (bpw is X, user column is Y)
+# --------------------------
+
+# Top-level worker for process pool. It must be picklable (i.e., module-level) for ProcessPoolExecutor.
+def _fit_pair_process_worker(xarr_shared, yarr_shared, d_cand_local: Optional[float], c_cand_local: Optional[float]):
+    """
+    Worker run in separate process. xarr_shared, yarr_shared are numpy arrays (pickled to worker).
+    Limit BLAS threads inside worker to avoid oversubscription.
+    """
+    # Limit BLAS / native threaded libs inside each worker to 1 to avoid contention.
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    os.environ.setdefault("MKL_NUM_THREADS", "1")
+    os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+    try:
+        # Convert to numpy arrays in worker context (they may already be np arrays after unpickling)
+        x_local = np.asarray(xarr_shared, dtype=float)
+        y_local = np.asarray(yarr_shared, dtype=float)
+        params_local, details_local = fit_model_general(x_local, y_local, d_fixed=d_cand_local, c_fixed=c_cand_local)
+        return (d_cand_local, c_cand_local, params_local, details_local, None)
+    except Exception as e:
+        return (d_cand_local, c_cand_local, None, None, str(e))
+
+
+def compute_and_plot_from_csv(csv_path: str,
+                              bpw_column: str = "bpw",
+                              ycol_identifier: Optional[str] = None,
+                              hide_empty: bool = False,
+                              plot_output: Optional[str] = None,
+                              fit_equation: bool = True,
+                              d_from_lowest_k: Optional[int] = None,
+                              d_free: bool = False,
+                              c_from_lowest_k: Optional[int] = None,
+                              c_free: bool = False,
+                              ignore_outliers_threshold: float = 30.0,
+                              threads: Optional[int] = None,
+                              metric_name: Optional[str] = "metric") -> None:
+    """
+    Read the produced bpw CSV (bpw_<input>.csv), plot metric (ycol) vs bpw (x axis).
+    ycol_identifier can be a column name or integer index (defaults to index 2).
+
+    New behaviour:
+      - c is handled similarly to d: can be anchored to mean of K lowest X values or allowed free.
+      - If neither --*-free nor --*-from-lowest are used for a parameter, the script will try
+        all possible 1..N values (means of lowest 1..N points) and pick the best based on SSE.
+      - Both d and c are determined (possibly from candidate grids) before the remaining parameters are searched.
+      - ignore_outliers_threshold > 0 enables removal of outliers (modified z-score) from data used
+        for determining c/d and for fitting the model. Outlier removal does NOT alter the CSV file;
+        it only affects the equation-fitting stage. Scatter plotting will show all original points.
+      - default outlier threshold is 30 per user request.
+
+    metric_name: Optional explicit metric name to show in labels.
+    """
+    with open(csv_path, newline="", encoding="utf-8") as inf:
+        reader = csv.DictReader(inf)
+        rows = list(reader)
+        headers = list(reader.fieldnames or [])
+
+    # find qtype column to determine default positions but we use bpw directly
+    qcol = None
+    qcol_index = None
+    for i, h in enumerate(headers):
+        if h.lower() == "qtype":
+            qcol = h
+            qcol_index = i
+            break
+    if qcol is None:
+        raise ValueError("CSV must have a 'qtype' column to determine default y column if not provided.")
+
+    # determine y column name (user metric)
+    if ycol_identifier is None:
+        # default: column index 2 (per your request)
+        yidx = 2
+        if yidx < 0 or yidx >= len(headers):
+            raise ValueError("default ycol index 2 is out of range; please specify --ycol.")
+        ycol = headers[yidx]
+    else:
+        try:
+            yidx = int(ycol_identifier)
+            if yidx < 0 or yidx >= len(headers):
+                raise ValueError("ycol index out of range.")
+            ycol = headers[yidx]
+        except ValueError:
+            if ycol_identifier in headers:
+                ycol = ycol_identifier
+            else:
+                matches = [h for h in headers if h.lower() == ycol_identifier.lower()]
+                if matches:
+                    ycol = matches[0]
+                else:
+                    raise ValueError(f"ycol '{ycol_identifier}' not found in CSV headers.")
+
+    # extract arrays: bpw as xarr, chosen column as yarr
+    xs = []
+    ys = []
+    valid_rows = []
+    for r in rows:
+        bpb = r.get(bpw_column)
+        bmetric = r.get(ycol)
+        if bpb is None or bmetric is None:
+            continue
+        if bpb == "" or bmetric == "":
+            continue
+        if "404" in str(bpb) or "404" in str(bmetric):
+            continue
+        try:
+            xv = float(str(bpb).strip().replace(",", ""))
+            yv = float(str(bmetric).strip().replace(",", ""))
+        except Exception:
+            continue
+        xs.append(xv)
+        ys.append(yv)
+        valid_rows.append(r)
+
+    if len(xs) < 4:
+        raise ValueError("Not enough valid rows to plot/fit. Need at least 4 valid numeric rows.")
+
+    # Keep original arrays for plotting; we'll create filtered versions for fitting if requested.
+    xarr_full = np.array(xs, dtype=float)  # bpw -> X axis (all points)
+    yarr_full = np.array(ys, dtype=float)  # metric -> Y axis (all points)
+
+    # Determine outliers (if requested) using modified z-score on both x and y.
+    # A point is considered an outlier if it's extreme in x OR y.
+    filtered_mask = np.ones_like(xarr_full, dtype=bool)
+    if ignore_outliers_threshold and ignore_outliers_threshold > 0.0:
+        mz_x = modified_z_score(xarr_full)
+        mz_y = modified_z_score(yarr_full)
+        outlier_mask = (mz_x > ignore_outliers_threshold) | (mz_y > ignore_outliers_threshold)
+        num_outliers = int(np.sum(outlier_mask))
+        if num_outliers > 0:
+            print(f"[info] Ignoring {num_outliers} outlier(s) (threshold={ignore_outliers_threshold}) for fitting.", file=sys.stderr)
+            filtered_mask = ~outlier_mask
+        else:
+            print(f"[info] No outliers detected at threshold {ignore_outliers_threshold}.", file=sys.stderr)
+
+    # prepare arrays used for fitting (after outlier exclusion)
+    xarr = xarr_full[filtered_mask]
+    yarr = yarr_full[filtered_mask]
+    if len(xarr) < 4:
+        raise ValueError("Not enough valid rows remain after outlier removal to plot/fit. Need at least 4 valid numeric rows.")
+
+    # The scatter plot should show all points (including outliers) so user can inspect.
+    fig, ax = plt.subplots()
+
+    ax.scatter(xarr_full, yarr_full, label="data")
+
+    # construct metric display label: e.g. "accuracy (column_name)"
+    metric_display = f"{metric_name} ({ycol})"
+    ax.set_xlabel("bpw")
+    ax.set_ylabel(f"{metric_display}")
+    ax.set_title(f"{metric_display} vs bpw")
+
+    if not fit_equation:
+        fig.tight_layout()
+        if plot_output:
+            plt.savefig(plot_output, dpi=300)
+            print(f"Wrote plot to {plot_output}")
+        else:
+            try:
+                plt.show()
+            except Exception:
+                fallback = "bpw_plot.png"
+                plt.savefig(fallback, dpi=300)
+                print(f"Interactive display not available; saved plot to {fallback}")
+        return
+
+    # Determine d candidates (anchoring/inference) BEFORE fitting other params.
+    # Use filtered (outlier-excluded) arrays for candidate generation, as requested.
+    d_candidates: List[Optional[float]] = []
+    if d_free:
+        # d is free: indicate by using None (fit will treat d_fixed=None)
+        d_candidates = [None]
+    else:
+        # user wants to anchor d to mean of K lowest y values OR try all K from 1..N
+        if d_from_lowest_k is not None:
+            K = max(1, int(d_from_lowest_k))
+            order = np.argsort(yarr)  # sort by Y (metric), take lowest K
+            k_used = min(K, len(order))
+            indices = order[:k_used]
+            d_val = float(np.mean(yarr[indices]))
+            d_candidates = [d_val]
+            print(f"[info] Anchoring d to mean of {k_used} lowest y values (after outlier removal) -> d = {d_val:.12g}", file=sys.stderr)
+        else:
+            # neither d_free nor d_from_lowest provided -> generate candidate list using K=1..N
+            order = np.argsort(yarr)
+            d_candidates = []
+            for K in range(1, len(yarr) + 1):
+                indices = order[:K]
+                d_candidates.append(float(np.mean(yarr[indices])))
+            # keep unique candidates while preserving order
+            seen = set()
+            d_candidates = [x for x in d_candidates if not (x in seen or seen.add(x))]
+
+    # Determine c candidates (anchoring/inference) BEFORE fitting other params.
+    # Use filtered arrays for computing c candidates as well.
+    c_candidates: List[Optional[float]] = []
+    if c_free:
+        c_candidates = [None]
+    else:
+        if c_from_lowest_k is not None:
+            K = max(1, int(c_from_lowest_k))
+            orderx = np.argsort(xarr)  # sort by X (bpw), take lowest K
+            k_used = min(K, len(orderx))
+            indices = orderx[:k_used]
+            c_val = float(np.mean(xarr[indices]))
+            c_candidates = [c_val]
+            print(f"[info] Anchoring c to mean of {k_used} lowest x values (after outlier removal) -> c = {c_val:.12g}", file=sys.stderr)
+        else:
+            # neither c_free nor c_from_lowest provided -> try all K=1..N
+            orderx = np.argsort(xarr)
+            c_candidates = []
+            for K in range(1, len(xarr) + 1):
+                indices = orderx[:K]
+                c_candidates.append(float(np.mean(xarr[indices])))
+            seen = set()
+            c_candidates = [x for x in c_candidates if not (x in seen or seen.add(x))]
+
+    # iterate over d/c candidate pairs and pick best fit (on outlier-excluded data)
+    best_overall = None
+    best_details = None
+    best_params = None
+
+    # --- Begin parallel region: evaluate fit_model_general for each (d_cand,c_cand) pair in parallel ---
+    pairs = [(d_cand, c_cand) for d_cand in d_candidates for c_cand in c_candidates]
+
+    if len(pairs) == 0:
+        best_params = None
+        best_details = None
+    else:
+        # Determine number of worker processes to use
+        if threads is None or (isinstance(threads, int) and threads <= 0):
+            max_workers = multiprocessing.cpu_count()
+        else:
+            max_workers = int(threads)
+
+        # cap to number of tasks
+        max_workers = max(1, min(max_workers, len(pairs)))
+
+        # To avoid BLAS-based contention, we also set these env vars in the main process.
+        os.environ.setdefault("OMP_NUM_THREADS", "1")
+        os.environ.setdefault("MKL_NUM_THREADS", "1")
+        os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+
+        # submit tasks to process pool. Each worker gets (xarr, yarr, d_cand, c_cand).
+        # Note: passing numpy arrays to processes implies pickling; it's acceptable for moderate-sized arrays.
+        tasks = []
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            future_to_pair = {}
+            for d_c, c_c in pairs:
+                fut = executor.submit(_fit_pair_process_worker, xarr, yarr, d_c, c_c)
+                future_to_pair[fut] = (d_c, c_c)
+            results = []
+            for fut in as_completed(future_to_pair):
+                d_cand_local, c_cand_local = future_to_pair[fut]
+                try:
+                    res = fut.result()
+                except Exception as exc:
+                    # In case the executor raised (should be rare because worker returns exceptions as strings)
+                    results.append((d_cand_local, c_cand_local, None, None, f"executor-exception: {exc}"))
+                else:
+                    results.append(res)
+
+        # Evaluate results to pick best SSE
+        for (d_cand_local, c_cand_local, params_local, details_local, exc_str) in results:
+            if exc_str:
+                # Report worker exception to stderr but continue scanning other results.
+                print(f"[worker-error] d={d_cand_local} c={c_cand_local} -> {exc_str}", file=sys.stderr)
+                continue
+            if params_local is None or details_local is None:
+                continue
+            sse = details_local.get("sse", params_local.get("sse", float("inf")))
+            if best_overall is None or sse < best_overall:
+                best_overall = sse
+                best_params = params_local
+                best_details = details_local
+                selected_d = d_cand_local
+                selected_c = c_cand_local
+    # --- End parallel region ---
+
+    if best_params is None:
+        print("Warning: no valid fit found among transforms; plotting scatter only.", file=sys.stderr)
+        fig.tight_layout()
+        if plot_output:
+            plt.savefig(plot_output, dpi=300)
+            print(f"Wrote plot to {plot_output}")
+        else:
+            plt.show()
+        return
+
+    # Selected parameters
+    params = best_params
+    details = best_details
+
+    a = params["a"]
+    b = params["b"]
+    c = params["c"]
+    d = params["d"]
+    p = params["p"]
+    transform = params["transform"]
+    r2 = params.get("r2", float("nan"))
+    log_base = params.get("log_base", None)
+
+    # construct fitted curve (x is bpw). Use same formula b * (x - c).
+    x_plot = np.linspace(np.min(xarr_full), np.max(xarr_full), 600)
+    vals_plot = b * (x_plot - c)
+
+    # apply transform to plotting vals (safely suppress warnings)
+    if transform == "logn":
+        base_to_use = log_base if log_base is not None else 10.0
+        with np.errstate(divide="ignore", invalid="ignore"):
+            T_plot = apply_transform(vals_plot, "logn", log_base=float(base_to_use))
+    else:
+        with np.errstate(divide="ignore", invalid="ignore"):
+            T_plot = apply_transform(vals_plot, transform)
+
+    with np.errstate(invalid="ignore", divide="ignore"):
+        y_plot = np.full_like(x_plot, np.nan, dtype=float)
+        S_plot = T_plot ** (-p)
+        mask = np.isfinite(T_plot) & (T_plot != 0.0) & np.isfinite(S_plot)
+        y_plot[mask] = d + a * S_plot[mask]
+
+    # Draw fitted curve (based on outlier-excluded fit) on top of full scatter
+    ax.plot(x_plot, y_plot, label=f"fit ({transform}, p={p:.3g})")
+    ax.text(0.02, 0.98, f"{transform}, p={p:.4g}\nR²={r2:.4f}", transform=ax.transAxes, va="top")
+    ax.legend()
+    fig.tight_layout()
+
+    # stdout prints - param details and grapher-friendly equation. Use x for bpw in equation.
+    print("Selected transform:", transform)
+    print(f"Selected p: {p:.12g}")
+    print("Fitted parameters (fit was computed after excluding outliers if requested):")
+    print(f"  d = {d:.12g}")
+    print(f"  a = {a:.12g}")
+    print(f"  b = {b:.12g}")
+    print(f"  c = {c:.12g}")
+    print(f"  R^2 = {r2:.6f}")
+    print("")
+    print("Equation (copy-paste-friendly, variable x = bpw):")
+    if transform == "ln":
+        grapher_transform = "ln"
+    elif transform == "log10":
+        grapher_transform = "log10"
+    elif transform == "log2":
+        grapher_transform = "log2"
+    elif transform == "logn":
+        grapher_transform = f"log{log_base:.6g}" if log_base is not None else "logN"
+    else:
+        grapher_transform = "identity"
+
+    # Note: equation uses b*(x - c) inside the transform per new requirement.
+    if grapher_transform == "identity":
+        grapher_eq = f"y = {d:.12g} + {a:.12g} * ( {b:.12g} * (x - {c:.12g}) )^(-{p:.12g})"
+    else:
+        grapher_eq = f"y = {d:.12g} + {a:.12g} * {grapher_transform}( {b:.12g} * (x - {c:.12g}) )^(-{p:.12g})"
+
+    print(grapher_eq)
+
+    if plot_output:
+        plt.savefig(plot_output, dpi=300)
+        print(f"Wrote plot to {plot_output}")
+    else:
+        try:
+            plt.show()
+        except Exception:
+            fallback = "bpw_plot.png"
+            plt.savefig(fallback, dpi=300)
+            print(f"Interactive display not available; saved plot to {fallback}")
+
+
+# --------------------------
+# CSV writing (unchanged) & CLI glue
+# --------------------------
+
+def write_bpw_results_csv_from_rows(input_csv_path: str,
+                                    out_csv_path: str,
+                                    parsed_mapfiles: Dict[str, List[Dict[str, Any]]],
+                                    qtypes_to_consider: Optional[List[str]],
+                                    allow_impure_map: bool,
+                                    fail_on_missing_bytes: bool,
+                                    hide_empty: bool) -> None:
+    if not os.path.exists(input_csv_path):
+        raise FileNotFoundError(input_csv_path)
+
+    with open(input_csv_path, newline="", encoding="utf-8") as inf:
+        reader = csv.DictReader(inf)
+        rows = list(reader)
+        input_fieldnames = list(reader.fieldnames or [])
+
+    qcol = None
+    qcol_index = None
+    for idx, fn in enumerate(input_fieldnames):
+        if fn.lower() == "qtype":
+            qcol = fn
+            qcol_index = idx
+            break
+    if qcol is None:
+        raise ValueError("Input CSV must contain a 'qtype' column (case-insensitive).")
+
+    out_fieldnames = list(input_fieldnames)
+    if "bpw" not in [f.lower() for f in out_fieldnames]:
+        insert_pos = (qcol_index + 1) if qcol_index is not None else len(out_fieldnames)
+        out_fieldnames.insert(insert_pos, "bpw")
+    else:
+        cur_idx = next(i for i, fn in enumerate(out_fieldnames) if fn.lower() == "bpw")
+        if qcol_index is not None and cur_idx != qcol_index + 1:
+            bpw_val = out_fieldnames.pop(cur_idx)
+            insert_pos = qcol_index + 1
+            out_fieldnames.insert(insert_pos, bpw_val)
+
+    output_rows: List[Dict[str, Any]] = []
+
+    for row in rows:
+        qval = (row.get(qcol) or "").strip()
+        if not qval:
+            if hide_empty:
+                continue
+            row["bpw"] = "404"
+            output_rows.append(row)
+            continue
+
+        qval_l = qval.lower()
+        if qtypes_to_consider is not None and qval_l not in [q.lower() for q in qtypes_to_consider]:
+            if hide_empty:
+                continue
+            row["bpw"] = "404"
+            output_rows.append(row)
+            continue
+
+        parsed_entries = parsed_mapfiles.get(qval_l)
+        if parsed_entries is None:
+            csv_dir = os.path.dirname(os.path.abspath(input_csv_path)) or "."
+            candidate = os.path.join(csv_dir, f"tensors.{qval}.map")
+            if os.path.exists(candidate):
+                _, parsed_entries = load_parsed_entries_from_mapfile(candidate)
+                parsed_mapfiles[qval_l] = parsed_entries
+            else:
+                if hide_empty:
+                    continue
+                row["bpw"] = "404"
+                output_rows.append(row)
+                print(f"[CSV] qtype={qval}: no map file found; wrote 404.", file=sys.stderr)
+                continue
+
+        bpw_val, details = compute_bpw_for_qtype(parsed_entries,
+                                                 declared_qtype=qval_l,
+                                                 allow_impure_map=allow_impure_map,
+                                                 fail_on_missing_bytes=fail_on_missing_bytes)
+        if bpw_val is None:
+            if hide_empty:
+                continue
+            row["bpw"] = "404"
+            output_rows.append(row)
+            print(f"[CSV] qtype={qval}: bpw not computed (reason={details.get('reason')}).", file=sys.stderr)
+        else:
+            row["bpw"] = f"{bpw_val:.6f}"
+            output_rows.append(row)
+            if details.get("soft_impure"):
+                print(f"[CSV] qtype={qval}: soft-impure tensors present (same q-family variants).", file=sys.stderr)
+            if details.get("hard_impure") and allow_impure_map:
+                print(f"[CSV] qtype={qval}: hard-impure tensors present but --allow-impure-map used; BPW computed.", file=sys.stderr)
+
+    def bpw_key(r: Dict[str, Any]):
+        v = r.get("bpw")
+        if v is None:
+            return float("-inf")
+        try:
+            fv = float(v)
+            return fv
+        except Exception:
+            return float("-inf")
+
+    output_rows.sort(key=bpw_key, reverse=True)
+
+    with open(out_csv_path, "w", newline="", encoding="utf-8") as ouf:
+        writer = csv.DictWriter(ouf, fieldnames=out_fieldnames)
+        writer.writeheader()
+        for r in output_rows:
+            writer.writerow(r)
+
+
+def write_bpw_results_csv_from_rows_and_maybe_plot(input_csv_path: str,
+                                                   out_csv_path: str,
+                                                   parsed_mapfiles: Dict[str, List[Dict[str, Any]]],
+                                                   qtypes_to_consider: Optional[List[str]],
+                                                   allow_impure_map: bool,
+                                                   fail_on_missing_bytes: bool,
+                                                   hide_empty: bool,
+                                                   plot: bool = False,
+                                                   ycol_identifier: Optional[str] = None,
+                                                   plot_output: Optional[str] = None,
+                                                   fit_equation: bool = True,
+                                                   d_from_lowest_k: Optional[int] = None,
+                                                   d_free: bool = False,
+                                                   c_from_lowest_k: Optional[int] = None,
+                                                   c_free: bool = False,
+                                                   ignore_outliers_threshold: float = 30.0,
+                                                   threads: Optional[int] = None,
+                                                   metric_name: Optional[str] = "metric") -> None:
+    write_bpw_results_csv_from_rows(input_csv_path, out_csv_path, parsed_mapfiles,
+                                    qtypes_to_consider, allow_impure_map, fail_on_missing_bytes, hide_empty)
+    if plot:
+        compute_and_plot_from_csv(out_csv_path,
+                                  bpw_column="bpw",
+                                  ycol_identifier=ycol_identifier,
+                                  hide_empty=hide_empty,
+                                  plot_output=plot_output,
+                                  fit_equation=fit_equation,
+                                  d_from_lowest_k=d_from_lowest_k,
+                                  d_free=d_free,
+                                  c_from_lowest_k=c_from_lowest_k,
+                                  c_free=c_free,
+                                  ignore_outliers_threshold=ignore_outliers_threshold,
+                                  threads=threads,
+                                  metric_name=metric_name)
+
+
+# --------------------------
+# CLI entrypoint
+# --------------------------
+
+def main():
+    ap = argparse.ArgumentParser(description="Compute model BPW from tensors.qtype.map files.")
+    ap.add_argument("map_file", nargs="?", default=None,
+                    help="(Legacy) single map file to process (optional). Use --map-files for many.")
+    ap.add_argument("--map-files", nargs="+", default=None,
+                    help="One or more map files to process (optional).")
+    ap.add_argument("--qtypes", nargs="+", default=None,
+                    help="One or more qtypes to process (mutually exclusive with --map-files).")
+    ap.add_argument("--results-csv", type=str, default=None,
+                    help="Optional input CSV with a 'qtype' column. Produces bpw_<input_csv>.")
+    ap.add_argument("--hide-empty", action="store_true",
+                    help="When producing CSV, hide rows where bpw wasn't computed; otherwise fill '404'.")
+    ap.add_argument("--allow-impure-map", action="store_true",
+                    help="Allow hard-impure tensors (different families) and compute BPW with a warning.")
+    ap.add_argument("--fail-on-missing-bytes", action="store_true",
+                    help="Fail when tensors lack bytes= for a qtype (treated as missing bpw).")
+    ap.add_argument("--plot", action="store_true", help="Produce a plot of chosen metric (y) vs bpw (x) from output CSV.")
+    ap.add_argument("--ycol", type=str, default="2",
+                    help="Y column name or index for plotting (defaults to '2' when not provided).")
+    ap.add_argument("--plot-output", type=str, default=None, help="Path to save plot PNG (optional).")
+    ap.add_argument("--no-equation", "--skip-fit", action="store_true",
+                    help="Do not compute or plot the fitted equation (only scatter).")
+    # Note: we changed defaults so that when user doesn't provide --d-from-lowest or --c-from-lowest
+    # the code will try all K=1..N candidates. If a user wants a specific anchoring value, they can provide K.
+    ap.add_argument("--d-from-lowest", type=int, default=None,
+                    help="When not using --d-free, anchor d to mean of the K lowest-y rows' y values (provide K). If omitted, try all K=1..N and pick best.")
+    ap.add_argument("--d-free", action="store_true", help="Allow fitting d as a free parameter (do not anchor to lowest values).")
+    # New c parameters: parallel to d, but c is based on lowest X (bpw) values and used as b*(x - c)
+    ap.add_argument("--c-from-lowest", type=int, default=None,
+                    help="When not using --c-free, anchor c to mean of the K lowest-x rows' x values (provide K). If omitted, try all K=1..N and pick best.")
+    ap.add_argument("--c-free", action="store_true", help="Allow fitting c as a free parameter (do not anchor to lowest-x values).")
+    # New outlier handling parameter: modified z-score threshold. default 30 per user request.
+    ap.add_argument("--ignore-outliers", type=float, default=30.0,
+                    help="Ignore outliers (modified z-score) when fitting if >0. Default 30. Set to 0 to disable.")
+    # Threading parameter: number of processes to use. Default 0/None => use machine CPU count.
+    ap.add_argument("--threads", type=int, default=0,
+                    help="Number of worker processes to use for fitting (default 0 => use machine CPU count).")
+    ap.add_argument("--metric-name", type=str, default=None,
+                    help="Optional metric name used for plot labeling. If omitted and --results-csv is provided, infer from results CSV filename like 'metricname_results.csv'; otherwise default 'metric'.")
+    args = ap.parse_args()
+
+    if args.map_files and args.qtypes:
+        print("ERROR: --map-files and --qtypes cannot both be used.", file=sys.stderr)
+        sys.exit(2)
+
+    parsed_mapfiles: Dict[str, List[Dict[str, Any]]] = {}
+    if args.map_files:
+        for mf in args.map_files:
+            try:
+                q, parsed = load_parsed_entries_from_mapfile(mf)
+            except Exception as ex:
+                print(f"ERROR: failed to read map file {mf}: {ex}", file=sys.stderr)
+                sys.exit(3)
+            if q is None:
+                print(f"Warning: could not infer qtype from map filename '{mf}'; skipping.", file=sys.stderr)
+                continue
+            parsed_mapfiles[q.lower()] = parsed
+
+    if args.map_file:
+        try:
+            q, parsed = load_parsed_entries_from_mapfile(args.map_file)
+        except Exception as ex:
+            print(f"ERROR: failed to read map file {args.map_file}: {ex}", file=sys.stderr)
+            sys.exit(3)
+        if q is None:
+            print(f"Warning: could not infer qtype from map filename '{args.map_file}'.", file=sys.stderr)
+        else:
+            parsed_mapfiles.setdefault(q.lower(), parsed)
+
+    qtypes_to_process: Optional[List[str]] = None
+    if args.results_csv:
+        with open(args.results_csv, newline="", encoding="utf-8") as inf:
+            reader = csv.DictReader(inf)
+            if not reader.fieldnames:
+                print(f"ERROR: results CSV {args.results_csv} has no header.", file=sys.stderr)
+                sys.exit(4)
+            qcol = None
+            for fn in reader.fieldnames:
+                if fn.lower() == "qtype":
+                    qcol = fn
+                    break
+            if qcol is None:
+                print(f"ERROR: results CSV {args.results_csv} must have a 'qtype' column.", file=sys.stderr)
+                sys.exit(4)
+            csv_qtypes = []
+            for r in reader:
+                val = (r.get(qcol) or "").strip()
+                if val:
+                    csv_qtypes.append(val.lower())
+            csv_qtypes = list(dict.fromkeys(csv_qtypes))
+
+        if args.qtypes:
+            qtypes_to_process = [q.lower() for q in args.qtypes]
+        else:
+            qtypes_to_process = csv_qtypes
+
+        if not args.map_files and not args.map_file:
+            csv_dir = os.path.dirname(os.path.abspath(args.results_csv)) or "."
+            for q in qtypes_to_process:
+                if q in parsed_mapfiles:
+                    continue
+                cand = os.path.join(csv_dir, f"tensors.{q}.map")
+                if os.path.exists(cand):
+                    try:
+                        _, parsed = load_parsed_entries_from_mapfile(cand)
+                        parsed_mapfiles[q] = parsed
+                    except Exception as ex:
+                        print(f"Warning: failed to read inferred map file {cand}: {ex}", file=sys.stderr)
+    else:
+        if args.qtypes:
+            qtypes_to_process = [q.lower() for q in args.qtypes]
+            for q in list(qtypes_to_process):
+                if q in parsed_mapfiles:
+                    continue
+                cand = os.path.join(".", f"tensors.{q}.map")
+                if os.path.exists(cand):
+                    try:
+                        _, parsed = load_parsed_entries_from_mapfile(cand)
+                        parsed_mapfiles[q] = parsed
+                    except Exception as ex:
+                        print(f"Warning: failed to read inferred map file {cand}: {ex}", file=sys.stderr)
+        elif parsed_mapfiles:
+            qtypes_to_process = list(parsed_mapfiles.keys())
+        elif args.map_file:
+            qtypes_to_process = list(parsed_mapfiles.keys())
+        else:
+            print("ERROR: no input map file(s) provided. Use --map-files, positional map_file, or --results-csv (with map files next to CSV).", file=sys.stderr)
+            sys.exit(5)
+
+    if args.results_csv:
+        in_csv = args.results_csv
+        out_csv = os.path.join(os.path.dirname(os.path.abspath(in_csv)) or ".", "bpw_" + os.path.basename(in_csv))
+        try:
+            # infer metric_name from csv filename if not provided
+            metric_name = args.metric_name
+            if not args.metric_name:
+                base = os.path.basename(in_csv)
+                m = re.match(r"(?i)^(.+)_results\.csv$", base)
+                if m:
+                    metric_name = m.group(1)
+            write_bpw_results_csv_from_rows_and_maybe_plot(input_csv_path=in_csv,
+                                                           out_csv_path=out_csv,
+                                                           parsed_mapfiles=parsed_mapfiles,
+                                                           qtypes_to_consider=qtypes_to_process,
+                                                           allow_impure_map=args.allow_impure_map,
+                                                           fail_on_missing_bytes=args.fail_on_missing_bytes,
+                                                           hide_empty=args.hide_empty,
+                                                           plot=args.plot,
+                                                           ycol_identifier=args.ycol,
+                                                           plot_output=args.plot_output,
+                                                           fit_equation=(not args.no_equation),
+                                                           d_from_lowest_k=args.d_from_lowest,
+                                                           d_free=args.d_free,
+                                                           c_from_lowest_k=args.c_from_lowest,
+                                                           c_free=args.c_free,
+                                                           ignore_outliers_threshold=(args.ignore_outliers if args.ignore_outliers and float(args.ignore_outliers) > 0.0 else 0.0),
+                                                           threads=(args.threads if args.threads and int(args.threads) > 0 else None),
+                                                           metric_name=metric_name)
+        except Exception as ex:
+            print(f"ERROR: failed to produce {out_csv}: {ex}", file=sys.stderr)
+            sys.exit(6)
+        print(f"Wrote BPW CSV: {out_csv}")
+
+    if not args.results_csv:
+        for q in qtypes_to_process:
+            parsed_entries = parsed_mapfiles.get(q)
+            if parsed_entries is None:
+                print("=" * 60)
+                print(f"qtype: {q}")
+                print("  No map file found for this qtype; BPW not computed.")
+                print("=" * 60)
+                continue
+            bpw_val, details = compute_bpw_for_qtype(parsed_entries,
+                                                     declared_qtype=q,
+                                                     allow_impure_map=args.allow_impure_map,
+                                                     fail_on_missing_bytes=args.fail_on_missing_bytes)
+            print("=" * 60)
+            print(f"qtype: {q}")
+            if details.get("total_elements_with_bytes") is not None:
+                print(f"  Total elements (used): {details.get('total_elements_with_bytes'):,}")
+            if details.get("total_bytes") is not None:
+                tb = details.get("total_bytes")
+                print(f"  Total bytes (sum)    : {tb:,} ({human_bytes(tb)})")
+            if bpw_val is None:
+                print(f"  BPW: not computed (reason={details.get('reason')})")
+            else:
+                print(f"  BPW: {bpw_val:.6f} bits/weight")
+            if details.get("soft_impure"):
+                print("  NOTE: soft-impure tensors (same q-family variants) were present. See stderr for details.")
+            if details.get("hard_impure") and args.allow_impure_map:
+                print("  WARNING: hard-impure tensors present but --allow-impure-map used; BPW computed anyway.")
+            print("=" * 60)
+
+    return
+
+
+if __name__ == "__main__":
+    main()
