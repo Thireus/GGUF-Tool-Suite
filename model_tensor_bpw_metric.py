@@ -358,8 +358,9 @@ def fit_model_general(xarr: np.ndarray,
                     # other transforms: ln, log10, log2, identity
                     with np.errstate(divide="ignore", invalid="ignore"):
                         Tvals = apply_transform(vals, transform)
-                    # if not np.all(np.isfinite(Tvals)):
-                    #     continue
+                    if transform in {"identity"}:
+                        if not np.all(np.isfinite(Tvals)):
+                            continue
                     if np.any(Tvals == 0):
                         continue
 
@@ -367,8 +368,9 @@ def fit_model_general(xarr: np.ndarray,
                         # compute S while suppressing invalid-value warnings (user noted harmless warning)
                         with np.errstate(invalid="ignore", divide="ignore"):
                             S = Tvals ** (-p)
-                        # if not np.all(np.isfinite(S)):
-                        #     continue
+                        if transform in {"identity"}:
+                            if not np.all(np.isfinite(S)):
+                                continue
                         if d_fixed is None:
                             # solve for d and a via linear least squares: y = d + a * S
                             G = np.vstack([np.ones_like(S), S]).T
