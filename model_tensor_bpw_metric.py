@@ -30,6 +30,7 @@ import math
 import os
 import re
 import sys
+import json
 from typing import List, Optional, Dict, Any, Tuple
 
 import numpy as np
@@ -249,7 +250,7 @@ def fit_model_general(xarr: np.ndarray,
     """
     # default transforms/p grid (added 'logn' to allow variable log base)
     if transforms is None:
-        transforms = ["ln", "log10", "log2", "logn", "identity"]
+        transforms = ["ln", "log2", "log10", "logn", "identity"]
     if p_grid is None:
         p_grid = np.linspace(0.2, 3.0, 15)  # from 0.2 to 3.0 in 15 steps
 
@@ -304,10 +305,10 @@ def fit_model_general(xarr: np.ndarray,
                 vals = b * (xfit - c)
 
                 # For log-like transforms, we still require vals > 0. For identity we accept any vals.
-                if transform in {"ln", "log10", "log2", "logn"}:
-                    # skip combos where any vals are nonpositive (cannot take log)
-                    if np.any(vals <= 0):
-                        continue
+                # if transform in {"ln", "log10", "log2", "logn"}:
+                #     # skip combos where any vals are nonpositive (cannot take log)
+                #     if np.any(vals <= 0):
+                #         continue
 
                 # Now handle transform-specific processing.
                 if transform == "logn":
@@ -316,8 +317,8 @@ def fit_model_general(xarr: np.ndarray,
                         # apply transform safely (suppress warnings during log)
                         with np.errstate(divide="ignore", invalid="ignore"):
                             Tvals = apply_transform(vals, "logn", log_base=float(Nbase))
-                        if not np.all(np.isfinite(Tvals)):
-                            continue
+                        # if not np.all(np.isfinite(Tvals)):
+                        #     continue
                         # skip cases where Tvals contains zeros (would blow up when raising to -p)
                         if np.any(Tvals == 0):
                             continue
@@ -325,8 +326,8 @@ def fit_model_general(xarr: np.ndarray,
                             # compute S = Tvals ** (-p) while suppressing invalid warnings (e.g. negative bases)
                             with np.errstate(invalid="ignore", divide="ignore"):
                                 S = Tvals ** (-p)
-                            if not np.all(np.isfinite(S)):
-                                continue
+                            # if not np.all(np.isfinite(S)):
+                            #     continue
                             if d_fixed is None:
                                 # solve for d and a via linear least squares: y = d + a * S
                                 G = np.vstack([np.ones_like(S), S]).T
@@ -357,8 +358,8 @@ def fit_model_general(xarr: np.ndarray,
                     # other transforms: ln, log10, log2, identity
                     with np.errstate(divide="ignore", invalid="ignore"):
                         Tvals = apply_transform(vals, transform)
-                    if not np.all(np.isfinite(Tvals)):
-                        continue
+                    # if not np.all(np.isfinite(Tvals)):
+                    #     continue
                     if np.any(Tvals == 0):
                         continue
 
@@ -366,8 +367,8 @@ def fit_model_general(xarr: np.ndarray,
                         # compute S while suppressing invalid-value warnings (user noted harmless warning)
                         with np.errstate(invalid="ignore", divide="ignore"):
                             S = Tvals ** (-p)
-                        if not np.all(np.isfinite(S)):
-                            continue
+                        # if not np.all(np.isfinite(S)):
+                        #     continue
                         if d_fixed is None:
                             # solve for d and a via linear least squares: y = d + a * S
                             G = np.vstack([np.ones_like(S), S]).T
@@ -579,7 +580,7 @@ def modified_z_score(values: np.ndarray) -> np.ndarray:
 # --------------------------
 
 # Top-level worker for process pool. It must be picklable (i.e., module-level) for ProcessPoolExecutor.
-def _fit_pair_process_worker(xarr_shared, yarr_shared, d_cand_local: Optional[float], c_cand_local: Optional[float]):
+def _fit_pair_process_worker(xarr_shared, yarr_shared, d_cand_local: Optional[float], c_cand_local: Optional[float], transforms_local: Optional[List[str]] = None):
     """
     Worker run in separate process. xarr_shared, yarr_shared are numpy arrays (pickled to worker).
     Limit BLAS threads inside worker to avoid oversubscription.
@@ -592,7 +593,7 @@ def _fit_pair_process_worker(xarr_shared, yarr_shared, d_cand_local: Optional[fl
         # Convert to numpy arrays in worker context (they may already be np arrays after unpickling)
         x_local = np.asarray(xarr_shared, dtype=float)
         y_local = np.asarray(yarr_shared, dtype=float)
-        params_local, details_local = fit_model_general(x_local, y_local, d_fixed=d_cand_local, c_fixed=c_cand_local)
+        params_local, details_local = fit_model_general(x_local, y_local, d_fixed=d_cand_local, c_fixed=c_cand_local, transforms=transforms_local)
         return (d_cand_local, c_cand_local, params_local, details_local, None)
     except Exception as e:
         return (d_cand_local, c_cand_local, None, None, str(e))
@@ -610,9 +611,11 @@ def compute_and_plot_from_csv(csv_path: str,
                               c_free: bool = False,
                               ignore_outliers_threshold: float = 30.0,
                               threads: Optional[int] = None,
-                              metric_name: Optional[str] = "metric") -> None:
+                              metric_name: Optional[str] = "metric",
+                              predict_bpw_values: Optional[List[float]] = None,
+                              transforms: Optional[List[str]] = None) -> Optional[List[float]]:
     """
-    Read the produced bpw CSV (bpw_<input>.csv), plot metric (ycol) vs bpw (x axis).
+    Read the produced bpw CSV (bpw_<input>.csv), plot metric (y) vs bpw (x).
     ycol_identifier can be a column name or integer index (defaults to index 2).
 
     New behaviour:
@@ -626,7 +629,15 @@ def compute_and_plot_from_csv(csv_path: str,
       - default outlier threshold is 30 per user request.
 
     metric_name: Optional explicit metric name to show in labels.
+
+    If predict_bpw_values is provided (list of floats), the function will print a JSON array to stdout
+    containing predicted metric values for those bpw inputs (when an equation is available).
+    All other textual output will be written to stderr in that mode. Returns the list of predictions
+    when run programmatically; otherwise returns None.
     """
+    # Flag indicating machine-friendly output mode (predict-only)
+    machine_mode = bool(predict_bpw_values and len(predict_bpw_values) > 0)
+
     with open(csv_path, newline="", encoding="utf-8") as inf:
         reader = csv.DictReader(inf)
         rows = list(reader)
@@ -730,15 +741,24 @@ def compute_and_plot_from_csv(csv_path: str,
         fig.tight_layout()
         if plot_output:
             plt.savefig(plot_output, dpi=300)
-            print(f"Wrote plot to {plot_output}")
+            print(f"Wrote plot to {plot_output}", file=sys.stderr)
         else:
             try:
-                plt.show()
+                if not machine_mode:
+                    plt.show()
+                else:
+                    fallback = "bpw_plot.png"
+                    plt.savefig(fallback, dpi=300)
+                    print(f"Interactive display not available; saved plot to {fallback}", file=sys.stderr)
             except Exception:
                 fallback = "bpw_plot.png"
                 plt.savefig(fallback, dpi=300)
-                print(f"Interactive display not available; saved plot to {fallback}")
-        return
+                print(f"Interactive display not available; saved plot to {fallback}", file=sys.stderr)
+        # In machine mode, no predictions were requested, so return None
+        if machine_mode:
+            print("[]")
+            return []
+        return None
 
     # Determine d candidates (anchoring/inference) BEFORE fitting other params.
     # Use filtered (outlier-excluded) arrays for candidate generation, as requested.
@@ -823,7 +843,8 @@ def compute_and_plot_from_csv(csv_path: str,
         with ProcessPoolExecutor(max_workers=max_workers) as executor:
             future_to_pair = {}
             for d_c, c_c in pairs:
-                fut = executor.submit(_fit_pair_process_worker, xarr, yarr, d_c, c_c)
+                # pass transforms along to worker so users can override which transforms are tried
+                fut = executor.submit(_fit_pair_process_worker, xarr, yarr, d_c, c_c, transforms)
                 future_to_pair[fut] = (d_c, c_c)
             results = []
             for fut in as_completed(future_to_pair):
@@ -854,14 +875,28 @@ def compute_and_plot_from_csv(csv_path: str,
     # --- End parallel region ---
 
     if best_params is None:
+        # If machine_mode and predictions were requested, return empty array to stdout for easy piping.
+        if machine_mode:
+            print("[]")
+            return []
         print("Warning: no valid fit found among transforms; plotting scatter only.", file=sys.stderr)
         fig.tight_layout()
         if plot_output:
             plt.savefig(plot_output, dpi=300)
-            print(f"Wrote plot to {plot_output}")
+            print(f"Wrote plot to {plot_output}", file=sys.stderr)
         else:
-            plt.show()
-        return
+            try:
+                if not machine_mode:
+                    plt.show()
+                else:
+                    fallback = "bpw_plot.png"
+                    plt.savefig(fallback, dpi=300)
+                    print(f"Interactive display not available; saved plot to {fallback}", file=sys.stderr)
+            except Exception:
+                fallback = "bpw_plot.png"
+                plt.savefig(fallback, dpi=300)
+                print(f"Interactive display not available; saved plot to {fallback}", file=sys.stderr)
+        return None
 
     # Selected parameters
     params = best_params
@@ -875,6 +910,38 @@ def compute_and_plot_from_csv(csv_path: str,
     transform = params["transform"]
     r2 = params.get("r2", float("nan"))
     log_base = params.get("log_base", None)
+
+    # If machine_mode (predict-only), compute predictions for requested bpw values and print JSON to stdout,
+    # and ensure all other printing goes to stderr.
+    if machine_mode:
+        preds = []
+        for xv in predict_bpw_values:
+            try:
+                x_val = float(xv)
+            except Exception:
+                preds.append(None)
+                continue
+            vals_single = b * (x_val - c)
+            # handle transform and compute S
+            try:
+                with np.errstate(divide="ignore", invalid="ignore"):
+                    if transform == "logn":
+                        base_to_use = log_base if log_base is not None else 10.0
+                        T_single = apply_transform(np.array([vals_single], dtype=float), "logn", log_base=float(base_to_use))[0]
+                    else:
+                        T_single = apply_transform(np.array([vals_single], dtype=float), transform)[0]
+                    # If T_single is not finite or zero, prediction is None
+                    if not np.isfinite(T_single) or T_single == 0.0:
+                        preds.append(None)
+                        continue
+                    S_single = float(T_single ** (-p))
+                    y_pred = float(d + a * S_single)
+                    preds.append(y_pred)
+            except Exception:
+                preds.append(None)
+        # Convert None to null in JSON by leaving them as None in Python -> JSON null.
+        print(json.dumps(preds))
+        return preds
 
     # construct fitted curve (x is bpw). Use same formula b * (x - c).
     x_plot = np.linspace(np.min(xarr_full), np.max(xarr_full), 600)
@@ -902,16 +969,17 @@ def compute_and_plot_from_csv(csv_path: str,
     fig.tight_layout()
 
     # stdout prints - param details and grapher-friendly equation. Use x for bpw in equation.
-    print("Selected transform:", transform)
-    print(f"Selected p: {p:.12g}")
-    print("Fitted parameters (fit was computed after excluding outliers if requested):")
-    print(f"  d = {d:.12g}")
-    print(f"  a = {a:.12g}")
-    print(f"  b = {b:.12g}")
-    print(f"  c = {c:.12g}")
-    print(f"  R^2 = {r2:.6f}")
-    print("")
-    print("Equation (copy-paste-friendly, variable x = bpw):")
+    # These must go to stderr so interactive/piping is easier.
+    print("Selected transform:", transform, file=sys.stderr)
+    print(f"Selected p: {p:.12g}", file=sys.stderr)
+    print("Fitted parameters (fit was computed after excluding outliers if requested):", file=sys.stderr)
+    print(f"  d = {d:.12g}", file=sys.stderr)
+    print(f"  a = {a:.12g}", file=sys.stderr)
+    print(f"  b = {b:.12g}", file=sys.stderr)
+    print(f"  c = {c:.12g}", file=sys.stderr)
+    print(f"  R^2 = {r2:.6f}", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("Equation (copy-paste-friendly, variable x = bpw):", file=sys.stderr)
     if transform == "ln":
         grapher_transform = "ln"
     elif transform == "log10":
@@ -929,18 +997,20 @@ def compute_and_plot_from_csv(csv_path: str,
     else:
         grapher_eq = f"y = {d:.12g} + {a:.12g} * {grapher_transform}( {b:.12g} * (x - {c:.12g}) )^(-{p:.12g})"
 
-    print(grapher_eq)
+    print(grapher_eq, file=sys.stderr)
 
     if plot_output:
         plt.savefig(plot_output, dpi=300)
-        print(f"Wrote plot to {plot_output}")
+        print(f"Wrote plot to {plot_output}", file=sys.stderr)
     else:
         try:
             plt.show()
         except Exception:
             fallback = "bpw_plot.png"
             plt.savefig(fallback, dpi=300)
-            print(f"Interactive display not available; saved plot to {fallback}")
+            print(f"Interactive display not available; saved plot to {fallback}", file=sys.stderr)
+
+    return None
 
 
 # --------------------------
@@ -1071,23 +1141,28 @@ def write_bpw_results_csv_from_rows_and_maybe_plot(input_csv_path: str,
                                                    c_free: bool = False,
                                                    ignore_outliers_threshold: float = 30.0,
                                                    threads: Optional[int] = None,
-                                                   metric_name: Optional[str] = "metric") -> None:
+                                                   metric_name: Optional[str] = "metric",
+                                                   predict_bpw_values: Optional[List[float]] = None,
+                                                   transforms: Optional[List[str]] = None) -> Optional[List[float]]:
     write_bpw_results_csv_from_rows(input_csv_path, out_csv_path, parsed_mapfiles,
                                     qtypes_to_consider, allow_impure_map, fail_on_missing_bytes, hide_empty)
     if plot:
-        compute_and_plot_from_csv(out_csv_path,
-                                  bpw_column="bpw",
-                                  ycol_identifier=ycol_identifier,
-                                  hide_empty=hide_empty,
-                                  plot_output=plot_output,
-                                  fit_equation=fit_equation,
-                                  d_from_lowest_k=d_from_lowest_k,
-                                  d_free=d_free,
-                                  c_from_lowest_k=c_from_lowest_k,
-                                  c_free=c_free,
-                                  ignore_outliers_threshold=ignore_outliers_threshold,
-                                  threads=threads,
-                                  metric_name=metric_name)
+        return compute_and_plot_from_csv(out_csv_path,
+                                         bpw_column="bpw",
+                                         ycol_identifier=ycol_identifier,
+                                         hide_empty=hide_empty,
+                                         plot_output=plot_output,
+                                         fit_equation=fit_equation,
+                                         d_from_lowest_k=d_from_lowest_k,
+                                         d_free=d_free,
+                                         c_from_lowest_k=c_from_lowest_k,
+                                         c_free=c_free,
+                                         ignore_outliers_threshold=ignore_outliers_threshold,
+                                         threads=threads,
+                                         metric_name=metric_name,
+                                         predict_bpw_values=predict_bpw_values,
+                                         transforms=transforms)
+    return None
 
 
 # --------------------------
@@ -1133,11 +1208,32 @@ def main():
                     help="Number of worker processes to use for fitting (default 0 => use machine CPU count).")
     ap.add_argument("--metric-name", type=str, default=None,
                     help="Optional metric name used for plot labeling. If omitted and --results-csv is provided, infer from results CSV filename like 'metricname_results.csv'; otherwise default 'metric'.")
+    # New: exclude qtypes by regex
+    ap.add_argument("--exclude-qtypes", nargs="+", default=None,
+                    help="One or more regular expressions; qtypes matching any will be excluded (case-insensitive).")
+    # New: predict bpw values - machine-friendly mode prints JSON array to stdout and everything else to stderr
+    ap.add_argument("--predict-bpw-values", nargs="+", type=float, default=None,
+                    help="Provide a list of bpw values; when an equation is produced, print JSON array of predicted metric values to stdout. Other textual output goes to stderr.")
+    # New: allow user to specify the transforms to try (defaults to ln, log2, log10, logn, identity)
+    ap.add_argument("--transforms", nargs="+", default=None,
+                    help="Space-separated (or comma-separated) list of transforms to try. Choices: ln, log2, log10, logn, identity. Default: ln log2 log10 logn identity.")
     args = ap.parse_args()
 
     if args.map_files and args.qtypes:
         print("ERROR: --map-files and --qtypes cannot both be used.", file=sys.stderr)
         sys.exit(2)
+
+    # Normalize transforms argument into a list (split commas if user passed a single comma-separated string)
+    transforms_arg: Optional[List[str]] = None
+    if args.transforms:
+        tmp = []
+        for t in args.transforms:
+            # allow comma-separated single argument
+            parts = [s.strip() for s in t.split(",") if s.strip()]
+            tmp.extend(parts)
+        # keep unique while preserving order
+        seen_t = set()
+        transforms_arg = [x for x in tmp if not (x in seen_t or seen_t.add(x))]
 
     parsed_mapfiles: Dict[str, List[Dict[str, Any]]] = {}
     if args.map_files:
@@ -1164,6 +1260,27 @@ def main():
             parsed_mapfiles.setdefault(q.lower(), parsed)
 
     qtypes_to_process: Optional[List[str]] = None
+
+    # Helper to apply exclude regexes to a list of qtypes (lowercase strings).
+    def apply_excludes(qtypes: List[str], exclude_patterns: Optional[List[str]]) -> List[str]:
+        if not exclude_patterns:
+            return qtypes
+        compiled = []
+        for pat in exclude_patterns:
+            try:
+                compiled.append(re.compile(pat, flags=re.IGNORECASE))
+            except re.error:
+                print(f"Warning: invalid exclude regex '{pat}' - ignoring.", file=sys.stderr)
+        if not compiled:
+            return qtypes
+        filtered = []
+        for q in qtypes:
+            if any(rx.search(q) for rx in compiled):
+                print(f"[exclude] qtype '{q}' excluded by regex.", file=sys.stderr)
+                continue
+            filtered.append(q)
+        return filtered
+
     if args.results_csv:
         with open(args.results_csv, newline="", encoding="utf-8") as inf:
             reader = csv.DictReader(inf)
@@ -1185,8 +1302,12 @@ def main():
                     csv_qtypes.append(val.lower())
             csv_qtypes = list(dict.fromkeys(csv_qtypes))
 
+        # apply exclude patterns to csv_qtypes
+        csv_qtypes = apply_excludes(csv_qtypes, args.exclude_qtypes)
+
         if args.qtypes:
             qtypes_to_process = [q.lower() for q in args.qtypes]
+            qtypes_to_process = apply_excludes(qtypes_to_process, args.exclude_qtypes)
         else:
             qtypes_to_process = csv_qtypes
 
@@ -1205,6 +1326,7 @@ def main():
     else:
         if args.qtypes:
             qtypes_to_process = [q.lower() for q in args.qtypes]
+            qtypes_to_process = apply_excludes(qtypes_to_process, args.exclude_qtypes)
             for q in list(qtypes_to_process):
                 if q in parsed_mapfiles:
                     continue
@@ -1217,8 +1339,10 @@ def main():
                         print(f"Warning: failed to read inferred map file {cand}: {ex}", file=sys.stderr)
         elif parsed_mapfiles:
             qtypes_to_process = list(parsed_mapfiles.keys())
+            qtypes_to_process = apply_excludes(qtypes_to_process, args.exclude_qtypes)
         elif args.map_file:
             qtypes_to_process = list(parsed_mapfiles.keys())
+            qtypes_to_process = apply_excludes(qtypes_to_process, args.exclude_qtypes)
         else:
             print("ERROR: no input map file(s) provided. Use --map-files, positional map_file, or --results-csv (with map files next to CSV).", file=sys.stderr)
             sys.exit(5)
@@ -1234,28 +1358,64 @@ def main():
                 m = re.match(r"(?i)^(.+)_results\.csv$", base)
                 if m:
                     metric_name = m.group(1)
-            write_bpw_results_csv_from_rows_and_maybe_plot(input_csv_path=in_csv,
-                                                           out_csv_path=out_csv,
-                                                           parsed_mapfiles=parsed_mapfiles,
-                                                           qtypes_to_consider=qtypes_to_process,
-                                                           allow_impure_map=args.allow_impure_map,
-                                                           fail_on_missing_bytes=args.fail_on_missing_bytes,
-                                                           hide_empty=args.hide_empty,
-                                                           plot=args.plot,
-                                                           ycol_identifier=args.ycol,
-                                                           plot_output=args.plot_output,
-                                                           fit_equation=(not args.no_equation),
-                                                           d_from_lowest_k=args.d_from_lowest,
-                                                           d_free=args.d_free,
-                                                           c_from_lowest_k=args.c_from_lowest,
-                                                           c_free=args.c_free,
-                                                           ignore_outliers_threshold=(args.ignore_outliers if args.ignore_outliers and float(args.ignore_outliers) > 0.0 else 0.0),
-                                                           threads=(args.threads if args.threads and int(args.threads) > 0 else None),
-                                                           metric_name=metric_name)
+
+            # If predict mode requested, we want to handle exceptions differently: print [] to stdout on error.
+            if args.predict_bpw_values:
+                try:
+                    preds = write_bpw_results_csv_from_rows_and_maybe_plot(input_csv_path=in_csv,
+                                                                           out_csv_path=out_csv,
+                                                                           parsed_mapfiles=parsed_mapfiles,
+                                                                           qtypes_to_consider=qtypes_to_process,
+                                                                           allow_impure_map=args.allow_impure_map,
+                                                                           fail_on_missing_bytes=args.fail_on_missing_bytes,
+                                                                           hide_empty=args.hide_empty,
+                                                                           plot=args.plot,
+                                                                           ycol_identifier=args.ycol,
+                                                                           plot_output=args.plot_output,
+                                                                           fit_equation=(not args.no_equation),
+                                                                           d_from_lowest_k=args.d_from_lowest,
+                                                                           d_free=args.d_free,
+                                                                           c_from_lowest_k=args.c_from_lowest,
+                                                                           c_free=args.c_free,
+                                                                           ignore_outliers_threshold=(args.ignore_outliers if args.ignore_outliers and float(args.ignore_outliers) > 0.0 else 0.0),
+                                                                           threads=(args.threads if args.threads and int(args.threads) > 0 else None),
+                                                                           metric_name=metric_name,
+                                                                           predict_bpw_values=args.predict_bpw_values,
+                                                                           transforms=transforms_arg)
+                    # If the compute function printed predictions to stdout, we're done. Still print CSV path to stderr for diagnostics.
+                    print(f"Wrote BPW CSV: {out_csv}", file=sys.stderr)
+                except Exception as ex:
+                    # On error in predict mode: print empty JSON array to stdout and details to stderr.
+                    print("[]")
+                    print(f"ERROR (predict mode): failed to produce {out_csv}: {ex}", file=sys.stderr)
+                    # exit quietly with success (machine-mode expects [] on failure)
+                    return
+            else:
+                # non-machine mode: preserve previous behavior (raise/exit on error)
+                write_bpw_results_csv_from_rows_and_maybe_plot(input_csv_path=in_csv,
+                                                               out_csv_path=out_csv,
+                                                               parsed_mapfiles=parsed_mapfiles,
+                                                               qtypes_to_consider=qtypes_to_process,
+                                                               allow_impure_map=args.allow_impure_map,
+                                                               fail_on_missing_bytes=args.fail_on_missing_bytes,
+                                                               hide_empty=args.hide_empty,
+                                                               plot=args.plot,
+                                                               ycol_identifier=args.ycol,
+                                                               plot_output=args.plot_output,
+                                                               fit_equation=(not args.no_equation),
+                                                               d_from_lowest_k=args.d_from_lowest,
+                                                               d_free=args.d_free,
+                                                               c_from_lowest_k=args.c_from_lowest,
+                                                               c_free=args.c_free,
+                                                               ignore_outliers_threshold=(args.ignore_outliers if args.ignore_outliers and float(args.ignore_outliers) > 0.0 else 0.0),
+                                                               threads=(args.threads if args.threads and int(args.threads) > 0 else None),
+                                                               metric_name=metric_name,
+                                                               predict_bpw_values=None,
+                                                               transforms=transforms_arg)
+                print(f"Wrote BPW CSV: {out_csv}")
         except Exception as ex:
             print(f"ERROR: failed to produce {out_csv}: {ex}", file=sys.stderr)
             sys.exit(6)
-        print(f"Wrote BPW CSV: {out_csv}")
 
     if not args.results_csv:
         for q in qtypes_to_process:
