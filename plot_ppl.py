@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** plot_ppl.py a useful tensor ppl visualisation utility to  **#
-#** identify tensor quantisation sensitiveness patterns.      **#
+#** plot_ppl.py a useful ppl/kld/topP plot utility designed   **#
+#** to visualise tensor quantisation sensitiveness patterns.  **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-26-2025 -------------------- **#
+#** --------------- Updated: Oct-12-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -28,6 +28,7 @@
 # Example:
 # python3 plot_ppl.py ppl_results.csv --tensors 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_shexp\.weight' 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_shexp\.weight' 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_shexp\.weight' 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight' 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight' 'blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight'
 
+import os
 import argparse, re, sys, textwrap
 import pandas as pd
 import numpy as np
@@ -41,7 +42,7 @@ DEBUG = False
 
 def parse_args():
     p = argparse.ArgumentParser(
-        description='Interactive PPL % bar chart with dynamic QTYPE and tensor filtering.'
+        description='Interactive METRIC % bar chart with dynamic QTYPE and tensor filtering.'
     )
     p.add_argument('csv_file', help='Path to the primary CSV file (OUTPUT_CSV)')
     p.add_argument('--interp_csv', help='Path to the second CSV file with interpolated % results', default=None)
@@ -49,6 +50,7 @@ def parse_args():
                    help='List of QTYPEs to pre-select (default: all)')
     p.add_argument('--tensors', nargs='+', default=None,
                    help='List of regex patterns for tensor pre-filter')
+    p.add_argument('--metric-name', default='', help='Name of the metric which will appear on the graph (default obtains it from filename if possible, otherwise uses "PPL")')
     return p.parse_args()
 
 
@@ -108,7 +110,7 @@ def extract_layer(name):
     return int(m.group(1)) if m else -1
 
 
-def draw_chart(pct_df, interp_df, qtypes, patterns, ax):
+def draw_chart(metric_name, pct_df, interp_df, qtypes, patterns, ax):
     # filter primary data by QTYPEs and tensor patterns
     sub = pct_df.loc[qtypes]
     cols = list(sub.columns)
@@ -192,9 +194,9 @@ def draw_chart(pct_df, interp_df, qtypes, patterns, ax):
     ax.set_xticklabels(order, rotation=90)
     ax.set_ylim(ymin * 0.9, ymax * 1.1)
     ax.yaxis.set_major_formatter(mticker.PercentFormatter())
-    ax.set_ylabel('PPL %')
+    ax.set_ylabel(f"{metric_name} %")
     ax.legend(title='QTYPE')
-    ax.set_title('Interactive PPL % by QTYPE and Tensor')
+    ax.set_title(f"Interactive {metric_name} % by QTYPE and Tensor")
 
 
 def print_summary(pct_df, raw_strings, patterns=None):
@@ -274,6 +276,18 @@ def main():
     base_presets = patterns.copy()
     toggle_state = True  # True => all checked; button reads “Unselect All”
 
+    metric_name = args.metric_name
+
+    # Obtain metric name
+    if not metric_name:
+        # Try to extract metric name from filename pattern like "metricname_results.csv"
+        filename = os.path.basename(csv_path)
+        match = re.match(r"([a-zA-Z0-9_-]+)_results", filename)
+        if match:
+            metric_name = match.group(1).upper()
+        else:
+            metric_name = "PPL"
+
     # Initial diagnostics & summary
     print_summary(pct_df, raw_strings, patterns)
 
@@ -283,7 +297,7 @@ def main():
     root.withdraw()
     fig, ax = plt.subplots(figsize=(12, 6))
     plt.subplots_adjust(left=0.217, right=0.995, top=0.971, bottom=0.217)
-    draw_chart(pct_df, interp_df, selected, patterns, ax)
+    draw_chart(metric_name, pct_df, interp_df, selected, patterns, ax)
 
     # QTYPE selector
     all_q = sorted(pct_df.index)
@@ -292,7 +306,7 @@ def main():
     def on_q(label):
         if label in selected: selected.remove(label)
         else: selected.append(label)
-        draw_chart(pct_df, interp_df, selected, patterns, ax)
+        draw_chart(metric_name, pct_df, interp_df, selected, patterns, ax)
         fig.canvas.draw_idle()
     q_checks.on_clicked(on_q)
 
@@ -305,7 +319,7 @@ def main():
         if args.interp_csv:
             interp_df = load_interp(args.interp_csv)
         print_summary(pct_df, raw_strings, patterns)
-        draw_chart(pct_df, interp_df, selected, patterns, ax)
+        draw_chart(metric_name, pct_df, interp_df, selected, patterns, ax)
         fig.canvas.draw_idle()
     btn_reload.on_clicked(do_reload)
 
@@ -325,7 +339,7 @@ def main():
         base_presets = patterns.copy()
         toggle_state = True
         update_presets()
-        draw_chart(pct_df, interp_df, selected, patterns, ax)
+        draw_chart(metric_name, pct_df, interp_df, selected, patterns, ax)
         fig.canvas.draw_idle()
     btn_edit.on_clicked(do_edit)
 
@@ -370,7 +384,7 @@ def main():
             btn_toggle.label.set_text(
                 'Unselect All' if toggle_state else 'Select All'
             )
-            draw_chart(pct_df, interp_df, selected, patterns, ax)
+            draw_chart(metric_name, pct_df, interp_df, selected, patterns, ax)
             fig.canvas.draw_idle()
 
         preset_check.on_clicked(on_preset)
@@ -386,7 +400,7 @@ def main():
             toggle_state = True
             btn_toggle.label.set_text('Unselect All')
         update_presets()
-        draw_chart(pct_df, interp_df, selected, patterns, ax)
+        draw_chart(metric_name, pct_df, interp_df, selected, patterns, ax)
         fig.canvas.draw_idle()
 
     btn_toggle.on_clicked(do_toggle)

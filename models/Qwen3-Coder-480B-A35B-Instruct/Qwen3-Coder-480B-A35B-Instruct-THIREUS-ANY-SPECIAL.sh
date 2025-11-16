@@ -5,7 +5,7 @@
 #** used for ppl bench purpose. Adjust $1 in $custom!         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-23-2025 -------------------- **#
+#** --------------- Updated: Nov-06-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -484,4 +484,4 @@ mkdir Qwen3-Coder-480B-A35B-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quan
     Qwen3-Coder-480B-A35B-Instruct-THIREUS-BF16-SPECIAL_SPLIT/Qwen3-Coder-480B-A35B-Instruct-THIREUS-BF16-SPECIAL_TENSOR-00001-of-00748.gguf \
     Qwen3-Coder-480B-A35B-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/Qwen3-Coder-480B-A35B-Instruct-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
     ${1^^} \
-    32 && chmod 444 Qwen3-Coder-480B-A35B-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
+    $(nproc) && chmod 444 Qwen3-Coder-480B-A35B-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"

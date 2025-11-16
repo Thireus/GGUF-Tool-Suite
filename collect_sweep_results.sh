@@ -5,7 +5,7 @@
 #** the S_PP and S_TG values from bench_sweep_result.* files. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-31-2025 -------------------- **#
+#** --------------- Updated: Nov-15-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -26,6 +26,7 @@
 # Exit on error, undefined variable, or pipe failure
 set -euo pipefail
 
+# Usage message
 usage() {
   cat <<EOF
 Usage: $(basename "$0") [OPTIONS]
@@ -41,18 +42,23 @@ Options:
                                         otherwise tries to read bench_sweep_result.baseline.QTYPE.<CONTEXT>.txt)
   --auto-baseline QTYPE                 Automatically read bench_sweep_result.baseline.QTYPE.<CONTEXT>.txt to obtain
                                         per-qtype baseline PP and TG (only for the named qtype).
+
+  --group-tensors REG1[,REG2] [REG3,..] Specify one or more group specifications (same syntax as benchmark_each_tensor.sh).
+                                        Each argument is a group: comma-separated regexes. If omitted, grouping disabled.
+  --group-tensors-map FILE              Path to a group mapping file (each line "groupN:regex[,regex2]" or "regex[,regex2]").
+                                          This replicates --group-tensors but reads groups from a file. Mutually exclusive
+                                          with --group-tensors.
+  --groups-only.                        When present, will only collect the group metrics (default: disabled)
+  --expand-groups                       When present, expand groups into individual tensor columns (default: disabled)
   --hide-empty                          Don't include empty benchmark results to the output csv
   --output-pp FILE                      Path to output PP CSV file (default: pp_results.csv)
   --output-tg FILE                      Path to output TG CSV file (default: tg_results.csv)
   --qtypes Q1,Q2,...                    Comma-separated list of qtypes to use (overrides auto-discovery)
-  --group-tensors REG1[,REG2] [REG3,..] Specify one or more group specifications (same syntax as benchmark_each_tensor.sh).
-                                        Each argument is a group: comma-separated regexes. If omitted, grouping disabled.
-  --expand-groups                       When present, expand groups into individual tensor columns (default: disabled).
   -h, --help                            Show this help message and exit
 EOF
 }
 
-# ======== USER CONFIGURATION (same regexes as collect_ppl_results.sh) ========
+# ============== USER CONFIGURATION ==============
 
 # List of tensor-name regex patterns (Bash regex) to include in the CSV.
 # Adjust these as needed.
@@ -81,7 +87,8 @@ USER_REGEX=(
 # Default output CSV filename (can be overridden via --output-pp and --output-tg)
 OUTPUT_PP_CSV="pp_results.csv"
 OUTPUT_TG_CSV="tg_results.csv"
-# ===========================================================================
+
+# =========== End USER CONFIGURATION ============
 
 # Initialize variables
 CONTEXT=8192
@@ -95,7 +102,9 @@ HIDE_EMPTY=false
 qtypes=""
 GROUP_TENSORS_RAW=()
 GROUP_TENSORS_DISABLED=true
+GROUPS_ONLY=false
 EXPAND_GROUPS=false
+GROUP_TENSORS_MAP_FILE=""
 
 # Parse args
 while [[ $# -gt 0 ]]; do
@@ -121,26 +130,130 @@ while [[ $# -gt 0 ]]; do
     --output-tg)
       shift; OUTPUT_TG_CSV="$1"; shift;;
     --qtypes)
-      shift; qtypes="$1"; shift;;
+      if [[ -z "${2:-}" || "${2:0:2}" == "--" ]]; then
+        echo "Error: --qtypes requires an argument (comma-separated list)" >&2; usage; exit 1
+      fi
+      qtypes="$2"
+      shift 2
+      ;;
     --group-tensors)
+      # collect one or more group specs (nargs '+')
       shift
       GROUP_TENSORS_RAW=()
-      # collect one or more group specs (nargs '+')
-      while [[ $# -gt 0 && ! "$1" =~ ^-- ]]; do
+      if [[ $# -eq 0 || "${1:0:2}" == "--" ]]; then
+        echo "Error: --group-tensors requires at least one group specification" >&2; usage; exit 1
+      fi
+      while [[ $# -gt 0 && "${1:0:2}" != "--" ]]; do
         GROUP_TENSORS_RAW+=("$1")
         shift
       done
       ;;
+    --group-tensors-map)
+      if [[ -z "${2:-}" || "${2:0:2}" == "--" ]]; then
+        echo "Error: --group-tensors-map requires a filename argument" >&2; usage; exit 1
+      fi
+      GROUP_TENSORS_MAP_FILE="$2"
+      shift 2
+      ;;
+    --groups-only)
+      GROUPS_ONLY=true
+      shift
+      ;;
     --expand-groups)
-      EXPAND_GROUPS=true; shift;;
+      EXPAND_GROUPS=true
+      shift
+      ;;
     -h|--help)
-      usage; exit 0;;
+      usage; exit 0
+      ;;
     *)
-      echo "Unknown option: $1" >&2; usage; exit 1;;
+      echo "Unknown option: $1" >&2
+      usage
+      exit 1
+      ;;
   esac
 done
 
-# If user explicitly passed single token '[]', treat as disabled (mirrors benchmark_each_tensor.sh behaviour)
+# Ensure user didn't supply both --group-tensors and --group-tensors-map
+if [[ -n "${GROUP_TENSORS_MAP_FILE:-}" && ${#GROUP_TENSORS_RAW[@]} -gt 0 ]]; then
+  echo "Error: --group-tensors and --group-tensors-map are mutually exclusive. Please provide only one of them." >&2
+  exit 1
+fi
+
+# If a group mapping file was provided, read it and populate GROUP_TENSORS_RAW.
+# File lines can be:
+#   group0:^blk\.0\.attn_(k|v)\.weight$
+#   group1:^another_regex1$,^another_regex2$
+#   or simply:
+#   ^blk\.0\.attn_(k|v)\.weight$
+# blank lines and lines starting with '#' are ignored.
+if [[ -n "${GROUP_TENSORS_MAP_FILE:-}" ]]; then
+  if [[ ! -f "$GROUP_TENSORS_MAP_FILE" ]]; then
+    echo "Error: group mapping file '$GROUP_TENSORS_MAP_FILE' not found." >&2
+    exit 1
+  fi
+
+  # Read file, collect named group indices and/or unnamed groups preserving order.
+  declare -A __GTMP_idx_map=()
+  declare -a __GTMP_idx_list=()
+  declare -a __GTMP_ordered_unnamed=()
+
+  while IFS= read -r __line || [[ -n "$__line" ]]; do
+    # Trim whitespace
+    __line="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$__line")"
+    # skip empty or comment lines
+    [[ -z "$__line" ]] && continue
+    [[ "${__line:0:1}" == "#" ]] && continue
+
+    if [[ "$__line" == *:* ]]; then
+      __prefix="${__line%%:*}"
+      __rest="${__line#*:}"
+      __rest="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$__rest")"
+      if [[ "$__prefix" =~ ^group([0-9]+)$ ]]; then
+        __idx="${BASH_REMATCH[1]}"
+        __GTMP_idx_map["$__idx"]="$__rest"
+        __GTMP_idx_list+=("$__idx")
+      else
+        # no groupN prefix, treat entire line after first colon as a single group spec
+        __GTMP_ordered_unnamed+=("$__rest")
+      fi
+    else
+      # whole line is a group regex list
+      __GTMP_ordered_unnamed+=("$__line")
+    fi
+  done < "$GROUP_TENSORS_MAP_FILE"
+
+  # Sort numeric indices ascending and build GROUP_TENSORS_RAW
+  if [[ ${#__GTMP_idx_list[@]} -gt 0 ]]; then
+    # remove duplicates and sort numeric
+    IFS=$'\n' __sorted_idx=($(printf '%s\n' "${__GTMP_idx_list[@]}" | sort -n -u))
+    unset IFS
+    for __i in "${__sorted_idx[@]}"; do
+      GROUP_TENSORS_RAW+=("${__GTMP_idx_map[$__i]}")
+    done
+  fi
+  # Append unnamed groups preserving file order
+  for __u in "${__GTMP_ordered_unnamed[@]}"; do
+    GROUP_TENSORS_RAW+=("$__u")
+  done
+
+  # cleanup temp variables
+  unset __GTMP_idx_map __GTMP_idx_list __GTMP_ordered_unnamed __sorted_idx __i __u __prefix __rest __line __idx
+
+  if [[ ${#GROUP_TENSORS_RAW[@]} -eq 0 ]]; then
+    echo "Warning: group mapping file '$GROUP_TENSORS_MAP_FILE' parsed but no groups found." >&2
+  else
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Loaded ${#GROUP_TENSORS_RAW[@]} group(s) from mapping file: $GROUP_TENSORS_MAP_FILE"
+  fi
+fi
+
+# Validate that if user asked to collect groups only, they passed --group-tensors or --group-tensors-map
+if [[ "$GROUPS_ONLY" == "true" ]] && [[ ! (-n "${GROUP_TENSORS_MAP_FILE:-}" || ${#GROUP_TENSORS_RAW[@]} -gt 0) ]]; then
+  echo "Error: --groups-only requires --group-tensors or --group-tensors-map to be set." >&2
+  exit 1
+fi
+
+# If the single token '[]' is passed, grouping disabled (mirror benchmark_each_tensor behaviour)
 if (( ${#GROUP_TENSORS_RAW[@]} == 0 )) || ( (( ${#GROUP_TENSORS_RAW[@]} == 1 )) && [[ "${GROUP_TENSORS_RAW[0]}" == "[]" ]] ); then
   GROUP_TENSORS_DISABLED=true
 else
@@ -161,6 +274,7 @@ if [[ -n "$BASELINE_TG" ]] && ! [[ $BASELINE_TG =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
   echo "Error: --baseline-tg must be a number." >&2; exit 1
 fi
 
+# Echo chosen settings
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting collection of SWEEP results."
 echo "Context: $CONTEXT"
 echo "Requested N_KV: $N_KV"
@@ -170,61 +284,77 @@ echo "Requested N_KV: $N_KV"
 [[ -n "$BASELINE_TG_QTYPE" ]] && echo "Inject TG baseline for qtype: $BASELINE_TG_QTYPE"
 [[ -n "$AUTO_BASELINE_QTYPE" ]] && echo "Auto-baseline will attempt to read bench_sweep_result.baseline.${AUTO_BASELINE_QTYPE}.${CONTEXT}.txt"
 [[ "$HIDE_EMPTY" == true ]] && echo "Hide empty qtype bench results from the csv: $HIDE_EMPTY"
-[[ -n "$qtypes" ]] && echo "Overriding qtypes with: $qtypes"
+[[ -n "${qtypes:-}" ]] && echo "Overriding qtypes with: $qtypes"
 echo "Output PP CSV: $OUTPUT_PP_CSV"
 echo "Output TG CSV: $OUTPUT_TG_CSV"
-if [[ "$GROUP_TENSORS_DISABLED" == "true" ]]; then
-  echo "Group tensors: DISABLED"
-else
+if [[ "$GROUP_TENSORS_DISABLED" != "true" ]]; then
   echo "Group tensors: ENABLED; groups:"
   for g in "${GROUP_TENSORS_RAW[@]}"; do echo "  - $g"; done
   if [[ "$EXPAND_GROUPS" == "true" ]]; then
     echo "Group expansion: ENABLED (show all member tensors)"
+    if [[ "$GROUPS_ONLY" == "true" ]]; then
+      echo "⚠️  Warning! If a group contains tensor(s) presents in other groups the metrics for that tensor will be overwritten by the latest group processed."
+    fi
   else
     echo "Group expansion: DISABLED (show one column per group)"
   fi
+  if [[ "$GROUPS_ONLY" == "true" ]]; then
+    echo "Collecting group metrics only: ENABLED"
+  else
+    echo "Collecting group metrics only: DISABLED"
+  fi
 fi
 
-# Discover qtypes
-declare -a QTYPES
-qtype=""
-if [[ -n "$qtypes" ]]; then
-  IFS=',' read -r -a QTYPES <<< "$qtypes"
+# 1. Discover qtypes by finding tensors.{qtype}.map files in current directory
+declare -a QTYPES=()
+
+# Override discovered qtypes if user provided --qtypes
+if [[ -n "${qtypes:-}" ]]; then
+    IFS=',' read -r -a QTYPES <<< "$qtypes"
 else
-  for f in tensors.*.map; do
-    [[ -f $f ]] || continue
-    qtype="${f#tensors.}"
-    qtype="${qtype%.map}"
-    QTYPES+=("$qtype")
-  done
+    for f in tensors.*.map; do
+        [[ -f $f ]] || continue
+        qtype="${f#tensors.}"
+        qtype="${qtype%.map}"
+        QTYPES+=("$qtype")
+    done
 fi
 
 if [[ ${#QTYPES[@]} -eq 0 ]]; then
-  echo "Warning: No tensors.*.map files found in current directory and no --qtypes provided. Exiting." >&2
-  exit 1
+    echo "Warning: No tensors.*.map files found in current directory${qtypes:+ and no valid --qtypes provided}. Exiting." >&2
+    exit 1
 fi
 
-# normalize and sort
+# Sort qtypes lexically and remove duplicates
 IFS=$'\n' sorted_qtypes=($(printf '%s\n' "${QTYPES[@]}" | sort -u))
 unset IFS
 QTYPES=("${sorted_qtypes[@]}")
-echo "Found qtypes: ${QTYPES[*]}"
 
-# gather list of sweep result files in current dir matching context (includes group files)
-all_bench_sweep_result_files=$(find . -maxdepth 1 -type f -printf "%f\n" 2>/dev/null | grep -E "^bench_sweep_result\..*\.${CONTEXT}\.txt$" 2>/dev/null || true)
+echo "Found qtypes: ${QTYPES[*]}"
 
 declare -A PP_VALUES   # key: "qtype|tensor_or_group" => S_PP value or "404"
 declare -A TG_VALUES   # key: "qtype|tensor_or_group" => S_TG value or "404"
 declare -A TENSOR_SET  # tensor_name or group name => 1 (if to include)
 declare -A PROCESSED_GROUP_QTYPE  # key: "qtype|groupidx" => 1 when group's results handled for that qtype
 
-# helper: find_group_index_for_tensor <tensor> -> prints group index (0-based) or -1
-find_group_index_for_tensor() {
+# gather list of sweep result files in current dir matching context (includes group files)
+bench_files_list=$(
+  for f in ./* ./.?*; do
+    [ -e "$f" ] || continue    # skip non-matching globs
+    [ -f "$f" ] && printf '%s\n' "${f##*/}"
+  done 2>/dev/null
+)
+all_bench_sweep_result_files=$(printf '%s\n' "$bench_files_list" | grep -E "^bench_sweep_result\..*\.${CONTEXT}\.txt$" 2>/dev/null || true)
+
+# find_group_indexes_for_tensor <tensor> -> prints zero-or-more group indices (one per line)
+find_group_indexes_for_tensor() {
   local tensor="$1"
   if [[ "$GROUP_TENSORS_DISABLED" == "true" ]]; then
-    printf '%s\n' -1
+    # print nothing -> caller receives an empty array
     return
   fi
+
+  local -a idxs=()
   for idx in "${!GROUP_TENSORS_RAW[@]}"; do
     local group_raw="${GROUP_TENSORS_RAW[$idx]}"
     IFS=',' read -r -a regs <<< "$group_raw"
@@ -233,12 +363,17 @@ find_group_index_for_tensor() {
       reg="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$reg")"
       [[ -z "$reg" ]] && continue
       if [[ $tensor =~ $reg ]]; then
-        printf '%s\n' "$idx"
-        return
+        idxs+=("$idx")
+        # one matching regex per group is enough -> move to next group
+        break
       fi
     done
   done
-  printf '%s\n' -1
+
+  # print them newline-separated (or nothing if empty)
+  for i in "${idxs[@]}"; do
+    printf '%s\n' "$i"
+  done
 }
 
 # helper: extract S_PP and S_TG from a baseline/sweep file (returns "S_PP|S_TG" or empty string)
@@ -267,26 +402,26 @@ if [[ "$GROUP_TENSORS_DISABLED" != "true" && "$EXPAND_GROUPS" == "false" && "$HI
   done
 fi
 
-# If user requested auto-baseline, attempt to read bench_sweep_result.baseline.<qtype>.<CONTEXT>.txt
+# If auto-baseline requested, attempt to read bench_sweep_result.baseline.<qtype>.<CONTEXT>.txt
 if [[ -n "$AUTO_BASELINE_QTYPE" ]]; then
   baseline_fname="bench_sweep_result.baseline.${AUTO_BASELINE_QTYPE,,}.${CONTEXT}.txt"
   if printf '%s\n' "$all_bench_sweep_result_files" | grep -qF -- "$baseline_fname"; then
-      parsed=$(extract_pp_tg_from_file "./${baseline_fname}" || true)
-      if [[ -n "$parsed" ]]; then
-        base_pp="${parsed%%|*}"
-        base_tg="${parsed#*|}"
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Auto-baseline: extracted for qtype=${qtype}: PP=${base_pp}, TG=${base_tg}"
-        [[ -n "$BASELINE_PP_QTYPE" && "$AUTO_BASELINE_QTYPE" == "$BASELINE_PP_QTYPE" && -n "$BASELINE_PP" ]] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] BASELINE_PP already user-defined, not replaced!" || { BASELINE_PP=${base_pp} && BASELINE_PP_QTYPE=${AUTO_BASELINE_QTYPE,,} && echo "[$(date '+%Y-%m-%d %H:%M:%S')] BASELINE_PP='$BASELINE_PP' and BASELINE_PP_QTYPE='$BASELINE_PP_QTYPE' have now been set"; }
-        [[ -n "$BASELINE_TG_QTYPE" && "$AUTO_BASELINE_QTYPE" == "$BASELINE_TG_QTYPE" && -n "$BASELINE_TG" ]] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] BASELINE_TG already user-defined, not replaced!" || { BASELINE_TG=${base_tg} && BASELINE_TG_QTYPE=${AUTO_BASELINE_QTYPE,,} && echo "[$(date '+%Y-%m-%d %H:%M:%S')] BASELINE_TG='$BASELINE_TG' and BASELINE_TG_QTYPE='$BASELINE_TG_QTYPE' have now been set"; }
-      else
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Auto-baseline: baseline file exists but no N_KV=${N_KV} row found in $baseline_fname"
-      fi
+    parsed=$(extract_pp_tg_from_file "./${baseline_fname}" || true)
+    if [[ -n "$parsed" ]]; then
+      base_pp="${parsed%%|*}"
+      base_tg="${parsed#*|}"
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Auto-baseline: extracted for qtype=${AUTO_BASELINE_QTYPE}: PP=${base_pp}, TG=${base_tg}"
+      [[ -n "$BASELINE_PP_QTYPE" && "$AUTO_BASELINE_QTYPE" == "$BASELINE_PP_QTYPE" && -n "$BASELINE_PP" ]] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] BASELINE_PP already user-defined, not replaced!" || { BASELINE_PP=${base_pp} && BASELINE_PP_QTYPE=${AUTO_BASELINE_QTYPE,,} && echo "[$(date '+%Y-%m-%d %H:%M:%S')] BASELINE_PP='$BASELINE_PP' and BASELINE_PP_QTYPE='$BASELINE_PP_QTYPE' have now been set"; }
+      [[ -n "$BASELINE_TG_QTYPE" && "$AUTO_BASELINE_QTYPE" == "$BASELINE_TG_QTYPE" && -n "$BASELINE_TG" ]] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] BASELINE_TG already user-defined, not replaced!" || { BASELINE_TG=${base_tg} && BASELINE_TG_QTYPE=${AUTO_BASELINE_QTYPE,,} && echo "[$(date '+%Y-%m-%d %H:%M:%S')] BASELINE_TG='$BASELINE_TG' and BASELINE_TG_QTYPE='$BASELINE_TG_QTYPE' have now been set"; }
+    else
+      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Auto-baseline: baseline file exists but no N_KV=${N_KV} row found in $baseline_fname"
+    fi
   else
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Auto-baseline: baseline file $baseline_fname not found for qtype=${qtype}"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Auto-baseline: baseline file $baseline_fname not found for qtype=${AUTO_BASELINE_QTYPE}"
   fi
 fi
 
-# For each qtype, parse its tensors map
+# 2. For each qtype, parse tensors.{qtype}.map and collect results (with grouping support)
 for qtype in "${QTYPES[@]}"; do
   mapfile="tensors.${qtype}.map"
   if [[ ! -f "$mapfile" ]]; then
@@ -318,108 +453,119 @@ for qtype in "${QTYPES[@]}"; do
     done
     [[ "$matched" == true ]] || continue
 
-    # Determine group membership (if any) for this tensor
-    gid=$(find_group_index_for_tensor "$tensor_name")
+    # Determine all group indices for this tensor (could be zero..N)
+    mapfile -t group_idxs_for_tensor < <(find_group_indexes_for_tensor "$tensor_name")
 
-    # Decide whether to add a column placeholder based on grouping & expansion & hide-empty
-    if (( gid >= 0 )); then
+    # If grouping is enabled and this tensor belongs to one or more group, attempt to process the groups
+    if (( ${#group_idxs_for_tensor[@]} > 0 )); then
+
+      # Decide whether to add a column placeholder based on grouping & expansion & hide-empty
       if [[ "$EXPAND_GROUPS" == "true" ]]; then
         # user wants member columns: include the individual tensor as a column unless hide-empty==true
         [[ "$HIDE_EMPTY" == "false" ]] && TENSOR_SET["$tensor_name"]=1
-      else
-        # user wants group columns: ensure group column is present (unless hide-empty==true)
-        [[ "$HIDE_EMPTY" == "false" ]] && TENSOR_SET["group${gid}"]=1
       fi
+
+      # iterate over all groups this tensor belongs to and handle each group separately
+      for group_idx_for_tensor in "${group_idxs_for_tensor[@]}"; do
+        proc_key="${qtype}|${group_idx_for_tensor}"
+        # If this group for this qtype has already been processed (value '1'), skip individual handling.
+        # We do NOT skip when the marker is 'MISSING' — that allows falling back to per-tensor files.
+        if [[ "${PROCESSED_GROUP_QTYPE[$proc_key]:-}" == "1" ]]; then
+          continue
+        fi
+
+        # collect all group members present in this qtype's map
+        group_raw="${GROUP_TENSORS_RAW[$group_idx_for_tensor]}"
+        IFS=',' read -r -a regs <<< "$group_raw"
+        declare -a group_members=() # IMPORTANT: If there is more than one group, this array will be overwritten, which is fine, just make sure to inform the user!
+        for reg in "${regs[@]}"; do
+          reg="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$reg")"
+          [[ -z "$reg" ]] && continue
+          for t in "${TENS_IN_MAP[@]}"; do
+            if [[ $t =~ $reg ]]; then
+              if [[ ! " ${group_members[*]} " =~ " $t " ]]; then
+                group_members+=("$t")
+              fi
+            fi
+          done
+        done
+
+        if (( ${#group_members[@]} == 0 )); then
+          echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: no group members found in map for group #${group_idx_for_tensor} (qtype=${qtype}). Skipping group." >&2
+          PROCESSED_GROUP_QTYPE["$proc_key"]=1
+          continue
+        fi
+      done
+    # Decide whether to add a column placeholder based on grouping & expansion & hide-empty
     else
       # not in a group -> individual tensor column
-      [[ "$HIDE_EMPTY" == "false" ]] && TENSOR_SET["$tensor_name"]=1
+      ([[ "$HIDE_EMPTY" == "false" ]] && [[ "$GROUPS_ONLY" != "true" ]]) && TENSOR_SET["$tensor_name"]=1
     fi
 
-    # If grouping is enabled and this tensor belongs to a group, attempt to process the group
-    if (( gid >= 0 )); then
-      proc_key="${qtype}|${gid}"
-      # If this group for this qtype has already been processed (value '1'), skip individual handling.
-      # We do NOT skip when the marker is 'MISSING' — that allows falling back to per-tensor files.
-      if [[ "${PROCESSED_GROUP_QTYPE[$proc_key]:-}" == "1" ]]; then
-        continue
-      fi
-
-      # collect all group members present in this qtype's map
-      group_raw="${GROUP_TENSORS_RAW[$gid]}"
-      IFS=',' read -r -a regs <<< "$group_raw"
-      declare -a group_members=()
-      for reg in "${regs[@]}"; do
-        reg="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$reg")"
-        [[ -z "$reg" ]] && continue
-        for t in "${TENS_IN_MAP[@]}"; do
-          if [[ $t =~ $reg ]]; then
-            if [[ ! " ${group_members[*]} " =~ " $t " ]]; then
-              group_members+=("$t")
-            fi
+    # If grouping is enabled and this tensor belongs to a group, attempt to process the group (continuation)
+    if (( ${#group_idxs_for_tensor[@]} > 0 )); then
+      # iterate over all groups this tensor belongs to and handle each group separately
+      for group_idx_for_tensor in "${group_idxs_for_tensor[@]}"; do
+        proc_key="${qtype}|${group_idx_for_tensor}"
+        # Look for group result file: bench_sweep_result.group{group_idx_for_tensor}.{qtype}.{CONTEXT}.txt
+        group_result_filename="bench_sweep_result.group${group_idx_for_tensor}.${qtype}.${CONTEXT}.txt"
+        # confirm it exists in directory listing
+        if ! printf '%s\n' "$all_bench_sweep_result_files" | grep -qF -- "$group_result_filename"; then
+          # Only log the "missing group file" message once per (qtype, group).
+          if [[ -z "${PROCESSED_GROUP_QTYPE[$proc_key]:-}" ]]; then
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] No group sweep result file found for group #${group_idx_for_tensor}, qtype=${qtype}: expected '$group_result_filename'. Will fall back to individual tensor files (unless --groups-only is enabled)."
+            # Mark as 'missing' so we don't re-print this for other members of the same group/qtype.
+            PROCESSED_GROUP_QTYPE["$proc_key"]="MISSING"
           fi
-        done
+          # fall back to per-tensor handling
+        elif [[ -z "${PROCESSED_GROUP_QTYPE[$proc_key]:-}" ]]; then
+          echo "[$(date '+%Y-%m-%d %H:%M:%S')] Found group sweep result file: $group_result_filename -> applying to ${#group_members[@]} member(s)."
+          result_file="./${group_result_filename}"
+
+          # parse file to extract S_PP and S_TG for requested N_KV
+          parsed=$(extract_pp_tg_from_file "$result_file" || true)
+
+          if [[ -n "$parsed" ]]; then
+            SPP_VAL="${parsed%%|*}"
+            STG_VAL="${parsed#*|}"
+            SPP_VAL="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$SPP_VAL")"
+            STG_VAL="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$STG_VAL")"
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracted group #${group_idx_for_tensor} (qtype=${qtype}): S_PP=$SPP_VAL, S_TG=$STG_VAL"
+          else
+            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: no row with N_KV=${N_KV} found in $result_file. Marking 404 for entire group."
+            SPP_VAL="404"
+            STG_VAL="404"
+          fi
+
+          # assign values either to group column (default) or to each member (when expanded)
+          if [[ "$EXPAND_GROUPS" == "true" ]]; then
+            # assign per-member values
+            for gm in "${group_members[@]}"; do
+              PP_VALUES["${qtype}|${gm}"]="$SPP_VAL"
+              TG_VALUES["${qtype}|${gm}"]="$STG_VAL"
+              # ensure tensor column present when hide-empty==true and a result exists
+              [[ "$HIDE_EMPTY" == true ]] && TENSOR_SET["$gm"]=1
+            done
+          else
+            # assign to group column key, not individual members
+            PP_VALUES["${qtype}|group${group_idx_for_tensor}"]="$SPP_VAL"
+            TG_VALUES["${qtype}|group${group_idx_for_tensor}"]="$STG_VAL"
+            # when hide-empty==true and we found a result, ensure the group column is present
+            [[ "$HIDE_EMPTY" == true ]] && TENSOR_SET["group${group_idx_for_tensor}"]=1
+          fi
+
+          PROCESSED_GROUP_QTYPE["$proc_key"]=1
+          continue
+        fi
       done
-
-      if (( ${#group_members[@]} == 0 )); then
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: no group members found in map for group #${gid} (qtype=${qtype}). Skipping group." >&2
-        PROCESSED_GROUP_QTYPE["$proc_key"]=1
-        continue
-      fi
-
-      # Look for group result file: bench_sweep_result.group{gid}.{qtype}.{CONTEXT}.txt
-      group_result_filename="bench_sweep_result.group${gid}.${qtype}.${CONTEXT}.txt"
-      # confirm it exists in directory listing
-      if ! printf '%s\n' "$all_bench_sweep_result_files" | grep -qF -- "$group_result_filename"; then
-        # Only log the "missing group file" message once per (qtype, group).
-        if [[ -z "${PROCESSED_GROUP_QTYPE[$proc_key]:-}" ]]; then
-          echo "[$(date '+%Y-%m-%d %H:%M:%S')] No group sweep result file found for group #${gid}, qtype=${qtype}: expected '$group_result_filename'. Will fall back to individual tensor files."
-          # Mark as 'missing' so we don't re-print this for other members of the same group/qtype.
-          PROCESSED_GROUP_QTYPE["$proc_key"]="MISSING"
-        fi
-        # fall back to per-tensor handling (do not mark as processed=1)
-      else
-        echo "[$(date '+%Y-%m-%d %H:%M:%S')] Found group sweep result file: $group_result_filename -> applying to ${#group_members[@]} member(s)."
-        result_file="./${group_result_filename}"
-
-        # parse file to extract S_PP and S_TG for requested N_KV
-        parsed=$(extract_pp_tg_from_file "$result_file" || true)
-
-        if [[ -n "$parsed" ]]; then
-          SPP_VAL="${parsed%%|*}"
-          STG_VAL="${parsed#*|}"
-          SPP_VAL="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$SPP_VAL")"
-          STG_VAL="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$STG_VAL")"
-          echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracted group #${gid} (qtype=${qtype}): S_PP=$SPP_VAL, S_TG=$STG_VAL"
-        else
-          echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: no row with N_KV=${N_KV} found in $result_file. Marking 404 for entire group."
-          SPP_VAL="404"
-          STG_VAL="404"
-        fi
-
-        # assign values either to group column (default) or to each member (when expanded)
-        if [[ "$EXPAND_GROUPS" == "true" ]]; then
-          # assign per-member values
-          for gm in "${group_members[@]}"; do
-            PP_VALUES["${qtype}|${gm}"]="$SPP_VAL"
-            TG_VALUES["${qtype}|${gm}"]="$STG_VAL"
-            # ensure tensor column present when hide-empty==true and a result exists
-            [[ "$HIDE_EMPTY" == true ]] && TENSOR_SET["$gm"]=1
-          done
-        else
-          # assign to group column key, not individual members
-          PP_VALUES["${qtype}|group${gid}"]="$SPP_VAL"
-          TG_VALUES["${qtype}|group${gid}"]="$STG_VAL"
-          # when hide-empty==true and we found a result, ensure the group column is present
-          [[ "$HIDE_EMPTY" == true ]] && TENSOR_SET["group${gid}"]=1
-        fi
-
-        PROCESSED_GROUP_QTYPE["$proc_key"]=1
-        # done with this group for this qtype
-        continue
-      fi
     fi
 
+    # Skip individual tensors fallback if groups only is used.
+    [[ "$GROUPS_ONLY" == "true" ]] && continue
+
+    # Fallback: look for individual per-tensor result
     # If we reach here: either grouping disabled, tensor not in group, OR group file not present -> handle per-tensor file
+
     # Find matching bench_sweep_result file for this tensor and qtype (individual)
     # regex to match: ^bench_sweep_result\.${tensor_name}\..*\.${CONTEXT}\.txt$
     regex="^bench_sweep_result\.${tensor_name}\..*\.${CONTEXT}\.txt$"
@@ -432,7 +578,7 @@ for qtype in "${QTYPES[@]}"; do
 
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Found sweep result file for tensor '$tensor_name': $bench_match"
 
-    # Mark tensor for CSV if hide-empty was true (we found result)
+    # ensure included if hide-empty true
     [[ "$HIDE_EMPTY" == true ]] && TENSOR_SET["$tensor_name"]=1
 
     # Full path to file in current dir
@@ -480,10 +626,9 @@ for qtype in "${QTYPES[@]}"; do
     TG_VALUES["${qtype}|${tensor_name}"]="$STG_VAL"
 
   done # end iterating MAP_LINES
-
 done # end for qtype
 
-# Build sorted tensor list / group list for headers
+# 3. Build sorted list of all tensor names (or groups) for header
 tensor_list=("${!TENSOR_SET[@]}")
 if [[ ${#tensor_list[@]} -eq 0 ]]; then
   echo "Warning: No tensor names matched USER_REGEX in any map files (or no results found). Exiting." >&2
@@ -492,10 +637,8 @@ fi
 IFS=$'\n' sorted_tensors=($(printf '%s\n' "${tensor_list[@]}" | sort -Vu))
 unset IFS
 
-# Write PP CSV
+# 4. Write PP CSV
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Writing PP CSV to $OUTPUT_PP_CSV"
-
-echo "[DEBUG] Writing PP CSV..."
 
 {
   printf 'QTYPE'
@@ -511,9 +654,15 @@ echo "[DEBUG] Writing PP CSV..."
     for t in "${sorted_tensors[@]}"; do
       key="${qtype}|${t}"
       val="${PP_VALUES[$key]:-}"
-      echo "[DEBUG] Raw value for [$key] = '$val'" >&2
+      if [[ -n "$val" ]]; then
+        echo "[DEBUG] Raw value for [$key] = '$val'" >&2
+      else
+        echo "[DEBUG] Empty value for [$key] = '$val', will use "404" instead" >&2
+        val="404"
+      fi
 
-      if [[ -n "$BASELINE_PP" && -n "$val" ]]; then
+      # If a global baseline exists, compute percent-delta across all qtypes
+	  if [[ -n "$BASELINE_PP" && -n "$val" ]]; then
         if [[ "$val" == "404" ]]; then
           val="404%"
         else
@@ -532,10 +681,11 @@ echo "[DEBUG] Writing PP CSV..."
   done
 } > "$OUTPUT_PP_CSV"
 
-echo "[DEBUG] Writing TG CSV..."
+echo "[DEBUG] Finished writing PP CSV."
 
-# Write TG CSV
+# 5. Write TG CSV
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Writing TG CSV to $OUTPUT_TG_CSV"
+
 {
   printf 'QTYPE'
   for t in "${sorted_tensors[@]}"; do
@@ -571,4 +721,8 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Writing TG CSV to $OUTPUT_TG_CSV"
   done
 } > "$OUTPUT_TG_CSV"
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Done. CSVs available at: $OUTPUT_PP_CSV and $OUTPUT_TG_CSV"
+
+# 6. The end!
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] All Done."
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] CSVs available at: $OUTPUT_PP_CSV and $OUTPUT_TG_CSV"

@@ -1,3 +1,45 @@
+<h2 align="center">💖 Support GGUF-Tool-Suite</h2>
+
+<p align="center">
+  <a href="https://www.patreon.com/Thireus" target="_blank">
+    <img src="https://img.shields.io/badge/Support%20on-Patreon-F96854?style=for-the-badge&logo=patreon&logoColor=white" alt="Support on Patreon">
+  </a>
+</p>
+
+<p align="center">
+  Producing over <b>250 TB</b> of <a href="https://gguf.thireus.com/" target="_blank">pre-quantised LLM tensor</a> shards costs both time and money.<br>
+  Additional costs include compute for calibrated data generation and active project improvements and support for new models.<br>
+  If this tool saves you time, compute, or helps your research, please consider supporting its development on Patreon.
+</p>
+
+<p align="center">
+  <a href="https://www.patreon.com/Thireus" target="_blank">👉 Become a Patron</a><br>
+  <a href="https://donate.thireus.com/" target="_blank">Other ways to help</a>
+</p>
+
+---
+
+### 🔧 How to Download Models Locally
+
+You can download and store desired quantised models locally using the following example:
+
+```bash
+mkdir GLM-4.6_q4_K \
+&& cd GLM-4.6_q4_K \
+&& echo '.*=q4_K' > q4_K.recipe \
+&& ../quant_downloader.sh q4_K.recipe
+```
+
+Be sure to adjust your `download.conf` file appropriately.  
+It can be configured to download from **local directories** by setting the `COPY` option.
+
+### 💡 Note on bf16 Models
+
+Please note that the **bf16 models are the most important ones**, as they serve as the **reference base models** from which all other quantised variants can be derived using `llama-quantize`.  
+If possible, make sure to preserve local copies of these bf16 models, as they are essential for generating new quantisations or reproducing existing ones.
+
+---
+
 # GGUF Tool Suite - [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Thireus/GGUF-Tool-Suite/blob/main/quant_recipe_pipeline.ipynb)
 
 **GGUF Tool Suite** is a set of flexible utilities that enables users to experiment with and create custom GGUF quantization blends. It simplifies the process of mixing quant formats (like `iq3_xxs`, `iq4_nl`, etc.) to:
@@ -23,28 +65,37 @@ Here's how DeepSeek-R1-0528 quantized with **Thireus' GGUF Tool Suite** compares
 
 *In theory, any model supported by llama.cpp is also supported by this tool suite. However, models that are not explicitely in the models/ folder would require additional efforts such as benchmarking and quantizing the model tensors. This table provides an overview of the models officially supported.*
 
-| **Model** | **Calibration Data** | **Quantized Shards** | **Google Colabs** | **Evaluated** | **Comments** |
-|---|---|---|---|---|---|
-| [DeepSeek-R1-0528](https://huggingface.co/collections/Thireus/deepseek-r1-0528-thireus-special-split-68725429aceffbd1094bdd29) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Yes | Works like a charm. When the quant_assign settings are right, it produces recipes with better ppl than any other reputable GGUFs. |
-| [DeepSeek-TNG-R1T2-Chimera](https://huggingface.co/collections/Thireus/deepseek-tng-r1t2-chimera-thireus-special-split-68737c17e50ee1d7fb0fc474) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ⚠️ Not personally | Should not be any different than DeepSeek-R1-0528. |
-| [DeepSeek-V3-0324](https://huggingface.co/collections/Thireus/deepseek-v3-0324-thireus-special-split-6885d5fba52645afa377cc79) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ⚠️ Not evaluated | Should not be any different than DeepSeek-R1-0528. Calibration data produced by @ewhacc. |
-| [DeepSeek-V3.1](https://huggingface.co/collections/Thireus/deepseek-v31-thireus-special-split-68a8ad64125b2c6c7e8ce91d) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Yes | Great coding abilities even at 1.9bpw quantisation and excellent compatibility with [Cline](https://github.com/cline/cline)/[Kilo Code](https://github.com/Kilo-Org/kilocode)/[Roo Code](https://github.com/RooCodeInc/Roo-Code) for [Visual Studio Code](https://code.visualstudio.com/Download) using "Openai Compatible" API provider (extensively tested at full context length). |
-| [DeepSeek-V3.1-Terminus](https://huggingface.co/collections/Thireus/deepseek-v31-terminus-thireus-special-split-68d23e92699c4560d27b76d5) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Yes | Similar to DeepSeek-V3.1 |
-| [DeepSeek-V3.2-Exp](https://huggingface.co/collections/Thireus/deepseek-v32-exp-thireus-special-split-68db895852d3c475d39e3ab3) | ⚠️ Not Started | ⚠️ Not Started | ⚠️ Untested | ⚠️ Not evaluated | Similar to DeepSeek-V3.1-Terminus |
-| [Kimi-K2-Instruct](https://huggingface.co/collections/Thireus/kimi-k2-instruct-thireus-special-split-68778e3701cf3e80574185e2) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Yes | Examples provided. It would appear that it does really well on _kt quants, likely because this is the target quant that was used for the calibration data. I may need to redo the calibration data using iq1_s_r4 to verify this theory. |
-| [Kimi-K2-Instruct-0905](https://huggingface.co/collections/Thireus/kimi-k2-instruct-0905-thireus-special-split-68bacdbc888c9a411d8a1a4c) | ✅ Complete | ✅ Complete | ⚠️ Untested | ⚠️ Not evaluated | Similar to Kimi-K2-Instruct. |
-| [Qwen3-VL-235B-A22B-Thinking](https://huggingface.co/collections/Thireus/qwen3-vl-235b-a22b-thinking-thireus-special-split-68d39cfb2e741c6b8b8e0175) | ⚠️ Not Started | ⚠️ In progress... | ⚠️ Untested | ⚠️ Not evaluated | Similar to Qwen3-235B-A22B-Thinking-2507 |
-| [mmproj-Qwen3-VL-235B-A22B-Thinking](https://huggingface.co/collections/Thireus/mmproj-qwen3-235b-a22b-thinking-2507-thireus-special-split-68e24b96cb032d78f0a2f35f) | ⚠️ Not Started | ⚠️ In progress... | ⚠️ Untested | ⚠️ Not evaluated | [mmproj](https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal.md) for Qwen3-VL-235B-A22B-Thinking |
-| [Qwen3-VL-235B-A22B-Instruct](https://huggingface.co/collections/Thireus/qwen3-vl-235b-a22b-instruct-thireus-special-split-68d39d005b9f820e74698e5c) | ⚠️ Not Started | ⚠️ In progress... | ⚠️ Untested | ⚠️ Not evaluated | Similar to Qwen3-235B-A22B-Instruct-2507 |
-| [mmproj-Qwen3-VL-235B-A22B-Instruct](https://huggingface.co/collections/Thireus/mmproj-qwen3-vl-235b-a22b-instruct-thireus-special-split-68e24b78990e499348ff6649) | ⚠️ Not Started | ⚠️ In progress... | ⚠️ Untested | ⚠️ Not evaluated | [mmproj](https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal.md) for Qwen3-VL-235B-A22B-Instruct |
-| [Qwen3-235B-A22B-Thinking-2507](https://huggingface.co/collections/Thireus/qwen3-235b-a22b-thinking-2507-thireus-special-split-688368c416e0f03b1853b10f) | ✅ Complete | ✅ Best effort (a few quants are still missing) | ✅ Tested and Working | ✅ Yes | Best to use at most two quant types for `quant_assign` to choose from per tensor group. Weak coding abilities but excellent compatibility with [Cline](https://github.com/cline/cline)/[Kilo Code](https://github.com/Kilo-Org/kilocode)/[Roo Code](https://github.com/RooCodeInc/Roo-Code) for [Visual Studio Code](https://code.visualstudio.com/Download) using "Openai Compatible" API provider. |
-| [Qwen3-235B-A22B-Instruct-2507](https://huggingface.co/collections/Thireus/qwen3-235b-a22b-instruct-2507-thireus-special-split-68813c81fa03b52fe0d6f4e9) | ✅ Complete | ✅ Best effort (a few quants are still missing) | ⚠️ Untested | ⚠️ Not evaluated | All you need is available to produce quant mixes, but not personally tested. |
-| [Qwen3-4B-Instruct-2507](https://huggingface.co/collections/Thireus/Qwen3-4B-Instruct-2507-thireus-special-split-68813c81fa03b52fe0d6f4e9) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Tested and Working | Just a proof of concept that this tool suite isn't limited to massive models. |
-| [Qwen3-4B-Thinking-2507](https://huggingface.co/collections/Thireus/qwen3-4b-thinking-2507-thireus-special-split-68b06916ebfbd7e282b2d7a3) | ✅ Complete | ✅ Complete | ⚠️ Untested | ⚠️ Not evaluated | Just a proof of concept that this tool suite isn't limited to massive models. |
-| [Qwen3-Coder-480B-A35B-Instruct](https://huggingface.co/collections/Thireus/qwen3-coder-480b-a35b-instruct-thireus-special-split-68813cb65745c166d0386e91) | ✅ Complete | ✅ Best effort (a few quants are still missing) | ✅ Tested and Working | ✅ Yes | Looks like [iq3_k is faulty](https://huggingface.co/Thireus/Qwen3-Coder-480B-A35B-Instruct-THIREUS-IQ3_K-SPECIAL_SPLIT/discussions/1) - avoid using it. Good coding abilities and excellent compatibility with [Cline](https://github.com/cline/cline)/[Kilo Code](https://github.com/Kilo-Org/kilocode)/[Roo Code](https://github.com/RooCodeInc/Roo-Code) for [Visual Studio Code](https://code.visualstudio.com/Download) using "Openai Compatible" API provider. |
-| [GLM-4.6](https://huggingface.co/collections/Thireus/glm-46-thireus-special-split-68dd82a76c24f0e5b1dfd7ae) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Yes | Less constraining to quantize than GLM-4.5 or GLM-4.5-Air, and recipes are straightforward. |
-| [GLM-4.5](https://huggingface.co/collections/Thireus/glm-45-thireus-special-split-6888e23853f18dd2d57a295b) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Yes | Users are encouraged to read [the following methodology](https://huggingface.co/ubergarm/GLM-4.5-GGUF/discussions/6#68c786f1d0c6560e153b786a) which provides advanced techniques and tips to produce high quality GLM-4.5 recipes using this tool suite. |
-| [GLM-4.5-Air](https://huggingface.co/collections/Thireus/glm-45-air-thireus-special-split-688f9936d839ef353d92426a) | ✅ Complete | ✅ Complete | ✅ Tested and Working | ✅ Yes | Similar to GLM-4.5. |
+> All Thireus' model shards can be found on https://huggingface.co/Thireus/collections and on https://gguf.thireus.com/.
+
+| **Model** | **Status** | **Comments** |
+|---|---|---|
+| [DeepSeek-R1-0528](https://huggingface.co/collections/Thireus/deepseek-r1-0528-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶✅ Tested and Working<br>🅴✅ Yes | Works like a charm. When the quant\_assign settings are right, it produces recipes with better ppl than any other reputable GGUFs. |
+| [DeepSeek-TNG-R1T2-Chimera](https://huggingface.co/collections/Thireus/deepseek-tng-r1t2-chimera-thireus-special-spli) |🅲✅ Complete<br>🆀✅ Complete<br>🅶✅ Tested and Working<br>🅴⚠️ Not personally | Should not be any different than DeepSeek-R1-0528. |
+| [DeepSeek-V3-0324](https://huggingface.co/collections/Thireus/deepseek-v3-0324-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶✅ Tested and Working<br>🅴⚠️ Not evaluated | Should not be any different than DeepSeek-R1-0528. Calibration data produced by @ewhacc. |
+| [DeepSeek-V3.1](https://huggingface.co/collections/Thireus/deepseek-v31-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶✅ Tested and Working<br>🅴✅ Yes | Great coding abilities even at 1.9bpw quantisation and excellent compatibility with [Cline](https://github.com/cline/cline)/[Kilo Code](https://github.com/Kilo-Org/kilocode)/[Roo Code](https://github.com/RooCodeInc/Roo-Code) for [Visual Studio Code](https://code.visualstudio.com/Download) using "Openai Compatible" API provider (extensively tested at full context length). |
+| [DeepSeek-V3.1-Terminus](https://huggingface.co/collections/Thireus/deepseek-v31-terminus-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶✅ Tested and Working<br>🅴✅ Yes | Similar to DeepSeek-V3.1 |
+| [DeepSeek-V3.2-Exp](https://huggingface.co/collections/Thireus/deepseek-v32-exp-thireus-special-split3) |🅲⚠️ Not Started<br>🆀⚠️ Not Started<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | Similar to DeepSeek-V3.1-Terminus |
+| [Kimi-K2-Instruct](https://huggingface.co/collections/Thireus/kimi-k2-instruct-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶✅ Tested and Working<br>🅴✅ Yes | Examples provided. It would appear that it does really well on \_kt quants, likely because this is the target quant that was used for the calibration data. I may need to redo the calibration data using iq1\_s\_r4 to verify this theory. |
+| [Kimi-K2-Thinking](https://huggingface.co/collections/Thireus/kimi-k2-thinking-thireus-special-split) |🅲⚠️ Not Started<br>🆀⚠️ Not Started<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | https://github.com/Thireus/GGUF-Tool-Suite/issues/39 |
+| [Kimi-K2-Instruct-0905](https://huggingface.co/collections/Thireus/kimi-k2-instruct-0905-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | Similar to Kimi-K2-Instruct. |
+| [Qwen3-VL-235B-A22B-Thinking](https://huggingface.co/collections/Thireus/qwen3-vl-235b-a22b-thinking-thireus-special-split) |🅲✅ Complete<br>🆀⚠️ In progress...<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | Similar to Qwen3-235B-A22B-Thinking-2507 |
+| [mmproj-Qwen3-VL-235B-A22B-Thinking](https://huggingface.co/collections/Thireus/mmproj-qwen3-235b-a22b-thinking-2507-thireus-special-split) |🅲❌ Not planned<br>🆀✅ Complete<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | [mmproj](https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal.md) for Qwen3-VL-235B-A22B-Thinking. No plan to quantise below BF16. Consider converting it to FP32 if your hardware doesn't support BF16 to keep this model lossless! |
+| [Qwen3-VL-235B-A22B-Instruct](https://huggingface.co/collections/Thireus/qwen3-vl-235b-a22b-instruct-thireus-special-split) |🅲⚠️ Not Started<br>🆀⚠️ In progress...<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | Similar to Qwen3-235B-A22B-Instruct-2507 |
+| [mmproj-Qwen3-VL-235B-A22B-Instruct](https://huggingface.co/collections/Thireus/mmproj-qwen3-235b-a22b-instruct-thireus-special-split) |🅲❌ Not planned<br>🆀✅ Complete<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | [mmproj](https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal.md) for Qwen3-VL-235B-A22B-Instruct. No plan to quantise below BF16. Consider converting it to FP32 if your hardware doesn't support BF16 to keep this model lossless! |
+| [Qwen3-235B-A22B-Thinking-2507](https://huggingface.co/collections/Thireus/qwen3-235b-a22b-thinking-2507-thireus-special-split) |🅲✅ Complete<br>🆀✅ Best effort (a few quants are still missing)<br>🅶✅ Tested and Working<br>🅴✅ Yes | Best to use at most two quant types for `quant_assign.py` to choose from per tensor group. Weak coding abilities but excellent compatibility with [Cline](https://github.com/cline/cline)/[Kilo Code](https://github.com/Kilo-Org/kilocode)/[Roo Code](https://github.com/RooCodeInc/Roo-Code) for [Visual Studio Code](https://code.visualstudio.com/Download) using "Openai Compatible" API provider. |
+| [Qwen3-235B-A22B-Instruct-2507](https://huggingface.co/collections/Thireus/qwen3-235b-a22b-instruct-2507-thireus-special-split) |🅲✅ Complete<br>🆀✅ Best effort (a few quants are still missing)<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | All you need is available to produce quant mixes, but not personally tested. |
+| [Qwen3-4B-Instruct-2507](https://huggingface.co/collections/Thireus/Qwen3-4B-Instruct-2507-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶✅ Tested and Working<br>🅴✅ Tested and Working | Just a proof of concept that this tool suite isn't limited to massive models. |
+| [Qwen3-4B-Thinking-2507](https://huggingface.co/collections/Thireus/qwen3-4b-thinking-2507-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | Just a proof of concept that this tool suite isn't limited to massive models. |
+| [Qwen3-Coder-480B-A35B-Instruct](https://huggingface.co/collections/Thireus/qwen3-coder-480b-a35b-instruct-thireus-special-split) |🅲✅ Complete<br>🆀✅ Best effort (a few quants are still missing)<br>🅶✅ Tested and Working<br>🅴✅ Yes | Looks like [iq3\_k is faulty](https://huggingface.co/Thireus/Qwen3-Coder-480B-A35B-Instruct-THIREUS-IQ3\_K-SPECIAL\_SPLIT/discussions/1) - avoid using it. Good coding abilities and excellent compatibility with [Cline](https://github.com/cline/cline)/[Kilo Code](https://github.com/Kilo-Org/kilocode)/[Roo Code](https://github.com/RooCodeInc/Roo-Code) for [Visual Studio Code](https://code.visualstudio.com/Download) using "Openai Compatible" API provider. |
+| [GLM-4.6](https://huggingface.co/collections/Thireus/glm-46-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶✅ Tested and Working<br>🅴✅ Yes | Less constraining to quantize than GLM-4.5 or GLM-4.5-Air, and recipes are straightforward. |
+| [GLM-4.5](https://huggingface.co/collections/Thireus/glm-45-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶✅ Tested and Working<br>🅴✅ Yes | Users are encouraged to read [the following methodology](https://huggingface.co/ubergarm/GLM-4.5-GGUF/discussions/6#68c786f1d0c6560e153b786a) which provides advanced techniques and tips to produce high quality GLM-4.5 recipes using this tool suite. |
+| [GLM-4.5-Air](https://huggingface.co/collections/Thireus/glm-45-air-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶✅ Tested and Working<br>🅴✅ Yes | Similar to GLM-4.5. |
+
+**Legend:**  
+🅲 = Calibration Data  
+🆀 = Quantized Shards  
+🅶 = Google Colabs  
+🅴 = Evaluated
 
 ### ⚠️ Requirements
 
@@ -105,7 +156,7 @@ I would strongly encourage users to assess the TG and PP speed of both `ik_llama
 
         </details>
     
-      > Did you know? Windows binaries can be executed from WSL2, that includes `llama.cpp` and `ik_llama.cpp` Windows binaries. Which should give better model loading time and improved perfs. For example: `/mnt/c/Users/Thireus/Desktop/llama-server.exe -m "d:models/GLM-4.5-Air/GLM-4.5-Air.gguf" -fa -ctk f16 -c 4096 -ngl 99 --no-mmap --threads 8 --main-gpu 0` - Loads model stored in `D:\models\GLM-4.5-Air\GLM-4.5-Air.gguf` using the `llama-server.exe` Windows binary located on `C:\Users\Thireus\Desktop`.
+      > Did you know? Windows binaries can be executed from WSL2, that includes `llama.cpp` and `ik_llama.cpp` Windows binaries. Which should give better model loading time and improved perfs. For example: `/mnt/c/Users/Thireus/Desktop/llama-server.exe -m "d:models/GLM-4.5-Air/GLM-4.5-Air.gguf" -ctk f16 -c 4096 -ngl 99 --no-mmap --threads 8 --main-gpu 0` - Loads model stored in `D:\models\GLM-4.5-Air\GLM-4.5-Air.gguf` using the `llama-server.exe` Windows binary located on `C:\Users\Thireus\Desktop`.
 
    - Source code and builds:  
      👉 https://github.com/Thireus/ik_llama.cpp/releases  
@@ -170,7 +221,7 @@ mkdir -p kitchen && cd kitchen
 ulimit -n 9999 # Required on Linux - Also make sure you have compiled ik_llama.cpp with -DGGML_MAX_CONTEXTS=2048
 ~/ik_llama-main-b3904-41a9c8a-bin-win-cuda-12.8-x64-avx512/llama-cli \
   -m DeepSeek-R1-0528-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
-  -mla 3 -fa -amb 1024 -fmoe -ctk f16 -c 16384 -ngl 99 \
+  -mla 3 -amb 1024 -ctk f16 -c 16384 -ngl 99 \
   -ot "blk\.(3|4|5|6)\.ffn_.*=CUDA0" \
   -ot "blk\.(7|8|9)\.ffn_.*=CUDA1" \
   -ot "blk\.(10|11|12)\.ffn_.*=CUDA2" \
@@ -229,17 +280,41 @@ python quant_assign.py ppl_results.csv \
 
 ---
 
+## 📊 About `kld_results.csv`
+
+The data calibration file `kld_results.csv` present in some model directories contains **individual tensor-level KLD (Kullback–Leibler Divergence) benchmarks**, it is the new preferred calibration data of each model. Evaluation results show that a data calibration file based on KLD leads to better quant mix results than PPL-based (old way) calibration data files.
+
+For example for **GLM-4.6**:
+- Baseline quant: `iq6_k` for all tensors
+- Quantization degradation reference: `iq1_kt`
+- 814 chunks (although overkill, 250 chunks is more than enough)
+- @ubergarm's [imatrix-calibration-corpus-v02.txt](https://gist.github.com/ubergarm/edfeb3ff9c6ec8b49e88cdf627b0711a) dataset is used for KLD benchmarking - found to produce better calibration data files than ![wikitext](wiki.test.raw).
+- Command used for benchmarking: https://github.com/Thireus/GGUF-Tool-Suite/issues/34#issuecomment-3488743872
+- Command used to produce the calibration data: https://github.com/Thireus/GGUF-Tool-Suite/issues/34#issuecomment-3519187690
+
+`kld_results.csv` is the **core calibration data file** used to determine the optimal quant mix for any given VRAM/RAM requirement. The KLD of the model is computed after the quant of each tensor is individually dropped to `iq1_kt` (or whichever quantization degradation reference chosen by the user) - the kld metrics obtained help identify which tensors are more sensitive to quantization than others.  
+> ⚠️ Generating this CSV usually takes **several days of GPU + CPU compute time** for big models.
+
+Note that `iq3_xxs` or similar smaller quant may often be chosen the baseline as it helps reduce the model size to fit the hardware that benchmarks it, without degrading KLD excessively
+
+Additional research refs:
+- https://github.com/Thireus/GGUF-Tool-Suite/issues/34
+- https://github.com/Thireus/GGUF-Tool-Suite/discussions/23
+
 ## 📊 About `ppl_results.csv`
 
-The file `ppl_results.csv` present in each model directory contains **individual tensor-level PPL benchmarks**, for example for **DeepSeek-R1-0528**:
+The file `ppl_results.csv` present in some model directories contains **individual tensor-level PPL benchmarks**. It has since been replaced in favour of `kld_results.csv` which results in better recipes.
 
+<details>
+For example for **DeepSeek-R1-0528**:
 - Baseline quant: `q8_0` (for GPU-friendly tensors) + `iq3_xxs` (for CPU-friendly tensors)
 - Quantization degradation reference: `iq1_m_r4`
 
 `ppl_results.csv` is the **core calibration data file** used to determine the optimal quant mix for any given VRAM/RAM requirement. The perplexity of the model is computed after the quant of each tensor is individually dropped to `iq1_m_r4` (or whichever quantization degradation reference chosen by the user) - the ppl metrics obtained help identify which tensors are more sensitive to quantization than others.  
 > ⚠️ Generating this CSV usually takes **several days of GPU + CPU compute time** for big models.
 
-- `iq3_xxs` was chosen for CPU-friendly tensors as it helped fit the model within **256GB RAM** and isn't degrading PPL too much
+- `iq3_xxs` was chosen for CPU-friendly tensors baseline as it helped fit the model within **256GB RAM** and isn't degrading PPL excessively
+- ![wikitext](wiki.test.raw) is used as the dataset file for perplexity compute
 - Scripts used to produce this file (edit the "USER CONFIGURATION" section in the bash scripts as needed):
 
 ```bash
@@ -252,8 +327,7 @@ cp -f models/DeepSeek-R1-0528/download.conf .
 # Collects PPL, KLD and TOP P - Remember to adjust the USER_REGEX variable
 ./collect_ppl_results.sh --chunks 250 --qtypes iq1_m_r4 --regex '.*Same top p[[:space:]]*:[[:space:]]*([0-9]+(\.[0-9]+)?).*' --output-regex-csv topp_results.csv
 ```
-
-📄 An article explaining this methodology in detail is **coming soon**.
+</details>
 
 ---
 

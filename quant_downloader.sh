@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regexe entries.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-08-2025 -------------------- **#
+#** --------------- Updated: Nov-11-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -26,27 +26,155 @@
 # Exit on error, undefined variable, or pipe failure
 set -euo pipefail
 
-# ---------------- SIGNAL HANDLING ----------------
-# Ensure child processes are killed on interrupt
-# Trap SIGINT and SIGTERM, kill the entire group, but never let kill’s
-# “no such process group” error exit the script.
-trap_handler() {
-  # ignore further SIGTERM so our kill -- -$$ won't re-enter this handler
-  trap '' SIGTERM
-  echo "[$(timestamp)] Signal caught, forwarding to process group..." >&2
-  kill -- -$$ 2>/dev/null || true
-  exit 1
+# ----- Debugging: verbose ERR trap -----
+# Capture the exact command line used to start the script (script name + all args).
+# We build this safely so it works on Bash 3.2 and preserves arguments with spaces.
+ORIGINAL_INVOCATION="$0"
+for __arg in "$@"; do
+  ORIGINAL_INVOCATION="${ORIGINAL_INVOCATION} ${__arg//$/\\$}"  # simple safe concatenation
+done
+# Also save the raw args array if you want to inspect individual params later
+ORIGINAL_ARGS=("$@")
+
+error_reporting() {
+  # save exit status immediately
+  local _err="$?"
+  # save the command that caused the trap
+  local _cmd="${BASH_COMMAND:-}"
+  # save shell flags and pid info
+  local _shellflags="$-"
+  local _pid=$$
+  local _ppid=$PPID
+  # avoid set -e in trap doing weird things; make trap body robust
+  set +e
+
+  {
+    printf '\n===== ERR-TRAP - PLEASE REPORT THE ISSUE HERE: https://github.com/Thireus/GGUF-Tool-Suite/issues =====\n' >&2
+    printf 'Timestamp: %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" >&2
+    printf 'Exit status: %s\n' "$_err" >&2
+    printf 'Failed command: %s\n' "$_cmd" >&2
+
+    # Print the exact invocation that started this script (script + parameters)
+    printf 'Script invocation (user command): %s\n' "${ORIGINAL_INVOCATION:-unknown}" >&2
+    # show the raw args as an indexed list (useful if args contain spaces)
+    if [[ ${#ORIGINAL_ARGS[@]} -gt 0 ]]; then
+      printf 'Script args (one per line):\n' >&2
+      local __i=0
+      for __a in "${ORIGINAL_ARGS[@]}"; do
+        printf '  [%d] %s\n' "$__i" "$__a" >&2
+        __i=$((__i + 1))
+      done
+    else
+      printf 'Script args: (none)\n' >&2
+    fi
+
+    # try to show source file and line number where the error happened
+    local src="${BASH_SOURCE[1]:-${BASH_SOURCE[0]:-unknown}}"
+    local lineno="${BASH_LINENO[0]:-unknown}"
+    printf 'Location: %s:%s\n' "$src" "$lineno" >&2
+
+    # Print function/stack trace (if any). Compatible with bash 3.2.
+    printf 'Stack trace (most recent call first):\n' >&2
+    local i
+    for i in "${!FUNCNAME[@]}"; do
+      # FUNCNAME[0] is the current function (error_reporting); skip it if desired
+      printf '  %d: %s()  at %s:%s\n' "$i" "${FUNCNAME[$i]:-MAIN}" "${BASH_SOURCE[$i]:-?}" "${BASH_LINENO[$i-1]:-?}" >&2
+    done
+
+    printf 'Shell flags: %s\n' "$_shellflags" >&2
+    printf 'PID: %s  PPID: %s\n' "$_pid" "$_ppid" >&2
+
+    # show active background jobs (if any)
+    printf 'Background jobs (jobs -rp): %s\n' "$(jobs -rp 2>/dev/null || true)" >&2
+
+    # dump some useful shell variables for debugging (avoid unbound vars)
+    printf 'BASH_COMMAND (raw): %s\n' "$BASH_COMMAND" >&2
+    printf 'Last pipeline status: %s\n' "${PIPESTATUS[*]:-unknown}" >&2
+
+    printf '===== END ERR-TRAP =====\n\n' >&2
+  } || true
+
+  # restore errexit behaviour for the rest of the script
+  set -e
 }
-trap trap_handler SIGINT SIGTERM
+
+# Install the trap. Use single quotes so expansion occurs at trap time, not now.
+trap 'error_reporting' ERR
+# ----------------------------------------------------------------
+
+# DEBUG function
+if [[ -n "${DEBUG:-}" ]]; then
+  DEBUG() { printf "DEBUG: %s\n" "$*" >&2; }
+else
+  DEBUG() { :; }
+fi
+
+# ---------------- SIGNAL HANDLING ----------------
+# Graceful shutdown on Ctrl+C / SIGTERM
+INTERRUPTED=0
+
+shutdown_on_signal() {
+  local rc=130  # conventional exit code for SIGINT
+  INTERRUPTED=1
+  DEBUG "shutdown_on_signal: received signal, initiating graceful shutdown (exit $rc)" >&2
+
+  # Get running child PIDs started by this shell (jobs -rp)
+  local pids
+  pids="$(jobs -rp 2>/dev/null || true)"
+
+  if [[ -n "${pids:-}" ]]; then
+    DEBUG "shutdown_on_signal: killing child PIDs: $pids"
+
+    # ask nicely first
+    kill $pids 2>/dev/null || true
+    # give them a second to exit gracefully
+    sleep 1
+
+    # force-kill any remaining
+    pids="$(jobs -rp 2>/dev/null || true)"
+    if [[ -n "${pids:-}" ]]; then
+      DEBUG "shutdown_on_signal: force-killing remaining PIDs: $pids"
+      kill -KILL $pids 2>/dev/null || true
+    fi
+
+    # Reap all children (wait without args waits for all children)
+    # Use set +e to avoid aborting if wait returns non-zero.
+    set +e
+    wait
+    set -e
+  else
+    DEBUG "shutdown_on_signal: no running child jobs found"
+  fi
+
+  # Optionally print partial state if you maintain WRAPPER_STATUS/WRAPPER_RAW
+  if declare -p WRAPPER_STATUS >/dev/null 2>&1; then
+    DEBUG "shutdown_on_signal: current WRAPPER_STATUS snapshot:"
+    for k in "${!WRAPPER_STATUS[@]:-}"; do
+      printf "DEBUG: idx=%s status=%s raw=%s\n" "$k" "${WRAPPER_STATUS[$k]:-}" "${WRAPPER_RAW[$k]:-}" >&2
+    done
+  fi
+
+  # If you have any cleanup traps for FIFOs etc, they will run because we exit now.
+  echo "💀 Received termination signal; initiating graceful shutdown (exit $rc)... Some sub-processes might still be ongoing for a short while after this script terminates!" >&2
+  exit "$rc"
+}
+
+# install the trap for INT and TERM
+trap 'shutdown_on_signal' INT TERM
+# ------------------------------------------------------------
 
 # ----------------- DEFAULTS & INITIALIZATION -----------------
-MAX_JOBS=8             # Default concurrency level
-NEW_MAP=true           # Whether to try obtain the latest map files
-FORCE_REDOWNLOAD=false # Whether to redownload all files (maps, shards, first shard)
-VERIFY_ONLY=false      # If true, only verify hashes and report errors
-BASE_DIR="."           # Base directory for model and download dirs
-QTYPE="BF16"           # Default quantization type used for the first shard and filenames
-SKIP_GPG=false         # If true, skip the gpg signature verification of the signed files
+MAX_JOBS=8              # Default concurrency level
+NEW_MAP=true            # Whether to try obtain the latest map files
+FORCE_REDOWNLOAD=false  # Whether to redownload all files (maps, shards, first shard)
+VERIFY_ONLY=false       # If true, only verify hashes and report errors
+BASE_DIR="."            # Base directory for model and download dirs
+QTYPE="BF16"            # Default quantization type used for the first shard and filenames - also used for F32 tensors
+SKIP_GPG=false          # If true, skip the gpg signature verification of the signed files
+SPECIAL_NODE_ID=""      # Optional: number of nodes (see --special-node-id). If non-empty, only shards assigned to the deterministic node are downloaded.
+TOTAL_NODES=""          # Optional: Total number of nodes (see --total-nodes).
+RM_SKIPPED_SHARDS=false # Optional: Remove shards that are skipped for this node (not performed in --verify mode).
+MODEL_NAME=""           # Will be read from $SCRIPT_DIR/download.conf when --special-node-id is used.
 
 # --------------------- USAGE & ARG PARSING -------------------
 usage() {
@@ -57,13 +185,16 @@ usage() {
   echo "      --verify            Only verify existing shard hashes; report mismatches; skip downloads" >&2
   echo "      --qtype QUANT       Set quantization type for the first shard and filenames (default: BF16); use highest qtype of the model!" >&2
   echo "      --skip-gpg          Do not verify the gpg signature of the downloaded files" >&2
+  echo "      --special-node-id N Only process shards assigned to this node for this model." >&2
+  echo "      --total-nodes N     Total number of nodes." >&2
+  echo "      --rm-skipped-shards Remove shards not assigned to this node if present." >&2
   echo "  -d, --dest DIR          Base path for model and download dirs (default: .)" >&2
   echo "  <recipe-file>: path to recipe containing USER_REGEX lines (one per tensor; must have .recipe extension)" >&2
   exit 1
 }
 
 # Parse arguments (supports GNU long options)
-PARSED_OPTS=$(getopt -n "$0" -o j:d: -l max-jobs:,no-new-map,force-redownload,verify,qtype:,skip-gpg,dest:,destination: -- "$@") || usage
+PARSED_OPTS=$(getopt -n "$0" -o j:d: -l max-jobs:,no-new-map,force-redownload,verify,qtype:,skip-gpg,dest:,destination:,special-node-id:,total-nodes:,rm-skipped-shards -- "$@") || usage
 eval set -- "$PARSED_OPTS"
 while true; do
   case "$1" in
@@ -89,6 +220,18 @@ while true; do
       ;;
     --skip-gpg)
       SKIP_GPG=true
+      shift
+      ;;
+    --special-node-id)
+      SPECIAL_NODE_ID="$2"
+      shift 2
+      ;;
+    --total-nodes)
+      TOTAL_NODES="$2"
+      shift 2
+      ;;
+    --rm-skipped-shards)
+      RM_SKIPPED_SHARDS=true
       shift
       ;;
     -d|--dest|--destination)
@@ -131,6 +274,17 @@ echo "[INFO] Using base directory: $BASE_DIR"
 echo "[INFO] Download dir: $LOCAL_DOWNLOAD_DIR"
 echo "[INFO] Model dir: $LOCAL_MODEL_DIR"
 echo "[INFO] Max jobs: $MAX_JOBS, Obtain new map: $NEW_MAP, Force redownload: $FORCE_REDOWNLOAD, Verify only: $VERIFY_ONLY, Skip signature verification: $SKIP_GPG"
+if [[ -n "$SPECIAL_NODE_ID" ]]; then
+  if [[ -n "$TOTAL_NODES" ]]; then
+    echo "[INFO] special-node-id/(total-nodes - 1) set to: $SPECIAL_NODE_ID/$((TOTAL_NODES-1)) (only shards assigned to this model/node pair will be downloaded)"
+  else
+    echo "❌ Error: --total-nodes N must be specified when using the --special-node-id option!" >&2
+    exit 1
+  fi
+elif [[ -n "$TOTAL_NODES" ]]; then
+  echo "❌ Error: --special-node-id N must be specified when using the --total-nodes option!" >&2
+  exit 1
+fi
 
 # -------------------- TIMESTAMP FUNCTION ---------------------
 timestamp() { date '+%Y-%m-%d %H:%M:%S'; }
@@ -161,10 +315,10 @@ fi
 # _sha256sum reads either from file (if you pass an arg) or from stdin
 _sha256sum() {
   if (( $# > 0 )); then
-    # file‑mode: pass filename as $1
+    # file-mode: pass filename as $1
     "${sha256tool[@]}" "${args[@]}" "$1" | awk '{print $1}'
   else
-    # stdin‑mode: read data from pipe
+    # stdin-mode: read data from pipe
     "${sha256tool[@]}" "${args[@]}" | awk '{print $1}'
   fi
 }
@@ -224,8 +378,8 @@ fi
 
 # -------------------- HASH & SHARD STORAGE -------------------
 declare -A T_HASHES SHARD_ID
-set_t_hash() { local key="${1,,}::${2,,}"; T_HASHES["$key"]="$3"; }
-get_t_hash() { echo "${T_HASHES["${1,,}::${2,,}"]}"; }
+set_t_hash() { local key="${1,,}::${2,,}"; T_HASHES["$key"]="$3"; DEBUG "set_t_hash T_HASHES["$key"]=${T_HASHES["$key"]}"; }
+get_t_hash() { [[ "${1^^}" == "F32" ]] && local key="${QTYPE,,}::${2,,}" || local key="${1,,}::${2,,}"; echo "${T_HASHES["$key"]}"; DEBUG "get_t_hash T_HASHES["$key"]=${T_HASHES["$key"]}"; }
 set_shard_id() { SHARD_ID["${1,,}"]="$2"; }
 get_shard_id() { echo "${SHARD_ID["${1,,}"]}"; }
 
@@ -239,23 +393,52 @@ done
 readarray -t UNIQUE_QTYPES < <(printf "%s
 " "${PATTERN_QTYPES[@]}" | sort -u)
 
-# Ensure QTYPE included first
-if [[ " ${UNIQUE_QTYPES[*]} " != *"${QTYPE}"* ]]; then
+# Ensure QTYPE is present and is the first element (case-insensitive)
+if [[ " ${UNIQUE_QTYPES[*]^^} " != *" ${QTYPE^^} "* ]]; then
+  # not present -> prepend
   UNIQUE_QTYPES=("${QTYPE}" "${UNIQUE_QTYPES[@]}")
+else
+  # present, ensure it's first (case-insensitive match; preserve original casing)
+  for i in "${!UNIQUE_QTYPES[@]}"; do
+    if [[ "${UNIQUE_QTYPES[$i]^^}" == "${QTYPE^^}" ]]; then
+      if [[ $i -ne 0 ]]; then
+        val="${UNIQUE_QTYPES[$i]}"
+        unset 'UNIQUE_QTYPES[i]'
+        UNIQUE_QTYPES=("$val" "${UNIQUE_QTYPES[@]}")
+      fi
+      break
+    fi
+  done
 fi
 
 # --------------- FETCH MAPS & COLLECT ----------------
-declare -a TENSORS_TO_FETCH BF16_SHARDS
+declare -a TENSORS_TO_FETCH SHARD_FILENAMES
+# Keep track of which mapfiles we've already processed (case-insensitive)
+declare -A PROCESSED_MAPFILES=()
 for _q in "${UNIQUE_QTYPES[@]}"; do
   qtype=${_q^^}
   _qtype=$qtype
   [[ "$qtype" == "F32" ]] && _qtype="${QTYPE}"
   echo "[$(timestamp)] Fetching ${_qtype} tensor map (and gpg signature if enabled) for ${qtype} quants"
+
+  # canonical mapfile name (lowercase) used as key to prevent duplicate processing
   mapfile="tensors.${_qtype,,}.map"
+  mapkey="${mapfile,,}"    # normalized key (all-lowercase)
+
+  # If we've already processed this mapfile, skip the rest of the loop.
+  if [[ -n "${PROCESSED_MAPFILES[$mapkey]:-}" ]]; then
+    echo "[$(timestamp)] Skipping already-processed mapfile: $mapfile"
+    continue
+  fi
+
+  # Mark it as being processed now (prevents re-entrance if UNIQUE_QTYPES had duplicates)
+  PROCESSED_MAPFILES["$mapkey"]=1
+
   if [[ "$FORCE_REDOWNLOAD" == true ]]; then
     echo "[$(timestamp)] Force redownload: removing existing map $mapfile and $mapfile.sig"
     rm -f "$mapfile"
     rm -f "$mapfile.sig"
+    sync || true
   fi
   if [[ "$NEW_MAP" == true ]]; then
       if [[ -f "$mapfile" ]]; then
@@ -300,6 +483,7 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
               # Download the signature
               if [[ "$SKIP_GPG" != "true" ]]; then
                 rm -f "$LOCAL_MODEL_DIR/$mapfile.sig"
+                sync || true
                 if ! run_downloader "$_qtype" -1 . "$mapfile.sig"; then
                     echo "❌ Error: failed to fetch map gpg signature for $_qtype" >&2
                     [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
@@ -354,8 +538,9 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
       shard_id=$((10#${BASH_REMATCH[1]}))
       set_shard_id "$tname" "$shard_id"
       set_t_hash "$qtype" "$tname" "$hash"
+      # Filling these lists should only happen once now
       if [[ "$qtype" == "${QTYPE}" ]]; then
-        BF16_SHARDS+=("$fname")
+        SHARD_FILENAMES+=("$fname")
         TENSORS_TO_FETCH+=("$tname")
       fi
     else
@@ -363,6 +548,85 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
     fi
   done < "$mapfile"
 done
+
+# ------------------ SPECIAL NODE ASSIGNMENT (if requested) ----------------
+# New approach: compute an xxh3-based digest over MODEL_NAME+chunkid and use that
+# to decide if *this* runner should download that chunk. This avoids a fixed
+# assigned_node and uses per-chunk hashing. The rule implemented:
+#   should_process_chunk(chunk_id) -> true if (dec_from_xxhsum(MODEL_NAME+chunk_id) % SPECIAL_NODE_ID) == 0
+#
+# The function below returns success (0) when the chunk should be downloaded by this node.
+if [[ -n "$SPECIAL_NODE_ID" ]]; then
+  # validate SPECIAL_NODE_ID
+  if ! [[ "$SPECIAL_NODE_ID" =~ ^[0-9]+$ ]] || (( SPECIAL_NODE_ID < 0 )); then
+    echo "❌ Error: --special-node-id must be a positive integer." >&2
+    exit 1
+  fi
+
+  # try to read MODEL_NAME from $SCRIPT_DIR/download.conf
+  CONFIG_FILE="$SCRIPT_DIR/download.conf"
+  MODEL_NAME=""
+  MAINTAINER=""
+  if [[ -f "$CONFIG_FILE" ]]; then
+    # shellcheck source=/dev/null
+    source "$CONFIG_FILE"
+  fi
+
+  if [[ -z "$MODEL_NAME" ]]; then
+    echo "❌ Error: --special-node-id provided but MODEL_NAME could not be read from $DOWNLOAD_CONF" >&2
+    exit 1
+  fi
+
+  # Ensure xxhsum is available
+  if ! command -v xxhsum >/dev/null 2>&1; then
+    echo "❌ Error: --special-node-id requires 'xxhsum' to be installed and on PATH." >&2
+    echo "Hint: Install xxhash (xxhsum) or omit --special-node-id." >&2
+    exit 1
+  fi
+
+  # should_process_chunk: returns 0 if this node should process the provided chunk_id
+  # Uses: printf '%s' "${MODEL_NAME}-${MAINTAINER}-${QTYPE^^}-SPECIAL_SPLIT${chunk_id}" | xxhsum -H3
+  should_process_chunk() {
+    local chunk_id="$1"
+    chunk_id=$((10#$chunk_id))
+
+    # Concatenate model name + chunk_id (no separator; deterministic)
+    local input="${MODEL_NAME}-${MAINTAINER}-${QTYPE^^}-SPECIAL_SPLIT${chunk_id}"
+
+    # Example: echo abc | xxhsum -H3
+    local out=$(printf '%s' "$input" | xxhsum -H3 2>/dev/null) || true
+
+    # Extract a hex-like token from the output robustly.
+    # Require at least 12 hex chars, then take the first 12.
+    local hex=$(printf '%s' "$out" | grep -oE '[0-9a-fA-F]{12,}' | head -n1 || true)
+
+    if [[ -z "$hex" ]]; then
+      echo "[$(timestamp)] ⚠️ Warning: failed to parse xxhsum output for chunk_id=$chunk_id; output='$out'." >&2
+      return 1
+    fi
+
+    # Use only the first 12 hex chars to avoid integer overflow in bash arithmetic
+    hex="${hex:0:12}"
+
+    # Convert to decimal and modulo
+    if ! [[ "$hex" =~ ^[0-9a-fA-F]+$ ]]; then
+      echo "[$(timestamp)] ⚠️ Warning: invalid hex digest ('$hex') for chunk_id=$chunk_id." >&2
+      return 1
+    fi
+
+    local dec=$((16#$hex))
+    local mod=$(( dec % TOTAL_NODES ))
+
+    # We choose the rule: this node handles chunk if mod == SPECIAL_NODE_ID
+    if (( mod == SPECIAL_NODE_ID )); then
+      return 0
+    else
+      return 1
+    fi
+  }
+
+  echo "[$(timestamp)] SPECIAL NODE MODE: MODEL_NAME='$MODEL_NAME' using xxhsum. Only chunks where xxhsum(MODEL_NAME+chunkid) % $TOTAL_NODES == $SPECIAL_NODE_ID will be downloaded/verified by this runner."
+fi
 
 # --------------- CONCURRENCY HELPERS ----------------
 wait_for_slot() {
@@ -373,32 +637,47 @@ wait_for_slot() {
 download_shard() {
   local idx="$1"
   local tensor="${TENSORS_TO_FETCH[$idx]}"
-  echo "[$(timestamp)] Starting process for tensor='$tensor'"
 
-  chunk_id=$(get_shard_id "$tensor")
+  local chunk_id=$(get_shard_id "$tensor")
+
+  local shard_file="${SHARD_FILENAMES[$idx]}"
+  local local_path="$LOCAL_MODEL_DIR/$shard_file"
+  local dl_path="$LOCAL_DOWNLOAD_DIR/$shard_file"
+
+  # If special node assignment is enabled, skip shards not assigned to this node
+  if [[ -n "$SPECIAL_NODE_ID" ]]; then
+    if ! should_process_chunk "$chunk_id"; then
+      _del=""
+      [[ "$RM_SKIPPED_SHARDS" == "true" ]] && _del=" and deleting (if present)" && rm -f "$dl_path" "$local_path" || true
+      echo "[$(timestamp)] Skipping$_del tensor='$tensor' chunk_id=$chunk_id not assigned to this node (xxhsum-based selection)."
+      return 0
+    else
+      echo "[$(timestamp)] Tensor='$tensor' chunk_id=$chunk_id assigned to this node (xxhsum-based selection) — proceeding to HASH verification"
+    fi
+  else
+    echo "[$(timestamp)] Tensor='$tensor' chunk_id=$chunk_id HASH verification — proceeding"
+  fi
 
   for i in "${!PATTERNS[@]}"; do
-    pat="${PATTERNS[$i]}"
+    local pat="${PATTERNS[$i]}"
     if [[ "$tensor" =~ $pat ]]; then
-      qtype="${PATTERN_QTYPES[$i]^^]}"
-      dl_type="$qtype"
+      local qtype="${PATTERN_QTYPES[$i]^^]}"
+      local dl_type="$qtype"
       [[ "${qtype^^}" == "F32" ]] && dl_type="${QTYPE}"
-
-      local shard_file="${BF16_SHARDS[$idx]}"
-      local local_path="$LOCAL_MODEL_DIR/$shard_file"
-      local dl_path="$LOCAL_DOWNLOAD_DIR/$shard_file"
 
       local shard_id=$(echo "$shard_file" | sed -E 's/.*-([0-9]{5})-of-[0-9]{5}\.gguf/\1/')
 
-      got=""
-      need_download=false
+      local got=""
+      local need_download=false
+      local failed_hash=0
+      local skip_mv=true
       if [[ "$FORCE_REDOWNLOAD" == true ]]; then
           echo "[$(timestamp)] Force redownload: removing existing shard $shard_file"
           rm -f "$dl_path" "$local_path" || true
+          sync || true
           skip_mv=false
-      else
-          skip_mv=true
       fi
+      local _path=""
       while [[ "$need_download" == false ]] && [[ "$got" == "" ]]; do
         if [[ -f "$local_path" ]] || [[ -f "$dl_path" ]]; then
             if [[ -f "$local_path" ]]; then
@@ -408,11 +687,14 @@ download_shard() {
                 skip_mv=false
             fi
             if command -v _sha256sum &>/dev/null; then
+                [ "$failed_hash" -gt 0 ] && sync || true
                 got=$(_sha256sum "$_path" | cut -d' ' -f1)
-                exp=$(get_t_hash "$qtype" "$tensor")
+                local exp=$(get_t_hash "$qtype" "$tensor")
                 if [[ "$got" != "$exp" ]]; then
-                    echo "[$(timestamp)] Will redownload due to hash mismatch for '$shard_file' - tensor '$tensor' of qtype: '$qtype' ($got != $exp)"
+                    failed_hash=$((failed_hash + 1))
+                    echo "[$(timestamp)] Will redownload due to hash mismatch (count: $failed_hash) for '$shard_file' - tensor '$tensor' of qtype: '$qtype' ($got != $exp)"
                     rm -f "$dl_path" "$local_path" || true
+                    sync || true
                     need_download=true
                 else
                     echo "[$(timestamp)] File id '$shard_id' - tensor '$tensor' of qtype: '$qtype' hash is valid!"
@@ -467,44 +749,56 @@ if [[ "$VERIFY_ONLY" == "true" ]]; then
   wait_for_slot
   (
     _find=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-*-of-*.gguf")
-    total=$(echo ${_find} | head -n1 | sed -E 's/.*-[0-9]{5}-of-([0-9]{5})\.gguf/\1/')
-    gguf_first=$(basename "$(echo ${_find} | head -n1 \
-      | sed "s/-[0-9]\{5\}-of-$total\.gguf$/-00001-of-$total.gguf/")")
-    if [[ "$total" != "" && "$gguf_first" != "" && -f "$LOCAL_MODEL_DIR/$gguf_first" ]]; then
-      if [[ ! "$gguf_first" =~ "-BF16-" && "${QTYPE}" == "BF16" ]]; then
-        echo "[$(timestamp)] VERIFY_ONLY: Error - Non-BF16 qtype detected for first shard, please re-run using the --qtype option!!!"
-        kill -s TERM "$SCRIPT_PID"  # Kill parent
-        exit 2
-      else
-        if [[ "$SKIP_GPG" != "true" ]]; then
-          if command -v gpg >/dev/null 2>&1; then
-            if [ ! -f "$LOCAL_MODEL_DIR/$gguf_first" ]; then
-                echo "[$(timestamp)] VERIFY_ONLY: Error - Shard file '$gguf_first' not found."
-                kill -s TERM "$SCRIPT_PID"  # Kill parent
-                exit 5
-            fi
-            if [ ! -f "$LOCAL_MODEL_DIR/$gguf_first.sig" ]; then
-                echo "[$(timestamp)] VERIFY_ONLY: Error - Signature file '$gguf_first.sig' is missing."
-                echo "Hint: To skip GPG verification, re-run this script with the --skip-gpg option."
-                kill -s TERM "$SCRIPT_PID"  # Kill parent
-                exit 5
-            fi
-            if gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --verify "$LOCAL_MODEL_DIR/$gguf_first.sig" "$LOCAL_MODEL_DIR/$gguf_first" > /dev/null 2>&1; then
-                echo "[$(timestamp)] GPG signature verification for '$gguf_first.sig' successful."
+    IFS= read -r first <<< "$_find"
+    total=$(printf '%s\n' "$first" | sed -E 's/.*-[0-9]{5}-of-([0-9]{5})\.gguf/\1/')
+    gguf_first=""
+    # Determine whether we should perform first-shard GPG download/verification under special-node-mode (does it by default for BF16 models)
+    should_verify_first=true
+    if [[ -n "$SPECIAL_NODE_ID" && (! "$first" =~ "-BF16-" && "${QTYPE^^}" != "BF16") ]]; then
+      if ! should_process_chunk 1; then
+        should_verify_first=false
+      fi
+    fi
+    if [[ "$should_verify_first" == true ]]; then
+      gguf_first=$(basename "$(printf '%s\n' "$first" | sed "s/-[0-9]\{5\}-of-$total\.gguf$/-00001-of-$total.gguf/")")
+      if [[ "$total" != "" && "$gguf_first" != "" && -f "$LOCAL_MODEL_DIR/$gguf_first" ]]; then
+        if [[ ! "$gguf_first" =~ "-BF16-" && "${QTYPE}" == "BF16" ]]; then
+          echo "[$(timestamp)] VERIFY_ONLY: Error - Non-BF16 qtype detected for first shard, please re-run using the --qtype option!!!"
+          kill -s TERM "$SCRIPT_PID"  # Kill parent
+          exit 2
+        else
+          if [[ "$SKIP_GPG" != "true" ]]; then
+            if command -v gpg >/dev/null 2>&1; then
+              if [ ! -f "$LOCAL_MODEL_DIR/$gguf_first" ]; then
+                  echo "[$(timestamp)] VERIFY_ONLY: Error - Shard file '$gguf_first' not found."
+                  kill -s TERM "$SCRIPT_PID"  # Kill parent
+                  exit 5
+              fi
+              if [ ! -f "$LOCAL_MODEL_DIR/$gguf_first.sig" ]; then
+                  echo "[$(timestamp)] VERIFY_ONLY: Error - Signature file '$gguf_first.sig' is missing."
+                  echo "Hint: To skip GPG verification, re-run this script with the --skip-gpg option."
+                  kill -s TERM "$SCRIPT_PID"  # Kill parent
+                  exit 5
+              fi
+              if gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --verify "$LOCAL_MODEL_DIR/$gguf_first.sig" "$LOCAL_MODEL_DIR/$gguf_first" > /dev/null 2>&1; then
+                  echo "[$(timestamp)] GPG signature verification for '$gguf_first.sig' successful."
+              else
+                  echo "[$(timestamp)] VERIFY_ONLY: Error - GPG signature verification failed for '$gguf_first.sig'."
+                  kill -s TERM "$SCRIPT_PID"  # Kill parent
+                  exit 4
+              fi
             else
-                echo "[$(timestamp)] VERIFY_ONLY: Error - GPG signature verification failed for '$gguf_first.sig'."
-                kill -s TERM "$SCRIPT_PID"  # Kill parent
-                exit 4
+              echo "⚠️ Warning: 'gpg' command not found. Signature verification skipped." >&2
             fi
-          else
-            echo "⚠️ Warning: 'gpg' command not found. Signature verification skipped." >&2
           fi
+          echo "[$(timestamp)] OK: $gguf_first"
         fi
-        echo "[$(timestamp)] OK: $gguf_first"
+      else
+        echo "[$(timestamp)] MISSING: $gguf_first"
+        touch "$FAIL_MARKER"
       fi
     else
-      echo "[$(timestamp)] MISSING: $gguf_first"
-      touch "$FAIL_MARKER"
+      echo "[$(timestamp)] Skipping first-shard GPG verification due to special-node-id/xxhsum assignment (not BF16 or assigned node)."
     fi
   ) &
 
@@ -512,29 +806,46 @@ if [[ "$VERIFY_ONLY" == "true" ]]; then
   for idx in "${!TENSORS_TO_FETCH[@]}"; do
     wait_for_slot
     (
-      for i in "${!PATTERNS[@]}"; do
-        pat="${PATTERNS[$i]}"
-        if [[ "${TENSORS_TO_FETCH[$idx]}" =~ $pat ]]; then
-          qtype="${PATTERN_QTYPES[$i]^^]}"
-          shardfile="${BF16_SHARDS[$idx]}"
-          local_path="$LOCAL_MODEL_DIR/$shardfile"
+      tensor="${TENSORS_TO_FETCH[$idx]}"
+      #echo "[$(timestamp)] Checking HASH for tensor='$tensor'"
 
-          if [[ -f "$local_path" ]] && command -v _sha256sum &>/dev/null; then
-            got=$(_sha256sum "$local_path" | cut -d' ' -f1)
-            exp=$(get_t_hash "$qtype" "${TENSORS_TO_FETCH[$idx]}")
-            if [[ "$got" != "$exp" ]]; then
-              echo "[$(timestamp)] WRONG HASH: $shardfile ($got != $exp) - tensor: '${TENSORS_TO_FETCH[$idx]}' - qtype: '$qtype'"
-              touch "$FAIL_MARKER"
-            else
-              echo "[$(timestamp)] OK: $shardfile"
-            fi
-          else
-            echo "[$(timestamp)] MISSING: $shardfile"
-            touch "$FAIL_MARKER"
-          fi
-          break
+      chunk_id=$(get_shard_id "$tensor")
+
+      # If special node assignment is enabled, skip shards not assigned to this node
+      proceed=true
+      if [[ -n "$SPECIAL_NODE_ID" ]]; then
+        if ! should_process_chunk "$chunk_id"; then
+          #echo "[$(timestamp)] Skipping HASH of tensor='$tensor' chunk_id=$chunk_id not assigned to this node (xxhsum-based selection)."
+          proceed=false
+        else
+          echo "[$(timestamp)] Tensor='$tensor' chunk_id=$chunk_id assigned to this node (xxhsum-based selection) — proceeding to HASH"
         fi
-      done
+      fi
+      if [[ "$proceed" == true ]]; then
+        for i in "${!PATTERNS[@]}"; do
+          pat="${PATTERNS[$i]}"
+          if [[ "$tensor" =~ $pat ]]; then
+            qtype="${PATTERN_QTYPES[$i]^^]}"
+            shardfile="${SHARD_FILENAMES[$idx]}"
+            local_path="$LOCAL_MODEL_DIR/$shardfile"
+
+            if [[ -f "$local_path" ]] && command -v _sha256sum &>/dev/null; then
+              got=$(_sha256sum "$local_path" | cut -d' ' -f1)
+              exp=$(get_t_hash "$qtype" "$tensor")
+              if [[ "$got" != "$exp" ]]; then
+                echo "[$(timestamp)] WRONG HASH: $shardfile ($got != $exp) - tensor: '$tensor' - qtype: '$qtype'"
+                touch "$FAIL_MARKER"
+              else
+                echo "[$(timestamp)] HASH OK: $shardfile"
+              fi
+            else
+              echo "[$(timestamp)] MISSING: $shardfile"
+              touch "$FAIL_MARKER"
+            fi
+            break
+          fi
+        done
+      fi
     ) &
   done
 
@@ -558,103 +869,228 @@ if [[ "$VERIFY_ONLY" == "true" ]]; then
   fi
 fi
 
-# ------------------ MAIN DOWNLOAD LOOP -------------------
-for idx in "${!TENSORS_TO_FETCH[@]}"; do
- wait_for_slot
- download_shard "$idx" &
-done
-wait
+# ------------------ MAIN DOWNLOAD LOOP (retry-until-success wrappers, no PID bookkeeping) -------------------
 
-_find=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-*-of-*.gguf")
-total=$(echo ${_find} | head -n1 | sed -E 's/.*-[0-9]{5}-of-([0-9]{5})\.gguf/\1/')
-gguf_first=$(basename "$(echo ${_find} | head -n1 | sed "s/-[0-9]\{5\}-of-$total\.gguf$/-00001-of-$total.gguf/")")
+for idx in "${!TENSORS_TO_FETCH[@]}"; do
+  wait_for_slot
+
+  # compute tensor & chunk_id in parent so we can record them for the subshell
+  tensor="${TENSORS_TO_FETCH[$idx]:-}"
+  chunk_id="$(get_shard_id "$tensor")"
+
+  # capture loop variables for the subshell to avoid race / duplication
+  current_idx="$idx"
+  current_tensor="$tensor"
+  current_chunk="$chunk_id"
+
+  (
+    attempts=0
+    # Each wrapper will keep trying until download_shard returns success (0)
+    while true; do
+      attempts=$((attempts + 1))
+      if download_shard "$current_idx"; then
+        # succeeded
+        DEBUG "child idx=$current_idx download_shard succeeded (attempt $attempts)"
+        break
+      else
+        rc=$?
+        # use the parent-computed tensor/chunk_id (visible inside subshell)
+        echo "[$(timestamp)] ⚠️ Warning: Tensor='${current_tensor}' chunk_id=${current_chunk} download failed with exit $rc (attempt $attempts). Retrying in 10s..." >&2
+        sleep 10
+      fi
+    done
+  ) &
+
+  # Optionally show the child's PID in debug, but we do NOT save it anywhere.
+  pid=$!
+  DEBUG "spawned wrapper idx=$idx pid=$pid"
+done
+
+# Wait for all background wrapper jobs to finish
+rc=0
+set +e
+# Single wait with no args waits for all child processes started in this shell.
+# Its exit status is that of the last process waited for; treat any non-zero as error.
+if ! wait; then
+  status=$?
+  echo "❌ Error: one or more download wrapper children exited with non-zero status (wait returned $status). Check child stderr logs for details (each child prints its tensor and chunk on retry/error)." >&2
+  rc=1
+fi
+set -e
+
+if (( rc != 0 )); then
+  echo "❌ Error: one or more download wrappers exited abnormally." >&2
+  exit $rc
+fi
+
+# ------------------ END MAIN DOWNLOAD LOOP (retry-until-success wrappers, no PID bookkeeping) -------------------
 
 # ------------- FINAL FIRST-SHARD FETCH (non-verify) -----
-if [[ "$VERIFY_ONLY" != true ]]; then
-  echo "[$(timestamp)] Fetching first shard separately"
-  if [[ "$total" != "" ]] && [[ "$gguf_first" != "" ]]; then
-    if [[ "$FORCE_REDOWNLOAD" == true ]]; then
-      echo "[$(timestamp)] Force redownload: removing existing first shard (and gpg signature)"
-      rm -f "$LOCAL_MODEL_DIR/$gguf_first" "$LOCAL_DOWNLOAD_DIR/$gguf_first" || true
-      rm -f "$LOCAL_MODEL_DIR/$gguf_first.sig" "$LOCAL_DOWNLOAD_DIR/$gguf_first.sig" || true
-    fi
-    if ! [ -f "$LOCAL_MODEL_DIR/$gguf_first" ]; then
-      until run_downloader "${QTYPE}" 1 "$LOCAL_DOWNLOAD_DIR" "$(basename "$gguf_first")"; do
-        echo "[$(timestamp)] First shard download failed; retrying in 10s..."
-        sleep 10
-      done
-      mv -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first")" "$LOCAL_MODEL_DIR/"
-      echo "[$(timestamp)] First shard saved"
-      if [[ "$SKIP_GPG" != "true" ]]; then
-        until run_downloader "${QTYPE}" -2 "$LOCAL_DOWNLOAD_DIR" "$(basename "$gguf_first.sig")"; do
-          echo "[$(timestamp)] First shard signature download failed; retrying in 10s..."
+_find=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-*-of-*.gguf")
+IFS= read -r first <<< "$_find"
+total=$(printf '%s\n' "$first" | sed -E 's/.*-[0-9]{5}-of-([0-9]{5})\.gguf/\1/')
+gguf_first=$(basename "$(printf '%s\n' "$first" | sed "s/-[0-9]\{5\}-of-$total\.gguf$/-00001-of-$total.gguf/")")
+# Determine whether we should perform first-shard GPG download/verification under special-node-mode (does it by default for BF16 models)
+should_verify_first=true
+_del=""
+if [[ -n "$SPECIAL_NODE_ID" && (! "$first" =~ "-BF16-" && "${QTYPE^^}" != "BF16") ]]; then
+  if ! should_process_chunk 1; then
+    [[ "$RM_SKIPPED_SHARDS" == "true" ]] && _del=" and deleting (if present)" && rm -f "$LOCAL_MODEL_DIR/$gguf_first" "$LOCAL_DOWNLOAD_DIR/$gguf_first" "$LOCAL_MODEL_DIR/$gguf_first.sig" "$LOCAL_DOWNLOAD_DIR/$gguf_first.sig" || true
+    should_verify_first=false
+  fi
+fi
+if [[ "$should_verify_first" == true ]]; then
+  if [[ "$VERIFY_ONLY" != true ]]; then
+    echo "[$(timestamp)] Fetching first shard separately"
+    if [[ "$total" != "" ]] && [[ "$gguf_first" != "" ]]; then
+      if [[ "$FORCE_REDOWNLOAD" == true ]]; then
+        echo "[$(timestamp)] Force redownload: removing existing first shard (and gpg signature)"
+        rm -f "$LOCAL_MODEL_DIR/$gguf_first" "$LOCAL_DOWNLOAD_DIR/$gguf_first" || true
+        rm -f "$LOCAL_MODEL_DIR/$gguf_first.sig" "$LOCAL_DOWNLOAD_DIR/$gguf_first.sig" || true
+        sync || true
+      fi
+      if ! [ -f "$LOCAL_MODEL_DIR/$gguf_first" ]; then
+        until run_downloader "${QTYPE}" 1 "$LOCAL_DOWNLOAD_DIR" "$(basename "$gguf_first")"; do
+          echo "[$(timestamp)] First shard download failed; retrying in 10s..."
           sleep 10
         done
-        mv -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first.sig")" "$LOCAL_MODEL_DIR/"
-        echo "[$(timestamp)] First shard gpg signature saved"
-      fi
-    else
-      echo "[$(timestamp)] First shard already exists"
-      if [[ "$SKIP_GPG" != "true" ]]; then
-        if ! [ -f "$LOCAL_MODEL_DIR/$gguf_first.sig" ]; then
+        mv -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first")" "$LOCAL_MODEL_DIR/"
+        echo "[$(timestamp)] First shard saved"
+        if [[ "$SKIP_GPG" != "true" ]]; then
           until run_downloader "${QTYPE}" -2 "$LOCAL_DOWNLOAD_DIR" "$(basename "$gguf_first.sig")"; do
-            echo "[$(timestamp)] First shard gpg signature download failed; retrying in 10s..."
+            echo "[$(timestamp)] First shard signature download failed; retrying in 10s..."
             sleep 10
           done
           mv -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first.sig")" "$LOCAL_MODEL_DIR/"
           echo "[$(timestamp)] First shard gpg signature saved"
-        else
-          echo "[$(timestamp)] First shard gpg signature already exists"
+        fi
+      else
+        echo "[$(timestamp)] First shard already exists"
+        if [[ "$SKIP_GPG" != "true" ]]; then
+          if ! [ -f "$LOCAL_MODEL_DIR/$gguf_first.sig" ]; then
+            until run_downloader "${QTYPE}" -2 "$LOCAL_DOWNLOAD_DIR" "$(basename "$gguf_first.sig")"; do
+              echo "[$(timestamp)] First shard gpg signature download failed; retrying in 10s..."
+              sleep 10
+            done
+            mv -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first.sig")" "$LOCAL_MODEL_DIR/"
+            echo "[$(timestamp)] First shard gpg signature saved"
+          else
+            echo "[$(timestamp)] First shard gpg signature already exists"
+          fi
         fi
       fi
+    else
+      echo "❌ Error: unable to find previous shards..." >&2
     fi
-  else
-    echo "❌ Error: unable to find previous shards..." >&2
   fi
+else
+  echo "[$(timestamp)] Skipping$_del first-shard signature download/verification due to special-node-id/xxhsum assignment (not BF16 or assigned node)."
 fi
 
 # ------------- FINAL VERIFICATION & SHARD SEQUENCE --------
 echo "[$(timestamp)] Verifying shard sequence completeness"
-indices=( $(echo "${_find}" | sed -E "s/.*-([0-9]{5})-of-$total\.gguf$/\1/" | sort) )
-last_index=${indices[-1]}
-first_index=${indices[0]}
-count_expected=$((10#$last_index - 10#$first_index + 1))
 
-if [[ ${#indices[@]} -ne $count_expected ]]; then
-  echo "❌ Error - $((count_expected - ${#indices[@]})) missing shard(s) between $first_index and $last_index. Verify recipe or rerun." >&2
-  echo "Missing indices:"
-  # generate the full expected sequence, then filter out the ones you *have*
-  seq -f "%05g" "$((10#$first_index))" "$((10#$last_index))" \
-    | grep -Fvx -f <(printf "%s\n" "${indices[@]}")
+# Extract all found indices (zero-padded, sorted)
+full_indices=( $(echo "${_find}" | sed -E "s/.*-([0-9]{5})-of-$total\.gguf$/\1/" | sort) )
+
+if [[ ${#full_indices[@]} -eq 0 ]]; then
+  echo "❌ Error: no shard files found to verify." >&2
   exit 1
 fi
 
-echo "[$(timestamp)] All shards from $first_index to $last_index are present."
+# Convert first/last from the full list (zero-padded strings)
+full_first_z="${full_indices[0]}"
+full_last_z="${full_indices[-1]}"
+full_first=$((10#$full_first_z))
+full_last=$((10#$full_last_z))
+
+if [[ -z "$SPECIAL_NODE_ID" ]]; then
+  # unchanged legacy behavior when not using special-node mode:
+  last_index=${full_last_z}
+  first_index=${full_first_z}
+  count_expected=$((10#$last_index - 10#$first_index + 1))
+
+  if [[ ${#full_indices[@]} -ne $count_expected ]]; then
+    echo "❌ Error - $((count_expected - ${#full_indices[@]})) missing shard(s) between $first_index and $last_index. Verify recipe or rerun." >&2
+    echo "Missing indices:"
+    seq -f "%05g" "$full_first" "$full_last" \
+      | grep -Fvx -f <(printf "%s\n" "${full_indices[@]}")
+    exit 1
+  fi
+
+  echo "[$(timestamp)] All shards from ${first_index} to ${last_index} are present."
+else
+  # SPECIAL_NODE_ID mode: compute which indices this node SHOULD process
+  expected_for_node=()
+  # iterate the *full* range and test each index with should_process_chunk
+  while IFS= read -r idx_z; do
+    # convert to integer for should_process_chunk
+    if should_process_chunk "$idx_z"; then
+      expected_for_node+=("$idx_z")
+    fi
+  done < <(seq -f "%05g" "$full_first" "$full_last")
+
+  # Build actual present-for-node list by filtering full_indices with should_process_chunk
+  present_for_node=()
+  for idx_z in "${full_indices[@]}"; do
+    if should_process_chunk "$idx_z"; then
+      present_for_node+=("$idx_z")
+    fi
+  done
+
+  count_expected=${#expected_for_node[@]}
+  count_present=${#present_for_node[@]}
+
+  if (( count_present != count_expected )); then
+    # find missing expected entries (expected - present)
+    echo "❌ Error - $((count_expected - count_present)) missing shard(s) assigned to this node between ${full_first_z} and ${full_last_z}. Verify recipe or rerun." >&2
+    echo "Missing indices (zero-padded):"
+    # print expected list and subtract present list
+    printf "%s\n" "${expected_for_node[@]}" | grep -Fvx -f <(printf "%s\n" "${present_for_node[@]}")
+    exit 1
+  fi
+
+  # For logging, show the node-specific first/last
+  first_index="${expected_for_node[0]}"
+  last_index="${expected_for_node[-1]}"
+  echo "[$(timestamp)] All assigned shards for this node present: ${first_index} .. ${last_index} (count=${count_present})"
+fi
 
 if [[ "$SKIP_GPG" != "true" ]]; then
-  if command -v gpg >/dev/null 2>&1; then
-    if [ ! -f "$LOCAL_MODEL_DIR/$gguf_first" ]; then
-        echo "❌ Error: Shard file '$gguf_first' not found."
-        [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
-        exit 5
+  # Decide whether to run final GPG verification for first-shard
+  should_verify_first=true
+  if [[ -n "$SPECIAL_NODE_ID" && (! "$first" =~ "-BF16-" && "${QTYPE^^}" != "BF16") ]]; then
+    if ! should_process_chunk 1; then
+      should_verify_first=false
     fi
-    if [ ! -f "$LOCAL_MODEL_DIR/$gguf_first.sig" ]; then
-        echo "❌ Error: Signature file '$gguf_first.sig' is missing."
-        echo "Hint: To skip GPG verification, re-run this script with the --skip-gpg option."
-        [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
-        exit 5
-    fi
-    if gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --verify "$LOCAL_MODEL_DIR/$gguf_first.sig" "$LOCAL_MODEL_DIR/$gguf_first" > /dev/null 2>&1; then
-        echo "[$(timestamp)] GPG signature verification for '$gguf_first.sig' successful."
-    else
-        echo "❌ Error: GPG signature verification failed for '$gguf_first.sig'."
-        [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
-        exit 4
-    fi
-    [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
-  else
-    echo "⚠️ Warning: 'gpg' command not found. Signature verification skipped." >&2
   fi
+  if [[ "$should_verify_first" == true ]]; then
+    if command -v gpg >/dev/null 2>&1; then
+      if [ ! -f "$LOCAL_MODEL_DIR/$gguf_first" ]; then
+          echo "❌ Error: Shard file '$gguf_first' not found."
+          [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+          exit 5
+      fi
+      if [ ! -f "$LOCAL_MODEL_DIR/$gguf_first.sig" ]; then
+          echo "❌ Error: Signature file '$gguf_first.sig' is missing."
+          echo "Hint: To skip GPG verification, re-run this script with the --skip-gpg option."
+          [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+          exit 5
+      fi
+      if gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --verify "$LOCAL_MODEL_DIR/$gguf_first.sig" "$LOCAL_MODEL_DIR/$gguf_first" > /dev/null 2>&1; then
+          echo "[$(timestamp)] GPG signature verification for '$gguf_first.sig' successful."
+      else
+          echo "❌ Error: GPG signature verification failed for '$gguf_first.sig'."
+          [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+          exit 4
+      fi
+    else
+      echo "⚠️ Warning: 'gpg' command not found. Signature verification skipped." >&2
+    fi
+  else
+    echo "[$(timestamp)] Skipping final first-shard GPG verification due to special-node-id/xxhsum assignment (not BF16 or assigned node)."
+  fi
+  [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
 fi
 
 echo

@@ -46,7 +46,7 @@ mkdir -p kitchen && cd kitchen
 ulimit -n 9999 # Lifts "too many open files" limitation on Linux
 ~/ik_llama.cpp/build/bin/llama-cli \
   -m DeepSeek-R1-0528-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
-  -mla 3 -fa -amb 512 -fmoe -ctk f16 -c 4096 -ngl 99 \
+  -mla 3 -fa auto -amb 512 -ctk f16 -c 4096 -ngl 99 \
   -ot "blk\.(3|4|5|6)\.ffn_.*=CUDA0" \
   -ot "blk\.(7|8|9|10)\.ffn_.*=CUDA1" \
   -ot exps=CPU -b 2048 -ub 1024 --warmup-batch --no-mmap --threads 36 \

@@ -1,14 +1,14 @@
 ## Model head & embeddings
-^token_embd\.weight$=q8_0
-^output\.weight$=q8_0
+^token_embd\.weight$=iq6_k
+^output\.weight$=iq6_k
 ^output_norm\.weight$=f32
 
 ## Multi-headed attention parameters
 ^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_v\.bias$=f32
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_v\.weight$=q8_0
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q\.weight$=q8_0
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_output\.weight$=q8_0
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k\.weight$=q8_0
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_v\.weight$=iq6_k
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q\.weight$=iq6_k
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_output\.weight$=iq6_k
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k\.weight$=iq6_k
 ^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q\.bias$=f32
 ^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q_norm\.weight$=f32
 ^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k_norm\.weight$=f32
@@ -16,17 +16,17 @@
 ^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_norm\.weight$=f32
 
 ## Core FFN weights
-^blk\.[0-2]\.ffn_down\.weight$=q8_0
+^blk\.[0-2]\.ffn_down\.weight$=iq6_k
 ^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_inp\.weight$=f32
-^blk\.[0-2]\.ffn_gate\.weight$=q8_0
-^blk\.[0-2]\.ffn_up\.weight$=q8_0
+^blk\.[0-2]\.ffn_gate\.weight$=iq6_k
+^blk\.[0-2]\.ffn_up\.weight$=iq6_k
 
 ## Other tensors
 ^blk\.92\.nextn\.shared_head_norm\.weight$=f32
 ^blk\.92\.nextn\.enorm\.weight$=f32
 ^blk\.([0-9]|[1-8][0-9]|9[0-2])\.post_attention_norm\.weight$=f32
 ^blk\.([3-9]|[1-8][0-9]|9[0-2])\.exp_probs_b\.bias$=f32
-^blk\.92\.nextn\.eh_proj\.weight$=q8_0
+^blk\.92\.nextn\.eh_proj\.weight$=iq6_k
 ^blk\.92\.nextn\.hnorm\.weight$=f32
 
 ## GPU-loaded ffn_*_shexp

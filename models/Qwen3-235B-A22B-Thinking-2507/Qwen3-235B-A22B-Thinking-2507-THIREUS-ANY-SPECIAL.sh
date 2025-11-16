@@ -5,7 +5,7 @@
 #** for ppl bench purpose. Adjust $1 in $custom!              **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-25-2025 -------------------- **#
+#** --------------- Updated: Nov-06-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -484,5 +484,5 @@ mkdir Qwen3-235B-A22B-Thinking-2507-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quant
     Qwen3-235B-A22B-Thinking-2507-THIREUS-BF16-SPECIAL_SPLIT/Qwen3-235B-A22B-Thinking-2507-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01132.gguf \
     Qwen3-235B-A22B-Thinking-2507-THIREUS-${1^^}-SPECIAL_SPLIT/Qwen3-235B-A22B-Thinking-2507-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
     ${1^^} \
-    32 && chmod 444 Qwen3-235B-A22B-Thinking-2507-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
+    $(nproc) && chmod 444 Qwen3-235B-A22B-Thinking-2507-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
     
