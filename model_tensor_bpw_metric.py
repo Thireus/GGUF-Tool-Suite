@@ -616,7 +616,8 @@ def compute_and_plot_from_csv(csv_path: str,
                               metric_name: Optional[str] = "metric",
                               predict_bpw_values: Optional[List[float]] = None,
                               transforms: Optional[List[str]] = None,
-                              suppress_plot: bool = False) -> Optional[List[float]]:
+                              suppress_plot: bool = False,
+                              equation_only: bool = False) -> Optional[List[float]]:
     """
     Read the produced bpw CSV (bpw_<input>.csv), plot metric (y) vs bpw (x).
     ycol_identifier can be a column name or integer index (defaults to index 2).
@@ -640,6 +641,8 @@ def compute_and_plot_from_csv(csv_path: str,
 
     New parameter:
       - suppress_plot: when True and predict_bpw_values is used, suppress creating/saving/showing any plot.
+      - equation_only: when True, print only the fitted equation to stdout (one line) and do not print JSON preds.
+                       Other diagnostic output continues to go to stderr.
     """
     # Flag indicating machine-friendly output mode (predict-only)
     machine_mode = bool(predict_bpw_values and len(predict_bpw_values) > 0)
@@ -890,6 +893,7 @@ def compute_and_plot_from_csv(csv_path: str,
     if best_params is None:
         # If machine_mode and predictions were requested, return empty array to stdout for easy piping.
         if machine_mode:
+            # If equation_only is requested but no fit, still print empty JSON to stdout (consistent with previous machine behavior)
             print("[]")
             return []
         print("Warning: no valid fit found among transforms; plotting scatter only.", file=sys.stderr)
@@ -926,8 +930,9 @@ def compute_and_plot_from_csv(csv_path: str,
     log_base = params.get("log_base", None)
 
     # If machine_mode (predict-only), compute predictions for requested bpw values and print JSON to stdout,
-    # and ensure all other printing goes to stderr.
-    if machine_mode:
+    # and ensure all other printing goes to stderr. However, if equation_only is requested, prefer to print
+    # only the equation to stdout (not the JSON predictions).
+    if machine_mode and not equation_only:
         preds = []
         for xv in predict_bpw_values:
             try:
@@ -956,6 +961,28 @@ def compute_and_plot_from_csv(csv_path: str,
         # Convert None to null in JSON by leaving them as None in Python -> JSON null.
         print(json.dumps(preds))
         return preds
+
+    # If machine_mode and equation_only: print only the equation to stdout (no JSON), then return.
+    if machine_mode and equation_only:
+        # Build grapher_eq exactly as in non-machine flow below.
+        if transform == "ln":
+            grapher_transform = "ln"
+        elif transform == "log10":
+            grapher_transform = "log10"
+        elif transform == "log2":
+            grapher_transform = "log2"
+        elif transform == "logn":
+            grapher_transform = f"log{log_base:.6g}" if log_base is not None else "logN"
+        else:
+            grapher_transform = "identity"
+
+        if grapher_transform == "identity":
+            grapher_eq = f"y = {d:.12g} + {a:.12g} * ( {b:.12g} * (x - {c:.12g}) )^(-{p:.12g})"
+        else:
+            grapher_eq = f"y = {d:.12g} + {a:.12g} * {grapher_transform}( {b:.12g} * (x - {c:.12g}) )^(-{p:.12g})"
+        # Print only the equation line to stdout.
+        print(grapher_eq)
+        return [grapher_eq]
 
     # construct fitted curve (x is bpw). Use same formula b * (x - c).
     x_plot = np.linspace(np.min(xarr_full), np.max(xarr_full), 600)
@@ -1012,7 +1039,12 @@ def compute_and_plot_from_csv(csv_path: str,
     else:
         grapher_eq = f"y = {d:.12g} + {a:.12g} * {grapher_transform}( {b:.12g} * (x - {c:.12g}) )^(-{p:.12g})"
 
-    print(grapher_eq, file=sys.stderr)
+    # If the user requested equation_only in non-machine mode, we should print the equation to stdout
+    # (and nothing else to stdout). The diagnostics above go to stderr.
+    if equation_only:
+        print(grapher_eq)
+    else:
+        print(grapher_eq, file=sys.stderr)
 
     if not suppress_plot:
         if plot_output:
@@ -1160,7 +1192,8 @@ def write_bpw_results_csv_from_rows_and_maybe_plot(input_csv_path: str,
                                                    metric_name: Optional[str] = "metric",
                                                    predict_bpw_values: Optional[List[float]] = None,
                                                    transforms: Optional[List[str]] = None,
-                                                   suppress_plot: bool = False) -> Optional[List[float]]:
+                                                   suppress_plot: bool = False,
+                                                   equation_only: bool = False) -> Optional[List[float]]:
     write_bpw_results_csv_from_rows(input_csv_path, out_csv_path, parsed_mapfiles,
                                     qtypes_to_consider, allow_impure_map, fail_on_missing_bytes, hide_empty)
     # If the caller explicitly requested plotting, do the previous behavior.
@@ -1180,9 +1213,10 @@ def write_bpw_results_csv_from_rows_and_maybe_plot(input_csv_path: str,
                                          metric_name=metric_name,
                                          predict_bpw_values=predict_bpw_values,
                                          transforms=transforms,
-                                         suppress_plot=suppress_plot)
+                                         suppress_plot=suppress_plot,
+                                         equation_only=equation_only)
     # If plotting was not requested but predictions were requested, still run the fitter (with plotting suppressed if requested)
-    if predict_bpw_values:
+    if predict_bpw_values or equation_only:
         return compute_and_plot_from_csv(out_csv_path,
                                          bpw_column="bpw",
                                          ycol_identifier=ycol_identifier,
@@ -1198,7 +1232,8 @@ def write_bpw_results_csv_from_rows_and_maybe_plot(input_csv_path: str,
                                          metric_name=metric_name,
                                          predict_bpw_values=predict_bpw_values,
                                          transforms=transforms,
-                                         suppress_plot=suppress_plot)
+                                         suppress_plot=suppress_plot,
+                                         equation_only=equation_only)
     return None
 
 
@@ -1254,6 +1289,10 @@ def main():
     # New: allow user to specify the transforms to try (defaults to ln, log2, log10, logn, identity)
     ap.add_argument("--transforms", nargs="+", default=None,
                     help="Space-separated (or comma-separated) list of transforms to try. Choices: ln, log2, log10, logn, identity. Default: ln log2 log10 logn identity.")
+    # New: print only the equation to stdout (one line). When used, the equation string is printed to stdout and
+    # other normal stdout outputs (like JSON predictions) are suppressed. Diagnostic messages still go to stderr.
+    ap.add_argument("--equation-only", action="store_true",
+                    help="Print only the fitted equation to stdout (one line). Works with or without --plot. Overrides --predict-bpw-values stdout output.")
     args = ap.parse_args()
 
     if args.map_files and args.qtypes:
@@ -1419,7 +1458,8 @@ def main():
                                                                            metric_name=metric_name,
                                                                            predict_bpw_values=args.predict_bpw_values,
                                                                            transforms=transforms_arg,
-                                                                           suppress_plot=(not args.plot))
+                                                                           suppress_plot=(not args.plot),
+                                                                           equation_only=args.equation_only)
                     # If the compute function printed predictions to stdout, we're done. Still print CSV path to stderr for diagnostics.
                     print(f"Wrote BPW CSV: {out_csv}", file=sys.stderr)
                 except Exception as ex:
@@ -1450,8 +1490,9 @@ def main():
                                                                metric_name=metric_name,
                                                                predict_bpw_values=None,
                                                                transforms=transforms_arg,
-                                                               suppress_plot=(not args.plot))
-                print(f"Wrote BPW CSV: {out_csv}")
+                                                               suppress_plot=(not args.plot),
+                                                               equation_only=args.equation_only)
+                print(f"Wrote BPW CSV: {out_csv}", file=sys.stderr)
         except Exception as ex:
             print(f"ERROR: failed to produce {out_csv}: {ex}", file=sys.stderr)
             sys.exit(6)
