@@ -749,6 +749,69 @@ def modified_z_score(values: np.ndarray) -> np.ndarray:
 
 
 # --------------------------
+# Helper: predict & r2 computation from params (used by reconsideration loop)
+# --------------------------
+
+def _predict_from_params(params: Dict[str, Any], xarr: np.ndarray) -> np.ndarray:
+    """
+    Given params dict (from fit_model_general) and xarr (bpw values),
+    compute predicted y values according to the same formula used in fitter.
+    Returns an array of same length as xarr with finite or non-finite entries where appropriate.
+    """
+    if params is None:
+        return np.full_like(xarr, np.nan, dtype=float)
+    # copy to float arrays
+    x = np.asarray(xarr, dtype=float)
+    shift = float(params.get("shift", 0.0))
+    if shift != 0.0:
+        x = x + shift
+    b = float(params.get("b", 1.0))
+    c = float(params.get("c", 0.0))
+    p = float(params.get("p", 1.0))
+    a = float(params.get("a", 0.0))
+    d = float(params.get("d", 0.0))
+    transform = params.get("transform", "identity")
+    log_base = params.get("log_base", None)
+
+    vals = b * (x - c)
+    try:
+        if transform == "logn":
+            base = float(log_base) if log_base is not None else 10.0
+            with np.errstate(divide="ignore", invalid="ignore"):
+                T = apply_transform(vals, "logn", log_base=base)
+        else:
+            with np.errstate(divide="ignore", invalid="ignore"):
+                T = apply_transform(vals, transform)
+    except Exception:
+        # return all NaNs on failure
+        return np.full_like(x, np.nan, dtype=float)
+
+    with np.errstate(invalid="ignore", divide="ignore"):
+        S = T ** (-p)
+    ypred = np.full_like(x, np.nan, dtype=float)
+    mask = np.isfinite(T) & (T != 0.0) & np.isfinite(S)
+    ypred[mask] = d + a * S[mask]
+    return ypred
+
+
+def _compute_r2_from_pred_and_true(y_pred: np.ndarray, y_true: np.ndarray) -> float:
+    """
+    Compute R^2 between y_pred and y_true. Returns NaN when not defined.
+    This uses the same R^2 formula used elsewhere in the script.
+    """
+    yp = np.asarray(y_pred, dtype=float)
+    yt = np.asarray(y_true, dtype=float)
+    mask = np.isfinite(yp) & np.isfinite(yt)
+    if not np.any(mask):
+        return float("nan")
+    ss_res = np.sum((yt[mask] - yp[mask]) ** 2)
+    ss_tot = np.sum((yt[mask] - np.mean(yt[mask])) ** 2)
+    if ss_tot == 0:
+        return float("nan")
+    return float(1.0 - ss_res / ss_tot)
+
+
+# --------------------------
 # plotting & CSV integration (bpw is X, user column is Y)
 # --------------------------
 
@@ -1190,6 +1253,191 @@ def compute_and_plot_from_csv(csv_path: str,
     log_base = params.get("log_base", None)
     selected_score = params.get("score", details.get("score", float("nan")))
 
+    # --------------------------
+    # NEW: Reconsideration loop based on explicit user-provided --penalty-above/--penalty-below
+    # --------------------------
+    # This loop triggers only when the user explicitly passed the flags on the command line,
+    # not when default values are used. We detect presence via sys.argv.
+    user_passed_penalty_above = any(arg.startswith("--penalty-above") for arg in sys.argv[1:])
+    user_passed_penalty_below = any(arg.startswith("--penalty-below") for arg in sys.argv[1:])
+    if user_passed_penalty_above or user_passed_penalty_below:
+        # Interpret penalty flags as percentages of the baseline R^2 (drift threshold).
+        # Example: baseline R^2 = 0.95 and --penalty-above 5 means allowed lower bound is 0.95 * (1 - 0.05) = 0.9025.
+        pa_percent = float(penalty_above) if user_passed_penalty_above else 0.0
+        pb_percent = float(penalty_below) if user_passed_penalty_below else 0.0
+        # Use the more permissive percentage (largest percent) when both provided
+        allowed_percent = max(pa_percent, pb_percent)
+
+        # Baseline: compute R^2 of the selected equation vs the **initial fitting set** (the points present before the loop started).
+        # NOTE: per your request, all subsequent R^2 calculations are evaluated against this same initial set (xarr, yarr).
+        baseline_pred = _predict_from_params(params, xarr)
+        r2_baseline = _compute_r2_from_pred_and_true(baseline_pred, yarr)
+        if not np.isfinite(r2_baseline):
+            # fallback to stored r2 if available
+            if np.isfinite(r2):
+                r2_baseline = float(r2)
+            else:
+                r2_baseline = float("nan")
+
+        if not np.isfinite(r2_baseline):
+            print("[reconsider] Baseline R^2 is non-finite; skipping reconsideration loop.", file=sys.stderr)
+        else:
+            # allowed lower bound
+            allowed_lower_r2 = r2_baseline * (1.0 - allowed_percent / 100.0)
+
+            # Prepare working indices (indices into the initial fitting set) that were used for fitting.
+            # We'll operate in terms of indices into the initial-fit arrays (xarr_full indices filtered_mask True).
+            init_indices = np.nonzero(filtered_mask)[0].tolist()  # global indices in full arrays that were used initially
+            working_indices = init_indices.copy()
+            if len(working_indices) < 4:
+                print("[reconsider] Too few points in the fitting set to perform reconsideration loop.", file=sys.stderr)
+            else:
+                last_valid_params = params
+                last_valid_r2 = r2_baseline
+                prev_params = params
+
+                removed_global_indices: List[int] = []
+                loop_iter = 0
+                while True:
+                    loop_iter += 1
+                    # Build arrays for current working set (these are subsets of the initial-fit points)
+                    x_work_global = np.array([xarr_full[i] for i in working_indices], dtype=float)
+                    y_work_global = np.array([yarr_full[i] for i in working_indices], dtype=float)
+
+                    # compute residuals on the current working set using prev_params
+                    pred_on_work = _predict_from_params(prev_params, x_work_global)
+                    resid_work = y_work_global - pred_on_work  # positive => actual above predicted
+
+                    # choose candidate to remove based on user's chosen polarity
+                    candidate_pos = None
+                    if user_passed_penalty_above and not user_passed_penalty_below:
+                        positive_mask = np.isfinite(resid_work) & (resid_work > 0)
+                        if not np.any(positive_mask):
+                            # nothing above; stop
+                            break
+                        # choose largest positive resid
+                        idx_in_work = int(np.nanargmax(np.where(positive_mask, resid_work, -np.inf)))
+                        candidate_pos = idx_in_work
+                    elif user_passed_penalty_below and not user_passed_penalty_above:
+                        negative_mask = np.isfinite(resid_work) & (resid_work < 0)
+                        if not np.any(negative_mask):
+                            # nothing below; stop
+                            break
+                        idx_in_work = int(np.nanargmin(np.where(negative_mask, resid_work, np.inf)))
+                        candidate_pos = idx_in_work
+                    else:
+                        # both provided: remove the point with largest absolute residual
+                        finite_mask = np.isfinite(resid_work)
+                        if not np.any(finite_mask):
+                            break
+                        idx_in_work = int(np.nanargmax(np.abs(np.where(finite_mask, resid_work, 0.0))))
+                        candidate_pos = idx_in_work
+
+                    # global index to remove (index into xarr_full / yarr_full)
+                    global_idx = working_indices.pop(candidate_pos)
+                    removed_global_indices.append(global_idx)
+
+                    # Build subset arrays for refitting (these are still subsets of initial-fit points)
+                    x_subset = np.array([xarr_full[i] for i in working_indices], dtype=float)
+                    y_subset = np.array([yarr_full[i] for i in working_indices], dtype=float)
+
+                    # If too few remain, restore last removal and stop
+                    if len(x_subset) < 4:
+                        print("[reconsider] Stopping removal: too few points remain for refit.", file=sys.stderr)
+                        # restore last removed point to working_indices
+                        working_indices.insert(candidate_pos, global_idx)
+                        removed_global_indices.pop()
+                        break
+
+                    # Refit on the reduced set. Keep same d/c anchoring that was selected earlier.
+                    try:
+                        refit_params, refit_details = fit_model_general(
+                            x_subset, y_subset,
+                            d_fixed=selected_d,
+                            c_fixed=selected_c,
+                            transforms=transforms,
+                            p_grid_min=p_grid_min,
+                            p_grid_max=p_grid_max,
+                            p_grid_steps=p_grid_steps,
+                            logn_base_min=logn_base_min,
+                            logn_base_max=logn_base_max,
+                            logn_base_steps=logn_base_steps,
+                            c_mult_min=c_mult_min,
+                            c_mult_max=c_mult_max,
+                            c_mult_steps=c_mult_steps,
+                            b_grid_steps=b_grid_steps,
+                            b_refine_steps=b_refine_steps,
+                            c_refine_steps=c_refine_steps,
+                            p_refine_steps=p_refine_steps,
+                            N_refine_steps=N_refine_steps,
+                            identity_s_min=identity_s_min,
+                            identity_s_max=identity_s_max,
+                            identity_s_steps=identity_s_steps,
+                            resemblance_metric=resemblance_metric,
+                            penalty_above=penalty_above,
+                            penalty_below=penalty_below
+                        )
+                    except Exception as ex:
+                        # Refit failed: restore index and stop.
+                        print(f"[reconsider] refit failed after removing index {global_idx}: {ex}", file=sys.stderr)
+                        working_indices.insert(candidate_pos, global_idx)
+                        removed_global_indices.pop()
+                        break
+
+                    if refit_params is None:
+                        # restore and stop
+                        working_indices.insert(candidate_pos, global_idx)
+                        removed_global_indices.pop()
+                        break
+
+                    # Evaluate refit parameters against the **initial fitting set** (xarr, yarr) - per your requirement.
+                    pred_refit_on_initial = _predict_from_params(refit_params, xarr)
+                    r2_refit_on_initial = _compute_r2_from_pred_and_true(pred_refit_on_initial, yarr)
+
+                    # If R^2 is non-finite, revert and stop
+                    if not np.isfinite(r2_refit_on_initial):
+                        print("[reconsider] Non-finite R^2 encountered for refit; stopping reconsideration loop.", file=sys.stderr)
+                        working_indices.insert(candidate_pos, global_idx)
+                        removed_global_indices.pop()
+                        break
+
+                    # Stop condition: if refit R^2 drops below allowed lower bound, revert last removal and stop.
+                    if r2_refit_on_initial < allowed_lower_r2:
+                        # revert last removal and stop
+                        working_indices.insert(candidate_pos, global_idx)
+                        removed_global_indices.pop()
+                        print(f"[reconsider] Stopping: refit R^2 {r2_refit_on_initial:.6g} < allowed lower bound {allowed_lower_r2:.6g}", file=sys.stderr)
+                        break
+                    else:
+                        # Accept refit and continue to next iteration
+                        last_valid_params = refit_params
+                        last_valid_r2 = r2_refit_on_initial
+                        prev_params = refit_params
+                        # continue loop
+
+                # end while loop
+
+                # If we accepted any removals, adopt last_valid_params
+                if last_valid_params is not params:
+                    print(f"[reconsider] Removed {len(removed_global_indices)} point(s) during reconsideration; using last valid refit.", file=sys.stderr)
+                    params = last_valid_params
+                    details = {"reason": "reconsidered", "r2_initial": last_valid_r2}
+                    # update local variables for downstream plotting/text
+                    a = params["a"]
+                    b = params["b"]
+                    c = params["c"]
+                    d = params["d"]
+                    p = params["p"]
+                    transform = params["transform"]
+                    r2 = params.get("r2", float("nan"))
+                    log_base = params.get("log_base", None)
+                else:
+                    print("[reconsider] No removals performed or none accepted within threshold; keeping original fit.", file=sys.stderr)
+
+    # --------------------------
+    # End of reconsideration loop
+    # --------------------------
+
     # If machine_mode (predict-only), compute predictions for requested bpw values and print JSON to stdout,
     # and ensure all other printing goes to stderr. However, if equation_only is requested, prefer to print
     # only the equation to stdout (not the JSON predictions).
@@ -1202,21 +1450,21 @@ def compute_and_plot_from_csv(csv_path: str,
                 preds.append(None)
                 continue
             # For identity transform, b was fixed to 1.0 and 'a' is the merged coefficient for (x-c)^(-p).
-            vals_single = b * (x_val - c)
+            vals_single = params["b"] * (x_val - params["c"])
             # handle transform and compute S
             try:
                 with np.errstate(divide="ignore", invalid="ignore"):
-                    if transform == "logn":
-                        base_to_use = log_base if log_base is not None else 10.0
+                    if params["transform"] == "logn":
+                        base_to_use = params.get("log_base", 10.0)
                         T_single = apply_transform(np.array([vals_single], dtype=float), "logn", log_base=float(base_to_use))[0]
                     else:
-                        T_single = apply_transform(np.array([vals_single], dtype=float), transform)[0]
+                        T_single = apply_transform(np.array([vals_single], dtype=float), params["transform"])[0]
                     # If T_single is not finite or zero, prediction is None
                     if not np.isfinite(T_single) or T_single == 0.0:
                         preds.append(None)
                         continue
-                    S_single = float(T_single ** (-p))
-                    y_pred = float(d + a * S_single)
+                    S_single = float(T_single ** (-params["p"]))
+                    y_pred = float(params["d"] + params["a"] * S_single)
                     preds.append(y_pred)
             except Exception:
                 preds.append(None)
@@ -1227,83 +1475,87 @@ def compute_and_plot_from_csv(csv_path: str,
     # If machine_mode and equation_only: print only the equation to stdout (no JSON), then return.
     if machine_mode and equation_only:
         # Build grapher_eq exactly as in non-machine flow below.
-        if transform == "ln":
+        if params["transform"] == "ln":
             grapher_transform = "ln"
-        elif transform == "log10":
+        elif params["transform"] == "log10":
             grapher_transform = "log10"
-        elif transform == "log2":
+        elif params["transform"] == "log2":
             grapher_transform = "log2"
-        elif transform == "logn":
-            grapher_transform = f"log{log_base:.6g}" if log_base is not None else "logN"
+        elif params["transform"] == "logn":
+            grapher_transform = f"log{params.get('log_base'):.6g}" if params.get("log_base") is not None else "logN"
         else:
             grapher_transform = "identity"
 
         # For 'identity' we emit the simplified merged-a equation: y = d + a * (x - c)^(-p)
         if grapher_transform == "identity":
-            grapher_eq = f"y = {d:.12g} + {a:.12g} * ( x - {c:.12g} )^(-{p:.12g})"
+            grapher_eq = f"y = {params['d']:.12g} + {params['a']:.12g} * ( x - {params['c']:.12g} )^(-{params['p']:.12g})"
         else:
-            grapher_eq = f"y = {d:.12g} + {a:.12g} * {grapher_transform}( {b:.12g} * (x - {c:.12g}) )^(-{p:.12g})"
+            grapher_eq = f"y = {params['d']:.12g} + {params['a']:.12g} * {grapher_transform}( {params['b']:.12g} * (x - {params['c']:.12g}) )^(-{params['p']:.12g})"
         # Print only the equation line to stdout.
         print(grapher_eq)
         return [grapher_eq]
 
     # construct fitted curve (x is bpw). Use same formula b * (x - c).
     x_plot = np.linspace(np.min(xarr_full), np.max(xarr_full), 600)
-    vals_plot = b * (x_plot - c)
+    vals_plot = params["b"] * (x_plot - params["c"])
 
     # apply transform to plotting vals (safely suppress warnings)
-    if transform == "logn":
-        base_to_use = log_base if log_base is not None else 10.0
+    if params["transform"] == "logn":
+        base_to_use = params.get("log_base", 10.0)
         with np.errstate(divide="ignore", invalid="ignore"):
             T_plot = apply_transform(vals_plot, "logn", log_base=float(base_to_use))
     else:
         with np.errstate(divide="ignore", invalid="ignore"):
-            T_plot = apply_transform(vals_plot, transform)
+            T_plot = apply_transform(vals_plot, params["transform"])
 
     with np.errstate(invalid="ignore", divide="ignore"):
         y_plot = np.full_like(x_plot, np.nan, dtype=float)
-        S_plot = T_plot ** (-p)
+        S_plot = T_plot ** (-params["p"])
         mask = np.isfinite(T_plot) & (T_plot != 0.0) & np.isfinite(S_plot)
-        y_plot[mask] = d + a * S_plot[mask]
+        y_plot[mask] = params["d"] + params["a"] * S_plot[mask]
 
     # Draw fitted curve (based on outlier-excluded fit) on top of full scatter, only if plotting enabled
     if not suppress_plot:
-        ax.plot(x_plot, y_plot, label=f"fit ({transform}, p={p:.3g})")
-        ax.text(0.02, 0.98, f"{transform}, p={p:.4g}\nR²={r2:.4f}", transform=ax.transAxes, va="top")
+        ax.plot(x_plot, y_plot, label=f"fit ({params['transform']}, p={params['p']:.3g})")
+        ax.text(0.02, 0.98, f"{params['transform']}, p={params['p']:.4g}\nR²={params.get('r2', float('nan')):.4f}", transform=ax.transAxes, va="top")
         ax.legend()
         fig.tight_layout()
 
     # stdout prints - param details and grapher-friendly equation. Use x for bpw in equation.
     # These must go to stderr so interactive/piping is easier.
-    print("Selected transform:", transform, file=sys.stderr)
-    print(f"Selected p: {p:.12g}", file=sys.stderr)
+    print("Selected transform:", params["transform"], file=sys.stderr)
+    print(f"Selected p: {params['p']:.12g}", file=sys.stderr)
     print("Fitted parameters (fit was computed after excluding outliers if requested):", file=sys.stderr)
-    print(f"  d = {d:.12g}", file=sys.stderr)
-    print(f"  a = {a:.12g}", file=sys.stderr)
-    if transform != "identity":
-        print(f"  b = {b:.12g}", file=sys.stderr)
-    print(f"  c = {c:.12g}", file=sys.stderr)
-    print(f"  R^2 = {r2:.6f}", file=sys.stderr)
+    print(f"  d = {params['d']:.12g}", file=sys.stderr)
+    print(f"  a = {params['a']:.12g}", file=sys.stderr)
+    if params["transform"] != "identity":
+        print(f"  b = {params['b']:.12g}", file=sys.stderr)
+    print(f"  c = {params['c']:.12g}", file=sys.stderr)
+    if 'last_valid_r2' in locals() and np.isfinite(last_valid_r2) and 'r2_baseline' in locals() and np.isfinite(r2_baseline):
+        drift_pct = abs((last_valid_r2 - r2_baseline) / r2_baseline) * 100.0
+        print(f"  R^2 = {last_valid_r2:.6f} ({drift_pct:.2f}% drift of baseline: {r2_baseline:.6f})", file=sys.stderr)
+    else:
+        print(f"  R^2 = {params.get('r2', float('nan')):.6f}", file=sys.stderr)
     print(f"  resemblance_metric = {resemblance_metric}", file=sys.stderr)
     print(f"  resemblance_score = {selected_score:.6g}", file=sys.stderr)
     print("", file=sys.stderr)
     print("Equation (copy-paste-friendly, variable x = bpw):", file=sys.stderr)
-    if transform == "ln":
+    if params["transform"] == "ln":
         grapher_transform = "ln"
-    elif transform == "log10":
+    elif params["transform"] == "log10":
         grapher_transform = "log10"
-    elif transform == "log2":
+    elif params["transform"] == "log2":
         grapher_transform = "log2"
-    elif transform == "logn":
-        grapher_transform = f"log{log_base:.6g}" if log_base is not None else "logN"
+    elif params["transform"] == "logn":
+        grapher_transform = f"log{params.get('log_base'):.6g}" if params.get("log_base") is not None else "logN"
     else:
         grapher_transform = "identity"
 
     # Note: for identity we now use the simplified merged-a equation form (no separate b).
     if grapher_transform == "identity":
-        grapher_eq = f"y = {d:.12g} + {a:.12g} * ( x - {c:.12g} )^(-{p:.12g})"
+        grapher_eq = f"y = {params['d']:.12g} + {params['a']:.12g} * ( x - {params['c']:.12g} )^(-{params['p']:.12g})"
     else:
-        grapher_eq = f"y = {d:.12g} + {a:.12g} * {grapher_transform}( {b:.12g} * (x - {c:.12g}) )^(-{p:.12g})"
+        grapher_eq = f"y = {params['d']:.12g} + {params['a']:.12g} * {grapher_transform}( {params['b']:.12g} * (x - {params['c']:.12g}) )^(-{params['p']:.12g})"
 
     # If the user requested equation_only in non-machine mode, we should print the equation to stdout
     # (and nothing else to stdout). The diagnostics above go to stderr.
@@ -1663,9 +1915,9 @@ def main():
     ap.add_argument("--resemblance-metric", type=str, default="asym_abs",
                     help="Resemblance metric used to select the best candidate among searches. Choices: sse, mae, abs_mean, median_abs, r2, asym_abs, penalize_above, penalize_below. Default 'asym_abs' (favours matching lower actual values).")
     ap.add_argument("--penalty-above", type=float, default=2.0,
-                    help="Penalty multiplier applied to over-predictions when using asymmetric resemblance metrics (default 2.0).")
+                    help="Penalty (now interpreted as R^2 drift threshold) in percent. Example: --penalty-above 5 means an allowed R^2 drop of 5%% of the baseline R^2 (baseline 0.95 -> allowed lower bound 0.95*(1-0.05)=0.9025). When provided this triggers the reconsideration loop.")
     ap.add_argument("--penalty-below", type=float, default=1.0,
-                    help="Penalty multiplier applied to under-predictions when using asymmetric resemblance metrics (default 1.0).")
+                    help="Penalty (now interpreted as R^2 drift threshold) in percent. Example: --penalty-below 5 means an allowed R^2 drop of 5%% of the baseline R^2 (baseline 0.95 -> allowed lower bound 0.95*(1-0.05)=0.9025). When provided this triggers the reconsideration loop.")
     args = ap.parse_args()
 
     if args.map_files and args.qtypes:
