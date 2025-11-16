@@ -1517,7 +1517,41 @@ def compute_and_plot_from_csv(csv_path: str,
     # Draw fitted curve (based on outlier-excluded fit) on top of full scatter, only if plotting enabled
     if not suppress_plot:
         ax.plot(x_plot, y_plot, label=f"fit ({params['transform']}, p={params['p']:.3g})")
-        ax.text(0.02, 0.98, f"{params['transform']}, p={params['p']:.4g}\nR²={params.get('r2', float('nan')):.4f}", transform=ax.transAxes, va="top")
+        # safely fetch possible reconsideration variables (may be None if not set)
+        r2_baseline_val = locals().get("r2_baseline", None)
+        last_valid_r2_val = locals().get("last_valid_r2", None)
+
+        # build R² display (prefer last_valid_r2 if available, show drift vs baseline when possible)
+        if last_valid_r2_val is not None and np.isfinite(last_valid_r2_val) and r2_baseline_val is not None and np.isfinite(r2_baseline_val):
+            drift_pct = abs((last_valid_r2_val - r2_baseline_val) / r2_baseline_val) * 100.0
+            r2_display = f"R²={last_valid_r2_val:.4f} ({drift_pct:.2f}% drift of baseline {r2_baseline_val:.4f})"
+        else:
+            r2_val = params.get("r2", float("nan"))
+            r2_display = f"R²={r2_val:.4f}"
+
+        # build transform name and equation string for display
+        if params["transform"] == "ln":
+            grapher_transform = "ln"
+        elif params["transform"] == "log10":
+            grapher_transform = "log10"
+        elif params["transform"] == "log2":
+            grapher_transform = "log2"
+        elif params["transform"] == "logn":
+            grapher_transform = f"log{params.get('log_base', 10.0):.6g}"
+        else:
+            grapher_transform = "identity"
+
+        if grapher_transform == "identity":
+            eq_str = f"y = {params['d']:.12g} + {params['a']:.12g} * ( x - {params['c']:.12g} )^(-{params['p']:.12g})"
+        else:
+            eq_str = f"y = {params['d']:.12g} + {params['a']:.12g} * {grapher_transform}( {params['b']:.12g} * (x - {params['c']:.12g}) )^(-{params['p']:.12g})"
+
+        # place multi-line text on the plot (transform, p, R² with drift if available, and equation)
+        ax.text(
+            0.10, 0.98,
+            f"{params['transform']}, p={params['p']:.4g}\n{r2_display}\n{eq_str}",
+            transform=ax.transAxes, va="top", fontsize=8, wrap=True
+        )
         ax.legend()
         fig.tight_layout()
 
