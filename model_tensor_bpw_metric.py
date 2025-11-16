@@ -615,7 +615,8 @@ def compute_and_plot_from_csv(csv_path: str,
                               threads: Optional[int] = None,
                               metric_name: Optional[str] = "metric",
                               predict_bpw_values: Optional[List[float]] = None,
-                              transforms: Optional[List[str]] = None) -> Optional[List[float]]:
+                              transforms: Optional[List[str]] = None,
+                              suppress_plot: bool = False) -> Optional[List[float]]:
     """
     Read the produced bpw CSV (bpw_<input>.csv), plot metric (y) vs bpw (x).
     ycol_identifier can be a column name or integer index (defaults to index 2).
@@ -636,6 +637,9 @@ def compute_and_plot_from_csv(csv_path: str,
     containing predicted metric values for those bpw inputs (when an equation is available).
     All other textual output will be written to stderr in that mode. Returns the list of predictions
     when run programmatically; otherwise returns None.
+
+    New parameter:
+      - suppress_plot: when True and predict_bpw_values is used, suppress creating/saving/showing any plot.
     """
     # Flag indicating machine-friendly output mode (predict-only)
     machine_mode = bool(predict_bpw_values and len(predict_bpw_values) > 0)
@@ -729,38 +733,45 @@ def compute_and_plot_from_csv(csv_path: str,
         raise ValueError("Not enough valid rows remain after outlier removal to plot/fit. Need at least 4 valid numeric rows.")
 
     # The scatter plot should show all points (including outliers) so user can inspect.
-    fig, ax = plt.subplots()
+    # Only create plotting objects if plotting is not suppressed.
+    if not suppress_plot:
+        fig, ax = plt.subplots()
 
-    ax.scatter(xarr_full, yarr_full, label="data")
+        ax.scatter(xarr_full, yarr_full, label="data")
 
-    # construct metric display label: e.g. "accuracy (column_name)"
-    metric_display = f"{metric_name} ({ycol})"
-    ax.set_xlabel("bpw")
-    ax.set_ylabel(f"{metric_display}")
-    ax.set_title(f"{metric_display} vs bpw")
+        # construct metric display label: e.g. "accuracy (column_name)"
+        metric_display = f"{metric_name} ({ycol})"
+        ax.set_xlabel("bpw")
+        ax.set_ylabel(f"{metric_display}")
+        ax.set_title(f"{metric_display} vs bpw")
+    else:
+        # If plotting is suppressed, still build metric_display for later labels/printing.
+        metric_display = f"{metric_name} ({ycol})"
 
     if not fit_equation:
-        fig.tight_layout()
-        if plot_output:
-            plt.savefig(plot_output, dpi=300)
-            print(f"Wrote plot to {plot_output}", file=sys.stderr)
-        else:
-            try:
-                if not machine_mode:
-                    plt.show()
-                else:
+        if not suppress_plot:
+            fig.tight_layout()
+            if plot_output:
+                plt.savefig(plot_output, dpi=300)
+                print(f"Wrote plot to {plot_output}", file=sys.stderr)
+            else:
+                try:
+                    if not machine_mode:
+                        plt.show()
+                    else:
+                        fallback = "bpw_plot.png"
+                        plt.savefig(fallback, dpi=300)
+                        print(f"Interactive display not available; saved plot to {fallback}", file=sys.stderr)
+                except Exception:
                     fallback = "bpw_plot.png"
                     plt.savefig(fallback, dpi=300)
                     print(f"Interactive display not available; saved plot to {fallback}", file=sys.stderr)
-            except Exception:
-                fallback = "bpw_plot.png"
-                plt.savefig(fallback, dpi=300)
-                print(f"Interactive display not available; saved plot to {fallback}", file=sys.stderr)
-        # In machine mode, no predictions were requested, so return None
-        if machine_mode:
-            print("[]")
-            return []
-        return None
+        else:
+            # plotting suppressed: do not create/save/show any figure; in machine_mode return empty list or predictions later
+            if machine_mode:
+                print("[]")
+                return []
+            return None
 
     # Determine d candidates (anchoring/inference) BEFORE fitting other params.
     # Use filtered (outlier-excluded) arrays for candidate generation, as requested.
@@ -882,22 +893,23 @@ def compute_and_plot_from_csv(csv_path: str,
             print("[]")
             return []
         print("Warning: no valid fit found among transforms; plotting scatter only.", file=sys.stderr)
-        fig.tight_layout()
-        if plot_output:
-            plt.savefig(plot_output, dpi=300)
-            print(f"Wrote plot to {plot_output}", file=sys.stderr)
-        else:
-            try:
-                if not machine_mode:
-                    plt.show()
-                else:
+        if not suppress_plot:
+            fig.tight_layout()
+            if plot_output:
+                plt.savefig(plot_output, dpi=300)
+                print(f"Wrote plot to {plot_output}", file=sys.stderr)
+            else:
+                try:
+                    if not machine_mode:
+                        plt.show()
+                    else:
+                        fallback = "bpw_plot.png"
+                        plt.savefig(fallback, dpi=300)
+                        print(f"Interactive display not available; saved plot to {fallback}", file=sys.stderr)
+                except Exception:
                     fallback = "bpw_plot.png"
                     plt.savefig(fallback, dpi=300)
                     print(f"Interactive display not available; saved plot to {fallback}", file=sys.stderr)
-            except Exception:
-                fallback = "bpw_plot.png"
-                plt.savefig(fallback, dpi=300)
-                print(f"Interactive display not available; saved plot to {fallback}", file=sys.stderr)
         return None
 
     # Selected parameters
@@ -964,11 +976,12 @@ def compute_and_plot_from_csv(csv_path: str,
         mask = np.isfinite(T_plot) & (T_plot != 0.0) & np.isfinite(S_plot)
         y_plot[mask] = d + a * S_plot[mask]
 
-    # Draw fitted curve (based on outlier-excluded fit) on top of full scatter
-    ax.plot(x_plot, y_plot, label=f"fit ({transform}, p={p:.3g})")
-    ax.text(0.02, 0.98, f"{transform}, p={p:.4g}\nR²={r2:.4f}", transform=ax.transAxes, va="top")
-    ax.legend()
-    fig.tight_layout()
+    # Draw fitted curve (based on outlier-excluded fit) on top of full scatter, only if plotting enabled
+    if not suppress_plot:
+        ax.plot(x_plot, y_plot, label=f"fit ({transform}, p={p:.3g})")
+        ax.text(0.02, 0.98, f"{transform}, p={p:.4g}\nR²={r2:.4f}", transform=ax.transAxes, va="top")
+        ax.legend()
+        fig.tight_layout()
 
     # stdout prints - param details and grapher-friendly equation. Use x for bpw in equation.
     # These must go to stderr so interactive/piping is easier.
@@ -1001,16 +1014,17 @@ def compute_and_plot_from_csv(csv_path: str,
 
     print(grapher_eq, file=sys.stderr)
 
-    if plot_output:
-        plt.savefig(plot_output, dpi=300)
-        print(f"Wrote plot to {plot_output}", file=sys.stderr)
-    else:
-        try:
-            plt.show()
-        except Exception:
-            fallback = "bpw_plot.png"
-            plt.savefig(fallback, dpi=300)
-            print(f"Interactive display not available; saved plot to {fallback}", file=sys.stderr)
+    if not suppress_plot:
+        if plot_output:
+            plt.savefig(plot_output, dpi=300)
+            print(f"Wrote plot to {plot_output}", file=sys.stderr)
+        else:
+            try:
+                plt.show()
+            except Exception:
+                fallback = "bpw_plot.png"
+                plt.savefig(fallback, dpi=300)
+                print(f"Interactive display not available; saved plot to {fallback}", file=sys.stderr)
 
     return None
 
@@ -1145,9 +1159,11 @@ def write_bpw_results_csv_from_rows_and_maybe_plot(input_csv_path: str,
                                                    threads: Optional[int] = None,
                                                    metric_name: Optional[str] = "metric",
                                                    predict_bpw_values: Optional[List[float]] = None,
-                                                   transforms: Optional[List[str]] = None) -> Optional[List[float]]:
+                                                   transforms: Optional[List[str]] = None,
+                                                   suppress_plot: bool = False) -> Optional[List[float]]:
     write_bpw_results_csv_from_rows(input_csv_path, out_csv_path, parsed_mapfiles,
                                     qtypes_to_consider, allow_impure_map, fail_on_missing_bytes, hide_empty)
+    # If the caller explicitly requested plotting, do the previous behavior.
     if plot:
         return compute_and_plot_from_csv(out_csv_path,
                                          bpw_column="bpw",
@@ -1163,7 +1179,26 @@ def write_bpw_results_csv_from_rows_and_maybe_plot(input_csv_path: str,
                                          threads=threads,
                                          metric_name=metric_name,
                                          predict_bpw_values=predict_bpw_values,
-                                         transforms=transforms)
+                                         transforms=transforms,
+                                         suppress_plot=suppress_plot)
+    # If plotting was not requested but predictions were requested, still run the fitter (with plotting suppressed if requested)
+    if predict_bpw_values:
+        return compute_and_plot_from_csv(out_csv_path,
+                                         bpw_column="bpw",
+                                         ycol_identifier=ycol_identifier,
+                                         hide_empty=hide_empty,
+                                         plot_output=plot_output,
+                                         fit_equation=fit_equation,
+                                         d_from_lowest_k=d_from_lowest_k,
+                                         d_free=d_free,
+                                         c_from_lowest_k=c_from_lowest_k,
+                                         c_free=c_free,
+                                         ignore_outliers_threshold=ignore_outliers_threshold,
+                                         threads=threads,
+                                         metric_name=metric_name,
+                                         predict_bpw_values=predict_bpw_values,
+                                         transforms=transforms,
+                                         suppress_plot=suppress_plot)
     return None
 
 
@@ -1383,7 +1418,8 @@ def main():
                                                                            threads=(args.threads if args.threads and int(args.threads) > 0 else None),
                                                                            metric_name=metric_name,
                                                                            predict_bpw_values=args.predict_bpw_values,
-                                                                           transforms=transforms_arg)
+                                                                           transforms=transforms_arg,
+                                                                           suppress_plot=(not args.plot))
                     # If the compute function printed predictions to stdout, we're done. Still print CSV path to stderr for diagnostics.
                     print(f"Wrote BPW CSV: {out_csv}", file=sys.stderr)
                 except Exception as ex:
@@ -1413,7 +1449,8 @@ def main():
                                                                threads=(args.threads if args.threads and int(args.threads) > 0 else None),
                                                                metric_name=metric_name,
                                                                predict_bpw_values=None,
-                                                               transforms=transforms_arg)
+                                                               transforms=transforms_arg,
+                                                               suppress_plot=(not args.plot))
                 print(f"Wrote BPW CSV: {out_csv}")
         except Exception as ex:
             print(f"ERROR: failed to produce {out_csv}: {ex}", file=sys.stderr)
