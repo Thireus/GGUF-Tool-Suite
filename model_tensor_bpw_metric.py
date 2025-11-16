@@ -228,8 +228,8 @@ def apply_transform(vals: np.ndarray, kind: str, log_base: Optional[float] = Non
 def _compute_resemblance_score(y_true: np.ndarray,
                              y_pred: np.ndarray,
                              metric: str = "asym_abs",
-                             penalty_above: float = 2.0,
-                             penalty_below: float = 1.0) -> float:
+                             penalize_above: float = 2.0,
+                             penalize_below: float = 1.0) -> float:
     """
     Compute a scalar score (lower is better) based on the chosen metric.
     Supported metrics:
@@ -237,10 +237,10 @@ def _compute_resemblance_score(y_true: np.ndarray,
       - 'mae'/'abs_mean': mean absolute error
       - 'median_abs'  : median absolute error
       - 'r2'          : 1 - R^2 (lower better; R^2 higher is better)
-      - 'asym_abs'    : asymmetric mean absolute error, penalty_above applied to over-predictions (pred>true),
-                        penalty_below to under-predictions.
-      - 'penalize_above' : same as asym_abs but penalty_below fixed to 1.0 (convenience)
-      - 'penalize_below' : same as asym_abs but penalty_above fixed to 1.0 (convenience)
+      - 'asym_abs'    : asymmetric mean absolute error, penalize_above applied to over-predictions (pred>true),
+                        penalize_below to under-predictions.
+      - 'penalize_above' : same as asym_abs but penalize_above fixed to 2.0 (convenience)
+      - 'penalize_below' : same as asym_abs but penalize_below fixed to 1.0 (convenience)
     """
     # ensure numpy arrays
     y_t = np.asarray(y_true, dtype=float)
@@ -275,14 +275,14 @@ def _compute_resemblance_score(y_true: np.ndarray,
     # asymmetric absolute
     if metric in {"asym_abs", "penalize_above", "penalize_below"}:
         if metric == "penalize_above":
-            pa = max(1.0, float(penalty_above))
+            pa = max(1.0, float(penalize_above))
             pb = 1.0
         elif metric == "penalize_below":
             pa = 1.0
-            pb = max(1.0, float(penalty_below))
+            pb = max(1.0, float(penalize_below))
         else:
-            pa = max(0.0, float(penalty_above))
-            pb = max(0.0, float(penalty_below))
+            pa = max(0.0, float(penalize_above))
+            pb = max(0.0, float(penalize_below))
         weights = np.where(resid > 0, pa, pb)  # over-predictions get pa
         weighted = abs_resid * weights
         return float(np.mean(weighted))
@@ -318,8 +318,8 @@ def fit_model_general(xarr: np.ndarray,
                       identity_s_steps: int = 9,
                       # resemblance metric options
                       resemblance_metric: str = "asym_abs",
-                      penalty_above: float = 2.0,
-                      penalty_below: float = 1.0
+                      penalize_above: float = 2.0,
+                      penalize_below: float = 1.0
                       ) -> Tuple[Optional[Dict[str, float]], Dict[str, Any]]:
     """
     Fit model y = d + a * (T)^{-p} where T = transform(b * (x - c)),
@@ -473,8 +473,8 @@ def fit_model_general(xarr: np.ndarray,
 
                                 # compute resemblance score (lower is better)
                                 score = _compute_resemblance_score(yarr, pred, metric=resemblance_metric,
-                                                                 penalty_above=penalty_above,
-                                                                 penalty_below=penalty_below)
+                                                                 penalize_above=penalize_above,
+                                                                 penalize_below=penalize_below)
                                 sse = float(np.sum((yarr - pred) ** 2))
                                 if score < best_score:
                                     best_score = score
@@ -521,8 +521,8 @@ def fit_model_general(xarr: np.ndarray,
 
                             # compute resemblance score (lower is better)
                             score = _compute_resemblance_score(yarr, pred, metric=resemblance_metric,
-                                                             penalty_above=penalty_above,
-                                                             penalty_below=penalty_below)
+                                                             penalize_above=penalize_above,
+                                                             penalize_below=penalize_below)
                             sse = float(np.sum((yarr - pred) ** 2))
                             if score < best_score:
                                 best_score = score
@@ -637,7 +637,7 @@ def fit_model_general(xarr: np.ndarray,
                             d_est = float(d_fixed)
                             pred = d_est + a_est * S
                         score = _compute_resemblance_score(yarr, pred, metric=resemblance_metric,
-                                                         penalty_above=penalty_above, penalty_below=penalty_below)
+                                                         penalize_above=penalize_above, penalize_below=penalize_below)
                         sse = float(np.sum((yarr - pred) ** 2))
                         if score < best_score2:
                             best_score2 = score
@@ -675,7 +675,7 @@ def fit_model_general(xarr: np.ndarray,
                         d_est = float(d_fixed)
                         pred = d_est + a_est * S
                     score = _compute_resemblance_score(yarr, pred, metric=resemblance_metric,
-                                                     penalty_above=penalty_above, penalty_below=penalty_below)
+                                                     penalize_above=penalize_above, penalize_below=penalize_below)
                     sse = float(np.sum((yarr - pred) ** 2))
                     if score < best_score2:
                         best_score2 = score
@@ -718,8 +718,8 @@ def fit_model_general(xarr: np.ndarray,
     if "score" not in final:
         final["score"] = _compute_resemblance_score(yarr[finite_mask], pred[finite_mask],
                                                   metric=resemblance_metric,
-                                                  penalty_above=penalty_above,
-                                                  penalty_below=penalty_below)
+                                                  penalize_above=penalize_above,
+                                                  penalize_below=penalize_below)
     return final, {"reason": "ok", "r2": final["r2"], "sse": final["sse"], "score": float(final["score"])}
 
 
@@ -838,8 +838,8 @@ def _fit_pair_process_worker(xarr_shared, yarr_shared,
                              p_refine_steps_local: int = 20,
                              N_refine_steps_local: int = 12,
                              resemblance_metric_local: str = "asym_abs",
-                             penalty_above_local: float = 2.0,
-                             penalty_below_local: float = 1.0):
+                             penalize_above_local: float = 2.0,
+                             penalize_below_local: float = 1.0):
     """
     Worker run in separate process. xarr_shared, yarr_shared are numpy arrays (pickled to worker).
     Limit BLAS threads inside worker to avoid oversubscription.
@@ -875,8 +875,8 @@ def _fit_pair_process_worker(xarr_shared, yarr_shared,
             identity_s_max=identity_s_max_local,
             identity_s_steps=identity_s_steps_local,
             resemblance_metric=resemblance_metric_local,
-            penalty_above=penalty_above_local,
-            penalty_below=penalty_below_local
+            penalize_above=penalize_above_local,
+            penalize_below=penalize_below_local
         )
         return (d_cand_local, c_cand_local, params_local, details_local, None)
     except Exception as e:
@@ -918,42 +918,13 @@ def compute_and_plot_from_csv(csv_path: str,
                               p_refine_steps: int = 20,
                               N_refine_steps: int = 12,
                               resemblance_metric: str = "asym_abs",
-                              penalty_above: float = 2.0,
-                              penalty_below: float = 1.0) -> Optional[List[float]]:
+                              penalize_above: float = 2.0,
+                              penalize_below: float = 1.0,
+                              drift_below: float = 0.0,
+                              drift_above: float = 0.0) -> Optional[List[float]]:
     """
     Read the produced bpw CSV (bpw_<input>.csv), plot metric (y) vs bpw (x).
     ycol_identifier can be a column name or integer index (defaults to index 2).
-
-    New behaviour:
-      - c is handled similarly to d: can be anchored to mean of K lowest X values or allowed free.
-      - If neither --*-free nor --*-from-lowest are used for a parameter, the script will try
-        all possible 1..N values (means of lowest 1..N points) and pick the best based on SSE.
-      - Both d and c are determined (possibly from candidate grids) before the remaining parameters are searched.
-      - ignore_outliers_threshold > 0 enables removal of outliers (modified z-score) from data used
-        for determining c/d and for fitting the model. Outlier removal does NOT alter the CSV file;
-        it only affects the equation-fitting stage. Scatter plotting will show all original points.
-      - default outlier threshold is 30 per user request.
-
-    metric_name: Optional explicit metric name to show in labels.
-
-    If predict_bpw_values is provided (list of floats), the function will print a JSON array to stdout
-    containing predicted metric values for those bpw inputs (when an equation is available).
-    All other textual output will be written to stderr in that mode. Returns the list of predictions
-    when run programmatically; otherwise returns None.
-
-    New parameter:
-      - suppress_plot: when True and predict_bpw_values is used, suppress creating/saving/showing any plot.
-      - equation_only: when True, print only the fitted equation to stdout (one line) and do not print JSON preds.
-                       Other diagnostic output continues to go to stderr.
-      - identity_s_min/identity_s_max/identity_s_steps: control the exponent-range and density used to
-        build the multiplicative s_grid used for identity transform c-candidate scaling.
-      - p_grid_*, logn_base_*, c_mult_*, b_grid_steps, *_refine_steps: control grids used during search/refinement.
-        p_grid_* affects all transforms; logn_base_* affects logn bases; c_mult_* affects how c candidates are generated
-        (used for all transforms); b_grid_steps affects b-grid density for non-identity transforms; *_refine_steps
-        control density of refinement search.
-      - resemblance_metric + penalty_above/penalty_below: control how "best" fit is selected among candidates. Default
-        favors matching lower actual values by penalizing over-predictions more (resemblance_metric='asym_abs',
-        penalty_above=2.0, penalty_below=1.0).
     """
     # Flag indicating machine-friendly output mode (predict-only)
     machine_mode = bool(predict_bpw_values and len(predict_bpw_values) > 0)
@@ -1181,7 +1152,7 @@ def compute_and_plot_from_csv(csv_path: str,
                     float(c_mult_min), float(c_mult_max), int(c_mult_steps),
                     int(b_grid_steps),
                     int(b_refine_steps), int(c_refine_steps), int(p_refine_steps), int(N_refine_steps),
-                    str(resemblance_metric), float(penalty_above), float(penalty_below)
+                    str(resemblance_metric), float(penalize_above), float(penalize_below)
                 )
                 future_to_pair[fut] = (d_c, c_c)
             results = []
@@ -1250,21 +1221,22 @@ def compute_and_plot_from_csv(csv_path: str,
     p = params["p"]
     transform = params["transform"]
     r2 = params.get("r2", float("nan"))
+    #print("r2_baseline:", r2)
     log_base = params.get("log_base", None)
     selected_score = params.get("score", details.get("score", float("nan")))
 
     # --------------------------
-    # NEW: Reconsideration loop based on explicit user-provided --penalty-above/--penalty-below
+    # NEW: Reconsideration loop based on explicit user-provided --drift-below/--drift-above
     # --------------------------
     # This loop triggers only when the user explicitly passed the flags on the command line,
     # not when default values are used. We detect presence via sys.argv.
-    user_passed_penalty_above = any(arg.startswith("--penalty-above") for arg in sys.argv[1:])
-    user_passed_penalty_below = any(arg.startswith("--penalty-below") for arg in sys.argv[1:])
-    if user_passed_penalty_above or user_passed_penalty_below:
-        # Interpret penalty flags as percentages of the baseline R^2 (drift threshold).
-        # Example: baseline R^2 = 0.95 and --penalty-above 5 means allowed lower bound is 0.95 * (1 - 0.05) = 0.9025.
-        pa_percent = float(penalty_above) if user_passed_penalty_above else 0.0
-        pb_percent = float(penalty_below) if user_passed_penalty_below else 0.0
+    user_passed_drift_below = any(arg.startswith("--drift-below") for arg in sys.argv[1:])
+    user_passed_drift_above = any(arg.startswith("--drift-above") for arg in sys.argv[1:])
+    if user_passed_drift_below or user_passed_drift_above:
+        # Interpret drift flags as percentages of the baseline R^2 (drift threshold).
+        # Example: baseline R^2 = 0.95 and --drift-below 5 means allowed lower bound is 0.95 * (1 - 0.05) = 0.9025.
+        pa_percent = float(drift_below) if user_passed_drift_below else 0.0
+        pb_percent = float(drift_above) if user_passed_drift_above else 0.0
         # Use the more permissive percentage (largest percent) when both provided
         allowed_percent = max(pa_percent, pb_percent)
 
@@ -1310,7 +1282,7 @@ def compute_and_plot_from_csv(csv_path: str,
 
                     # choose candidate to remove based on user's chosen polarity
                     candidate_pos = None
-                    if user_passed_penalty_above and not user_passed_penalty_below:
+                    if user_passed_drift_below and not user_passed_drift_above:
                         positive_mask = np.isfinite(resid_work) & (resid_work > 0)
                         if not np.any(positive_mask):
                             # nothing above; stop
@@ -1318,7 +1290,7 @@ def compute_and_plot_from_csv(csv_path: str,
                         # choose largest positive resid
                         idx_in_work = int(np.nanargmax(np.where(positive_mask, resid_work, -np.inf)))
                         candidate_pos = idx_in_work
-                    elif user_passed_penalty_below and not user_passed_penalty_above:
+                    elif user_passed_drift_above and not user_passed_drift_below:
                         negative_mask = np.isfinite(resid_work) & (resid_work < 0)
                         if not np.any(negative_mask):
                             # nothing below; stop
@@ -1374,8 +1346,8 @@ def compute_and_plot_from_csv(csv_path: str,
                             identity_s_max=identity_s_max,
                             identity_s_steps=identity_s_steps,
                             resemblance_metric=resemblance_metric,
-                            penalty_above=penalty_above,
-                            penalty_below=penalty_below
+                            penalize_above=penalize_above,
+                            penalize_below=penalize_below
                         )
                     except Exception as ex:
                         # Refit failed: restore index and stop.
@@ -1764,8 +1736,10 @@ def write_bpw_results_csv_from_rows_and_maybe_plot(input_csv_path: str,
                                                    p_refine_steps: int = 20,
                                                    N_refine_steps: int = 12,
                                                    resemblance_metric: str = "asym_abs",
-                                                   penalty_above: float = 2.0,
-                                                   penalty_below: float = 1.0) -> Optional[List[float]]:
+                                                   penalize_above: float = 2.0,
+                                                   penalize_below: float = 1.0,
+                                                   drift_below: float = 0.0,
+                                                   drift_above: float = 0.0) -> Optional[List[float]]:
     write_bpw_results_csv_from_rows(input_csv_path, out_csv_path, parsed_mapfiles,
                                     qtypes_to_consider, allow_impure_map, fail_on_missing_bytes, hide_empty)
     # If the caller explicitly requested plotting, do the previous behavior.
@@ -1805,8 +1779,10 @@ def write_bpw_results_csv_from_rows_and_maybe_plot(input_csv_path: str,
                                          p_refine_steps=p_refine_steps,
                                          N_refine_steps=N_refine_steps,
                                          resemblance_metric=resemblance_metric,
-                                         penalty_above=penalty_above,
-                                         penalty_below=penalty_below)
+                                         penalize_above=penalize_above,
+                                         penalize_below=penalize_below,
+                                         drift_below=drift_below,
+                                         drift_above=drift_above)
     # If plotting was not requested but predictions were requested, still run the fitter (with plotting suppressed if requested)
     if predict_bpw_values or equation_only:
         return compute_and_plot_from_csv(out_csv_path,
@@ -1844,8 +1820,10 @@ def write_bpw_results_csv_from_rows_and_maybe_plot(input_csv_path: str,
                                          p_refine_steps=p_refine_steps,
                                          N_refine_steps=N_refine_steps,
                                          resemblance_metric=resemblance_metric,
-                                         penalty_above=penalty_above,
-                                         penalty_below=penalty_below)
+                                         penalize_above=penalize_above,
+                                         penalize_below=penalize_below,
+                                         drift_below=drift_below,
+                                         drift_above=drift_above)
     return None
 
 
@@ -1948,10 +1926,14 @@ def main():
     # Resemblance metric options (new)
     ap.add_argument("--resemblance-metric", type=str, default="asym_abs",
                     help="Resemblance metric used to select the best candidate among searches. Choices: sse, mae, abs_mean, median_abs, r2, asym_abs, penalize_above, penalize_below. Default 'asym_abs' (favours matching lower actual values).")
-    ap.add_argument("--penalty-above", type=float, default=2.0,
-                    help="Penalty (now interpreted as R^2 drift threshold) in percent. Example: --penalty-above 5 means an allowed R^2 drop of 5%% of the baseline R^2 (baseline 0.95 -> allowed lower bound 0.95*(1-0.05)=0.9025). When provided this triggers the reconsideration loop.")
-    ap.add_argument("--penalty-below", type=float, default=1.0,
-                    help="Penalty (now interpreted as R^2 drift threshold) in percent. Example: --penalty-below 5 means an allowed R^2 drop of 5%% of the baseline R^2 (baseline 0.95 -> allowed lower bound 0.95*(1-0.05)=0.9025). When provided this triggers the reconsideration loop.")
+    ap.add_argument("--penalize-above", type=float, default=2.0,
+                    help="Penalty multiplier applied to over-predictions when using asymmetric resemblance metrics (default 2.0).")
+    ap.add_argument("--penalize-below", type=float, default=1.0,
+                    help="Penalty multiplier applied to under-predictions when using asymmetric resemblance metrics (default 1.0).")
+    ap.add_argument("--drift-below", type=float, default=0.0,
+                    help="R^2 drift threshold in percent - removes values above and furthest to the theoretical curve. Example: --drift-below 5 means an allowed R^2 drop of 5%% of the baseline R^2 (baseline 0.95 -> allowed lower bound 0.95*(1-0.05)=0.9025). When provided this triggers the reconsideration loop.")
+    ap.add_argument("--drift-above", type=float, default=0.0,
+                    help="R^2 drift threshold in percent - removes values below and furthest to the theoretical curve. Example: --drift-above 5 means an allowed R^2 drop of 5%% of the baseline R^2 (baseline 0.95 -> allowed lower bound 0.95*(1-0.05)=0.9025). When provided this triggers the reconsideration loop.")
     args = ap.parse_args()
 
     if args.map_files and args.qtypes:
@@ -2137,8 +2119,10 @@ def main():
                                                                            p_refine_steps=args.p_refine_steps,
                                                                            N_refine_steps=args.N_refine_steps,
                                                                            resemblance_metric=args.resemblance_metric,
-                                                                           penalty_above=args.penalty_above,
-                                                                           penalty_below=args.penalty_below)
+                                                                           penalize_above=args.penalize_above,
+                                                                           penalize_below=args.penalize_below,
+                                                                           drift_below=args.drift_below,
+                                                                           drift_above=args.drift_above)
                     # If the compute function printed predictions to stdout, we're done. Still print CSV path to stderr for diagnostics.
                     print(f"Wrote BPW CSV: {out_csv}", file=sys.stderr)
                 except Exception as ex:
@@ -2189,8 +2173,10 @@ def main():
                                                                p_refine_steps=args.p_refine_steps,
                                                                N_refine_steps=args.N_refine_steps,
                                                                resemblance_metric=args.resemblance_metric,
-                                                               penalty_above=args.penalty_above,
-                                                               penalty_below=args.penalty_below)
+                                                               penalize_above=args.penalize_above,
+                                                               penalize_below=args.penalize_below,
+                                                               drift_below=args.drift_below,
+                                                               drift_above=args.drift_above)
                 print(f"Wrote BPW CSV: {out_csv}")
         except Exception as ex:
             print(f"ERROR: failed to produce {out_csv}: {ex}", file=sys.stderr)
