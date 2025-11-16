@@ -225,12 +225,102 @@ def apply_transform(vals: np.ndarray, kind: str, log_base: Optional[float] = Non
     raise ValueError(f"Unknown transform kind: {kind}")
 
 
+def _compute_resemblance_score(y_true: np.ndarray,
+                             y_pred: np.ndarray,
+                             metric: str = "asym_abs",
+                             penalty_above: float = 2.0,
+                             penalty_below: float = 1.0) -> float:
+    """
+    Compute a scalar score (lower is better) based on the chosen metric.
+    Supported metrics:
+      - 'sse'         : sum squared error (lower better)
+      - 'mae'/'abs_mean': mean absolute error
+      - 'median_abs'  : median absolute error
+      - 'r2'          : 1 - R^2 (lower better; R^2 higher is better)
+      - 'asym_abs'    : asymmetric mean absolute error, penalty_above applied to over-predictions (pred>true),
+                        penalty_below to under-predictions.
+      - 'penalize_above' : same as asym_abs but penalty_below fixed to 1.0 (convenience)
+      - 'penalize_below' : same as asym_abs but penalty_above fixed to 1.0 (convenience)
+    """
+    # ensure numpy arrays
+    y_t = np.asarray(y_true, dtype=float)
+    y_p = np.asarray(y_pred, dtype=float)
+
+    # mask finite
+    mask = np.isfinite(y_t) & np.isfinite(y_p)
+    if not np.any(mask):
+        return float("inf")
+
+    yt = y_t[mask]
+    yp = y_p[mask]
+    resid = yp - yt
+    abs_resid = np.abs(resid)
+
+    metric = (metric or "asym_abs").lower()
+    if metric == "sse":
+        return float(np.sum(resid ** 2))
+    if metric in {"mae", "abs_mean"}:
+        return float(np.mean(abs_resid))
+    if metric == "median_abs":
+        return float(np.median(abs_resid))
+    if metric == "r2":
+        # compute r2; return 1 - r2 (so lower is better)
+        ss_res = np.sum((yt - yp) ** 2)
+        ss_tot = np.sum((yt - np.mean(yt)) ** 2)
+        r2 = 1.0 - ss_res / ss_tot if ss_tot != 0 else float("nan")
+        # If r2 is nan, return large number
+        if not np.isfinite(r2):
+            return float("inf")
+        return float(1.0 - r2)
+    # asymmetric absolute
+    if metric in {"asym_abs", "penalize_above", "penalize_below"}:
+        if metric == "penalize_above":
+            pa = max(1.0, float(penalty_above))
+            pb = 1.0
+        elif metric == "penalize_below":
+            pa = 1.0
+            pb = max(1.0, float(penalty_below))
+        else:
+            pa = max(0.0, float(penalty_above))
+            pb = max(0.0, float(penalty_below))
+        weights = np.where(resid > 0, pa, pb)  # over-predictions get pa
+        weighted = abs_resid * weights
+        return float(np.mean(weighted))
+
+    # fallback to sse
+    return float(np.sum(resid ** 2))
+
+
 def fit_model_general(xarr: np.ndarray,
                       yarr: np.ndarray,
                       d_fixed: Optional[float] = None,
                       c_fixed: Optional[float] = None,
                       transforms: Optional[List[str]] = None,
-                      p_grid: Optional[np.ndarray] = None) -> Tuple[Optional[Dict[str, float]], Dict[str, Any]]:
+                      # tunable grids (exposed via CLI)
+                      p_grid_min: float = 0.2,
+                      p_grid_max: float = 3.0,
+                      p_grid_steps: int = 15,
+                      logn_base_min: float = 2.0,
+                      logn_base_max: float = 100.0,
+                      logn_base_steps: int = 8,
+                      c_mult_min: float = -0.9,
+                      c_mult_max: float = 10.0,
+                      c_mult_steps: int = 40,
+                      b_grid_steps: int = 60,
+                      # refinement densities
+                      b_refine_steps: int = 60,
+                      c_refine_steps: int = 60,
+                      p_refine_steps: int = 20,
+                      N_refine_steps: int = 12,
+                      # identity-specific s_grid params (existing flags)
+                      identity_s_min: float = -1.0,
+                      identity_s_max: float = 1.0,
+                      identity_s_steps: int = 9,
+                      # resemblance metric options
+                      resemblance_metric: str = "asym_abs",
+                      penalty_above: float = 2.0,
+                      penalty_below: float = 1.0
+                      ) -> Tuple[Optional[Dict[str, float]], Dict[str, Any]]:
     """
     Fit model y = d + a * (T)^{-p} where T = transform(b * (x - c)),
     trying multiple transforms and exponent p values.
@@ -247,19 +337,30 @@ def fit_model_general(xarr: np.ndarray,
         identity transform accepts negative vals.
       - warnings from invalid operations (like power of negative non-integer) are suppressed
         where we explicitly check isfinite after computation.
+      - selection of the 'best' candidate now uses a configurable metric (resemblance_metric) rather
+        than always using SSE. Default selection prefers matches to lower actual values by using
+        an asymmetric absolute error (over-predictions penalized more).
     """
     # default transforms/p grid (added 'logn' to allow variable log base)
     if transforms is None:
         transforms = ["ln", "log2", "log10", "logn", "identity"]
-    if p_grid is None:
-        p_grid = np.linspace(0.2, 3.0, 15)  # from 0.2 to 3.0 in 15 steps
+    # build p_grid from tunables
+    try:
+        p_grid = np.linspace(float(p_grid_min), float(p_grid_max), int(p_grid_steps))
+    except Exception:
+        p_grid = np.linspace(0.2, 3.0, 15)
 
     # prepare a grid for log-base N when transform == 'logn'
-    # include commonly useful bases 2 and 10 and some intermediate/exploratory values.
-    N_grid = np.unique(np.concatenate([
-        np.array([2.0, 10.0]),
-        np.logspace(np.log10(2.0), np.log10(100.0), num=8)
-    ]))
+    try:
+        N_grid = np.unique(np.concatenate([
+            np.array([2.0, 10.0]),
+            np.logspace(np.log10(float(logn_base_min)), np.log10(float(logn_base_max)), num=int(logn_base_steps))
+        ]))
+    except Exception:
+        N_grid = np.unique(np.concatenate([
+            np.array([2.0, 10.0]),
+            np.logspace(np.log10(2.0), np.log10(100.0), num=8)
+        ]))
 
     # shift xarr if includes nonpositive values so that logs won't blow up for log transforms; track shift to apply consistently
     # Note: shifting is still applied to allow some transforms to work; identity transform can accept negatives without shift,
@@ -282,52 +383,123 @@ def fit_model_general(xarr: np.ndarray,
     b_max = min(b_max, 1e12)
     if b_max <= b_min:
         b_min, b_max = 1e-6, 1e6
-    b_grid = np.logspace(np.log10(b_min), np.log10(b_max), num=60)
+    # Respect user-provided b_grid_steps
+    try:
+        b_grid = np.logspace(np.log10(b_min), np.log10(b_max), num=int(b_grid_steps))
+    except Exception:
+        b_grid = np.logspace(np.log10(b_min), np.log10(b_max), num=60)
 
     # c multipliers relative to median(x) used only when c is not fixed
-    c_multipliers = np.linspace(-0.9, 10.0, 40)
+    try:
+        c_multipliers = np.linspace(float(c_mult_min), float(c_mult_max), int(c_mult_steps))
+    except Exception:
+        c_multipliers = np.linspace(-0.9, 10.0, 40)
 
-    best_sse = float("inf")
+    # Prepare identity s_grid from user-provided parameters, with safe defaults/guards.
+    if identity_s_steps is None or not isinstance(identity_s_steps, int) or identity_s_steps <= 0:
+        identity_s_steps = 9
+    try:
+        s_grid_default = np.logspace(float(identity_s_min), float(identity_s_max), num=int(identity_s_steps))
+    except Exception:
+        s_grid_default = np.logspace(-1.0, 1.0, num=9)
+
+    best_score = float("inf")
+    best_sse_for_best = float("inf")
     best = None
 
     # main grid search: when c_fixed is provided, do not iterate over c_grid; use provided c_fixed.
     for transform in transforms:
-        for b in b_grid:
+        # For identity transform we do NOT search over b (merge b into a), use b=1.0 fixed.
+        # But we still want to emulate the effect b had on c placement, so create a small s_grid
+        # (multiplicative scales applied to c candidates) for identity.
+        local_b_grid = [1.0] if transform == "identity" else b_grid
+        s_grid = s_grid_default if transform == "identity" else [1.0]
+
+        for b in local_b_grid:
             # compute c grid relative to b * median(x) only if c is not fixed
-            if c_fixed is None:
-                bx_med = b * x_median
-                c_grid = bx_med * c_multipliers
-            else:
-                c_grid = [float(c_fixed)]
+            for s in s_grid:
+                if c_fixed is None:
+                    if transform == "identity":
+                        # emulate varying b's effect on c placement by scaling the c_multipliers with s
+                        c_grid = x_median * c_multipliers * float(s)
+                    else:
+                        bx_med = b * x_median
+                        c_grid = bx_med * c_multipliers
+                else:
+                    c_grid = [float(c_fixed)]
 
-            for c in c_grid:
-                # compute 'vals' for transform. IMPORTANT: use b * (xfit - c) per requirement.
-                vals = b * (xfit - c)
+                for c in c_grid:
+                    # compute 'vals' for transform. IMPORTANT: use b * (xfit - c) per requirement.
+                    vals = b * (xfit - c)
 
-                # For log-like transforms, we still require vals > 0. For identity we accept any vals.
-                # if transform in {"ln", "log10", "log2", "logn"}:
-                #     # skip combos where any vals are nonpositive (cannot take log)
-                #     if np.any(vals <= 0):
-                #         continue
+                    # For log-like transforms, we still require vals > 0. For identity we accept any vals.
+                    # if transform in {"ln", "log10", "log2", "logn"}:
+                    #     # skip combos where any vals are nonpositive (cannot take log)
+                    #     if np.any(vals <= 0):
+                    #         continue
 
-                # Now handle transform-specific processing.
-                if transform == "logn":
-                    # iterate over possible log bases
-                    for Nbase in N_grid:
-                        # apply transform safely (suppress warnings during log)
+                    # Now handle transform-specific processing.
+                    if transform == "logn":
+                        # iterate over possible log bases
+                        for Nbase in N_grid:
+                            # apply transform safely (suppress warnings during log)
+                            with np.errstate(divide="ignore", invalid="ignore"):
+                                Tvals = apply_transform(vals, "logn", log_base=float(Nbase))
+                            # skip cases where Tvals contains zeros (would blow up when raising to -p)
+                            if np.any(Tvals == 0):
+                                continue
+                            for p in p_grid:
+                                # compute S = Tvals ** (-p) while suppressing invalid warnings (e.g. negative bases)
+                                with np.errstate(invalid="ignore", divide="ignore"):
+                                    S = Tvals ** (-p)
+                                if d_fixed is None:
+                                    # solve for d and a via linear least squares: y = d + a * S
+                                    G = np.vstack([np.ones_like(S), S]).T
+                                    try:
+                                        coeffs, *_ = np.linalg.lstsq(G, yarr, rcond=None)
+                                    except Exception:
+                                        continue
+                                    d_est, a_est = float(coeffs[0]), float(coeffs[1])
+                                    pred = G.dot(coeffs)
+                                else:
+                                    # solve for a in closed form: minimize ||a*S - (y - d)||^2
+                                    numer = np.sum((yarr - d_fixed) * S)
+                                    denom = np.sum(S * S)
+                                    if denom == 0:
+                                        continue
+                                    a_est = numer / denom
+                                    d_est = float(d_fixed)
+                                    pred = d_est + a_est * S
+
+                                # compute resemblance score (lower is better)
+                                score = _compute_resemblance_score(yarr, pred, metric=resemblance_metric,
+                                                                 penalty_above=penalty_above,
+                                                                 penalty_below=penalty_below)
+                                sse = float(np.sum((yarr - pred) ** 2))
+                                if score < best_score:
+                                    best_score = score
+                                    best_sse_for_best = sse
+                                    best = {"a": float(a_est), "b": float(b), "c": float(c), "d": float(d_est),
+                                            "p": float(p), "transform": "logn", "log_base": float(Nbase),
+                                            "sse": sse, "score": score, "shift": shift}
+
+                    else:
+                        # other transforms: ln, log10, log2, identity
                         with np.errstate(divide="ignore", invalid="ignore"):
-                            Tvals = apply_transform(vals, "logn", log_base=float(Nbase))
-                        # if not np.all(np.isfinite(Tvals)):
-                        #     continue
-                        # skip cases where Tvals contains zeros (would blow up when raising to -p)
+                            Tvals = apply_transform(vals, transform)
+                        if transform in {"identity"}:
+                            if not np.all(np.isfinite(Tvals)):
+                                continue
                         if np.any(Tvals == 0):
                             continue
+
                         for p in p_grid:
-                            # compute S = Tvals ** (-p) while suppressing invalid warnings (e.g. negative bases)
+                            # compute S while suppressing invalid-value warnings (user noted harmless warning)
                             with np.errstate(invalid="ignore", divide="ignore"):
                                 S = Tvals ** (-p)
-                            # if not np.all(np.isfinite(S)):
-                            #     continue
+                            if transform in {"identity"}:
+                                if not np.all(np.isfinite(S)):
+                                    continue
                             if d_fixed is None:
                                 # solve for d and a via linear least squares: y = d + a * S
                                 G = np.vstack([np.ones_like(S), S]).T
@@ -347,54 +519,16 @@ def fit_model_general(xarr: np.ndarray,
                                 d_est = float(d_fixed)
                                 pred = d_est + a_est * S
 
+                            # compute resemblance score (lower is better)
+                            score = _compute_resemblance_score(yarr, pred, metric=resemblance_metric,
+                                                             penalty_above=penalty_above,
+                                                             penalty_below=penalty_below)
                             sse = float(np.sum((yarr - pred) ** 2))
-                            if sse < best_sse:
-                                best_sse = sse
+                            if score < best_score:
+                                best_score = score
+                                best_sse_for_best = sse
                                 best = {"a": float(a_est), "b": float(b), "c": float(c), "d": float(d_est),
-                                        "p": float(p), "transform": "logn", "log_base": float(Nbase),
-                                        "sse": sse, "shift": shift}
-
-                else:
-                    # other transforms: ln, log10, log2, identity
-                    with np.errstate(divide="ignore", invalid="ignore"):
-                        Tvals = apply_transform(vals, transform)
-                    if transform in {"identity"}:
-                        if not np.all(np.isfinite(Tvals)):
-                            continue
-                    if np.any(Tvals == 0):
-                        continue
-
-                    for p in p_grid:
-                        # compute S while suppressing invalid-value warnings (user noted harmless warning)
-                        with np.errstate(invalid="ignore", divide="ignore"):
-                            S = Tvals ** (-p)
-                        if transform in {"identity"}:
-                            if not np.all(np.isfinite(S)):
-                                continue
-                        if d_fixed is None:
-                            # solve for d and a via linear least squares: y = d + a * S
-                            G = np.vstack([np.ones_like(S), S]).T
-                            try:
-                                coeffs, *_ = np.linalg.lstsq(G, yarr, rcond=None)
-                            except Exception:
-                                continue
-                            d_est, a_est = float(coeffs[0]), float(coeffs[1])
-                            pred = G.dot(coeffs)
-                        else:
-                            # solve for a in closed form: minimize ||a*S - (y - d)||^2
-                            numer = np.sum((yarr - d_fixed) * S)
-                            denom = np.sum(S * S)
-                            if denom == 0:
-                                continue
-                            a_est = numer / denom
-                            d_est = float(d_fixed)
-                            pred = d_est + a_est * S
-
-                        sse = float(np.sum((yarr - pred) ** 2))
-                        if sse < best_sse:
-                            best_sse = sse
-                            best = {"a": float(a_est), "b": float(b), "c": float(c), "d": float(d_est),
-                                    "p": float(p), "transform": transform, "sse": sse, "shift": shift}
+                                        "p": float(p), "transform": transform, "sse": sse, "score": score, "shift": shift}
 
     if best is None:
         return None, {"reason": "no_valid_fit"}
@@ -406,37 +540,62 @@ def fit_model_general(xarr: np.ndarray,
     p_center = best["p"]
     log_base_best = best.get("log_base", None)
 
-    # refine b near center
-    b_low = max(b_center * 0.6, 1e-12)
-    b_high = b_center * 1.6
-    b_refined = np.logspace(math.log10(b_low), math.log10(b_high), num=60)
+    # refine b near center - for identity, keep b fixed to 1.0 (no refinement)
+    if t_best == "identity":
+        b_refined = np.array([1.0])
+    else:
+        b_low = max(b_center * 0.6, 1e-12)
+        b_high = b_center * 1.6
+        try:
+            b_refined = np.logspace(math.log10(b_low), math.log10(b_high), num=int(b_refine_steps))
+        except Exception:
+            b_refined = np.logspace(math.log10(b_low), math.log10(b_high), num=60)
 
     # refine c near center - when c_fixed was provided originally, we still refine around it
     if abs(c_center) > 1e-12:
-        c_low = c_center * 0.7
-        c_high = c_center * 1.3
+        # for identity widen the refinement range a bit to capture placements that earlier b grid emulated
+        if t_best == "identity":
+            c_low = c_center * 0.5
+            c_high = c_center * 1.5
+        else:
+            c_low = c_center * 0.7
+            c_high = c_center * 1.3
     else:
         # if c_center == 0 use a range relative to b_center * x_median
-        c_low = -0.3 * b_center * x_median
-        c_high = 1.0 * b_center * x_median
-    c_refined = np.linspace(c_low, c_high, num=60)
+        if t_best == "identity":
+            c_low = -0.6 * x_median
+            c_high = 2.0 * x_median
+        else:
+            c_low = -0.3 * b_center * x_median
+            c_high = 1.0 * b_center * x_median
+    try:
+        c_refined = np.linspace(c_low, c_high, num=int(c_refine_steps))
+    except Exception:
+        c_refined = np.linspace(c_low, c_high, num=60)
 
     # refine p near center
     p_low = max(0.05, p_center * 0.6)
     p_high = p_center * 1.6
-    p_refined = np.linspace(p_low, p_high, num=20)
+    try:
+        p_refined = np.linspace(p_low, p_high, num=int(p_refine_steps))
+    except Exception:
+        p_refined = np.linspace(p_low, p_high, num=20)
 
     # If the chosen transform was logn, also prepare a refined N grid centered on log_base_best
     if t_best == "logn" and log_base_best is not None:
         # small multiplicative sweep around chosen base
         N_low = max(1.1, log_base_best * 0.6)
         N_high = log_base_best * 1.6
-        N_refined = np.unique(np.logspace(math.log10(N_low), math.log10(max(N_high, N_low * 1.001)), num=12))
+        try:
+            N_refined = np.unique(np.logspace(math.log10(N_low), math.log10(max(N_high, N_low * 1.001)), num=int(N_refine_steps)))
+        except Exception:
+            N_refined = np.unique(np.logspace(math.log10(N_low), math.log10(max(N_high, N_low * 1.001)), num=12))
     else:
         N_refined = None
 
-    best_sse2 = float("inf")
+    best_score2 = float("inf")
     best2 = None
+    best_sse_for_best2 = float("inf")
 
     for b in b_refined:
         for c in c_refined:
@@ -477,12 +636,15 @@ def fit_model_general(xarr: np.ndarray,
                             a_est = numer / denom
                             d_est = float(d_fixed)
                             pred = d_est + a_est * S
+                        score = _compute_resemblance_score(yarr, pred, metric=resemblance_metric,
+                                                         penalty_above=penalty_above, penalty_below=penalty_below)
                         sse = float(np.sum((yarr - pred) ** 2))
-                        if sse < best_sse2:
-                            best_sse2 = sse
+                        if score < best_score2:
+                            best_score2 = score
+                            best_sse_for_best2 = sse
                             best2 = {"a": float(a_est), "b": float(b), "c": float(c), "d": float(d_est),
                                      "p": float(p), "transform": "logn", "log_base": float(Nbase),
-                                     "sse": sse, "shift": shift}
+                                     "sse": sse, "score": score, "shift": shift}
 
             else:
                 with np.errstate(divide="ignore", invalid="ignore"):
@@ -512,11 +674,14 @@ def fit_model_general(xarr: np.ndarray,
                         a_est = numer / denom
                         d_est = float(d_fixed)
                         pred = d_est + a_est * S
+                    score = _compute_resemblance_score(yarr, pred, metric=resemblance_metric,
+                                                     penalty_above=penalty_above, penalty_below=penalty_below)
                     sse = float(np.sum((yarr - pred) ** 2))
-                    if sse < best_sse2:
-                        best_sse2 = sse
+                    if score < best_score2:
+                        best_score2 = score
+                        best_sse_for_best2 = sse
                         best2 = {"a": float(a_est), "b": float(b), "c": float(c), "d": float(d_est),
-                                 "p": float(p), "transform": t_best, "sse": sse, "shift": shift}
+                                 "p": float(p), "transform": t_best, "sse": sse, "score": score, "shift": shift}
 
     final = best2 if best2 is not None else best
 
@@ -549,7 +714,13 @@ def fit_model_general(xarr: np.ndarray,
     r2 = 1.0 - ss_res / ss_tot if ss_tot != 0 else float("nan")
     final["r2"] = float(r2)
     final["sse"] = float(np.sum((yarr[finite_mask] - pred[finite_mask]) ** 2))
-    return final, {"reason": "ok", "r2": final["r2"], "sse": final["sse"]}
+    # ensure 'score' is present in final for downstream selection across processes
+    if "score" not in final:
+        final["score"] = _compute_resemblance_score(yarr[finite_mask], pred[finite_mask],
+                                                  metric=resemblance_metric,
+                                                  penalty_above=penalty_above,
+                                                  penalty_below=penalty_below)
+    return final, {"reason": "ok", "r2": final["r2"], "sse": final["sse"], "score": float(final["score"])}
 
 
 # --------------------------
@@ -582,7 +753,30 @@ def modified_z_score(values: np.ndarray) -> np.ndarray:
 # --------------------------
 
 # Top-level worker for process pool. It must be picklable (i.e., module-level) for ProcessPoolExecutor.
-def _fit_pair_process_worker(xarr_shared, yarr_shared, d_cand_local: Optional[float], c_cand_local: Optional[float], transforms_local: Optional[List[str]] = None):
+def _fit_pair_process_worker(xarr_shared, yarr_shared,
+                             d_cand_local: Optional[float],
+                             c_cand_local: Optional[float],
+                             transforms_local: Optional[List[str]] = None,
+                             identity_s_min_local: float = -1.0,
+                             identity_s_max_local: float = 1.0,
+                             identity_s_steps_local: int = 9,
+                             p_grid_min_local: float = 0.2,
+                             p_grid_max_local: float = 3.0,
+                             p_grid_steps_local: int = 15,
+                             logn_base_min_local: float = 2.0,
+                             logn_base_max_local: float = 100.0,
+                             logn_base_steps_local: int = 8,
+                             c_mult_min_local: float = -0.9,
+                             c_mult_max_local: float = 10.0,
+                             c_mult_steps_local: int = 40,
+                             b_grid_steps_local: int = 60,
+                             b_refine_steps_local: int = 60,
+                             c_refine_steps_local: int = 60,
+                             p_refine_steps_local: int = 20,
+                             N_refine_steps_local: int = 12,
+                             resemblance_metric_local: str = "asym_abs",
+                             penalty_above_local: float = 2.0,
+                             penalty_below_local: float = 1.0):
     """
     Worker run in separate process. xarr_shared, yarr_shared are numpy arrays (pickled to worker).
     Limit BLAS threads inside worker to avoid oversubscription.
@@ -595,7 +789,32 @@ def _fit_pair_process_worker(xarr_shared, yarr_shared, d_cand_local: Optional[fl
         # Convert to numpy arrays in worker context (they may already be np arrays after unpickling)
         x_local = np.asarray(xarr_shared, dtype=float)
         y_local = np.asarray(yarr_shared, dtype=float)
-        params_local, details_local = fit_model_general(x_local, y_local, d_fixed=d_cand_local, c_fixed=c_cand_local, transforms=transforms_local)
+        params_local, details_local = fit_model_general(
+            x_local, y_local,
+            d_fixed=d_cand_local,
+            c_fixed=c_cand_local,
+            transforms=transforms_local,
+            p_grid_min=p_grid_min_local,
+            p_grid_max=p_grid_max_local,
+            p_grid_steps=p_grid_steps_local,
+            logn_base_min=logn_base_min_local,
+            logn_base_max=logn_base_max_local,
+            logn_base_steps=logn_base_steps_local,
+            c_mult_min=c_mult_min_local,
+            c_mult_max=c_mult_max_local,
+            c_mult_steps=c_mult_steps_local,
+            b_grid_steps=b_grid_steps_local,
+            b_refine_steps=b_refine_steps_local,
+            c_refine_steps=c_refine_steps_local,
+            p_refine_steps=p_refine_steps_local,
+            N_refine_steps=N_refine_steps_local,
+            identity_s_min=identity_s_min_local,
+            identity_s_max=identity_s_max_local,
+            identity_s_steps=identity_s_steps_local,
+            resemblance_metric=resemblance_metric_local,
+            penalty_above=penalty_above_local,
+            penalty_below=penalty_below_local
+        )
         return (d_cand_local, c_cand_local, params_local, details_local, None)
     except Exception as e:
         return (d_cand_local, c_cand_local, None, None, str(e))
@@ -617,7 +836,27 @@ def compute_and_plot_from_csv(csv_path: str,
                               predict_bpw_values: Optional[List[float]] = None,
                               transforms: Optional[List[str]] = None,
                               suppress_plot: bool = False,
-                              equation_only: bool = False) -> Optional[List[float]]:
+                              equation_only: bool = False,
+                              identity_s_min: float = -1.0,
+                              identity_s_max: float = 1.0,
+                              identity_s_steps: int = 9,
+                              p_grid_min: float = 0.2,
+                              p_grid_max: float = 3.0,
+                              p_grid_steps: int = 15,
+                              logn_base_min: float = 2.0,
+                              logn_base_max: float = 100.0,
+                              logn_base_steps: int = 8,
+                              c_mult_min: float = -0.9,
+                              c_mult_max: float = 10.0,
+                              c_mult_steps: int = 40,
+                              b_grid_steps: int = 60,
+                              b_refine_steps: int = 60,
+                              c_refine_steps: int = 60,
+                              p_refine_steps: int = 20,
+                              N_refine_steps: int = 12,
+                              resemblance_metric: str = "asym_abs",
+                              penalty_above: float = 2.0,
+                              penalty_below: float = 1.0) -> Optional[List[float]]:
     """
     Read the produced bpw CSV (bpw_<input>.csv), plot metric (y) vs bpw (x).
     ycol_identifier can be a column name or integer index (defaults to index 2).
@@ -643,6 +882,15 @@ def compute_and_plot_from_csv(csv_path: str,
       - suppress_plot: when True and predict_bpw_values is used, suppress creating/saving/showing any plot.
       - equation_only: when True, print only the fitted equation to stdout (one line) and do not print JSON preds.
                        Other diagnostic output continues to go to stderr.
+      - identity_s_min/identity_s_max/identity_s_steps: control the exponent-range and density used to
+        build the multiplicative s_grid used for identity transform c-candidate scaling.
+      - p_grid_*, logn_base_*, c_mult_*, b_grid_steps, *_refine_steps: control grids used during search/refinement.
+        p_grid_* affects all transforms; logn_base_* affects logn bases; c_mult_* affects how c candidates are generated
+        (used for all transforms); b_grid_steps affects b-grid density for non-identity transforms; *_refine_steps
+        control density of refinement search.
+      - resemblance_metric + penalty_above/penalty_below: control how "best" fit is selected among candidates. Default
+        favors matching lower actual values by penalizing over-predictions more (resemblance_metric='asym_abs',
+        penalty_above=2.0, penalty_below=1.0).
     """
     # Flag indicating machine-friendly output mode (predict-only)
     machine_mode = bool(predict_bpw_values and len(predict_bpw_values) > 0)
@@ -860,7 +1108,18 @@ def compute_and_plot_from_csv(csv_path: str,
             future_to_pair = {}
             for d_c, c_c in pairs:
                 # pass transforms along to worker so users can override which transforms are tried
-                fut = executor.submit(_fit_pair_process_worker, xarr, yarr, d_c, c_c, transforms)
+                fut = executor.submit(
+                    _fit_pair_process_worker,
+                    xarr, yarr, d_c, c_c,
+                    transforms,
+                    float(identity_s_min), float(identity_s_max), int(identity_s_steps),
+                    float(p_grid_min), float(p_grid_max), int(p_grid_steps),
+                    float(logn_base_min), float(logn_base_max), int(logn_base_steps),
+                    float(c_mult_min), float(c_mult_max), int(c_mult_steps),
+                    int(b_grid_steps),
+                    int(b_refine_steps), int(c_refine_steps), int(p_refine_steps), int(N_refine_steps),
+                    str(resemblance_metric), float(penalty_above), float(penalty_below)
+                )
                 future_to_pair[fut] = (d_c, c_c)
             results = []
             for fut in as_completed(future_to_pair):
@@ -873,7 +1132,7 @@ def compute_and_plot_from_csv(csv_path: str,
                 else:
                     results.append(res)
 
-        # Evaluate results to pick best SSE
+        # Evaluate results to pick best by the resemblance 'score' (lower is better)
         for (d_cand_local, c_cand_local, params_local, details_local, exc_str) in results:
             if exc_str:
                 # Report worker exception to stderr but continue scanning other results.
@@ -881,9 +1140,10 @@ def compute_and_plot_from_csv(csv_path: str,
                 continue
             if params_local is None or details_local is None:
                 continue
-            sse = details_local.get("sse", params_local.get("sse", float("inf")))
-            if best_overall is None or sse < best_overall:
-                best_overall = sse
+            # details_local should include 'score' per fitter return
+            score = details_local.get("score", params_local.get("score", float("inf")))
+            if best_overall is None or score < best_overall:
+                best_overall = score
                 best_params = params_local
                 best_details = details_local
                 selected_d = d_cand_local
@@ -928,6 +1188,7 @@ def compute_and_plot_from_csv(csv_path: str,
     transform = params["transform"]
     r2 = params.get("r2", float("nan"))
     log_base = params.get("log_base", None)
+    selected_score = params.get("score", details.get("score", float("nan")))
 
     # If machine_mode (predict-only), compute predictions for requested bpw values and print JSON to stdout,
     # and ensure all other printing goes to stderr. However, if equation_only is requested, prefer to print
@@ -940,6 +1201,7 @@ def compute_and_plot_from_csv(csv_path: str,
             except Exception:
                 preds.append(None)
                 continue
+            # For identity transform, b was fixed to 1.0 and 'a' is the merged coefficient for (x-c)^(-p).
             vals_single = b * (x_val - c)
             # handle transform and compute S
             try:
@@ -976,8 +1238,9 @@ def compute_and_plot_from_csv(csv_path: str,
         else:
             grapher_transform = "identity"
 
+        # For 'identity' we emit the simplified merged-a equation: y = d + a * (x - c)^(-p)
         if grapher_transform == "identity":
-            grapher_eq = f"y = {d:.12g} + {a:.12g} * ( {b:.12g} * (x - {c:.12g}) )^(-{p:.12g})"
+            grapher_eq = f"y = {d:.12g} + {a:.12g} * ( x - {c:.12g} )^(-{p:.12g})"
         else:
             grapher_eq = f"y = {d:.12g} + {a:.12g} * {grapher_transform}( {b:.12g} * (x - {c:.12g}) )^(-{p:.12g})"
         # Print only the equation line to stdout.
@@ -1017,9 +1280,12 @@ def compute_and_plot_from_csv(csv_path: str,
     print("Fitted parameters (fit was computed after excluding outliers if requested):", file=sys.stderr)
     print(f"  d = {d:.12g}", file=sys.stderr)
     print(f"  a = {a:.12g}", file=sys.stderr)
-    print(f"  b = {b:.12g}", file=sys.stderr)
+    if transform != "identity":
+        print(f"  b = {b:.12g}", file=sys.stderr)
     print(f"  c = {c:.12g}", file=sys.stderr)
     print(f"  R^2 = {r2:.6f}", file=sys.stderr)
+    print(f"  resemblance_metric = {resemblance_metric}", file=sys.stderr)
+    print(f"  resemblance_score = {selected_score:.6g}", file=sys.stderr)
     print("", file=sys.stderr)
     print("Equation (copy-paste-friendly, variable x = bpw):", file=sys.stderr)
     if transform == "ln":
@@ -1033,9 +1299,9 @@ def compute_and_plot_from_csv(csv_path: str,
     else:
         grapher_transform = "identity"
 
-    # Note: equation uses b*(x - c) inside the transform per new requirement.
+    # Note: for identity we now use the simplified merged-a equation form (no separate b).
     if grapher_transform == "identity":
-        grapher_eq = f"y = {d:.12g} + {a:.12g} * ( {b:.12g} * (x - {c:.12g}) )^(-{p:.12g})"
+        grapher_eq = f"y = {d:.12g} + {a:.12g} * ( x - {c:.12g} )^(-{p:.12g})"
     else:
         grapher_eq = f"y = {d:.12g} + {a:.12g} * {grapher_transform}( {b:.12g} * (x - {c:.12g}) )^(-{p:.12g})"
 
@@ -1193,7 +1459,27 @@ def write_bpw_results_csv_from_rows_and_maybe_plot(input_csv_path: str,
                                                    predict_bpw_values: Optional[List[float]] = None,
                                                    transforms: Optional[List[str]] = None,
                                                    suppress_plot: bool = False,
-                                                   equation_only: bool = False) -> Optional[List[float]]:
+                                                   equation_only: bool = False,
+                                                   identity_s_min: float = -1.0,
+                                                   identity_s_max: float = 1.0,
+                                                   identity_s_steps: int = 9,
+                                                   p_grid_min: float = 0.2,
+                                                   p_grid_max: float = 3.0,
+                                                   p_grid_steps: int = 15,
+                                                   logn_base_min: float = 2.0,
+                                                   logn_base_max: float = 100.0,
+                                                   logn_base_steps: int = 8,
+                                                   c_mult_min: float = -0.9,
+                                                   c_mult_max: float = 10.0,
+                                                   c_mult_steps: int = 40,
+                                                   b_grid_steps: int = 60,
+                                                   b_refine_steps: int = 60,
+                                                   c_refine_steps: int = 60,
+                                                   p_refine_steps: int = 20,
+                                                   N_refine_steps: int = 12,
+                                                   resemblance_metric: str = "asym_abs",
+                                                   penalty_above: float = 2.0,
+                                                   penalty_below: float = 1.0) -> Optional[List[float]]:
     write_bpw_results_csv_from_rows(input_csv_path, out_csv_path, parsed_mapfiles,
                                     qtypes_to_consider, allow_impure_map, fail_on_missing_bytes, hide_empty)
     # If the caller explicitly requested plotting, do the previous behavior.
@@ -1214,7 +1500,27 @@ def write_bpw_results_csv_from_rows_and_maybe_plot(input_csv_path: str,
                                          predict_bpw_values=predict_bpw_values,
                                          transforms=transforms,
                                          suppress_plot=suppress_plot,
-                                         equation_only=equation_only)
+                                         equation_only=equation_only,
+                                         identity_s_min=identity_s_min,
+                                         identity_s_max=identity_s_max,
+                                         identity_s_steps=identity_s_steps,
+                                         p_grid_min=p_grid_min,
+                                         p_grid_max=p_grid_max,
+                                         p_grid_steps=p_grid_steps,
+                                         logn_base_min=logn_base_min,
+                                         logn_base_max=logn_base_max,
+                                         logn_base_steps=logn_base_steps,
+                                         c_mult_min=c_mult_min,
+                                         c_mult_max=c_mult_max,
+                                         c_mult_steps=c_mult_steps,
+                                         b_grid_steps=b_grid_steps,
+                                         b_refine_steps=b_refine_steps,
+                                         c_refine_steps=c_refine_steps,
+                                         p_refine_steps=p_refine_steps,
+                                         N_refine_steps=N_refine_steps,
+                                         resemblance_metric=resemblance_metric,
+                                         penalty_above=penalty_above,
+                                         penalty_below=penalty_below)
     # If plotting was not requested but predictions were requested, still run the fitter (with plotting suppressed if requested)
     if predict_bpw_values or equation_only:
         return compute_and_plot_from_csv(out_csv_path,
@@ -1233,7 +1539,27 @@ def write_bpw_results_csv_from_rows_and_maybe_plot(input_csv_path: str,
                                          predict_bpw_values=predict_bpw_values,
                                          transforms=transforms,
                                          suppress_plot=suppress_plot,
-                                         equation_only=equation_only)
+                                         equation_only=equation_only,
+                                         identity_s_min=identity_s_min,
+                                         identity_s_max=identity_s_max,
+                                         identity_s_steps=identity_s_steps,
+                                         p_grid_min=p_grid_min,
+                                         p_grid_max=p_grid_max,
+                                         p_grid_steps=p_grid_steps,
+                                         logn_base_min=logn_base_min,
+                                         logn_base_max=logn_base_max,
+                                         logn_base_steps=logn_base_steps,
+                                         c_mult_min=c_mult_min,
+                                         c_mult_max=c_mult_max,
+                                         c_mult_steps=c_mult_steps,
+                                         b_grid_steps=b_grid_steps,
+                                         b_refine_steps=b_refine_steps,
+                                         c_refine_steps=c_refine_steps,
+                                         p_refine_steps=p_refine_steps,
+                                         N_refine_steps=N_refine_steps,
+                                         resemblance_metric=resemblance_metric,
+                                         penalty_above=penalty_above,
+                                         penalty_below=penalty_below)
     return None
 
 
@@ -1293,6 +1619,53 @@ def main():
     # other normal stdout outputs (like JSON predictions) are suppressed. Diagnostic messages still go to stderr.
     ap.add_argument("--equation-only", action="store_true",
                     help="Print only the fitted equation to stdout (one line). Works with or without --plot. Overrides --predict-bpw-values stdout output.")
+    # New identity s_grid configurables: exponent range and step count for the multiplicative scale grid used when identity transform is chosen.
+    ap.add_argument("--identity-scale-min", type=float, default=-1.0,
+                    help="Minimum exponent for identity c-scaling grid (used as 10**min to 10**max). Default -1.0 (affects identity transform only)")
+    ap.add_argument("--identity-scale-max", type=float, default=1.0,
+                    help="Maximum exponent for identity c-scaling grid (used as 10**min to 10**max). Default 1.0 (affects identity transform only)")
+    ap.add_argument("--identity-scale-steps", type=int, default=9,
+                    help="Number of steps to use for identity c-scaling grid. Default 9 (affects identity transform only)")
+    # New: p-grid parameters (affects all transforms)
+    ap.add_argument("--p-grid-min", type=float, default=0.2,
+                    help="Minimum exponent p to search (applies to all transforms). Default 0.2")
+    ap.add_argument("--p-grid-max", type=float, default=3.0,
+                    help="Maximum exponent p to search (applies to all transforms). Default 3.0")
+    ap.add_argument("--p-grid-steps", type=int, default=15,
+                    help="Number of p grid steps (applies to all transforms). Default 15")
+    # New: controls for logn base grid (affects logn transform)
+    ap.add_argument("--logn-base-min", type=float, default=2.0,
+                    help="Minimum base for logn grid (affects logn transform). Default 2.0")
+    ap.add_argument("--logn-base-max", type=float, default=100.0,
+                    help="Maximum base for logn grid (affects logn transform). Default 100.0")
+    ap.add_argument("--logn-base-steps", type=int, default=8,
+                    help="Number of logn base steps (affects logn transform). Default 8")
+    # New: c_multipliers grid controls (affects how c candidates are generated for all transforms)
+    ap.add_argument("--c-mult-min", type=float, default=-0.9,
+                    help="Minimum multiplier for c candidate generation (applies to all transforms). Default -0.9")
+    ap.add_argument("--c-mult-max", type=float, default=10.0,
+                    help="Maximum multiplier for c candidate generation (applies to all transforms). Default 10.0")
+    ap.add_argument("--c-mult-steps", type=int, default=40,
+                    help="Number of steps for c multipliers grid (applies to all transforms). Default 40")
+    # New: b grid density (affects non-identity transforms)
+    ap.add_argument("--b-grid-steps", type=int, default=60,
+                    help="Number of steps for b grid (affects non-identity transforms). Default 60")
+    # New: refinement densities for final search refinement stage
+    ap.add_argument("--b-refine-steps", type=int, default=60,
+                    help="Number of b refinement steps in final refinement (affects non-identity transforms). Default 60")
+    ap.add_argument("--c-refine-steps", type=int, default=60,
+                    help="Number of c refinement steps in final refinement. Default 60")
+    ap.add_argument("--p-refine-steps", type=int, default=20,
+                    help="Number of p refinement steps in final refinement. Default 20")
+    ap.add_argument("--N-refine-steps", type=int, default=12,
+                    help="Number of base refinement steps for logn in final refinement. Default 12")
+    # Resemblance metric options (new)
+    ap.add_argument("--resemblance-metric", type=str, default="asym_abs",
+                    help="Resemblance metric used to select the best candidate among searches. Choices: sse, mae, abs_mean, median_abs, r2, asym_abs, penalize_above, penalize_below. Default 'asym_abs' (favours matching lower actual values).")
+    ap.add_argument("--penalty-above", type=float, default=2.0,
+                    help="Penalty multiplier applied to over-predictions when using asymmetric resemblance metrics (default 2.0).")
+    ap.add_argument("--penalty-below", type=float, default=1.0,
+                    help="Penalty multiplier applied to under-predictions when using asymmetric resemblance metrics (default 1.0).")
     args = ap.parse_args()
 
     if args.map_files and args.qtypes:
@@ -1459,7 +1832,27 @@ def main():
                                                                            predict_bpw_values=args.predict_bpw_values,
                                                                            transforms=transforms_arg,
                                                                            suppress_plot=(not args.plot),
-                                                                           equation_only=args.equation_only)
+                                                                           equation_only=args.equation_only,
+                                                                           identity_s_min=args.identity_scale_min,
+                                                                           identity_s_max=args.identity_scale_max,
+                                                                           identity_s_steps=args.identity_scale_steps,
+                                                                           p_grid_min=args.p_grid_min,
+                                                                           p_grid_max=args.p_grid_max,
+                                                                           p_grid_steps=args.p_grid_steps,
+                                                                           logn_base_min=args.logn_base_min,
+                                                                           logn_base_max=args.logn_base_max,
+                                                                           logn_base_steps=args.logn_base_steps,
+                                                                           c_mult_min=args.c_mult_min,
+                                                                           c_mult_max=args.c_mult_max,
+                                                                           c_mult_steps=args.c_mult_steps,
+                                                                           b_grid_steps=args.b_grid_steps,
+                                                                           b_refine_steps=args.b_refine_steps,
+                                                                           c_refine_steps=args.c_refine_steps,
+                                                                           p_refine_steps=args.p_refine_steps,
+                                                                           N_refine_steps=args.N_refine_steps,
+                                                                           resemblance_metric=args.resemblance_metric,
+                                                                           penalty_above=args.penalty_above,
+                                                                           penalty_below=args.penalty_below)
                     # If the compute function printed predictions to stdout, we're done. Still print CSV path to stderr for diagnostics.
                     print(f"Wrote BPW CSV: {out_csv}", file=sys.stderr)
                 except Exception as ex:
@@ -1491,8 +1884,28 @@ def main():
                                                                predict_bpw_values=None,
                                                                transforms=transforms_arg,
                                                                suppress_plot=(not args.plot),
-                                                               equation_only=args.equation_only)
-                print(f"Wrote BPW CSV: {out_csv}", file=sys.stderr)
+                                                               equation_only=args.equation_only,
+                                                               identity_s_min=args.identity_scale_min,
+                                                               identity_s_max=args.identity_scale_max,
+                                                               identity_s_steps=args.identity_scale_steps,
+                                                               p_grid_min=args.p_grid_min,
+                                                               p_grid_max=args.p_grid_max,
+                                                               p_grid_steps=args.p_grid_steps,
+                                                               logn_base_min=args.logn_base_min,
+                                                               logn_base_max=args.logn_base_max,
+                                                               logn_base_steps=args.logn_base_steps,
+                                                               c_mult_min=args.c_mult_min,
+                                                               c_mult_max=args.c_mult_max,
+                                                               c_mult_steps=args.c_mult_steps,
+                                                               b_grid_steps=args.b_grid_steps,
+                                                               b_refine_steps=args.b_refine_steps,
+                                                               c_refine_steps=args.c_refine_steps,
+                                                               p_refine_steps=args.p_refine_steps,
+                                                               N_refine_steps=args.N_refine_steps,
+                                                               resemblance_metric=args.resemblance_metric,
+                                                               penalty_above=args.penalty_above,
+                                                               penalty_below=args.penalty_below)
+                print(f"Wrote BPW CSV: {out_csv}")
         except Exception as ex:
             print(f"ERROR: failed to produce {out_csv}: {ex}", file=sys.stderr)
             sys.exit(6)
