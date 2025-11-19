@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-15-2025 -------------------- **#
+#** --------------- Updated: Nov-19-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -460,7 +460,7 @@ fi
 find_main_model_file() {
     # Finds one file matching MAIN_SHARD_PATTERN in LOCAL_MODEL_DIR
     local f
-    f=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "$MAIN_SHARD_PATTERN" | head -n1 || true)
+    f=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 \( -type f -o -type l \) -name "$MAIN_SHARD_PATTERN" | head -n1 || true)
     if [[ -z "$f" ]]; then
         return 1
     else
@@ -1345,7 +1345,7 @@ run_main_loop() {
                     for s in "${shards_needed[@]}"; do
                       if [[ $s =~ -([0-9]{5}-of-[0-9]{5})\.gguf$ ]]; then
                         suffix="${BASH_REMATCH[1]}.gguf"
-                        original_file=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-${suffix}" | grep -vF "$LOCAL_DOWNLOAD_DIR/" | head -n1 || true)
+                        original_file=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 \( -type f -o -type l \) -name "*-${suffix}" | grep -vF "$LOCAL_DOWNLOAD_DIR/" | head -n1 || true)
                         if [[ -z "$original_file" ]]; then
                           echo "[$(timestamp)] ⚠️ Warning: Could not find local original shard matching '*-${suffix}' in $LOCAL_MODEL_DIR. Aborting group #${group_idx_for_tensor}." >&2
                           replace_ok=false
@@ -1542,7 +1542,7 @@ run_main_loop() {
                 if [[ $shard_fname =~ -([0-9]{5}-of-[0-9]{5})\.gguf$ ]]; then
                     suffix="${BASH_REMATCH[1]}.gguf"
                     # find local original file
-                    original_file=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-${suffix}" | grep -vF "$LOCAL_DOWNLOAD_DIR/" | head -n1 || true)
+                    original_file=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 \( -type f -o -type l \) -name "*-${suffix}" | grep -vF "$LOCAL_DOWNLOAD_DIR/" | head -n1 || true)
                     if [[ -z "$original_file" ]]; then
                         echo "[$(timestamp)] ⚠️ Warning: Could not find local original shard matching '*-${suffix}' in $LOCAL_MODEL_DIR. Skipping this tensor." >&2
                         rm -f "$local_shard_tmp"
