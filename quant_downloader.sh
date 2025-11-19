@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regexe entries.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-11-2025 -------------------- **#
+#** --------------- Updated: Nov-19-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -748,7 +748,7 @@ if [[ "$VERIFY_ONLY" == "true" ]]; then
   # 1) check first shard explicitly, in background
   wait_for_slot
   (
-    _find=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-*-of-*.gguf")
+    _find=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 \( -type f -o -type l \) -name "*-*-of-*.gguf")
     IFS= read -r first <<< "$_find"
     total=$(printf '%s\n' "$first" | sed -E 's/.*-[0-9]{5}-of-([0-9]{5})\.gguf/\1/')
     gguf_first=""
@@ -926,7 +926,7 @@ fi
 # ------------------ END MAIN DOWNLOAD LOOP (retry-until-success wrappers, no PID bookkeeping) -------------------
 
 # ------------- FINAL FIRST-SHARD FETCH (non-verify) -----
-_find=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-*-of-*.gguf")
+_find=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 \( -type f -o -type l \) -name "*-*-of-*.gguf")
 IFS= read -r first <<< "$_find"
 total=$(printf '%s\n' "$first" | sed -E 's/.*-[0-9]{5}-of-([0-9]{5})\.gguf/\1/')
 gguf_first=$(basename "$(printf '%s\n' "$first" | sed "s/-[0-9]\{5\}-of-$total\.gguf$/-00001-of-$total.gguf/")")
