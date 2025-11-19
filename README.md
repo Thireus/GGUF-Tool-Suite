@@ -242,10 +242,10 @@ ulimit -n 9999 # Required on Linux - Also make sure you have compiled ik_llama.c
 
 ```bash
 # Make sure to copy the relevant download.conf and ppl_results.csv for the model before running quant_assign.py
-rm -f download.conf ppl_results.csv
-# Use the download.conf and ppl_results.csv of the chosen model
+rm -f download.conf ppl_results.csv kld_results.csv
+# Use the download.conf and kld_results.csv (or ppl_results.csv) of the chosen model
 cp -f models/DeepSeek-R1-0528/download.conf .
-cp -f models/DeepSeek-R1-0528/ppl_results.csv .
+cp -f models/DeepSeek-R1-0528/ppl_results.csv . # Use kld_results.csv instead when available for better results!
 # Run the quant_assign.py script (adjust the parameters to match your configuration and target model)
 python quant_assign.py ppl_results.csv \
   --gpu-tensors '.*' \

@@ -337,8 +337,7 @@ BASELINE_QTYPE="iq3_xxs"
 # Do not add KLD parameters, they will be automatically added if necessary at the end of this template - See "Add KLD parameter placeholder" section
 PPL_COMMAND_TEMPLATE='CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0,2,1 ~/ik_llama-main-b3833-65dd65c-bin-win-cuda-12.8-x64/llama-perplexity \
 -m {MODEL_FILE} -mla 3 -fa on -amb 1024 -ctk f16 -c 512 -ngl 99 \
--ot "blk\.(3|4|5)\.ffn_.*=CUDA0" -ot "blk\.(6|7|8)\.ffn_.*=CUDA1" \
--ot "blk\.(9|10)\.ffn_.*=CUDA2" \
+-ot "blk\.(3|4|5)\.ffn_.*=CUDA0" -ot "blk\.(6|7|8)\.ffn_.*=CUDA1" -ot "blk\.(9|10)\.ffn_.*=CUDA2" \
 -ot exps=CPU -b 4096 -ub 4096 --warmup-batch --no-mmap --threads 36 --main-gpu 0 --seed 1337 \
 -f ../../imatrix-calibration-corpus-v02.txt --chunks ${PPL_COMMAND_CHUNKS_TO_PROCESS}'
 
@@ -1603,11 +1602,9 @@ run_main_loop() {
                     downloaded_shards=()
 
                     # --- PARALLEL FETCH: spawn N_THREADS-throttled background workers (one per shard) ---
-                    # Each worker performs the exact same fetch+verify retry logic as original loop.
-                    # We collect PIDs and wait for them, then check exit-status to decide success/failure.
-                    declare -A fetch_pid_to_shard=()
-                    declare -a fetch_pids=()
-
+                    # We'll launch a background worker for each shard and throttle using the exact same
+                    # jobs-count technique used elsewhere in the script. After launching all workers we
+                    # call a single `wait` (no per-PID waits), then validate files and hashes.
                     fetch_worker() {
                       local s="$1"
                       local chunk_id="$2"
@@ -1616,8 +1613,28 @@ run_main_loop() {
                       local qtype_local="$5"
                       local gidx_local="$6"
 
-                      # ensure tmp removed at start
-                      rm -f -- "$local_shard_tmp"
+                      # If a temp file already exists, check it first instead of immediately removing it.
+                      if [[ -f "$local_shard_tmp" ]]; then
+                        if [[ -n "$expected_hash" && "$USE_SHA256" == "true" ]]; then
+                          # try compute SHA256
+                          actual_hash="$(_sha256sum "$local_shard_tmp" 2>/dev/null | cut -d' ' -f1 || true)"
+                          if [[ -n "$actual_hash" && "$actual_hash" == "$expected_hash" ]]; then
+                            echo "[$(timestamp)] Group #${gidx_local}: existing tmp $local_shard_tmp matches expected hash; reusing."
+                            return 0
+                          else
+                            if [[ -z "$actual_hash" ]]; then
+                              echo "[$(timestamp)] Group #${gidx_local}: could not compute SHA256 for existing tmp $local_shard_tmp; removing and re-downloading." >&2
+                            else
+                              echo "[$(timestamp)] Group #${gidx_local}: existing tmp $local_shard_tmp hash mismatch ($actual_hash != $expected_hash); removing and re-downloading." >&2
+                            fi
+                            rm -f -- "$local_shard_tmp"
+                          fi
+                        else
+                          # No hash verification possible; removing and re-downloading.
+                          echo "[$(timestamp)] Group #${gidx_local}: found existing tmp $local_shard_tmp but no hash verification available; removing and re-downloading."
+                          rm -f -- "$local_shard_tmp"
+                        fi
+                      fi
 
                       local fetched=false
                       local retry_before_delete=3
@@ -1663,39 +1680,50 @@ run_main_loop() {
                       fi
                     }
 
-                    # Launch fetch workers
+                    # Launch fetch workers using the same jobs-throttle pattern you used for tasks
                     for s in "${shards_to_fetch[@]}"; do
                       local_shard_tmp="${LOCAL_DOWNLOAD_DIR}/${s}"
                       chunk_id="$(echo "$s" | sed -nE 's/.*-([0-9]{5})-of-[0-9]{5}\.gguf$/\1/p')"
                       expected_hash="${shard_expected_hash[$s]:-}"
 
-                      # throttle concurrency to N_THREADS
+                      # throttle concurrency to N_THREADS (same approach as initial validation)
                       while (( $(jobs -p | wc -l) >= N_THREADS )); do
                         sleep 0.2
                       done
 
-                      # start worker in background
+                      # start worker in background (no per-pid tracking)
                       fetch_worker "$s" "$chunk_id" "$expected_hash" "$local_shard_tmp" "$qtype" "$group_idx_for_tensor" &
-                      pid=$!
-                      fetch_pid_to_shard["$pid"]="$s"
-                      fetch_pids+=("$pid")
                     done
 
-                    # wait for workers and collect statuses
-                    for pid in "${fetch_pids[@]}"; do
-                      if wait "$pid"; then
-                        s="${fetch_pid_to_shard[$pid]}"
-                        downloaded_shards+=("${LOCAL_DOWNLOAD_DIR}/${s}")
-                      else
-                        # a worker failed -> mark fetch failed
-                        echo "[$(timestamp)] ⚠️ Warning: fetch worker PID $pid for shard '${fetch_pid_to_shard[$pid]}' failed."
+                    # Wait for all background fetch workers to finish (single wait as requested)
+                    wait
+
+                    # After wait, validate that all expected shard files exist and match expected hashes
+                    echo "[$(timestamp)] Group #${gidx_local}: verifying all shard hashes... please be patient."
+                    for s in "${shards_to_fetch[@]}"; do
+                      local_shard_tmp="${LOCAL_DOWNLOAD_DIR}/${s}"
+                      expected_hash="${shard_expected_hash[$s]:-}"
+
+                      if [[ ! -f "$local_shard_tmp" ]]; then
+                        echo "[$(timestamp)] Group #${group_idx_for_tensor}: Expected downloaded file missing: $local_shard_tmp" >&2
                         group_fetch_ok=false
+                        break
                       fi
-                    done
 
-                    # clear fetch pid bookkeeping
-                    unset fetch_pid_to_shard
-                    unset fetch_pids
+                      if [[ -n "$expected_hash" && "$USE_SHA256" == "true" ]]; then
+                        actual_hash="$(_sha256sum "$local_shard_tmp" 2>/dev/null | cut -d' ' -f1 || true)"
+                        if [[ -z "$actual_hash" || "$actual_hash" != "$expected_hash" ]]; then
+                          echo "[$(timestamp)] Group #${group_idx_for_tensor}: Post-wait SHA256 mismatch for $local_shard_tmp: got '${actual_hash}', expected '${expected_hash}'." >&2
+                          group_fetch_ok=false
+                          break
+                        else
+                          echo "[$(timestamp)] Group #${group_idx_for_tensor}: Hash OK for $local_shard_tmp." >&2
+                        fi
+                      fi
+
+                      # If we reach here, the downloaded shard is considered valid
+                      downloaded_shards+=("$local_shard_tmp")
+                    done
 
                     if [[ "$group_fetch_ok" != true ]]; then
                       echo "[$(timestamp)] ⚠️ Group fetch failed; skipping group #${group_idx_for_tensor} and restoring any partial downloads." >&2
