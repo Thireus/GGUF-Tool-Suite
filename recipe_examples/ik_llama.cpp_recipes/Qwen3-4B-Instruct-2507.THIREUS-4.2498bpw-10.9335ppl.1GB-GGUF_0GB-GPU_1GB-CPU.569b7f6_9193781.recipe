@@ -1,0 +1,80 @@
+## Quant mix recipe created using Thireus' GGUF Tool Suite - https://gguf.thireus.com/
+# Model name: Qwen3-4B-Instruct-2507
+# Link to the original model: https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507
+
+## Model head & embeddings — qbits: 32 8 
+^output_norm\.weight$=f32
+^token_embd\.weight$=q8_0
+
+## Multi-headed attention parameters — qbits: 32 5 
+^blk\.([0-9]|[1-2][0-9]|3[0-5])\.attn_norm\.weight$=f32
+^blk\.([0-9]|[1-2][0-9]|3[0-5])\.attn_q\.weight$=iq5_k_r4
+^blk\.([0-9]|[1-2][0-9]|3[0-5])\.attn_v\.weight$=iq5_k_r4
+^blk\.([0-9]|[1-2][0-9]|3[0-5])\.attn_k\.weight$=iq5_k_r4
+^blk\.([0-9]|[1-2][0-9]|3[0-5])\.attn_k_norm\.weight$=f32
+^blk\.([0-9]|[1-2][0-9]|3[0-5])\.attn_output\.weight$=iq5_k_r4
+^blk\.([0-9]|[1-2][0-9]|3[0-5])\.attn_q_norm\.weight$=f32
+
+## Dense Feed-Forward Network weights — qbits: 4 3 2 
+^blk\.(2|4|6|[8-9]|10|15|31|3[3-4])\.ffn_down\.weight$=iq2_ks
+^blk\.(1|3|7|11|1[3-4]|1[6-9]|2[0-1]|24|2[6-8])\.ffn_down\.weight$=iq3_k
+^blk\.(0|[4-7]|1[2-3]|15|1[8-9]|2[1-2]|2[4-9]|3[0-1]|33)\.ffn_up\.weight$=iq3_k
+^blk\.(0|5|12|2[2-3]|25|29|30|32|35)\.ffn_down\.weight$=iq4_ks
+^blk\.(10|23|32|3[4-5])\.ffn_up\.weight$=iq4_ks
+^blk\.([1-3]|[8-9]|11|14|1[6-7]|20)\.ffn_up\.weight$=iq2_ks
+
+## Gating network — qbits: 4 3 2 
+^blk\.([0-1]|3|7|1[0-1]|1[6-9]|2[0-2]|26)\.ffn_gate\.weight$=iq2_ks
+^blk\.(2|[4-6]|[8-9]|1[2-5]|2[3-5]|2[7-9]|31)\.ffn_gate\.weight$=iq3_k
+^blk\.(30|3[2-5])\.ffn_gate\.weight$=iq4_ks
+
+## Misc / Other tensors — qbits: 32 
+^blk\.([0-9]|[1-2][0-9]|3[0-5])\.ffn_norm\.weight$=f32
+
+## Summary of tensor sizes per class
+# GPU Total: 0.99 GiB (100.0%) | 0.99 GiB max, if all were q8_0 | 0.99 GiB min, if all were q8_0
+# CPU Total: 1.00 GiB (75.2%) | 1.33 GiB max, if all were iq4_ks | 0.68 GiB min, if all were iq2_ks
+# GPU+CPU Total: 1.99 GiB (87.6%)
+
+## Summary of tensor counts and bpw per qtype
+#
+# GPU-loaded quants:
+# QTYPE		Count	BPW	Assigned GiB	% Assigned	Max GiB (all)
+# +f32       	145	32    	  0.00 GiB	-		-
+# q8_0      	1  	8.5   	  0.38 GiB	100.0%		0.38
+# +iq5_k_r4  	144	5.5   	  0.60 GiB	-		-
+#
+# CPU-friendly quants:
+# QTYPE		Count	BPW	Assigned GiB	% Assigned	Max GiB (all)
+# iq4_ks    	20 	4.25  	  0.25 GiB	18.5%		1.33
+# iq3_k     	54 	3.4375	  0.54 GiB	50.0%		1.08
+# iq2_ks    	34 	2.1875	  0.22 GiB	31.5%		0.68
+#
+# -Average BPW: 4.2498
+#
+# -Notes:
+# - '+' means user-defined pre-assigned tensors, or tensor missing from csv data or f32 tensors
+# - Recipe produced on the 2025-11-21 09:44:21 GMT+0000 using Thireus' GGUF tools (https://gguf.thireus.com/)
+# - Script SHA-256: 569b7f6a3239c9173d71ca1fadf34222607d72a2cfed2c284b42633e95b4a627
+# - Calibration dataset 'ppl_results.csv' SHA-256: ebe2b483e0a4258f3a65806462b6f4f4a3669a70f664d03dbfcb5c4984ea240a
+# - tensors.bf16.map SHA-256: 5586a523f4069ca3dbabf3b3db9b7514c239b74bd066c13b2c8039127c3fa0be
+# - tensors.bf16.map model name: Qwen3-4B-Instruct-2507-THIREUS-BF16-SPECIAL_TENSOR-00399-of-00399
+# - tensors.q8_0.map SHA-256: 18f39f0eccaaea43cad179f7ed2f98944ae86a88a90b53e6fd1483bdbf5e65ee
+# - tensors.q8_0.map model name: Qwen3-4B-Instruct-2507-THIREUS-Q8_0-SPECIAL_TENSOR-00399-of-00399
+# - tensors.iq5_k_r4.map SHA-256: 7cfde69b74100d794b0d718cc584a95a6c6fde089a7bde7b22e042cd3a35b014
+# - tensors.iq5_k_r4.map model name: Qwen3-4B-Instruct-2507-THIREUS-IQ5_K_R4-SPECIAL_TENSOR-00399-of-00399
+# - tensors.iq4_ks.map SHA-256: d9c6e71ab276dbec04373352b151c5460bd14a36cf7230ab1289ce59241759f9
+# - tensors.iq4_ks.map model name: Qwen3-4B-Instruct-2507-THIREUS-IQ4_KS-SPECIAL_TENSOR-00399-of-00399
+# - tensors.iq3_k.map SHA-256: fc8afc0b1ab1162f92efe31bd62d6ae54d7da62aafe5014e021f26a4d3ce574c
+# - tensors.iq3_k.map model name: Qwen3-4B-Instruct-2507-THIREUS-IQ3_K-SPECIAL_TENSOR-00399-of-00399
+# - tensors.iq2_ks.map SHA-256: 405cbb91c54dc596f71c21029da6db9bcb654600e51d314c33515fd58bf576ef
+# - tensors.iq2_ks.map model name: Qwen3-4B-Instruct-2507-THIREUS-IQ2_KS-SPECIAL_TENSOR-00399-of-00399
+# - GPG signatures: PASSED
+# - Command used:
+# ../../quant_assign.py ppl_results.csv --tolerance 0.01 --cpu-irq-k 1.5 --gpu-irq-k 1.5 --qtype iq2_ks \
+# --gpu-assign-qtype iq5_k_r4 --cpu-tensors-max-size 1 --gpu-tensors-max-size 95% --exponential-factor 8 \
+# --cpu-tensors 'blk\.([0-9]|[1-2][0-9]|3[0-5])\.ffn_down\.weight' 'blk\.([0-9]|[1-2][0-9]|3[0-5])\.ffn_up\.weight' \
+# 'blk\.([0-9]|[1-2][0-9]|3[0-5])\.ffn_gate\.weight' --gpu-tensors '.*' --cpu-quants iq4_ks iq3_k iq2_ks --gpu-quants \
+# q8_0 --gpu-assign-tensors 'blk\.([0-9]|[1-2][0-9]|3[0-5])\.attn_k_b\.weight=q8_0' --harmonization-technique 3
+
+## THE END!
