@@ -382,6 +382,22 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
                         params[out] = val
             i += 1
 
+        lonely_flags = {
+            '--debug': 'debug',
+            '--info': 'info',
+            '--ignore-f32': 'ignore_f32',
+            '--tensors-from-csv': 'tensors_from_csv',
+            '--skip-gpg': 'skip_gpg',
+            '--no-fallback': 'no_fallback',
+        }
+        i = 0
+        while i < len(tokens):
+            t = tokens[i]
+            if t in lonely_flags:
+                out = lonely_flags[t]
+                params[out] = True
+            i += 1
+
         # harmonize groups
         hvals = collect_flag_values(tokens, '--harmonize-tensors')
         if hvals:
