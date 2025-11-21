@@ -1,0 +1,124 @@
+## Quant mix recipe created using Thireus' GGUF Tool Suite - https://gguf.thireus.com/
+# Model name: DeepSeek-V3.1
+# Link to the original model: https://huggingface.co/deepseek-ai/DeepSeek-V3.1
+
+## Model head & embeddings — qbits: 32 8 
+^output_norm\.weight$=f32
+^token_embd\.weight$=q8_0
+^output\.weight$=q8_0
+
+## Special attention kernels — single-quant only (llama-quantize takes care of it) — qbits: 8 
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight$=q8_0
+
+## Multi-headed attention parameters — qbits: 32 4 
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_norm\.weight$=f32
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_v_b\.weight$=iq4_ks
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a_norm\.weight$=f32
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_b\.weight$=iq4_ks
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_output\.weight$=iq4_ks
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_mqa\.weight$=iq4_ks
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_norm\.weight$=f32
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a\.weight$=iq4_ks
+
+## Dense Feed-Forward Network weights — qbits: 6 
+^blk\.[0-2]\.ffn_up\.weight$=iq6_k
+^blk\.[0-2]\.ffn_down\.weight$=iq6_k
+
+## MoE Gating & Routing — qbits: 32 
+^blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_inp\.weight$=f32
+^blk\.([3-9]|[1-5][0-9]|60)\.exp_probs_b\.bias$=f32
+
+## Gating network — qbits: 8 6 
+^blk\.0\.ffn_gate\.weight$=q8_0
+^blk\.[1-2]\.ffn_gate\.weight$=iq6_k
+
+## Misc / Other tensors — qbits: 32 
+^blk\.([0-9]|[1-5][0-9]|60)\.ffn_norm\.weight$=f32
+
+## GPU-loaded - MoE Shared Experts Feed-Forward Network - ffn_*_shexp
+# ffn_down_shexp — down-projection (shared experts) — qbits: 8 6 5 
+^blk\.(5|9|12|15|19|21|24|29|3[1-3]|3[5-9]|4[2-3]|4[5-7]|49|51|60)\.ffn_down_shexp\.weight$=q8_0
+^blk\.([3-4]|[6-8]|10|1[3-4]|17|20|2[2-3]|2[5-7]|30|34|4[0-1]|44|48|50)\.ffn_down_shexp\.weight$=iq6_k
+^blk\.(11|16|18|28|5[2-9])\.ffn_down_shexp\.weight$=iq5_ks_r4
+
+# ffn_up_shexp — up-projection (shared experts) — qbits: 8 6 5 
+^blk\.([3-4]|6|[8-9]|1[4-5]|18|21|23|2[5-6]|29|32|3[6-7]|40|45|48|60)\.ffn_up_shexp\.weight$=q8_0
+^blk\.(5|7|1[0-1]|1[6-7]|19|20|22|24|2[7-8]|3[0-1]|3[3-5]|3[8-9]|4[1-4]|4[6-7]|49|5[0-4]|59)\.ffn_up_shexp\.weight$=iq6_k
+^blk\.(1[2-3]|5[5-8])\.ffn_up_shexp\.weight$=iq5_ks_r4
+
+# ffn_gate_shexp — gating network (shared experts) — qbits: 8 6 5 
+^blk\.([4-5]|[7-8]|11|14|1[7-9]|21|2[4-5]|28|3[3-5]|39|40|4[4-6]|4[8-9]|60)\.ffn_gate_shexp\.weight$=q8_0
+^blk\.(3|6|9|10|[1-2][2-3]|15|20|2[6-7]|29|3[0-2]|3[6-8]|4[1-3]|47|50|5[3-7]|59)\.ffn_gate_shexp\.weight$=iq6_k
+^blk\.(16|5[1-2]|58)\.ffn_gate_shexp\.weight$=iq5_ks_r4
+
+## CPU-friendly - MoE Per-expert Feed-Forward Network - ffn_*_exps
+# ffn_down_exps — down-projection (per-expert) — qbits: 3 2 1 
+^blk\.(35|41|44)\.ffn_down_exps\.weight$=iq3_kt
+^blk\.(28|3[2-4]|3[6-9]|40|42|4[5-9]|51|53|55)\.ffn_down_exps\.weight$=iq2_kt
+^blk\.([3-9]|1[0-9]|2[0-7]|29|3[0-1]|43|50|52|54|5[6-9]|60)\.ffn_down_exps\.weight$=iq1_kt
+
+# ffn_up_exps — up-projection (per-expert) — qbits: 2 1 
+^blk\.(44|4[7-8])\.ffn_up_exps\.weight$=iq2_kt
+^blk\.([3-9]|[1-3][0-9]|4[0-3]|4[5-6]|49|5[0-9]|60)\.ffn_up_exps\.weight$=iq1_kt
+
+# ffn_gate_exps — gating network (per-expert) — qbits: 2 1 
+^blk\.(44|4[7-8])\.ffn_gate_exps\.weight$=iq2_kt
+^blk\.([3-9]|[1-3][0-9]|4[0-3]|4[5-6]|49|5[0-9]|60)\.ffn_gate_exps\.weight$=iq1_kt
+
+## Summary of tensor sizes per class
+# GPU Total: 11.22 GiB (94.7%) | 11.84 GiB max, if all were q8_0 | 9.72 GiB min, if all were iq5_ks_r4
+# CPU Total: 138.96 GiB (58.4%) | 237.89 GiB max, if all were iq3_kt | 133.22 GiB min, if all were iq1_kt
+# GPU+CPU Total: 150.18 GiB (76.6%)
+
+## Summary of tensor counts and bpw per qtype
+#
+# GPU-loaded quants:
+# QTYPE		Count	BPW	Assigned GiB	% Assigned	Max GiB (all)
+# +f32       	361	32    	  0.40 GiB	-		-
+# +q8_0      	61 	8.5   	  0.51 GiB	-		-
+# q8_0      	71 	8.5   	  2.95 GiB	53.3%		5.54
+# iq6_k     	92 	6.625 	  1.77 GiB	40.9%		4.32
+# iq5_ks_r4 	22 	5.25  	  0.20 GiB	5.8%		3.42
+# +iq4_ks    	305	4.25  	  5.39 GiB	-		-
+#
+# CPU-friendly quants:
+# QTYPE		Count	BPW	Assigned GiB	% Assigned	Max GiB (all)
+# iq3_kt    	3  	3.125 	  4.10 GiB	1.7%		237.89
+# iq2_kt    	24 	2.125 	 22.31 GiB	13.8%		161.77
+# iq1_kt    	147	1.75  	112.55 GiB	84.5%		133.22
+#
+# -Average BPW: 1.9224
+#
+# -Notes:
+# - '+' means user-defined pre-assigned tensors, or tensor missing from csv data or f32 tensors
+# - Recipe produced on the 2025-11-21 09:27:03 GMT+0000 using Thireus' GGUF tools (https://gguf.thireus.com/)
+# - Script SHA-256: 569b7f6a3239c9173d71ca1fadf34222607d72a2cfed2c284b42633e95b4a627
+# - Calibration dataset 'ppl_results.csv' SHA-256: 3ddc5cb20a20dd27920b484255c9301f0753f75fc2901b7ed20af4f31fe0aedd
+# - tensors.bf16.map SHA-256: 015c510b188ee9671c09780b7f27a89b7eb09987439c8d1dfe79ed5eef8ea42e
+# - tensors.bf16.map model name: DeepSeek-V3.1-THIREUS-BF16-SPECIAL_TENSOR-01087-of-01087
+# - tensors.q8_0.map SHA-256: 65ad5d9ac889c1271bee1158cb21fef914f183bbe71b6a32a84a0dd5d2e6a9a6
+# - tensors.q8_0.map model name: DeepSeek-V3.1-THIREUS-Q8_0-SPECIAL_TENSOR-01087-of-01087
+# - tensors.iq6_k.map SHA-256: e85d4c0e51cba336be8402af2f92f61ff8fb652ff6919b6dc8c3b9176e83e6f2
+# - tensors.iq6_k.map model name: DeepSeek-V3.1-THIREUS-IQ6_K-SPECIAL_TENSOR-01087-of-01087
+# - tensors.iq5_ks_r4.map SHA-256: a22c646348a3d3eae44c403a828ad9fbc9bdcf84498535c4f60146bf86907be2
+# - tensors.iq5_ks_r4.map model name: DeepSeek-V3.1-THIREUS-IQ5_KS_R4-SPECIAL_TENSOR-01087-of-01087
+# - tensors.iq4_ks.map SHA-256: 279b86d6ab34c139632879c35b8c25317f8b2bcb53923f90e3593f2946d9f831
+# - tensors.iq4_ks.map model name: DeepSeek-V3.1-THIREUS-IQ4_KS-SPECIAL_TENSOR-01087-of-01087
+# - tensors.iq3_kt.map SHA-256: 75f2d2c833de16efc5645e46a1de74e3b9fc5c1ed9d14daedf011f80bb322f58
+# - tensors.iq3_kt.map model name: DeepSeek-V3.1-THIREUS-IQ3_KT-SPECIAL_TENSOR-01087-of-01087
+# - tensors.iq2_kt.map SHA-256: 33a60394195287c8bc7e8d3455a876c083b673d3855df715b4fc13eb0e630ecd
+# - tensors.iq2_kt.map model name: DeepSeek-V3.1-THIREUS-IQ2_KT-SPECIAL_TENSOR-01087-of-01087
+# - tensors.iq1_m_r4.map SHA-256: ac0f7d7b5e1783d01c64788eaa25e3a64a1c795caf32a43a10f9a5ae8f334623
+# - tensors.iq1_m_r4.map model name: DeepSeek-V3.1-THIREUS-IQ1_M_R4-SPECIAL_TENSOR-01087-of-01087
+# - tensors.iq1_kt.map SHA-256: caa397a9706ddc1e56fe271bebcaef978f88e7762183dd67fb90671738ef8a05
+# - tensors.iq1_kt.map model name: DeepSeek-V3.1-THIREUS-IQ1_KT-SPECIAL_TENSOR-01087-of-01087
+# - GPG signatures: PASSED
+# - Command used:
+# ../../quant_assign.py ppl_results.csv --tolerance 0.01 --cpu-irq-k 1.5 --gpu-irq-k 1.5 --gpu-assign-qtype iq4_ks \
+# --cpu-tensors-max-size 139 --gpu-tensors-max-size 95% --exponential-factor 8 --cpu-tensors \
+# '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight$' '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight$' \
+# '^blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight$' --gpu-tensors '.*' --cpu-quants iq3_kt iq2_kt iq1_kt \
+# --gpu-quants q8_0 iq5_ks_r4 iq6_k --gpu-assign-tensors '^blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight$=q8_0' \
+# --harmonize-tensors '^blk\..*\.ffn_up_exps.*,^blk\..*\.ffn_gate_exps.*' --harmonization-technique 3
+
+## THE END!

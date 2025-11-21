@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-12-2025 -------------------- **#
+#** --------------- Updated: Nov-21-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -31,6 +31,7 @@
 
 import ast
 from datetime import datetime
+import math
 import time
 import os
 import shlex
@@ -45,7 +46,7 @@ import subprocess
 import tempfile
 from collections import Counter
 import textwrap
-from typing import cast
+from typing import Dict, Tuple, cast, Any
 
 # Global default quants list
 DEFAULT_QUANTS = ['q8_0', 'q4_0']
@@ -61,6 +62,9 @@ DEFAULT_REDUCE = {
      2: 0.878,
      1: 0.395,
 }
+
+# Cache bpw observed per qtype whenever a tensors map file is processed
+QTYPE_BPW_CACHE = {}
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
 
@@ -187,59 +191,15 @@ def _call_normalised_ppl(keys):
     return results
 
 
-def obtain_quants_bpw(qtype):
-    """
-    Infer bits-per-weight (bpw) for each tensor of a quantized map.
-    Compares sizes in the bf16 base map to the qtype map.
-    Returns: dict tensor_name -> bpw (float)
-    """
-    # load base sizes and types from bf16 map
-    base_sizes, base_actual_qtypes = get_map_sizes('bf16')
-    # load quantized sizes (map returns tuple even if actual_qtypes unused)
-    if qtype == 'f32':
-        _qtype = 'bf16'
-    else:
-        _qtype = qtype
-    quant_sizes, quant_actual_qtypes = get_map_sizes(_qtype)
-    bpw_map = {}
-    for name, Sq in quant_sizes.items():
-        Sbase = base_sizes.get(name)
-        if Sbase is None or Sbase == 0:
-            if DEBUG:
-                print(f"[Debug] No base size for tensor {name}, skipping")
-            continue
-        dtype_base = base_actual_qtypes.get(name, 'bf16')
-        # bits per weight in base format
-        if dtype_base in ('bf16', 'fp16'):
-            bbase = 16
-        else:
-            bbase = 32
-        dtype_quant = {quant_actual_qtypes.get(name, qtype)}
-        bpw = bbase * (Sq / Sbase)
-        if quant_actual_qtypes.get(name, qtype) == qtype:
-            bpw_map[name] = bpw
-        else:
-            if DEBUG:
-                print(f"[Debug] Skipping tensor {name} because dtype_quant={dtype_quant} mismatch with exepcted qtype: {qtype}")
-        if DEBUG:
-            print(f"[Debug] Tensor {name}: base dtype={dtype_base}, Sbase={Sbase}, dtype_quant={dtype_quant}, Sq={Sq}, bpw={bpw:.3f}")
-    return bpw_map
-
-
 @functools.lru_cache(maxsize=None)
 def get_bpw(qtype):
     """
-    Return the bpw for a given qtype, caching results for performance.
+    Return the bpw for a given qtype.
     """
     # infer bits-per-weight from data instead of hardcoding
-    bpw_map = obtain_quants_bpw(qtype)
-    # compute average bpw across all tensors, fallback if empty
-    if bpw_map:
-        return sum(bpw_map.values()) / len(bpw_map)
-    else:
-        if DEBUG:
-            print(f"[Debug] Could not infer bpw for qtype {qtype}, using extract_quant_num fallback")
-        return extract_quant_num(qtype)
+    if qtype not in QTYPE_BPW_CACHE:
+        _, _, _ = get_map_sizes_and_elements(qtype)
+    return QTYPE_BPW_CACHE[qtype]
 
 @functools.lru_cache(maxsize=None)
 def get_default_factor(qtype):
@@ -334,6 +294,25 @@ def group_tensors(names):
     return groups
 
 
+def transform_q_suffix(s: str) -> str:
+    """
+    If s starts with 'q' (any case) and ends with 'kv' or 'k' (any case),
+    return the same string but with the trailing 'k' or 'kv' uppercased.
+    Otherwise return the original string.
+    """
+    # Try 'kv' first
+    m = re.match(r'^(q.*?)(kv)$', s, re.IGNORECASE)
+    if m:
+        return m.group(1) + m.group(2).upper()
+
+    # Then try single 'k'
+    m = re.match(r'^(q.*?)(k)$', s, re.IGNORECASE)
+    if m:
+        return m.group(1) + m.group(2).upper()
+
+    return s
+
+
 def select_qtype(df, qtype_arg):
     """
     Select the row for given QTYPE or lowest quant.
@@ -349,7 +328,7 @@ def select_qtype(df, qtype_arg):
     return sel
 
 # global state for fetch_map_for_qtype()
-MAP_FILE_INFO     = {}   # will hold {"tensors.<qtype>.map": [sha256, last_line], …}
+MAP_FILE_INFO     = {}   # will hold {"tensors.<qtype>.map": [qtype, sha256, last_line], …}
 SIG_FILE_HASHES   = {}   # will hold {"tensors.<qtype>.map.sig": sha256, …}
 # “Looks like q…k” ignoring case
 _INSPECT_K_RE = re.compile(r'^q.*k$', re.IGNORECASE)
@@ -431,7 +410,7 @@ def fetch_map_for_qtype(qtype: str):
                 lines = f_text.readlines()
             last_line = lines[-1].split(':', 1)[0] if lines else ''
             last_line = last_line.split('.gguf', 1)[0] if last_line else ''
-            MAP_FILE_INFO[map_key] = [sha256sum, last_line]
+            MAP_FILE_INFO[map_key] = [qtype, sha256sum, last_line]
 
         # Compute and store sha256 for the signature file, if applicable
         if not SKIP_GPG:
@@ -448,30 +427,36 @@ def fetch_map_for_qtype(qtype: str):
         return False
 
 
-def get_map_sizes(qtype):
+@functools.lru_cache(maxsize=None)
+def get_map_sizes_and_elements(qtype, collect_raw = False):
     """
-    Return parsed map sizes for given qtype, caching results.
+    Return parsed map sizes and elements for given qtype, caching results.
     """
     if qtype not in _quant_maps:
-        if not fetch_map_for_qtype(qtype):
-            print(f"Error: Fetching valid map for qtype: {qtype} was unsuccessful.")
+        # If caller asked for 'f32' we will probe 'bf16' and then return that result under the 'f32' key.
+        probe = 'bf16' if qtype == 'f32' else qtype
+        if not fetch_map_for_qtype(probe):
+            print(f"Error: Fetching valid map for qtype: {probe} was unsuccessful.")
             sys.exit(8)
         # parse_map_file now returns tuple
-        _quant_maps[qtype] = parse_map_file(qtype)
+        _quant_maps[qtype] = parse_map_file(qtype, collect_raw)
     return _quant_maps[qtype]
 
-
-def parse_map_file(qtype):
+def parse_map_file(qtype, collect_raw = False):
     """
     Parse local tensors.{qtype}.map into:
       - sizes: dict tensor_name -> bytes_size
-      - actual_qtypes: dict tensor_name -> dtype (e.g., 'bf16', 'f32')
+      - actual_qtypes: dict tensor_name -> dtype (e.g., 'bf16', 'f32', 'q8_0', ...)
+      - elements: dict tensor_name -> elements
     """
-    path = os.path.join(TMP_DIR, f"tensors.{qtype}.map")
+    probe = 'bf16' if qtype == 'f32' else qtype
+    path = os.path.join(TMP_DIR, f"tensors.{probe}.map")
     sizes = {}
     actual_qtypes = {}
+    elements = {}
     if not os.path.exists(path):
-        return sizes, actual_qtypes
+        return sizes, actual_qtypes, elements
+
     with open(path) as f:
         for line in f:
             parts = line.strip().split(':')
@@ -480,20 +465,37 @@ def parse_map_file(qtype):
             # parts example:
             # [file, checksum, tensor_name, shape=..., dtype=f32, elements=..., bytes=...]
             tensor_name = parts[2]
-            # find dtype and bytes fields
+            # find dtype, bytes, elements fields
             dtype = None
             size_bytes = None
+            elems = None
             for p in parts:
                 if p.startswith('dtype='):
-                    dtype = p.split('=')[1]
+                    dtype = transform_q_suffix(p.split('=', 1)[1]) # Ensures q..K and q..KV
                 elif p.startswith('bytes='):
-                    size_bytes = int(p.split('=')[1])
-            if dtype is None or size_bytes is None:
+                    size_bytes = int(p.split('=', 1)[1])
+                elif p.startswith('elements='):
+                    elems = int(p.split('=', 1)[1])
+                if dtype and size_bytes and elems and dtype not in QTYPE_BPW_CACHE:
+                    QTYPE_BPW_CACHE[dtype] = size_bytes * 8 / elems
+            if dtype is None or size_bytes is None or elems is None:
+                # skip incomplete lines
                 continue
+
             sizes[tensor_name] = size_bytes
             actual_qtypes[tensor_name] = dtype
-    return sizes, actual_qtypes
+            elements[tensor_name] = elems
 
+    # If NO_FALLBACK requested, synthesize faked sizes/dtypes for mismatching tensors
+    if NO_FALLBACK and not collect_raw:
+        for t in actual_qtypes:
+            if actual_qtypes[t] != qtype:
+                if INFO:
+                    print(f"[Info] --no-fallback: Enforcing {qtype} qtype for {t} instead of fallback {actual_qtypes[t]} dtype present in tensors map file.")
+                actual_qtypes[t] = qtype
+                sizes[t] = int(round(elements[t] * (QTYPE_BPW_CACHE[qtype] / 8)))
+
+    return sizes, actual_qtypes, elements
 
 def load_sample_ppl_table(path):
     """
@@ -615,7 +617,7 @@ def assign_quants(quants, _, class_values, forced_mid=None, stretch=1.0, harmoni
     # 2) Compute sizes and apply index-wise harmonization when applicable
     for name in class_names:
         q_assigned = assignment[name]
-        sizes_map, _ = get_map_sizes(q_assigned)  # sizes_map: {tensor_name: size_in_bytes}
+        sizes_map, _, _ = get_map_sizes_and_elements(q_assigned)  # sizes_map: {tensor_name: size_in_bytes}
         base_size = sizes_map.get(name, 0)
         final_size = base_size
 
@@ -683,7 +685,7 @@ def total_size_for_quant(names, qtype):
     """
     Sum the map sizes for the given tensor names under the specified quant.
     """
-    sizes_map, _ = get_map_sizes(qtype)
+    sizes_map, _, _ = get_map_sizes_and_elements(qtype)
     return sum(sizes_map.get(name, 0) for name in names)
 
 
@@ -774,7 +776,7 @@ def scale_for_size(assignment, sizes, quants, max_size_bytes):
             if idx + 1 < len(quants):
                 new_q = quants[idx+1]
                 assignment[name] = new_q
-                sizes[name], _ = get_map_sizes(new_q)
+                sizes[name], _, _ = get_map_sizes_and_elements(new_q)
                 sizes[name] = sizes[name].get(name, 0)
                 made_change = True
                 total = sum(sizes.values())
@@ -1034,7 +1036,7 @@ def harmonize_row(row: pd.Series, cols: list, harmonize_groups: list, technique:
     return row
 
 def main():
-    global DEBUG, INFO, SKIP_GPG, ALL_GPG_SIGS_VALID
+    global DEBUG, INFO, SKIP_GPG, ALL_GPG_SIGS_VALID, NO_FALLBACK
     parser = argparse.ArgumentParser(description="Assign optimal quants per tensor based on the calibration data CSV file.")
     parser.add_argument('--debug', action='store_true', help='Show debug logs')
     parser.add_argument('--info', action='store_true', help='Show info logs')
@@ -1075,6 +1077,9 @@ def main():
                         help=('Harmonization technique to use when --harmonize-tensors is set: 0=disabled, 1=max, 2=mean, 3=min (default). ' 
                             'Values are applied element-wise per layer across the matched tensors.'
                             'Max ensures calibration data measurement is not negatively degraded. Min will degrade calibration data accuracy but appears to give the best results. Mean is a compromise in-between. Disabled means harmonization is disabled.'))
+    parser.add_argument('--no-fallback', action='store_true',
+                        help=('Disable automatic fallback checks: do NOT attempt to inspect map files to detect per-tensor dtype mismatches. '
+                              'When set, the script will act as if the quantized tensors of the map files were pure and any tensor mismatching the quant type will have its size "guessed" as if it had been quantized to that qtype.'))
     args = parser.parse_args()
 
     # ---- BEGIN pgpy-based “trusted-keys.asc” check ----
@@ -1109,6 +1114,9 @@ def main():
 
     DEBUG = args.debug
     INFO = args.info or DEBUG
+
+    # make --no-fallback visible to top-level helpers
+    NO_FALLBACK = bool(args.no_fallback)
 
     if args.cpu_tensors and not args.cpu_quants:
         parser.error("--cpu-quants is required when --cpu-tensors is used")
@@ -1216,7 +1224,7 @@ def main():
     # Update columns one-by-one (avoids type-checker issues and is explicit)
     for col in cols_to_update:
         # row[col] might be a numpy scalar or python scalar — both are fine
-        df.at[idx, col] = row[col]
+        df.at[cast(Any, idx), col] = row[col]
 
     # ---- END harmonization ----
     #print(row.to_string(max_rows=None))
@@ -1225,9 +1233,10 @@ def main():
     if not fetch_map_for_qtype(qtype):
         print(f"Error: Fetching valid map for qtype: {qtype} was unsuccessful.")
         sys.exit(8)
-    _, items = get_map_sizes(qtype)
-    _, items_bf16 = get_map_sizes('bf16')
-    _items = items_bf16
+    _, items, _ = get_map_sizes_and_elements(qtype, True)
+    _, items_f32, _ = get_map_sizes_and_elements('f32', True)
+
+    _items = items_f32
     if not _items:
         _items = items
 
@@ -1240,7 +1249,7 @@ def main():
 
     # Identify all f32 tensors once
     if INFO: print(f"[Info] Get f32 tensor names")
-    # get_map_sizes returns (sizes, actual_qtypes)
+    # get_map_sizes_and_elements returns (sizes, actual_qtypes, elements)
     f32_names = [n for n,d in _items.items() if d == 'f32']
 
     # Classify tensors
@@ -1341,12 +1350,20 @@ def main():
                 continue # Skip loop if empty quants
             # if user did *not* list 'f32' in 'cls'_quants, add to cls offset
             if 'f32' not in (cpu_quants if cls=='cpu' else gpu_quants):
-                f32_offset[cls] = total_size_for_quant(f32_classes.get(cls, []), 'bf16')
+                f32_offset[cls] = total_size_for_quant(f32_classes.get(cls, []), 'f32')
                 if f32_offset[cls] == 0:
                     f32_offset[cls] = total_size_for_quant(f32_classes.get(cls, []), qtype)
+    
+    # Track how many fallback corrections happened
+    fallback_corrections = 0
 
     # Track precomputed extremes per class
     extremes = {}
+
+    # ---- Ensure single registry for all tensors (persist across classes) ----
+    # tensor_index[cls] is a list of dicts:
+    # {'name': str, 'orig_q': str|None, 'final_q': str|None, 'size': int, 'kind': 'f32'|'pre'|'measured'}
+    tensor_index = {'cpu': [], 'gpu': []}
 
     # Process GPU and CPU classes
     for cls in ['gpu', 'cpu']:
@@ -1550,36 +1567,229 @@ def main():
         if max_arg_bytes:
             print(f"# Optimized sub-total {cls.upper()} size excluding outliers and f32: {total_bytes/GIB:.3f} GiB")
 
-        # List any auto-added f32 tensors in the output
-        if add_f32 and f32_offset.get(cls,0) > 0:
-            print(f"# Auto-included f32 tensors for {cls.upper()}:")
-            for n in sorted(f32_names):
-                # _size = total_size_for_quant([n], 'bf16')
-                # if _size == 0:
-                #     _size = total_size_for_quant([n], qtype)
-                # size = _size / GIB
-                print(f"^{re.escape(n)}$=f32")
+        # ----------------- Verbose fallback-inspection & printing block (enhanced) -----------------
+        # Purpose: when we print assignments like ^regex$=QTYPE, verify the map actually
+        # contains that tensor with that QTYPE. If not, substitute the qtype found in the map.
+        # This block records the final qtype back into pre_assignments / assignments[cls]
+        # so later summary and size/bpw calculations use the corrected map-reported values.
 
+        def _regex_override_for(name, cls_local):
+            """
+            Check compiled regex override lists (cpu_regex_assign / gpu_regex_assign).
+            Returns the forced qtype (string) if any override applies, else None.
+            """
+            try:
+                if cls_local == 'cpu':
+                    for cre, qt in cpu_regex_assign:
+                        if cre.fullmatch(name):
+                            if DEBUG:
+                                print(f"[Debug] Regex override (cpu) matched {name} -> {qt}")
+                            return qt
+                else:
+                    for cre, qt in gpu_regex_assign:
+                        if cre.fullmatch(name):
+                            if DEBUG:
+                                print(f"[Debug] Regex override (gpu) matched {name} -> {qt}")
+                            return qt
+            except Exception as e:
+                if DEBUG:
+                    print(f"[Debug] Regex override check error for {name}: {e}")
+            return None
+
+        def _infer_assigned_q(name, cls_local):
+            """
+            Infer what qtype the script/user intended for `name` if the direct original_q
+            is missing. Priority:
+              1) pre_assignments (explicit user assign / missing-csv pre-assign)
+              2) regex overrides (--*-assign-tensors via parsed cpu_regex_assign/gpu_regex_assign)
+              3) assignments[cls] (what script computed earlier)
+              4) explicit --cpu-assign-qtype / --gpu-assign-qtype (default assigned qtype)
+              5) None (no assigned qtype)
+            """
+            # 1) pre_assignments (explicit user-provided or missing-from-csv pre-assign)
+            if name in pre_assignments:
+                q = pre_assignments.get(name)
+                if DEBUG:
+                    print(f"[Debug] Inferred from pre_assignments: {name} -> {q}")
+                return q
+            # 2) regex override lists (user-provided patterns)
+            overridden = _regex_override_for(name, cls_local)
+            if overridden:
+                return overridden
+            # 3) already computed assignments (post-assignment by this tool)
+            if name in assignments.get(cls_local, {}):
+                q = assignments[cls_local].get(name)
+                if DEBUG:
+                    print(f"[Debug] Inferred from assignments[{cls_local}]: {name} -> {q}")
+                return q
+            # 4) the explicit class-level default qtype flags
+            if cls_local == 'cpu' and args.cpu_assign_qtype:
+                if DEBUG:
+                    print(f"[Debug] Inferred class default cpu_assign_qtype for {name} -> {args.cpu_assign_qtype}")
+                return args.cpu_assign_qtype
+            if cls_local == 'gpu' and args.gpu_assign_qtype:
+                if DEBUG:
+                    print(f"[Debug] Inferred class default gpu_assign_qtype for {name} -> {args.gpu_assign_qtype}")
+                return args.gpu_assign_qtype
+            if DEBUG:
+                print(f"[Debug] No inferred assignment for {name}")
+            return None
+
+        def _basename_of_tensor(name: str) -> str:
+            m = re.match(r'^blk\.(\d+)\.(.*)$', name)
+            if m:
+                return m.group(2)
+            return name
+
+        def _format_type_list(names):
+            from collections import Counter
+            basenames = [_basename_of_tensor(n) for n in names]
+            cnt = Counter(basenames)
+            items = sorted(cnt.items(), key=lambda kv: (-kv[1], kv[0]))
+            parts = []
+            for name, c in items:
+                parts.append(f"{c}x {name}" if c != 1 else f"{name}")
+            return ", ".join(parts)
+
+        # ---- Process auto-included f32 tensors ----
+        if add_f32 and f32_offset.get(cls, 0) > 0:
+            print(f"# Auto-included f32 tensors for {cls.upper()}:")
+            f32_entries = []
+            for name in sorted(f32_names):
+                orig_q = 'f32'
+                # compute size under final_q and record full entry
+                sizes_map, actual_qtypes_map, elements_map = get_map_sizes_and_elements(orig_q)
+                size = int(sizes_map.get(name, 0))
+                final_q = actual_qtypes_map.get(name, 0)
+                elements = int(elements_map.get(name, 0))
+                f32_entries.append((name, orig_q, final_q))
+                # write back the final qtype into assignments / pre_assignments so later steps use it
+                if name in pre_assignments:
+                    pre_assignments[name] = final_q
+                else:
+                    assignments.setdefault(cls, {})[name] = final_q
+                tensor_index[cls].append({
+                    'name': name, 'orig_q': orig_q, 'final_q': final_q,
+                    'size': size, 'elements': elements, 'kind': 'f32'
+                })
+
+            # group mismatches and print warnings (same behaviour as before)
+            from collections import defaultdict
+            pair_to_names = defaultdict(list)
+            for name, o, f in f32_entries:
+                if o and o != f:
+                    pair_to_names[(o, f)].append(name)
+
+            phase_mismatch_count = sum(len(v) for v in pair_to_names.values())
+            if INFO:
+                print(f"[Info] f32 phase mismatches: {phase_mismatch_count}")
+
+            for (o, f), names_list in pair_to_names.items():
+                type_list_str = _format_type_list(names_list)
+                print(f"# WARNING - {type_list_str} qtype fallback to {f} from {o}")
+            for name, o, f in f32_entries:
+                print(f"^{re.escape(name)}$={f}")
+
+        # ---- Process grouped tensors (pre-assigned and measured) ----
         groups = group_tensors(names)
         for base, full in groups.items():
-            displayed_already = False
-            for name in sorted((n for n in full if n in pre_assignments), key=lambda n: pre_assignments[n], reverse=True):
-                if not displayed_already:
-                    print(f"# Group: {re.escape(base)}")
-                    displayed_already = True
-                print(f"^{re.escape(name)}$={pre_assignments.get(name,'')}")
-            for name in sorted((n for n in full if n in values), key=lambda n: values[n], reverse=True):
-                if not displayed_already:
-                    print(f"# Group: {re.escape(base)}")
-                    displayed_already = True
-                print(f"^{re.escape(name)}$={assignments[cls].get(name,'')}")
+            # pre-assigned entries
+            pre_list = sorted((n for n in full if n in pre_assignments), key=lambda n: pre_assignments[n], reverse=True)
+            pre_entries = []
+            for name in pre_list:
+                orig_q = pre_assignments.get(name, '')
+                # compute size under final_q and record full entry (kind = 'pre')
+                sizes_map, actual_qtypes_map, elements_map = get_map_sizes_and_elements(orig_q)
+                size = int(sizes_map.get(name, 0))
+                final_q = actual_qtypes_map.get(name, 0)
+                elements = int(elements_map.get(name, 0))
+                pre_entries.append((name, orig_q, final_q))
+                # writeback
+                pre_assignments[name] = final_q
+                tensor_index[cls].append({
+                    'name': name, 'orig_q': orig_q, 'final_q': final_q,
+                    'size': size, 'elements': elements, 'kind': 'pre'
+                })
 
-    # Summary of tensor sizes per class
+            # measured entries
+            val_list = sorted((n for n in full if n in values), key=lambda n: values[n], reverse=True)
+            val_entries = []
+            for name in val_list:
+                orig_q = assignments.get(cls, {}).get(name, '')
+                if not orig_q:
+                    inferred = _infer_assigned_q(name, cls)
+                    if inferred:
+                        orig_q = inferred
+                # compute size under final_q and record full entry (kind = 'measured')
+                sizes_map, actual_qtypes_map, elements_map = get_map_sizes_and_elements(orig_q)
+                size = int(sizes_map.get(name, 0))
+                final_q = actual_qtypes_map.get(name, 0)
+                elements = int(elements_map.get(name, 0))
+                val_entries.append((name, orig_q, final_q))
+                # writeback
+                assignments.setdefault(cls, {})[name] = final_q
+                tensor_index[cls].append({
+                    'name': name, 'orig_q': orig_q, 'final_q': final_q,
+                    'size': size, 'elements': elements, 'kind': 'measured'
+                })
+
+            # grouped warnings for pre / val phase (unchanged behavior)
+            from collections import defaultdict
+            pre_pair_to_names = defaultdict(list)
+            for name, o, f in pre_entries:
+                if o and o != f:
+                    pre_pair_to_names[(o, f)].append(name)
+            val_pair_to_names = defaultdict(list)
+            for name, o, f in val_entries:
+                if o and o != f:
+                    val_pair_to_names[(o, f)].append(name)
+
+            pre_mismatch = sum(len(v) for v in pre_pair_to_names.values())
+            val_mismatch = sum(len(v) for v in val_pair_to_names.values())
+            if INFO:
+                print(f"[Info] Group '{base}' pre_mismatch={pre_mismatch} val_mismatch={val_mismatch}")
+
+            if pre_entries or val_entries:
+                printed_group_header = False
+                for entries, pair_to_names in ((pre_entries, pre_pair_to_names), (val_entries, val_pair_to_names)):
+                    if entries and not printed_group_header:
+                        print(f"# Group: {re.escape(base)}")
+                        printed_group_header = True
+                    for (o, f), names_list in pair_to_names.items():
+                        type_list_str = _format_type_list(names_list)
+                        print(f"# WARNING - {type_list_str} qtype fallback to {f} from {o}")
+                    for name, o, f in entries:
+                        print(f"^{re.escape(name)}$={f if f is not None else ''}")
+
+        if INFO:
+            print(f"[Info] Completed verbose assignment inspection for class '{cls}'.")
+
+    # Recompute fallback_corrections from the single canonical registry (avoid double counting)
+    fallback_corrections = sum(
+        1 for cls in ('cpu', 'gpu') for e in tensor_index.get(cls, [])
+        if e.get('orig_q') and e.get('final_q') and e['orig_q'] != e['final_q']
+    )
+
+    if DEBUG:
+        print(f"[Debug] tensor_index - ", tensor_index)
+
+    # ----------------- SUMMARY: build everything from tensor_index (single source-of-truth) -----------------
     print("\n## Summary of tensor sizes per class")
+
+    # Recompute totals from the registry
+    recomputed_totals = {}
+    for cls in ['gpu', 'cpu']:
+        if cls == 'cpu' and not cpu_quants:
+            continue
+        if cls == 'gpu' and not gpu_quants:
+            continue
+        total_bytes = sum(e['size'] for e in tensor_index.get(cls, []))
+        recomputed_totals[cls] = total_bytes
+
+    # Print recomputed totals (use existing extremes map for max/min context)
     _tb = 0
     _pct = 0
-    for cls, tb in totals.items():
-        # Retrieve extremes
+    for cls, tb in recomputed_totals.items():
         ext = extremes.get(cls, {})
         highest_q = ext.get('highest_q')
         lowest_q = ext.get('lowest_q')
@@ -1589,20 +1799,32 @@ def main():
         pct = (tb / (max_size * GIB)) * 100 if max_size > 0 else 0
         _tb += tb
         _pct += pct
-        print(f"#{cls.upper():>4} Total: {tb/GIB:.3f} GiB ({pct:.1f}%) | {max_size:.2f} GiB max, if all were {highest_q} | {min_size:.2f} GiB min, if all were {lowest_q}")
-    
+        print(f"#{cls.upper():>4} Total: {tb/GIB:.2f} GiB ({pct:.1f}%) | {max_size:.2f} GiB max, if all were {highest_q} | {min_size:.2f} GiB min, if all were {lowest_q}")
+
     if cpu_quants and gpu_quants:
-        print(f"# GPU+CPU Total: {_tb/GIB:.3f} GiB ({_pct/2:.1f}%)")
+        print(f"# GPU+CPU Total: {_tb/GIB:.2f} GiB ({_pct/2:.1f}%)")
 
     # Summary tensor counts and bits-per-weight per qtype
     print("\n## Summary of tensor counts and bpw per qtype")
 
-    # Build a combined list of all qtypes, maintaining order
+    # Build master qtype list: user quants + discovered final_q types + pre_assign orig qtypes
     all_qtypes = []
     if cpu_quants:
         all_qtypes.extend(cpu_quants)
     if gpu_quants:
         all_qtypes.extend(gpu_quants)
+
+    # include final qtypes observed in registry
+    for cls in ('cpu', 'gpu'):
+        for e in tensor_index.get(cls, []):
+            fq = e.get('final_q')
+            if fq and fq not in all_qtypes:
+                all_qtypes.append(fq)
+            oq = e.get('orig_q')
+            if oq and oq not in all_qtypes:
+                all_qtypes.append(oq)
+
+    # preserve order unique
     seen = set()
     ordered_qtypes = []
     for qt in all_qtypes:
@@ -1610,102 +1832,133 @@ def main():
             seen.add(qt)
             ordered_qtypes.append(qt)
 
-    # Use separate assignment maps per class (already handled earlier)
-    quant_counts_by_class = {
-        'cpu': Counter(assignments.get('cpu', {}).values()),
-        'gpu': Counter(assignments.get('gpu', {}).values())
-    }
-
-    _bytes = 0
-    _bpw = 0
-    _w = 0
     for cls in ['gpu', 'cpu']:
         if cls == 'cpu' and not cpu_quants:
             continue # Skip loop if empty quants
         if cls == 'gpu' and not gpu_quants:
             continue # Skip loop if empty quants
+
         quants_list = gpu_quants if cls == 'gpu' else cpu_quants
         _quants_list = quants_list
         if add_f32:
             if 'f32' not in (cpu_quants if cls=='cpu' else gpu_quants):
                 quants_list = ['f32'] + _quants_list
-        names = classes.get(cls, [])
-        names_assigned = subclasses_assigned.get(cls, [])
-        names_post_assigned = subclasses_to_assign.get(cls, [])
-        if not quants_list:
-            continue
+
         # Section header per class
         if cls == 'cpu':
             print(f"#\n# {cls.upper()}-friendly quants:")
         else:
             print(f"#\n# {cls.upper()}-loaded quants:")
         print(f"# QTYPE\t\tCount\tBPW\tAssigned GiB\t% Assigned\tMax GiB (all)")
-        if cls == 'cpu':
-            _assign_qtype = assign_qtype(args.cpu_assign_qtype, cpu_regex_assign, _quants_list, names_assigned)
-        else:
-            _assign_qtype = assign_qtype(args.gpu_assign_qtype, gpu_regex_assign, _quants_list, names_assigned)
-        if _assign_qtype not in (cpu_quants if cls=='cpu' else gpu_quants):
-            unique_qtypes = set(_assign_qtype.values())
-            quants_list = list(set(quants_list).union(unique_qtypes))
-        # Sort quants by bits-per-weight descending
-        sorted_quants = sorted(quants_list, key=lambda q: get_bpw(q) or 0, reverse=True)
+
+        # Prepare the regex-derived assign map for '+' lines (same as before)
+
+        # candidate list: union of user quants and discovered qtypes
+        if DEBUG:
+            print(f"[Debug] quants_list - ", quants_list)
+        if DEBUG:
+            print(f"[Debug] _quants_list - ", _quants_list)
+        if DEBUG:
+            print(f"[Debug] ordered_qtypes - ", ordered_qtypes)
+        candidate_quants = list(dict.fromkeys((quants_list or []) + list(ordered_qtypes)))
+        sorted_quants = sorted(candidate_quants, key=lambda q: get_bpw(q) or 0, reverse=True)
+        if DEBUG:
+            print(f"[Debug] sorted_quants - ", sorted_quants)
+
+        # build quick index for this class by final_q
+        by_final = {}
+        for e in tensor_index.get(cls, []):
+            by_final.setdefault(e['final_q'], []).append(e)
+
+        # '+' section: show user pre-assigned or f32 grouped by qt
+        # '*' section: show user fallback grouped by qt
         for qt in sorted_quants:
+            # bpw for this qtype (safe fallback 0)
             try:
                 bpw_val = get_bpw(qt)
-            except:
+            except Exception:
                 bpw_val = 0
-            if qt == 'f32':
-                sizes_map, _ = get_map_sizes('bf16')
-            else:
-                sizes_map, _ = get_map_sizes(qt)
+            bpw_str = f"{bpw_val:.4f}".rstrip('0').rstrip('.')
 
-            # Pre-assigned tensors
-            if qt in _assign_qtype.values() or qt == 'f32':
-                # If we’re in the f32‐override case, swap in the f32 list; otherwise keep the original.
-                if add_f32 and qt == 'f32':
-                    # Overwrite names_assigned list
-                    names_assigned = f32_classes.get(cls, [])
-                    cnt = len(names_assigned)
-                    if cnt > 0:
-                        assigned_bytes = sum(sizes_map.get(n, 0) for n in names_assigned)
-                        assigned_gib = assigned_bytes / GIB
-                        _bytes += assigned_bytes
-                        _bpw += bpw_val * assigned_bytes
-                        _w += assigned_bytes / bpw_val
-                        print(f"# +{qt:<10}\t{cnt:<3}\t{bpw_val:<6}\t{assigned_gib:>6.2f} GiB\t-\t\t-")
-                else:
-                    # for each qt in whatever loop you have:
-                    # collect the names whose assigned q‐type is qt
-                    names_assigned = [name 
-                                    for name, q in _assign_qtype.items() 
-                                    if q == qt]
-                    # now cnt and assigned_bytes only refer to that subset:
-                    cnt = len(names_assigned)
-                    assigned_bytes = sum(sizes_map.get(n, 0) for n in names_assigned)
-                    assigned_gib = assigned_bytes / GIB
-                    _bytes += assigned_bytes
-                    _bpw   += bpw_val * assigned_bytes
-                    _w += assigned_bytes / bpw_val
-                    print(f"# +{qt:<10}\t{cnt:<3}\t{bpw_val:<6}\t{assigned_gib:>6.2f} GiB\t-\t\t-")
-            
-            # Post-assigned tensors
-            cnt = Counter(assignments[cls].values()).get(qt, 0)
-            if (cnt > 0 or qt in _quants_list) and qt != 'f32':
-                # Assigned size
-                assigned = [n for n, q in assignments[cls].items() if q == qt]
-                assigned_bytes = sum(sizes_map.get(n, 0) for n in assigned)
-                assigned_gib = assigned_bytes / GIB
-                _bytes += assigned_bytes
-                _bpw += bpw_val * assigned_bytes
-                _w += assigned_bytes / bpw_val
-                # Max size if all
-                max_gib = total_size_for_quant(names_post_assigned, qt) / GIB
-                pct = (assigned_bytes / (max_gib * GIB) * 100) if max_gib > 0 else 0
-                print(f"# {qt:<10}\t{cnt:<3}\t{bpw_val:<6}\t{assigned_gib:>6.2f} GiB\t{pct:>3.1f}%\t\t{max_gib:.2f}")
-    
-    print(f"#\n# -Average BPW: {_bytes/_w:.4f}")
+            # all entries in the canonical registry for this class that end up with final_q == qt
+            group_entries = [e for e in tensor_index.get(cls, []) if e.get('final_q') == qt]
 
-    print(f"#\n# -Notes:\n# - '+' means user-defined pre-assigned tensors, or tensor missing from csv data or f32 tensors")
+            # partition by kind
+            f32_entries = [e for e in group_entries if e.get('kind') == 'f32']
+            pre_entries = [e for e in group_entries if e.get('kind') == 'pre']
+            measured_entries = [e for e in group_entries if e.get('kind') == 'measured']
+
+            # helper: split fallback vs non-fallback (orig_q present and different => fallback)
+            def split_fb(lst):
+                fb = [e for e in lst if e.get('orig_q') and e.get('orig_q') != e.get('final_q')]
+                nfb = [e for e in lst if not (e.get('orig_q') and e.get('orig_q') != e.get('final_q'))]
+                return nfb, fb
+
+            # split each kind
+            pre_nfb, pre_fb = split_fb(pre_entries)
+            meas_nfb, meas_fb = split_fb(measured_entries)
+
+            # Compute max_gib context once
+            max_gib = total_size_for_quant(subclasses_to_assign.get(cls, []), qt) / GIB
+
+            # 1) f32 entries (displayed with '+' prefix). Always emit line (possibly zero).
+            cnt_f32 = len(f32_entries)
+            if cnt_f32 > 0:
+                bytes_f32 = sum(e['size'] for e in f32_entries)
+                gib_f32 = bytes_f32 / GIB
+                print(f"# +{qt:<10}\t{cnt_f32:<3}\t{bpw_str:<6}\t{gib_f32:>6.2f} GiB\t-\t\t-")
+
+            # 2) pre-assigned non-fallback (+)
+            cnt_pre = len(pre_nfb)
+            if cnt_pre > 0:
+                bytes_pre = sum(e['size'] for e in pre_nfb)
+                gib_pre = bytes_pre / GIB
+                print(f"# +{qt:<10}\t{cnt_pre:<3}\t{bpw_str:<6}\t{gib_pre:>6.2f} GiB\t-\t\t-")
+
+            # 3) pre-assigned fallback (*+)
+            cnt_pre_fb = len(pre_fb)
+            if cnt_pre_fb > 0:
+                bytes_pre_fb = sum(e['size'] for e in pre_fb)
+                gib_pre_fb = bytes_pre_fb / GIB
+                #pct_pre_fb = (bytes_pre_fb / (max_gib * GIB) * 100) if max_gib > 0 else 0
+                print(f"# *+{qt:<8}\t{cnt_pre_fb:<3}\t{bpw_str:<6}\t{gib_pre_fb:>6.2f} GiB\t-\t\t-")
+
+            # 4) measured fallback (*)
+            cnt_meas_fb = len(meas_fb)
+            if cnt_meas_fb > 0:
+                bytes_meas_fb = sum(e['size'] for e in meas_fb)
+                gib_meas_fb = bytes_meas_fb / GIB
+                pct_meas_fb = (bytes_meas_fb / (max_gib * GIB) * 100) if max_gib > 0 else 0
+                print(f"# *{qt:<9}\t{cnt_meas_fb:<3}\t{bpw_str:<6}\t{gib_meas_fb:>6.2f} GiB\t{pct_meas_fb:>3.1f}%\t\t{max_gib:.2f}")
+
+            # 5) measured non-fallback (regular, no prefix). Always emit line (possibly zero).
+            cnt_meas = len(meas_nfb)
+            #if cnt_meas > 0:
+            if cnt_meas > 0 or ((cnt_meas == 0 and qt != "f32") and qt in quants_list):
+                bytes_meas = sum(e['size'] for e in meas_nfb)
+                gib_meas = bytes_meas / GIB
+                pct_meas = (bytes_meas / (max_gib * GIB) * 100) if max_gib > 0 else 0
+                print(f"# {qt:<10}\t{cnt_meas:<3}\t{bpw_str:<6}\t{gib_meas:>6.2f} GiB\t{pct_meas:>3.1f}%\t\t{max_gib:.2f}")
+
+    _bytes = sum(e.get('size', 0) for lst in tensor_index.values() for e in lst)
+    _elements = sum(e.get('elements', 0) for lst in tensor_index.values() for e in lst)
+
+    print(f"#\n# -Average BPW: {_bytes * 8 / _elements:.4f}")
+
+    total_fallbacks = sum(
+        1 for cls in ('cpu','gpu') for e in tensor_index.get(cls, []) if e.get('orig_q') and e.get('final_q') and e['orig_q'] != e['final_q']
+    )
+
+    print(f"#\n# -Notes:")
+    print("# - '+' means user-defined pre-assigned tensors, or tensor missing from csv data or f32 tensors")
+    if total_fallbacks > 0:
+        print("# - '*' means fallback tensors: these tensors were present in the map(s) with a different dtype than the originally-intended qtype;")
+        print("#   they have been grouped and displayed as '*<qtype>' above to show the final (map-observed) qtype and sizes separately.")
+    # Conditionally warn user that automatic fallbacks may have changed assignments
+    if fallback_corrections > 0:
+        print(f"# - WARNING: {fallback_corrections} tensor assignments were substituted to the dtype actually present in their tensor map files. "
+              "\n#   This may change the final size relative to the expected thresholds and chosen quants. "
+              "\n#   To disable automatic map-based fallbacks and preserve the script's original assigned qtypes exactly, re-run with --no-fallback.")
 
     now = datetime.now().astimezone()  # Gets local time with tzinfo if available
     current_time = now.strftime("%Y-%m-%d %H:%M:%S %Z%z")
@@ -1735,9 +1988,40 @@ def main():
         sha256 = "N/A"
     print(f"# - Calibration dataset '{args.csv_file}' SHA-256: {sha256}")
 
-    for map_filename, (sha256sum, model_name) in MAP_FILE_INFO.items():
-        print(f"# - {map_filename} SHA-256: {sha256sum}")
-        print(f"# - {map_filename} model name: {model_name}")
+    def print_maps_sorted_by_bpw(MAP_FILE_INFO: Dict[str, Tuple[str, str, str]]) -> None:
+        """
+        Print entries from MAP_FILE_INFO sorted by get_bpw(qtype) (desc).
+        Each printed block shows BPW (if available), SHA-256 and model name.
+        """
+        # Cache bpw for each qtype to avoid repeated calls
+        bpw_cache: Dict[str, float] = {}
+        for _, (qtype, _, _) in MAP_FILE_INFO.items():
+            if qtype in bpw_cache:
+                continue
+            try:
+                # Expect get_bpw to be defined externally
+                bpw = get_bpw(qtype)
+                # Ensure the returned value is a float or can be converted
+                bpw_cache[qtype] = float(bpw) if bpw is not None else float("-inf")
+            except Exception:
+                # If get_bpw fails for any qtype, place it at the bottom
+                bpw_cache[qtype] = float("-inf")
+
+        # Sort items by bpw descending; tie-break by filename (stable deterministic)
+        sorted_items = sorted(
+            MAP_FILE_INFO.items(),
+            key=lambda kv: (bpw_cache.get(kv[1][0], float("-inf")), kv[0]),
+            reverse=True
+        )
+
+        # Print lines in the requested format, including BPW
+        for map_filename, (qtype, sha256sum, model_name) in sorted_items:
+            bpw = bpw_cache.get(qtype, float("-inf"))
+            bpw_str = f"{bpw:.6g}" if math.isfinite(bpw) else "N/A"
+            print(f"# - {map_filename} SHA-256: {sha256sum}")
+            print(f"# - {map_filename} model name: {model_name}")
+
+    print_maps_sorted_by_bpw(MAP_FILE_INFO)
 
     if not SKIP_GPG:
         if ALL_GPG_SIGS_VALID:

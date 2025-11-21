@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** Kimi-K2-Thinking-THIREUS-ANY-SPECIAL.sh used for ppl      **#
-#** bench purpose. Adjust $1 in $custom to your needs!        **#
+#** Kimi-K2-Thinking-THIREUS-ANY-SPECIAL.sh used for model    **#
+#** quantization purpose. Adjust $1 in $custom to your needs! **#
 #**                                                           **#
 #** ********************************************************* **#
 #** --------------- Updated: Nov-06-2025 -------------------- **#

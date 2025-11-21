@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-19-2025 -------------------- **#
+#** --------------- Updated: Nov-20-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -1087,6 +1087,7 @@ else
   echo "KLD benchmarking: ENABLED"
 fi
 echo "Sweep context (-c): $BENCH_COMMAND_CONTEXT_TO_PROCESS"
+ALL_GROUP_IDS=()
 if [[ "$GROUP_TENSORS_DISABLED" == "true" ]]; then
   echo "Group tensors: DISABLED"
 else
@@ -1099,8 +1100,12 @@ else
   for g in "${GROUP_TENSORS_RAW[@]}"; do
     echo "  - group$gid: $g"
     echo "group$gid:$g" >> "$tmp_mapping"
+    ALL_GROUP_IDS+=("$gid")
     gid=$((gid + 1))
   done
+  if [[ "$BENCH_GROUPS_ONLY" == "true" ]] && (( ${#ALL_GROUP_IDS[@]} == 0 )); then
+    echo "[$(timestamp)] ❌ Error: --benchmark-groups-only is set but there are no groups set!" >&2
+  fi
 
   if [ -e "$group_mapping_file" ]; then
       # If the existing file is byte-equal to the planned content, skip asking and do nothing
@@ -1300,6 +1305,13 @@ shuffle_tensors_by_pattern() {
 # find_group_indexes_for_tensor <tensor> -> prints zero-or-more group indices (one per line)
 find_group_indexes_for_tensor() {
   local tensor="$1"
+  # remaining args (if any) are treated as forbidden/processed group IDs
+  shift || true
+  local -a PROCESSED_GROUP_IDS=()
+  if (( $# )); then
+    PROCESSED_GROUP_IDS=("$@")
+  fi
+
   if [[ "$GROUP_TENSORS_DISABLED" == "true" ]]; then
     # print nothing -> caller receives an empty array
     return
@@ -1308,6 +1320,14 @@ find_group_indexes_for_tensor() {
   local -a idxs=()
   for idx in "${!GROUP_TENSORS_RAW[@]}"; do
     local group_raw="${GROUP_TENSORS_RAW[$idx]}"
+
+    # skip groups that are in the PROCESSED_GROUP_IDS list
+    local skip=false
+    for pid in "${PROCESSED_GROUP_IDS[@]}"; do
+      [[ "$pid" == "$idx" ]] && { skip=true; break; }
+    done
+    $skip && continue
+
     IFS=',' read -r -a regs <<< "$group_raw"
     for reg in "${regs[@]}"; do
       # trim spaces
@@ -1327,6 +1347,26 @@ find_group_indexes_for_tensor() {
   done
 }
 
+# remove_items_from_list_lines <list[@]> <to_remove[@]>
+remove_items_from_list_lines() {
+  local -n _list="$1"
+  local -n _remove="$2"
+
+  local -a result=()
+  for item in "${_list[@]}"; do
+    local skip=false
+    for rm in "${_remove[@]}"; do
+      [[ "$item" == "$rm" ]] && { skip=true; break; }
+    done
+    $skip || result+=("$item")
+  done
+
+  # print one per line (no trailing spaces)
+  for i in "${result[@]}"; do
+    printf '%s\n' "$i"
+  done
+}
+
 # Instead of a raw `while true; do ... done`, wrap the main body in a function and control
 # whether it runs infinitely or just once based on the INFINITE_LOOP flag.
 run_main_loop() {
@@ -1336,6 +1376,9 @@ run_main_loop() {
         local_tensors_map="tensors.${qtype}.map"
 
         echo "[$(timestamp)] Processing qtype='$qtype'."
+
+        # Track unprocessed group ids for this qtype
+        local QTYPE_REMAINING_GROUP_IDS=("${ALL_GROUP_IDS[@]}")
 
         # Store benchmark counts
         local count_group_ppl_bench_success=0
@@ -1500,8 +1543,16 @@ run_main_loop() {
           done
         fi
 
+        local PROCESSED_GROUP_IDS=()
+
         # Loop over each shard filename and its tensor names
         for shard_fname in "${shuffled_shard_keys[@]}"; do
+            # If we are in --benchmark-groups-only mode and there are no more groups to process, then we break this loop
+            if [[ "$BENCH_GROUPS_ONLY" == "true" ]] && (( ${#QTYPE_REMAINING_GROUP_IDS[@]} == 0 )); then
+              echo "[$(timestamp)] There are no more groups to process. Moving to next qtype..."
+              break
+            fi
+
             # For each tensor_name in this shard
             IFS=' ' read -r -a tensor_list <<< "${shard_to_tensors[$shard_fname]}"
             
@@ -1509,13 +1560,22 @@ run_main_loop() {
             shuffle_tensors_by_pattern tensor_list shuffled_tensor_list
             
             for tensor_name in "${shuffled_tensor_list[@]}"; do
+                # If we are in --benchmark-groups-only mode and there are no more groups to process, then we break this loop
+                if [[ "$BENCH_GROUPS_ONLY" == "true" ]] && (( ${#QTYPE_REMAINING_GROUP_IDS[@]} == 0 )); then
+                  break
+                fi
+
                 # If this tensor was pre-marked as processed, skip but only if we are not in --benchmark-groups-only mode
                 if [[ "$BENCH_GROUPS_ONLY" != "true" ]] && [[ "${PROCESSED_TENSOR[$tensor_name]:-}" == "1" ]]; then
                   continue
                 fi
 
-                # Determine all group indices for this tensor (could be zero..N)
-                mapfile -t group_idxs_for_tensor < <(find_group_indexes_for_tensor "$tensor_name")
+                # Determine all remaining group indices for this tensor (could be zero..N) when we are in --benchmark-groups-only mode only
+                if [[ "$BENCH_GROUPS_ONLY" == "true" ]]; then
+                  mapfile -t group_idxs_for_tensor < <(find_group_indexes_for_tensor "$tensor_name" "${PROCESSED_GROUP_IDS[@]}")
+                else
+                  mapfile -t group_idxs_for_tensor < <(find_group_indexes_for_tensor "$tensor_name")
+                fi
                 
                 # If tensor belongs to one or more groups and grouping is enabled, handle group processing
                 if (( ${#group_idxs_for_tensor[@]} > 0 )); then
@@ -1699,7 +1759,7 @@ run_main_loop() {
                     wait
 
                     # After wait, validate that all expected shard files exist and match expected hashes
-                    echo "[$(timestamp)] Group #${gidx_local}: verifying all shard hashes... please be patient."
+                    echo "[$(timestamp)] Group #${group_idx_for_tensor}: verifying all shard hashes... please be patient."
                     for s in "${shards_to_fetch[@]}"; do
                       local_shard_tmp="${LOCAL_DOWNLOAD_DIR}/${s}"
                       expected_hash="${shard_expected_hash[$s]:-}"
@@ -1818,6 +1878,8 @@ run_main_loop() {
                       [[ "$BENCH_GROUPS_ONLY" != "true" ]] && for t in "${group_members[@]}"; do PROCESSED_TENSOR["$t"]=1; done
                       # record that this exact combo (sorted member-list) has been processed for this qtype
                       PROCESSED_GROUP_COMBOS["$group_hash"]=1
+                      PROCESSED_GROUP_IDS+=(${group_idx_for_tensor})
+                      mapfile -t QTYPE_REMAINING_GROUP_IDS < <(remove_items_from_list_lines QTYPE_REMAINING_GROUP_IDS PROCESSED_GROUP_IDS)
                       echo "[$(timestamp)] Recorded processed combo for group #${group_idx_for_tensor} (qtype=${qtype}) => ${group_hash}"
                     else
                       echo "[$(timestamp)] ⚠️ Warning: Not all required group result files produced; group #${group_idx_for_tensor} members will remain unmarked for re-run."
@@ -1843,7 +1905,7 @@ run_main_loop() {
                   # done group processing; move to next tensor
                   continue
                 elif [[ "$BENCH_GROUPS_ONLY" == "true" ]]; then
-                  echo '[$(timestamp)] Skipping tensor='$tensor_name' because --benchmark-groups-only mode is used and this tensor is not part of any group.'
+                  echo '[$(timestamp)] Skipping tensor='$tensor_name' because --benchmark-groups-only mode is used and this tensor is not part of any remaining groups.'
                   continue
                 fi
 
