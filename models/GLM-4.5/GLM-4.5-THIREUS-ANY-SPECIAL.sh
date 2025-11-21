@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** GLM-4.5-THIREUS-ANY-SPECIAL.sh used for ppl benchmarking  **#
+#** GLM-4.5-THIREUS-ANY-SPECIAL.sh used for model quant       **#
 #** purpose. Adjust $1 in $custom to your needs!              **#
 #**                                                           **#
 #** ********************************************************* **#

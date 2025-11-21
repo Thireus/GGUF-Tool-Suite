@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** DeepSeek-V3-0324-THIREUS-ANY-SPECIAL.sh used for ppl      **#
-#** benchmarking purpose. Adjust $1 in $custom to your needs! **#
+#** DeepSeek-V3-0324-THIREUS-ANY-SPECIAL.sh used for model    **#
+#** quantization. Adjust $1 in $custom to your needs!         **#
 #**                                                           **#
 #** ********************************************************* **#
 #** --------------- Updated: Nov-06-2025 -------------------- **#

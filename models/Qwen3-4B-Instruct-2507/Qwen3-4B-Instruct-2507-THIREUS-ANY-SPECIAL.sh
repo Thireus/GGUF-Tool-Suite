@@ -2,7 +2,7 @@
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
 #** Qwen3-4B-Instruct-2507-THIREUS-ANY-SPECIAL.sh used for    **#
-#** ppl bench purpose. Adjust $1 in $custom!                  **#
+#** model quantization purpose. Adjust $1 in $custom!         **#
 #**                                                           **#
 #** ********************************************************* **#
 #** --------------- Updated: Nov-06-2025 -------------------- **#

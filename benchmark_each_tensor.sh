@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-15-2025 -------------------- **#
+#** --------------- Updated: Nov-20-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -161,7 +161,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --benchmark-groups-only)
       # require --group-tensors to be set (validated later after parsing defaults)
-      # In this mode, even if individual tensors or all tensors from a different larger group have been benchmarked, the script will still benchmark the group
+      # In this mode, even if individual tensors or all tensors from a different larger group have been benchmarked, the group will still be benchmarked
       # When this mode is not used, the groups will only be benchmarked if both of these statements are true:
       # 1. No other group that contains all the tensors of that group has been benchmarked
       # 2. All individual tensors of that group have never been benchmarked
@@ -256,7 +256,7 @@ USER_REGEX=(
   '^token_embd\.weight$=q8_0'
 
   # GPU Only - not divisible by 256 so only supports qN_0
-  # I recommend against unlocking this tensor, especially since it cannot be quantised to lower quants by llama, so the benchmark will be incorrect as it will use llama's auto-assigned fallback qtype without clear warning during the benchmark
+  # I recommend against unlocking this tensor, especially since it cannot be quantised lower than iq2_ks, so any benchmark using lower quant than this will be faulty for this tensor
   '^blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight$=q8_0=locked'
 
   # GPU Only
@@ -307,6 +307,13 @@ done
 # Build your LOCAL_QTYPES, removing any “f32”
 _LOCAL_QTYPES=( $(printf "%s\n" "${PATTERN_QTYPES[@]}" | sort -u) )
 LOCAL_QTYPES=( $(printf "%s\n" "${_LOCAL_QTYPES[@]}" | grep -v '^f32$') )
+
+# Also build USER_REGEX_PATTERNS (left-hand regex portions) for later use
+declare -a USER_REGEX_PATTERNS=()
+for entry in "${USER_REGEX[@]}"; do
+  IFS='=' read -r pat _qrest <<< "$entry"
+  USER_REGEX_PATTERNS+=("$pat")
+done
 
 # 4. Number of concurrent threads for initial fetch/validation:
 N_THREADS=8
@@ -460,7 +467,7 @@ fi
 find_main_model_file() {
     # Finds one file matching MAIN_SHARD_PATTERN in LOCAL_MODEL_DIR
     local f
-    f=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "$MAIN_SHARD_PATTERN" | head -n1 || true)
+    f=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 \( -type f -o -type l \) -name "$MAIN_SHARD_PATTERN" | head -n1 || true)
     if [[ -z "$f" ]]; then
         return 1
     else
@@ -752,7 +759,277 @@ fi
 #     # Not strictly required in this script
 # fi
 
+#
+# --------- New helpers & caches for repeated sha256 calculations and group logic ----------
+#
+
+# Cache of computed file hashes keyed by file metadata (device:inode:size:mtime)
+declare -A FILE_SHA_CACHE=()
+
+# resolve_link <path> -> prints resolved path (following symlinks). On failure exits the script.
+# Tries a few portable methods (realpath, readlink -f, python fallback). If none succeed, the script
+# will immediately exit as requested.
+resolve_link() {
+  local file="$1"
+  local resolved=""
+
+  # Prefer realpath if available
+  if command -v realpath >/dev/null 2>&1; then
+    # use -e if available (GNU realpath supports it), otherwise fall back to plain realpath
+    if realpath -e "$file" >/dev/null 2>&1; then
+      resolved=$(realpath -e "$file" 2>/dev/null || true)
+    else
+      resolved=$(realpath "$file" 2>/dev/null || true)
+    fi
+  fi
+
+  # Try readlink -f if realpath didn't work
+  if [[ -z "$resolved" ]] && command -v readlink >/dev/null 2>&1; then
+    if readlink -f "$file" >/dev/null 2>&1; then
+      resolved=$(readlink -f "$file" 2>/dev/null || true)
+    fi
+  fi
+
+  # Python fallback (should be available on most systems)
+  if [[ -z "$resolved" ]]; then
+    if command -v python3 >/dev/null 2>&1; then
+      resolved=$(python3 -c "import os,sys;print(os.path.realpath(sys.argv[1]))" "$file" 2>/dev/null || true)
+    elif command -v python >/dev/null 2>&1; then
+      resolved=$(python -c "import os,sys;print(os.path.realpath(sys.argv[1]))" "$file" 2>/dev/null || true)
+    fi
+  fi
+
+  # If still empty or non-existent -> error and immediate exit (per request)
+  if [[ -z "$resolved" || ! -e "$resolved" ]]; then
+    echo "[$(timestamp)] ❌ Error: Failed to resolve symlink/realpath for '$file' or resolved target does not exist." >&2
+    exit 22
+  fi
+
+  printf '%s' "$resolved"
+}
+
+# portable function to get a stable file metadata key
+# Now resolves symlinks first (so we operate on the resolved/target file)
+get_file_meta_key() {
+  local file="$1"
+
+  # Resolve symlink -> we must succeed or exit (resolve_link handles exit on failure)
+  local resolved
+  resolved=$(resolve_link "$file") || { echo "[$(timestamp)] ❌ Error: resolve_link failed for '$file'." >&2; exit 22; }
+
+  # Use stat on the resolved target. This avoids ambiguity about symlink vs target inode.
+  # For GNU stat use -c, for BSD/macOS use -f. Both operate on the resolved path here.
+  if stat --version >/dev/null 2>&1; then
+    stat -L -c "%d:%i:%s:%Y" "$resolved" 2>/dev/null || echo ""
+  else
+    stat -L -f "%d:%i:%z:%m" "$resolved" 2>/dev/null || echo ""
+  fi
+}
+
+# Return cached sha256 if present, otherwise compute and cache it.
+cached_sha256() {
+  local file="$1"
+  # If file doesn't exist (after resolution) return empty (caller handles)
+  if [[ ! -e "$file" ]]; then
+    echo ""
+    return 0
+  fi
+
+  # Resolve symlink to ensure we cache/hash the real target
+  local resolved
+  resolved=$(resolve_link "$file") || { echo "[$(timestamp)] ❌ Error: resolve_link failed for '$file'." >&2; exit 22; }
+
+  local key
+  key=$(get_file_meta_key "$resolved")
+  if [[ -z "$key" ]]; then
+    # fallback: use resolved path as key (less reliable but only used if stat failed)
+    key="$resolved"
+  fi
+
+  if [[ -n "${FILE_SHA_CACHE[$key]:-}" ]]; then
+    printf '%s' "${FILE_SHA_CACHE[$key]}"
+    return 0
+  fi
+
+  if [[ "$USE_SHA256" == "true" ]]; then
+    local h
+    h=$(_sha256sum "$resolved" | cut -d' ' -f1)
+    FILE_SHA_CACHE[$key]="$h"
+    printf '%s' "$h"
+    return 0
+  else
+    printf ''
+    return 0
+  fi
+}
+
+# Compute a stable, order-independent hash for a group's sorted member list
+# uses: cksum if available (produces "<checksum> <bytes>"), otherwise falls back to _sha256sum
+# NOTE: this implementation avoids creating a temporary file and does the work in-memory via pipes.
+compute_group_hash() {
+  # $1 = name of array var (passed by name)
+  local -n _arr=$1
+
+  # If no members, produce an empty hash deterministically
+  if (( ${#_arr[@]} == 0 )); then
+    # empty input -> return zero-length sha256 of empty string (or cksum equivalent)
+    if command -v cksum >/dev/null 2>&1; then
+      # cksum on empty input: "0 0"
+      printf '0-0'
+    else
+      # sha256 of empty string (hex)
+      printf '%s' "$(_sha256sum <(printf '') 2>/dev/null || echo 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')"
+    fi
+    return 0
+  fi
+
+  # Build a sorted stream in-memory and pipe to cksum or sha256
+  if command -v cksum >/dev/null 2>&1; then
+    # read checksum and bytes from cksum, then print "<checksum>-<bytes>"
+    # Use a subshell to ensure the printf + sort are grouped
+    local cs bytes
+    read cs bytes < <( ( printf '%s\n' "${_arr[@]}" | sort ) | cksum )
+    printf '%s-%s' "$cs" "$bytes"
+    return 0
+  else
+    # fallback to sha256 of the sorted stream; ensure we use cut as requested
+    ( printf '%s\n' "${_arr[@]}" | sort ) | _sha256sum | cut -d' ' -f1
+    return 0
+  fi
+}
+
+# collect_members_from_regexes <regex_array_name> <out_array_name>
+# Generic helper: given an array of regexes, populate out array with all matching tensors
+collect_members_from_regexes() {
+  local regex_arr_name="$1"
+  local out_arr_name="$2"
+  local -n _regexes="$regex_arr_name"
+  local -n _out_arr="$out_arr_name"    # <- different local name
+  _out_arr=()
+  for reg in "${_regexes[@]}"; do
+    reg="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$reg")"
+    [[ -z "$reg" ]] && continue
+    for t in "${!tensor_to_shard[@]}"; do
+      if [[ $t =~ $reg ]]; then
+        if [[ ! " ${_out_arr[*]} " =~ " $t " ]]; then
+          _out_arr+=("$t")
+        fi
+      fi
+    done
+  done
+}
+
+# collect_group_members <group_idx> <out_array_name>
+# populates the out array with all tensors present in current tensor_to_shard that match any regex in the group
+collect_group_members() {
+  local gidx="$1"
+  local -n out_arr=$2
+  out_arr=()
+  local group_raw="${GROUP_TENSORS_RAW[$gidx]}"
+  IFS=',' read -r -a regs <<< "$group_raw"
+  # delegate to generic regex-members collector
+  collect_members_from_regexes regs out_arr
+}
+
+# collect_members_for_user_regex <out_array_name>
+# collects members that match any of the USER_REGEX_PATTERNS into out array
+collect_members_for_user_regex() {
+  local -n out_arr=$1
+  collect_members_from_regexes USER_REGEX_PATTERNS out_arr
+}
+
+# ---------------- end helper section ---------------------------------------
+
+# ----------------------------------------------------------------
+# Seed FILE_SHA_CACHE from initial validation results (tasks array)
+# Optimized: run one find to gather local shards, map their "-NNNNN-of-NNNNN.gguf"
+# suffix to the local path, then iterate tasks and lookup suffix in the map.
+# This avoids a find() for every task.
+#
+# Each task entry is "fname:expected_hash:qtype".
+# We store expected_hash under the same meta-key produced by get_file_meta_key()
+# so cached_sha256() will return it later without recomputing.
+# ----------------------------------------------------------------
+if (( ${#tasks[@]} > 0 )); then
+  echo "[$(timestamp)] Seeding FILE_SHA_CACHE from initial tasks (${#tasks[@]} entries) using single-find optimization..."
+
+  # Build suffix -> local file map by running one find across LOCAL_MODEL_DIR.
+  # Only files/links at top-level are considered (maxdepth 1), excluding files in LOCAL_DOWNLOAD_DIR.
+  declare -A SUFFIX_TO_LOCAL=()
+  # Collect candidate files once
+  mapfile -t _cand_files < <(find "$LOCAL_MODEL_DIR" -maxdepth 1 \( -type f -o -type l \) -print 2>/dev/null || true)
+
+  if (( ${#_cand_files[@]} == 0 )); then
+    echo "[$(timestamp)] ⚠️ Warning: No candidate local model files found in $LOCAL_MODEL_DIR while seeding FILE_SHA_CACHE." >&2
+  else
+    for cf in "${_cand_files[@]}"; do
+      # Skip anything that lives under LOCAL_DOWNLOAD_DIR path (defensive)
+      case "$cf" in
+        *"$LOCAL_DOWNLOAD_DIR"*) continue ;;
+      esac
+      # Extract suffix "-NNNNN-of-NNNNN.gguf" if present
+      if [[ $cf =~ -([0-9]{5}-of-[0-9]{5})\.gguf$ ]]; then
+        suffix="${BASH_REMATCH[1]}.gguf"
+        # only add first occurrence (prefer earlier); don't overwrite an existing mapping
+        if [[ -z "${SUFFIX_TO_LOCAL[$suffix]:-}" ]]; then
+          SUFFIX_TO_LOCAL[$suffix]="$cf"
+        fi
+      fi
+    done
+  fi
+
+  # Now iterate tasks and seed cache by lookup instead of running find each time
+  for entry in "${tasks[@]}"; do
+    IFS=':' read -r fname expected_hash qtype <<< "$entry"
+    # sanity check: expected_hash must be present (it should be)
+    if [[ -z "$expected_hash" ]]; then
+      echo "[$(timestamp)] ❌ Error: task entry '$entry' has empty expected_hash; aborting seed." >&2
+      [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+      exit 20
+    fi
+
+    # extract suffix from fname
+    if [[ $fname =~ -([0-9]{5}-of-[0-9]{5})\.gguf$ ]]; then
+      suffix="${BASH_REMATCH[1]}.gguf"
+    else
+      echo "[$(timestamp)] ⚠️ Warning: cannot extract suffix from task fname='$fname'; skipping." >&2
+      continue
+    fi
+
+    local_file="${SUFFIX_TO_LOCAL[$suffix]:-}"
+    if [[ -z "$local_file" ]]; then
+      # No local file found for this suffix — that's fine, initial validation may have only used downloader tmp dir.
+      continue
+    fi
+
+    # Ensure the file actually exists (it should), then resolve symlink and compute meta-key
+    if [[ ! -e "$local_file" ]]; then
+      echo "[$(timestamp)] ⚠️ Warning: mapped local file '$local_file' for suffix '$suffix' does not exist; skipping."
+      continue
+    fi
+
+    # Resolve symlink -> must succeed or exit (resolve_link handles exiting on failure)
+    resolved=$(resolve_link "$local_file") || { echo "[$(timestamp)] ❌ Error: resolve_link failed for '$local_file' while seeding FILE_SHA_CACHE." >&2; exit 22; }
+
+    # Obtain canonical metadata key used by cached_sha256()
+    meta_key=$(get_file_meta_key "$resolved")
+    if [[ -z "$meta_key" ]]; then
+      # fallback to resolved path as a key (rare)
+      meta_key="$resolved"
+    fi
+
+    # Store expected hash in cache under that key
+    FILE_SHA_CACHE["$meta_key"]="$expected_hash"
+    echo "[$(timestamp)] Cached expected hash for local shard '$local_file' (suffix='$suffix', key='$meta_key')."
+  done
+else
+  echo "[$(timestamp)] No initial tasks to seed FILE_SHA_CACHE from."
+fi
+# ----------------------------------------------------------------
+
 # Baseline benchmark (PPL+KLD baseline) — only run if PPL+KLD is enabled (mode == 0 or 2)
+# We'll set a flag when baseline exists/done and later inject a PROCESSED_GROUP_COMBOS entry
+BASELINE_BENCHMARK_DONE=0
 if [[ "$BENCH_MODE" -eq 0 || "$BENCH_MODE" -eq 2 ]]; then
   baseline_result_file="bench_ppl${_kld}_result.baseline.${BASELINE_QTYPE}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
   baseline_kld_file="bench_kld_result.baseline.${BASELINE_QTYPE}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.bin"
@@ -770,6 +1047,7 @@ if [[ "$BENCH_MODE" -eq 0 || "$BENCH_MODE" -eq 2 ]]; then
       estimate=$(grep "Final estimate" "$baseline_result_file" || true)
       echo "[$(timestamp)] Baseline PPL$PLUS_KLD benchmark already exists for BASELINE_QTYPE='$BASELINE_QTYPE', chunks=$PPL_COMMAND_CHUNKS_TO_PROCESS: $estimate"
   fi
+  BASELINE_BENCHMARK_DONE=1
 else
   echo "[$(timestamp)] Skipping baseline PPL$PLUS_KLD benchmark because --mode=${BENCH_MODE} (PPL$PLUS_KLD disabled)."
 fi
@@ -809,6 +1087,7 @@ else
   echo "KLD benchmarking: ENABLED"
 fi
 echo "Sweep context (-c): $BENCH_COMMAND_CONTEXT_TO_PROCESS"
+ALL_GROUP_IDS=()
 if [[ "$GROUP_TENSORS_DISABLED" == "true" ]]; then
   echo "Group tensors: DISABLED"
 else
@@ -821,8 +1100,12 @@ else
   for g in "${GROUP_TENSORS_RAW[@]}"; do
     echo "  - group$gid: $g"
     echo "group$gid:$g" >> "$tmp_mapping"
+    ALL_GROUP_IDS+=("$gid")
     gid=$((gid + 1))
   done
+  if [[ "$BENCH_GROUPS_ONLY" == "true" ]] && (( ${#ALL_GROUP_IDS[@]} == 0 )); then
+    echo "[$(timestamp)] ❌ Error: --benchmark-groups-only is set but there are no groups set!" >&2
+  fi
 
   if [ -e "$group_mapping_file" ]; then
       # If the existing file is byte-equal to the planned content, skip asking and do nothing
@@ -1022,6 +1305,13 @@ shuffle_tensors_by_pattern() {
 # find_group_indexes_for_tensor <tensor> -> prints zero-or-more group indices (one per line)
 find_group_indexes_for_tensor() {
   local tensor="$1"
+  # remaining args (if any) are treated as forbidden/processed group IDs
+  shift || true
+  local -a PROCESSED_GROUP_IDS=()
+  if (( $# )); then
+    PROCESSED_GROUP_IDS=("$@")
+  fi
+
   if [[ "$GROUP_TENSORS_DISABLED" == "true" ]]; then
     # print nothing -> caller receives an empty array
     return
@@ -1030,6 +1320,14 @@ find_group_indexes_for_tensor() {
   local -a idxs=()
   for idx in "${!GROUP_TENSORS_RAW[@]}"; do
     local group_raw="${GROUP_TENSORS_RAW[$idx]}"
+
+    # skip groups that are in the PROCESSED_GROUP_IDS list
+    local skip=false
+    for pid in "${PROCESSED_GROUP_IDS[@]}"; do
+      [[ "$pid" == "$idx" ]] && { skip=true; break; }
+    done
+    $skip && continue
+
     IFS=',' read -r -a regs <<< "$group_raw"
     for reg in "${regs[@]}"; do
       # trim spaces
@@ -1049,54 +1347,48 @@ find_group_indexes_for_tensor() {
   done
 }
 
-# collect_group_members <group_idx> <out_array_name>
-# populates the out array with all tensors present in current tensor_to_shard that match any regex in the group
-collect_group_members() {
-  local gidx="$1"
-  local -n out_arr=$2
-  out_arr=()
-  local group_raw="${GROUP_TENSORS_RAW[$gidx]}"
-  IFS=',' read -r -a regs <<< "$group_raw"
-  for reg in "${regs[@]}"; do
-    reg="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$reg")"
-    [[ -z "$reg" ]] && continue
-    for t in "${!tensor_to_shard[@]}"; do
-      if [[ $t =~ $reg ]]; then
-        if [[ ! " ${out_arr[*]} " =~ " $t " ]]; then
-          out_arr+=("$t")
-        fi
-      fi
+# remove_items_from_list_lines <list[@]> <to_remove[@]>
+remove_items_from_list_lines() {
+  local -n _list="$1"
+  local -n _remove="$2"
+
+  local -a result=()
+  for item in "${_list[@]}"; do
+    local skip=false
+    for rm in "${_remove[@]}"; do
+      [[ "$item" == "$rm" ]] && { skip=true; break; }
     done
+    $skip || result+=("$item")
+  done
+
+  # print one per line (no trailing spaces)
+  for i in "${result[@]}"; do
+    printf '%s\n' "$i"
   done
 }
 
 # Instead of a raw `while true; do ... done`, wrap the main body in a function and control
 # whether it runs infinitely or just once based on the INFINITE_LOOP flag.
 run_main_loop() {
-    # helper: compute a stable, order-independent hash for a group's sorted member list
-    # uses: cksum if available (produces "<checksum> <bytes>"), otherwise falls back to _sha256sum
-    compute_group_hash() {
-      # $1 = name of array var (passed by name)
-      local -n _arr=$1
-      # produce sorted newline-separated canonical representation
-      local sorted
-      mapfile -t sorted < <(printf '%s\n' "${_arr[@]}" | sort)
-      # join with newline preserving newlines via printf
-      if command -v cksum >/dev/null 2>&1; then
-        # use cksum output: "<checksum> <bytes>"
-        printf '%s\n' "${sorted[@]}" | cksum | awk '{print $1 "-" $2}'
-      else
-        # fallback to sha256 text digest
-        printf '%s\n' "${sorted[@]}" | _sha256sum | awk '{print $1}'
-      fi
-    }
-
     for qtype in "${QTYPES[@]}"; do
         # Uppercase version for remote directory name
         qtype_up="${qtype^^}"
         local_tensors_map="tensors.${qtype}.map"
 
         echo "[$(timestamp)] Processing qtype='$qtype'."
+
+        # Track unprocessed group ids for this qtype
+        local QTYPE_REMAINING_GROUP_IDS=("${ALL_GROUP_IDS[@]}")
+
+        # Store benchmark counts
+        local count_group_ppl_bench_success=0
+        local count_group_ppl_bench_failure=0
+        local count_group_sweep_bench_success=0
+        local count_group_sweep_bench_failure=0
+        local count_individual_ppl_bench_success=0
+        local count_individual_ppl_bench_failure=0
+        local count_individual_sweep_bench_success=0
+        local count_individual_sweep_bench_failure=0
 
         # Attempt to download tensors.map from remote.
         # We first remove any old local copy to ensure we detect absence properly
@@ -1187,6 +1479,24 @@ run_main_loop() {
         # track processed group combos by a concise hash (cksum preferred)
         declare -A PROCESSED_GROUP_COMBOS=()
 
+        # If baseline benchmark was done earlier, compute the group combo corresponding to USER_REGEX
+        # using the same compute_group_hash logic (i.e., collect actual member tensor names from tensor_to_shard).
+        if [[ "${qtype^^}" == "${BASELINE_QTYPE^^}" ]] && [[ "$BASELINE_BENCHMARK_DONE" -eq 1 ]]; then
+          tmp_members_group=()
+          collect_members_for_user_regex tmp_members_group
+          if (( ${#tmp_members_group[@]} > 0 )); then
+            group_hash=$(compute_group_hash tmp_members_group)
+            PROCESSED_GROUP_COMBOS["$group_hash"]=1
+            echo "[$(timestamp)] Injected baseline-based group combo into PROCESSED_GROUP_COMBOS for qtype='$qtype' => ${group_hash}"
+            # optionally mark member tensors as processed (unless BENCH_GROUPS_ONLY)
+            if [[ "$BENCH_GROUPS_ONLY" != "true" ]]; then
+              for t in "${tmp_members_group[@]}"; do PROCESSED_TENSOR["$t"]=1; done
+            fi
+          else
+            echo "[$(timestamp)] ⚠️ Warning: baseline requested to inject group combo but no members were found for USER_REGEX in this qtype map."
+          fi
+        fi
+
         if [[ "$GROUP_TENSORS_DISABLED" != "true" ]]; then
           for gidx in "${!GROUP_TENSORS_RAW[@]}"; do
             # collect group members that exist in this tensor_to_shard set
@@ -1223,7 +1533,7 @@ run_main_loop() {
 
               ppl_done=false; sweep_done=false
               if need_run_ppl; then [[ -f "$ppl_indf" ]] && ppl_done=true || ppl_done=false; else ppl_done=true; fi
-              if need_run_sweep; then [[ -f "$sweep_indf" ]] && sweep_done=true || sweep_done=false; else sweep_done=true; fi
+              if need_run_sweep; then [[ -f "$ppl_indf" ]] && sweep_done=true || sweep_done=false; else sweep_done=true; fi
 
               if [[ "$ppl_done" == "true" && "$sweep_done" == "true" ]]; then
                 PROCESSED_TENSOR["$t"]=1
@@ -1233,8 +1543,16 @@ run_main_loop() {
           done
         fi
 
+        local PROCESSED_GROUP_IDS=()
+
         # Loop over each shard filename and its tensor names
         for shard_fname in "${shuffled_shard_keys[@]}"; do
+            # If we are in --benchmark-groups-only mode and there are no more groups to process, then we break this loop
+            if [[ "$BENCH_GROUPS_ONLY" == "true" ]] && (( ${#QTYPE_REMAINING_GROUP_IDS[@]} == 0 )); then
+              echo "[$(timestamp)] There are no more groups to process. Moving to next qtype..."
+              break
+            fi
+
             # For each tensor_name in this shard
             IFS=' ' read -r -a tensor_list <<< "${shard_to_tensors[$shard_fname]}"
             
@@ -1242,13 +1560,22 @@ run_main_loop() {
             shuffle_tensors_by_pattern tensor_list shuffled_tensor_list
             
             for tensor_name in "${shuffled_tensor_list[@]}"; do
+                # If we are in --benchmark-groups-only mode and there are no more groups to process, then we break this loop
+                if [[ "$BENCH_GROUPS_ONLY" == "true" ]] && (( ${#QTYPE_REMAINING_GROUP_IDS[@]} == 0 )); then
+                  break
+                fi
+
                 # If this tensor was pre-marked as processed, skip but only if we are not in --benchmark-groups-only mode
                 if [[ "$BENCH_GROUPS_ONLY" != "true" ]] && [[ "${PROCESSED_TENSOR[$tensor_name]:-}" == "1" ]]; then
                   continue
                 fi
 
-                # Determine all group indices for this tensor (could be zero..N)
-                mapfile -t group_idxs_for_tensor < <(find_group_indexes_for_tensor "$tensor_name")
+                # Determine all remaining group indices for this tensor (could be zero..N) when we are in --benchmark-groups-only mode only
+                if [[ "$BENCH_GROUPS_ONLY" == "true" ]]; then
+                  mapfile -t group_idxs_for_tensor < <(find_group_indexes_for_tensor "$tensor_name" "${PROCESSED_GROUP_IDS[@]}")
+                else
+                  mapfile -t group_idxs_for_tensor < <(find_group_indexes_for_tensor "$tensor_name")
+                fi
                 
                 # If tensor belongs to one or more groups and grouping is enabled, handle group processing
                 if (( ${#group_idxs_for_tensor[@]} > 0 )); then
@@ -1291,32 +1618,112 @@ run_main_loop() {
                     done
                     shards_needed=("${!shards_needed_map[@]}")
 
-                    # Download all required shards for the group (with verification)
+                    # --- NEW LOGIC: Determine which shards actually need downloading/replacement ---
+                    shards_to_fetch=()    # shards that must be downloaded from remote
+                    shards_to_replace=()  # shards for which we'll backup & replace
+                    shards_already_ok=()  # shards already have expected hash locally (no action)
+                    for s in "${shards_needed[@]}"; do
+                      # expected hash for this shard
+                      expected_hash="${shard_expected_hash[$s]:-}"
+                      # if expected_hash is empty -> this is an error, shards should always have a hash
+                      if [[ -z "$expected_hash" ]]; then
+                        echo "[$(timestamp)] ❌ Error: shard '$s' has no expected hash in map (qtype='$qtype'). Aborting." >&2
+                        [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+                        exit 20
+                      fi
+
+                      # try to find a local original file matching the "-NNNNN-of-NNNNN.gguf" suffix
+                      if [[ $s =~ -([0-9]{5}-of-[0-9]{5})\.gguf$ ]]; then
+                        suffix="${BASH_REMATCH[1]}.gguf"
+                        original_file=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 \( -type f -o -type l \) -name "*-${suffix}" | grep -vF "$LOCAL_DOWNLOAD_DIR/" | head -n1 || true)
+                        if [[ -n "$original_file" && -f "$original_file" ]]; then
+                          actual_hash=$(cached_sha256 "$original_file")
+                          if [[ -n "$actual_hash" && "$actual_hash" == "$expected_hash" ]]; then
+                            echo "[$(timestamp)] Group #${group_idx_for_tensor}: local shard '$original_file' already matches expected hash for '$s' -> no download/replace needed."
+                            # remove any stale backup for this shard as requested
+                            backup_file="${original_file}.bak"
+                            if [[ -f "$backup_file" ]]; then
+                              echo "[$(timestamp)] Removing existing backup file $backup_file (already matched expected hash)."
+                              rm -f "$backup_file"
+                            fi
+                            shards_already_ok+=("$s")
+                            continue
+                          fi
+                        fi
+                      fi
+
+                      # otherwise shard must be fetched/replaced
+                      shards_to_fetch+=("$s")
+                      shards_to_replace+=("$s")
+                    done
+
+                    # Download all required shards for the group (with verification) - only for shards_to_fetch
                     group_fetch_ok=true
                     downloaded_shards=()
-                    for s in "${shards_needed[@]}"; do
-                      local_shard_tmp="${LOCAL_DOWNLOAD_DIR}/${s}"
-                      rm -f "$local_shard_tmp"
-                      chunk_id="$(echo $s | sed -nE 's/.*-([0-9]{5})-of-[0-9]{5}\.gguf$/\1/p')"
-                      expected_hash="${shard_expected_hash[$s]:-}"
 
-                      fetched=false
-                      while true; do
-                        echo "[$(timestamp)] Group #${group_idx_for_tensor}: fetching shard '$s' (qtype=$qtype) ..."
-                        if run_tensor_downloader "${qtype^^}" "${chunk_id}" "${LOCAL_DOWNLOAD_DIR}" "${s}"; then
-                          echo "[$(timestamp)] Group #${group_idx_for_tensor}: fetched $local_shard_tmp"
+                    # --- PARALLEL FETCH: spawn N_THREADS-throttled background workers (one per shard) ---
+                    # We'll launch a background worker for each shard and throttle using the exact same
+                    # jobs-count technique used elsewhere in the script. After launching all workers we
+                    # call a single `wait` (no per-PID waits), then validate files and hashes.
+                    fetch_worker() {
+                      local s="$1"
+                      local chunk_id="$2"
+                      local expected_hash="$3"
+                      local local_shard_tmp="$4"
+                      local qtype_local="$5"
+                      local gidx_local="$6"
+
+                      # If a temp file already exists, check it first instead of immediately removing it.
+                      if [[ -f "$local_shard_tmp" ]]; then
+                        if [[ -n "$expected_hash" && "$USE_SHA256" == "true" ]]; then
+                          # try compute SHA256
+                          actual_hash="$(_sha256sum "$local_shard_tmp" 2>/dev/null | cut -d' ' -f1 || true)"
+                          if [[ -n "$actual_hash" && "$actual_hash" == "$expected_hash" ]]; then
+                            echo "[$(timestamp)] Group #${gidx_local}: existing tmp $local_shard_tmp matches expected hash; reusing."
+                            return 0
+                          else
+                            if [[ -z "$actual_hash" ]]; then
+                              echo "[$(timestamp)] Group #${gidx_local}: could not compute SHA256 for existing tmp $local_shard_tmp; removing and re-downloading." >&2
+                            else
+                              echo "[$(timestamp)] Group #${gidx_local}: existing tmp $local_shard_tmp hash mismatch ($actual_hash != $expected_hash); removing and re-downloading." >&2
+                            fi
+                            rm -f -- "$local_shard_tmp"
+                          fi
                         else
-                          echo "[$(timestamp)] ⚠️ Warning: Could not fetch shard '$s' from remote while processing group #${group_idx_for_tensor}. Aborting group." >&2
-                          break
+                          # No hash verification possible; removing and re-downloading.
+                          echo "[$(timestamp)] Group #${gidx_local}: found existing tmp $local_shard_tmp but no hash verification available; removing and re-downloading."
+                          rm -f -- "$local_shard_tmp"
+                        fi
+                      fi
+
+                      local fetched=false
+                      local retry_before_delete=3
+                      while true; do
+                        echo "[$(timestamp)] Group #${gidx_local}: fetching shard '$s' (qtype=$qtype_local) ..."
+                        if run_tensor_downloader "${qtype_local^^}" "${chunk_id}" "${LOCAL_DOWNLOAD_DIR}" "${s}"; then
+                          echo "[$(timestamp)] Group #${gidx_local}: fetched $local_shard_tmp"
+                        else
+                          echo "[$(timestamp)] ⚠️ Warning: Could not fetch shard '$s' from remote while processing group #${gidx_local}. Aborting fetch for this shard." >&2
+                          return 2
                         fi
 
                         if [[ -n "$expected_hash" && "$USE_SHA256" == "true" ]]; then
-                          actual_hash="$(_sha256sum "$local_shard_tmp" | awk '{print $1}')"
+                          if ! actual_hash="$(_sha256sum "$local_shard_tmp" 2>/dev/null | cut -d' ' -f1)"; then
+                            echo "[$(timestamp)] Group #${gidx_local}: Failed computing SHA256 for $local_shard_tmp. Retrying..." >&2
+                            sleep 10
+                            continue
+                          fi
                           if [[ "$actual_hash" == "$expected_hash" ]]; then
                             fetched=true
                             break
                           else
-                            echo "[$(timestamp)] Group #${group_idx_for_tensor}: SHA256 mismatch for $s: got $actual_hash, expected $expected_hash. Retrying in 10s..." >&2
+                            echo "[$(timestamp)] Group #${gidx_local}: SHA256 mismatch for $s: got $actual_hash, expected $expected_hash. Retrying in 10s..." >&2
+                            retry_before_delete=$((retry_before_delete - 1))
+                            if [[ $retry_before_delete -le 0 ]]; then
+                              echo "[$(timestamp)] Too many SHA256 mismatch for $s, removing $local_shard_tmp and resetting retry counter." >&2
+                              rm -f -- "$local_shard_tmp"
+                              retry_before_delete=3
+                            fi
                             sleep 10
                             continue
                           fi
@@ -1326,10 +1733,55 @@ run_main_loop() {
                         fi
                       done
 
-                      if [[ "$fetched" != true ]]; then
+                      if [[ "$fetched" == "true" ]]; then
+                        return 0
+                      else
+                        return 1
+                      fi
+                    }
+
+                    # Launch fetch workers using the same jobs-throttle pattern you used for tasks
+                    for s in "${shards_to_fetch[@]}"; do
+                      local_shard_tmp="${LOCAL_DOWNLOAD_DIR}/${s}"
+                      chunk_id="$(echo "$s" | sed -nE 's/.*-([0-9]{5})-of-[0-9]{5}\.gguf$/\1/p')"
+                      expected_hash="${shard_expected_hash[$s]:-}"
+
+                      # throttle concurrency to N_THREADS (same approach as initial validation)
+                      while (( $(jobs -p | wc -l) >= N_THREADS )); do
+                        sleep 0.2
+                      done
+
+                      # start worker in background (no per-pid tracking)
+                      fetch_worker "$s" "$chunk_id" "$expected_hash" "$local_shard_tmp" "$qtype" "$group_idx_for_tensor" &
+                    done
+
+                    # Wait for all background fetch workers to finish (single wait as requested)
+                    wait
+
+                    # After wait, validate that all expected shard files exist and match expected hashes
+                    echo "[$(timestamp)] Group #${group_idx_for_tensor}: verifying all shard hashes... please be patient."
+                    for s in "${shards_to_fetch[@]}"; do
+                      local_shard_tmp="${LOCAL_DOWNLOAD_DIR}/${s}"
+                      expected_hash="${shard_expected_hash[$s]:-}"
+
+                      if [[ ! -f "$local_shard_tmp" ]]; then
+                        echo "[$(timestamp)] Group #${group_idx_for_tensor}: Expected downloaded file missing: $local_shard_tmp" >&2
                         group_fetch_ok=false
                         break
                       fi
+
+                      if [[ -n "$expected_hash" && "$USE_SHA256" == "true" ]]; then
+                        actual_hash="$(_sha256sum "$local_shard_tmp" 2>/dev/null | cut -d' ' -f1 || true)"
+                        if [[ -z "$actual_hash" || "$actual_hash" != "$expected_hash" ]]; then
+                          echo "[$(timestamp)] Group #${group_idx_for_tensor}: Post-wait SHA256 mismatch for $local_shard_tmp: got '${actual_hash}', expected '${expected_hash}'." >&2
+                          group_fetch_ok=false
+                          break
+                        else
+                          echo "[$(timestamp)] Group #${group_idx_for_tensor}: Hash OK for $local_shard_tmp." >&2
+                        fi
+                      fi
+
+                      # If we reach here, the downloaded shard is considered valid
                       downloaded_shards+=("$local_shard_tmp")
                     done
 
@@ -1340,12 +1792,13 @@ run_main_loop() {
                     fi
 
                     # Backup originals and replace with downloaded files for all required shards
+                    # Only operate on shards_to_replace (shards that need actual replacement)
                     declare -A backups_made=()
                     replace_ok=true
-                    for s in "${shards_needed[@]}"; do
+                    for s in "${shards_to_replace[@]}"; do
                       if [[ $s =~ -([0-9]{5}-of-[0-9]{5})\.gguf$ ]]; then
                         suffix="${BASH_REMATCH[1]}.gguf"
-                        original_file=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-${suffix}" | grep -vF "$LOCAL_DOWNLOAD_DIR/" | head -n1 || true)
+                        original_file=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 \( -type f -o -type l \) -name "*-${suffix}" | grep -vF "$LOCAL_DOWNLOAD_DIR/" | head -n1 || true)
                         if [[ -z "$original_file" ]]; then
                           echo "[$(timestamp)] ⚠️ Warning: Could not find local original shard matching '*-${suffix}' in $LOCAL_MODEL_DIR. Aborting group #${group_idx_for_tensor}." >&2
                           replace_ok=false
@@ -1396,8 +1849,10 @@ run_main_loop() {
                       fi
                       if eval "$cmd" > "$group_result_file_ppl" 2>&1 < /dev/null; then
                         echo "[$(timestamp)] Group #${group_idx_for_tensor} PPL$PLUS_KLD finished and saved to $group_result_file_ppl"
+                        count_group_ppl_bench_success=$((count_group_ppl_bench_success + 1))
                       else
                         echo "[$(timestamp)] ⚠️ Warning: Group #${group_idx_for_tensor} PPL$PLUS_KLD command exited non-zero. See $group_result_file_ppl for details." >&2
+                        count_group_ppl_bench_failure=$((count_group_ppl_bench_failure + 1))
                       fi
                     fi
 
@@ -1407,8 +1862,10 @@ run_main_loop() {
                       cmd="${SWEEP_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
                       if eval "$cmd" > "$group_result_file_sweep" 2>&1 < /dev/null; then
                         echo "[$(timestamp)] Group #${group_idx_for_tensor} SWEEP finished and saved to $group_result_file_sweep"
+                        count_group_sweep_bench_success=$((count_group_sweep_bench_success + 1))
                       else
                         echo "[$(timestamp)] ⚠️ Warning: Group #${group_idx_for_tensor} SWEEP command exited non-zero. See $group_result_file_sweep for details." >&2
+                        count_group_sweep_bench_failure=$((count_group_sweep_bench_failure + 1))
                       fi
                     fi
 
@@ -1421,6 +1878,8 @@ run_main_loop() {
                       [[ "$BENCH_GROUPS_ONLY" != "true" ]] && for t in "${group_members[@]}"; do PROCESSED_TENSOR["$t"]=1; done
                       # record that this exact combo (sorted member-list) has been processed for this qtype
                       PROCESSED_GROUP_COMBOS["$group_hash"]=1
+                      PROCESSED_GROUP_IDS+=(${group_idx_for_tensor})
+                      mapfile -t QTYPE_REMAINING_GROUP_IDS < <(remove_items_from_list_lines QTYPE_REMAINING_GROUP_IDS PROCESSED_GROUP_IDS)
                       echo "[$(timestamp)] Recorded processed combo for group #${group_idx_for_tensor} (qtype=${qtype}) => ${group_hash}"
                     else
                       echo "[$(timestamp)] ⚠️ Warning: Not all required group result files produced; group #${group_idx_for_tensor} members will remain unmarked for re-run."
@@ -1446,7 +1905,7 @@ run_main_loop() {
                   # done group processing; move to next tensor
                   continue
                 elif [[ "$BENCH_GROUPS_ONLY" == "true" ]]; then
-                  echo '[$(timestamp)] Skipping tensor='$tensor_name' because --benchmark-groups-only mode is used and this tensor is not part of any group.'
+                  echo '[$(timestamp)] Skipping tensor='$tensor_name' because --benchmark-groups-only mode is used and this tensor is not part of any remaining groups.'
                   continue
                 fi
 
@@ -1482,7 +1941,9 @@ run_main_loop() {
                     fi
                 done < "$local_tensors_map"
                 if [[ -z "$expected_hash" ]]; then
-                    echo "[$(timestamp)] ⚠️ Warning: No hash found for shard='$shard_fname' in map. Will skip SHA256 check." >&2
+                    echo "[$(timestamp)] ❌ Error: No hash found for shard='$shard_fname' in map. This is unexpected; aborting." >&2
+                    [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+                    exit 21
                 else
                     echo "[$(timestamp)] Expected SHA256 for shard='$shard_fname': $expected_hash"
                 fi
@@ -1493,56 +1954,13 @@ run_main_loop() {
                 # Remove any old local copy
                 rm -f "$local_shard_tmp"
 
-                # Attempt download in a loop if SHA256 mismatch
-                fetch_success=false
-                retry_before_delete=3
-                while true; do
-                    echo "[$(timestamp)] Fetching shard from remote: $shard_fname"
-                    if run_tensor_downloader "${qtype^^}" "${chunk_id}" "${LOCAL_DOWNLOAD_DIR}" "${shard_fname}"; then
-                        echo "[$(timestamp)] Fetched to $local_shard_tmp"
-                    else
-                        echo "[$(timestamp)] ⚠️ Warning: Could not fetch shard '$shard_fname' from remote. Skipping this tensor." >&2
-                        break
-                    fi
-
-                    # If we have a hash to verify and _sha256sum available, check
-                    if [[ -n "$expected_hash" && "$USE_SHA256" == "true" ]]; then
-                        actual_hash="$(_sha256sum "$local_shard_tmp" | awk '{print $1}')"
-                        if [[ "$actual_hash" == "$expected_hash" ]]; then
-                            echo "[$(timestamp)] SHA256 matches for $shard_fname."
-                            fetch_success=true
-                            break
-                        else
-                            echo "[$(timestamp)] SHA256 mismatch for $shard_fname: got $actual_hash, expected $expected_hash." >&2
-                            retry_before_delete=$((retry_before_delete - 1))
-                            if [[ $retry_before_delete -eq 0 ]]; then
-                                echo "[$(timestamp)] Too many SHA256 mismatch for $shard_fname, removing $shard_fname from download directory!" >&2
-                                rm -f "$local_shard_tmp"
-                                retry_before_delete=3
-                            fi
-                            echo "[$(timestamp)] Retrying fetch after 10s..."
-                            sleep 10
-                            continue
-                        fi
-                    else
-                        # No hash to check or no _sha256sum: accept fetched file
-                        fetch_success=true
-                        break
-                    fi
-                done
-
-                if [[ "$fetch_success" != true ]]; then
-                    echo "[$(timestamp)] Failed to fetch valid shard for tensor='$tensor_name'. Skipping this tensor." >&2
-                    rm -f "$local_shard_tmp"
-                    continue
-                fi
-
                 # Locate the local original shard in LOCAL_MODEL_DIR matching the same "-NNNNN-of-NNNNN.gguf"
                 # Extract suffix "-NNNNN-of-NNNNN.gguf"
+                SKIP_REPLACE=false
                 if [[ $shard_fname =~ -([0-9]{5}-of-[0-9]{5})\.gguf$ ]]; then
                     suffix="${BASH_REMATCH[1]}.gguf"
                     # find local original file
-                    original_file=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -type f -name "*-${suffix}" | grep -vF "$LOCAL_DOWNLOAD_DIR/" | head -n1 || true)
+                    original_file=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 \( -type f -o -type l \) -name "*-${suffix}" | grep -vF "$LOCAL_DOWNLOAD_DIR/" | head -n1 || true)
                     if [[ -z "$original_file" ]]; then
                         echo "[$(timestamp)] ⚠️ Warning: Could not find local original shard matching '*-${suffix}' in $LOCAL_MODEL_DIR. Skipping this tensor." >&2
                         rm -f "$local_shard_tmp"
@@ -1554,20 +1972,79 @@ run_main_loop() {
                     continue
                 fi
 
-                echo "[$(timestamp)] Found local original shard: $original_file"
-
-                # Backup original
-                backup_file="${original_file}.bak"
-                if [[ -f "$backup_file" ]]; then
-                    echo "[$(timestamp)] Note: Backup file already exists: $backup_file. Overwriting it." >&2
-                    rm -f "$backup_file"
+                # If we have an expected hash and the local original file already matches it, skip download & replacement.
+                if [[ -n "$expected_hash" && -f "$original_file" ]]; then
+                  actual_hash=$(cached_sha256 "$original_file")
+                  if [[ -n "$actual_hash" && "$actual_hash" == "$expected_hash" ]]; then
+                    echo "[$(timestamp)] Local original shard $original_file already matches expected hash; skipping download/replacement for tensor='$tensor_name'."
+                    # Remove any stale backup for this shard as requested
+                    backup_file="${original_file}.bak"
+                    if [[ -f "$backup_file" ]]; then
+                      echo "[$(timestamp)] Removing existing backup file $backup_file (already matched expected hash)."
+                      rm -f "$backup_file"
+                    fi
+                    SKIP_REPLACE=true
+                  fi
                 fi
-                mv -f "$original_file" "$backup_file"
-                echo "[$(timestamp)] Backed up original to $backup_file"
 
-                # Move downloaded shard into place
-                mv -f "$local_shard_tmp" "$original_file"
-                echo "[$(timestamp)] Replaced original shard with downloaded shard."
+                # If not skipping, attempt download
+                fetch_success=false
+                retry_before_delete=3
+                if [[ "$SKIP_REPLACE" == "false" ]]; then
+                  while true; do
+                      echo "[$(timestamp)] Fetching shard from remote: $shard_fname"
+                      if run_tensor_downloader "${qtype^^}" "${chunk_id}" "${LOCAL_DOWNLOAD_DIR}" "${shard_fname}"; then
+                          echo "[$(timestamp)] Fetched to $local_shard_tmp"
+                      else
+                          echo "[$(timestamp)] ⚠️ Warning: Could not fetch shard '$shard_fname' from remote. Skipping this tensor." >&2
+                          break
+                      fi
+
+                      # If we have a hash to verify and _sha256sum available, check
+                      if [[ -n "$expected_hash" && "$USE_SHA256" == "true" ]]; then
+                          actual_hash="$(_sha256sum "$local_shard_tmp" | cut -d' ' -f1)"
+                          if [[ "$actual_hash" == "$expected_hash" ]]; then
+                              echo "[$(timestamp)] SHA256 matches for $shard_fname."
+                              fetch_success=true
+                              break
+                          else
+                              echo "[$(timestamp)] SHA256 mismatch for $shard_fname: got $actual_hash, expected $expected_hash." >&2
+                              retry_before_delete=$((retry_before_delete - 1))
+                              if [[ $retry_before_delete -eq 0 ]]; then
+                                  echo "[$(timestamp)] Too many SHA256 mismatch for $shard_fname, removing $shard_fname from download directory!" >&2
+                                  rm -f "$local_shard_tmp"
+                                  retry_before_delete=3
+                              fi
+                              echo "[$(timestamp)] Retrying fetch after 10s..."
+                              sleep 10
+                              continue
+                          fi
+                      else
+                          # No hash to check or no _sha256sum: accept fetched file
+                          fetch_success=true
+                          break
+                      fi
+                  done
+
+                  if [[ "$fetch_success" != true ]]; then
+                      echo "[$(timestamp)] Failed to fetch valid shard for tensor='$tensor_name'. Skipping this tensor." >&2
+                      rm -f "$local_shard_tmp"
+                      continue
+                  fi
+
+                  # Backup original
+                  backup_file="${original_file}.bak"
+                  if [[ -f "$backup_file" ]]; then
+                      echo "[$(timestamp)] Note: Backup file already exists: $backup_file. Overwriting it." >&2
+                      rm -f "$backup_file"
+                  fi
+                  mv -f "$original_file" "$backup_file"
+                  echo "[$(timestamp)] Backed up original to $backup_file"
+
+                  # Move downloaded shard into place
+                  mv -f "$local_shard_tmp" "$original_file"
+                  echo "[$(timestamp)] Replaced original shard with downloaded shard."
+                fi
 
                 # Run benchmark(s) according to mode
                 # PPL+KLD:
@@ -1585,8 +2062,10 @@ run_main_loop() {
                   fi
                   if eval "$cmd" > "$result_file_ppl" 2>&1 < /dev/null; then
                     echo "[$(timestamp)] 👀 PPL$PLUS_KLD output (stdout+stderr) saved to $result_file_ppl"
+                    count_individual_ppl_bench_success=$((count_individual_ppl_bench_success + 1))
                   else
                     echo "[$(timestamp)] ⚠️ Warning: PPL$PLUS_KLD command exited with non-zero status for tensor='$tensor_name'. See $result_file_ppl for details." >&2
+                    count_individual_ppl_bench_failure=$((count_individual_ppl_bench_failure + 1))
                   fi
                 fi
 
@@ -1596,8 +2075,10 @@ run_main_loop() {
                   cmd="${SWEEP_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
                   if eval "$cmd" > "$result_file_sweep" 2>&1 < /dev/null; then
                     echo "[$(timestamp)] 👀 SWEEP output (stdout+stderr) saved to $result_file_sweep"
+                    count_individual_sweep_bench_success=$((count_individual_sweep_bench_success + 1))
                   else
                     echo "[$(timestamp)] ⚠️ Warning: SWEEP command exited with non-zero status for tensor='$tensor_name'. See $result_file_sweep for details." >&2
+                    count_individual_sweep_bench_failure=$((count_individual_sweep_bench_failure + 1))
                   fi
                 fi
 
@@ -1612,9 +2093,11 @@ run_main_loop() {
                   echo "[$(timestamp)] ⚠️ Warning: Not all required result files produced for '$tensor_name'; it will remain unmarked for re-run."
                 fi
 
-                # Restore original shard
-                mv -f "$backup_file" "$original_file"
-                echo "[$(timestamp)] Restored original shard from backup."
+                # Restore original shard if we replaced it
+                if [[ "$SKIP_REPLACE" == "false" ]]; then
+                  mv -f "$backup_file" "$original_file"
+                  echo "[$(timestamp)] Restored original shard from backup."
+                fi
 
                 # Clean up any leftover in LOCAL_DOWNLOAD_DIR
                 rm -f "$local_shard_tmp"
@@ -1633,6 +2116,32 @@ run_main_loop() {
         # Optionally remove local_tensors_map if you don't need to keep it
         # rm -f "$local_tensors_map"
 
+        # Summary of benchmarks for this qtype (each line prefixed with timestamp)
+        total_all=$((count_group_ppl_bench_success + count_group_ppl_bench_failure + \
+                    count_group_sweep_bench_success + count_group_sweep_bench_failure + \
+                    count_individual_ppl_bench_success + count_individual_ppl_bench_failure + \
+                    count_individual_sweep_bench_success + count_individual_sweep_bench_failure))
+
+        if (( total_all == 0 )); then
+          echo "[$(timestamp)] ⚠️ Warning: No benchmarks were run for qtype='$qtype' — either everything was already benchmarked (e.g. baseline) or there was nothing to process."
+        fi
+
+        # Print PPL (PPL or PPL+KLD) related summary if PPL mode was enabled
+        if need_run_ppl; then
+          echo "[$(timestamp)] Summary (PPL${PLUS_KLD} - groups):    success=${count_group_ppl_bench_success}, failure=${count_group_ppl_bench_failure}"
+          echo "[$(timestamp)] Summary (PPL${PLUS_KLD} - individual): success=${count_individual_ppl_bench_success}, failure=${count_individual_ppl_bench_failure}"
+        fi
+
+        # Print SWEEP related summary if SWEEP mode was enabled
+        if need_run_sweep; then
+          echo "[$(timestamp)] Summary (SWEEP - groups):    success=${count_group_sweep_bench_success}, failure=${count_group_sweep_bench_failure}"
+          echo "[$(timestamp)] Summary (SWEEP - individual): success=${count_individual_sweep_bench_success}, failure=${count_individual_sweep_bench_failure}"
+        fi
+
+        # Always print an overall total line for convenience
+        echo "[$(timestamp)] Overall benchmark totals: success=$((count_group_ppl_bench_success + count_group_sweep_bench_success + count_individual_ppl_bench_success + count_individual_sweep_bench_success)), failure=$((count_group_ppl_bench_failure + count_group_sweep_bench_failure + count_individual_ppl_bench_failure + count_individual_sweep_bench_failure))"
+
+        # Existing finished marker
         echo "[$(timestamp)] 🎉 Finished qtype='$qtype'."
     done
 }

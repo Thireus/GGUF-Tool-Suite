@@ -5,7 +5,7 @@
 #** models.                                                   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-13-2025 -------------------- **#
+#** --------------- Updated: Nov-19-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -103,7 +103,7 @@ while true; do
             # If you want verbose logging, uncomment the next line:
             # echo "[$(date '+%Y-%m-%d %H:%M:%S')] Split directory already exists for '$file'; skipping."
         fi
-    done < <(find "$WATCH_DIR" -maxdepth 1 -type f -name "*-SPECIAL.gguf" -mmin +10 -print0)
+    done < <(find "$WATCH_DIR" -maxdepth 1 \( -type f -o -type l \) -name "*-SPECIAL.gguf" -mmin +10 -print0)
 
     # Sleep for 60 seconds before next check
     sleep 60

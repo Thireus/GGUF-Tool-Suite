@@ -5,7 +5,7 @@
 #** Colab pipeline parameters for quant_recipe_pipeline.ipynb **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-12-2025 -------------------- **#
+#** --------------- Updated: Nov-21-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -69,6 +69,7 @@ DEFAULTS: Dict[str, Any] = {
     "debug": False,
     "info": False,
     "ignore_f32": False,
+    "no_fallback": False,
     "tensors_from_csv": False,
     "cpu_irq_k": 1.5,
     "gpu_irq_k": 1.5,
@@ -241,6 +242,7 @@ def emit_parameters(params: Dict[str, Any]) -> str:
     lines.append(f'debug = {params["debug"]}               #@param {{type:"boolean"}}')
     lines.append(f'info = {params["info"]}                #@param {{type:"boolean"}}')
     lines.append(f'ignore_f32 = {params["ignore_f32"]}          #@param {{type:"boolean"}}')
+    lines.append(f'no_fallback = {params["no_fallback"]}          #@param {{type:"boolean"}}')
     lines.append(f'tensors_from_csv = {params["tensors_from_csv"]}    #@param {{type:"boolean"}}')
     lines.append(f'cpu_irq_k = {params["cpu_irq_k"]}             #@param {{type:"number"}}')
     lines.append(f'gpu_irq_k = {params["gpu_irq_k"]}             #@param {{type:"number"}}')
