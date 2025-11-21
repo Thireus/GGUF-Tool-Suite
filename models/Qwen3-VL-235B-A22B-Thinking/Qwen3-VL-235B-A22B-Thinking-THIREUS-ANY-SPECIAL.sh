@@ -2,7 +2,7 @@
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
 #** Qwen3-VL-235B-A22B-Thinking-THIREUS-ANY-SPECIAL.sh used   **#
-#** for ppl bench purpose. Adjust $1 in $custom!              **#
+#** for model quantization purpose. Adjust $1 in $custom!     **#
 #**                                                           **#
 #** ********************************************************* **#
 #** --------------- Updated: Nov-06-2025 -------------------- **#

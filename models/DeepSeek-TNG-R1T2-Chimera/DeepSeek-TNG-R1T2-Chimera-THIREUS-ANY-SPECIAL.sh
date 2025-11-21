@@ -2,7 +2,7 @@
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
 #** DeepSeek-TNG-R1T2-Chimera-THIREUS-ANY-SPECIAL.sh used for **#
-#** ppl bench purpose. Adjust $1 in $custom to your needs!    **#
+#** model quant purpose. Adjust $1 in $custom to your needs!  **#
 #**                                                           **#
 #** ********************************************************* **#
 #** --------------- Updated: Nov-06-2025 -------------------- **#
