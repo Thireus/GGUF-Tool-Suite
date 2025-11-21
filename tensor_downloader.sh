@@ -5,7 +5,7 @@
 #** downloads pre-quantised tensors/shards to cook recipes.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-11-2025 -------------------- **#
+#** --------------- Updated: Nov-21-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -24,6 +24,35 @@
 #***************************************************************#
 
 set -u
+
+# -----------------------------------------------------------------------------
+# Ensure required external tools are available.
+# The downloader relies on `curl` for HTTP/HTTPS downloads (HuggingFace/CURL fallbacks).
+# If curl is missing, display a big warning and exit with an error asking the user to install it.
+if ! command -v curl >/dev/null 2>&1; then
+  cat >&2 <<'WARN'
+
+###########################################################################
+#                                                                         #
+#  ERROR: Required tool "curl" not found on this system.                  #
+#                                                                         #
+#  This script requires 'curl' to perform HTTP/HTTPS downloads (Hugging   #
+#  Face & direct URL fallback methods). Please install 'curl' and re-run  #
+#  the script.                                                            #
+#                                                                         #
+#  On Debian/Ubuntu:    sudo apt update && sudo apt install -y curl       #
+#  On Fedora:           sudo dnf install -y curl                          #
+#  On CentOS/RHEL:      sudo yum install -y curl                          #
+#  On Arch Linux:       sudo pacman -Syu curl                             #
+#  On macOS (Homebrew): brew install curl                                 #
+#                                                                         #
+#  After installation, run this script again.                             #
+#                                                                         #
+###########################################################################
+
+WARN
+  exit 1
+fi
 
 # -----------------------------------------------------------------------------
 # tensor_downloader.sh
@@ -347,7 +376,7 @@ do_huggingface() {
     else
       CURL_OPTS="--silent"
     fi
-    curl --fail -L --retry 3 -C - ${CURL_OPTS} -R \
+    curl --fail -L --retry 5 --retry-connrefused --retry-all-errors --retry-delay 5 --retry-max-time 600 --connect-timeout 15  -C - ${CURL_OPTS} -R \
       "${URL}" -o "${DST}"
 
     if [ $? -eq 0 ]; then
@@ -462,7 +491,7 @@ do_curl() {
     else
       CURL_OPTS="--silent"
     fi
-    curl --fail -L --retry 3 -C - ${CURL_OPTS} -R \
+    curl --fail -L --retry 5 --retry-connrefused --retry-all-errors --retry-delay 5 --retry-max-time 600 --connect-timeout 15 -C - ${CURL_OPTS} -R \
       "${URL}" -o "${DST}"
 
     if [ $? -eq 0 ]; then
