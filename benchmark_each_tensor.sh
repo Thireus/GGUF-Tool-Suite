@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-20-2025 -------------------- **#
+#** --------------- Updated: Nov-21-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -1347,23 +1347,19 @@ find_group_indexes_for_tensor() {
   done
 }
 
-# remove_items_from_list_lines <list[@]> <to_remove[@]>
-remove_items_from_list_lines() {
+# write result into an output array passed by name
+remove_items_from_list_lines_inplace() {
   local -n _list="$1"
   local -n _remove="$2"
+  local -n _out="$3"
 
-  local -a result=()
+  _out=()
   for item in "${_list[@]}"; do
     local skip=false
     for rm in "${_remove[@]}"; do
       [[ "$item" == "$rm" ]] && { skip=true; break; }
     done
-    $skip || result+=("$item")
-  done
-
-  # print one per line (no trailing spaces)
-  for i in "${result[@]}"; do
-    printf '%s\n' "$i"
+    $skip || _out+=("$item")
   done
 }
 
@@ -1879,7 +1875,10 @@ run_main_loop() {
                       # record that this exact combo (sorted member-list) has been processed for this qtype
                       PROCESSED_GROUP_COMBOS["$group_hash"]=1
                       PROCESSED_GROUP_IDS+=(${group_idx_for_tensor})
-                      mapfile -t QTYPE_REMAINING_GROUP_IDS < <(remove_items_from_list_lines QTYPE_REMAINING_GROUP_IDS PROCESSED_GROUP_IDS)
+                      _tmp_qtype_remaining=()
+                      remove_items_from_list_lines_inplace QTYPE_REMAINING_GROUP_IDS PROCESSED_GROUP_IDS _tmp_qtype_remaining
+                      QTYPE_REMAINING_GROUP_IDS=( "${_tmp_qtype_remaining[@]}" )
+                      unset _tmp_qtype_remaining
                       echo "[$(timestamp)] Recorded processed combo for group #${group_idx_for_tensor} (qtype=${qtype}) => ${group_hash}"
                     else
                       echo "[$(timestamp)] ⚠️ Warning: Not all required group result files produced; group #${group_idx_for_tensor} members will remain unmarked for re-run."
