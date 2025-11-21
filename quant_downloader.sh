@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regexe entries.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-19-2025 -------------------- **#
+#** --------------- Updated: Nov-21-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -175,6 +175,8 @@ SPECIAL_NODE_ID=""      # Optional: number of nodes (see --special-node-id). If 
 TOTAL_NODES=""          # Optional: Total number of nodes (see --total-nodes).
 RM_SKIPPED_SHARDS=false # Optional: Remove shards that are skipped for this node (not performed in --verify mode).
 MODEL_NAME=""           # Will be read from $SCRIPT_DIR/download.conf when --special-node-id is used.
+RETRY_ATTEMPTS=3        # Retry config for pathological symlink/network cases (only for read ops)
+RETRY_DELAY=10          # Retry config for pathological symlink/network cases (only for read ops)
 
 # --------------------- USAGE & ARG PARSING -------------------
 usage() {
@@ -322,6 +324,107 @@ _sha256sum() {
     "${sha256tool[@]}" "${args[@]}" | awk '{print $1}'
   fi
 }
+
+# ----------------------- SYMLINK/RETRY HELPERS (minimal) -----------------------
+# retry_exec: run a command repeatedly (exec mode). Usage: retry_exec cmd arg1 arg2 ...
+retry_exec() {
+  local attempt=1
+  while :; do
+    if "$@"; then
+      return 0
+    fi
+    if [[ $attempt -ge $RETRY_ATTEMPTS ]]; then
+      return 1
+    fi
+    echo "⚠️ Warning: command failed (attempt $attempt/${RETRY_ATTEMPTS}): $*" >&2
+    attempt=$((attempt + 1))
+    sleep "$RETRY_DELAY"
+  done
+}
+
+# retry_capture: run a command and capture stdout with retries. Usage: out="$(retry_capture cmd arg1 ...)"
+retry_capture() {
+  local attempt=1
+  local out
+  while :; do
+    if out="$("$@" 2>/dev/null)"; then
+      printf '%s' "$out"
+      return 0
+    fi
+    if [[ $attempt -ge $RETRY_ATTEMPTS ]]; then
+      return 1
+    fi
+    echo "⚠️ Warning: command failed (attempt $attempt/${RETRY_ATTEMPTS}): $*" >&2
+    attempt=$((attempt + 1))
+    sleep "$RETRY_DELAY"
+  done
+}
+
+# ensure_path_available: when a path is a symlink pointing to a network mount
+# we retry waiting for the *target* to become available. Returns 0 if path (or
+# symlink target) becomes available within RETRY_ATTEMPTS; non-zero otherwise.
+ensure_path_available() {
+  local path="$1"
+  local attempt=1
+  while :; do
+    if [[ -e "$path" ]]; then
+      return 0
+    fi
+    # If it's a symlink, but target not present, wait and retry
+    if [[ -L "$path" ]]; then
+      # if target becomes available, -e "$path" above will be true; otherwise we retry
+      :
+    fi
+    if [[ $attempt -ge $RETRY_ATTEMPTS ]]; then
+      return 1
+    fi
+    echo "⚠️ Warning: path not available (attempt $attempt/${RETRY_ATTEMPTS}): $path" >&2
+    attempt=$((attempt + 1))
+    sleep "$RETRY_DELAY"
+  done
+}
+
+is_symlink() { [[ -L "$1" ]]; }
+
+# safe_file_exists: when checking file existence, if path is a symlink attempt retries
+safe_file_exists() {
+  local path="$1"
+  if is_symlink "$path"; then
+    ensure_path_available "$path" || return 1
+  fi
+  [[ -f "$path" ]]
+}
+
+# safe_sha256sum: ensure path available if symlink, then run _sha256sum (with retries if symlink)
+safe_sha256sum() {
+  local path="$1"
+  if is_symlink "$path"; then
+    if ! ensure_path_available "$path"; then
+      return 1
+    fi
+    retry_capture _sha256sum "$path"
+  else
+    _sha256sum "$path"
+  fi
+}
+
+# safe_gpg_verify: run gpg --verify with retry semantics when either file is a symlink
+safe_gpg_verify() {
+  local sigfile="$1"
+  local datafile="$2"
+  if is_symlink "$sigfile" || is_symlink "$datafile"; then
+    if is_symlink "$sigfile"; then
+      ensure_path_available "$sigfile" || return 1
+    fi
+    if is_symlink "$datafile"; then
+      ensure_path_available "$datafile" || return 1
+    fi
+    retry_exec gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --verify "$sigfile" "$datafile"
+  else
+    gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --verify "$sigfile" "$datafile"
+  fi
+}
+# ----------------------------------------------------------------
 
 # ------------------ READ USER_REGEX PATTERNS -----------------
 declare -a USER_REGEX
@@ -521,7 +624,7 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
           [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
           exit 5
       fi
-      if gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --verify "$mapfile.sig" "$mapfile" > /dev/null 2>&1; then
+      if safe_gpg_verify "$mapfile.sig" "$mapfile" > /dev/null 2>&1; then
           echo "[$(timestamp)] GPG signature verification successful."
       else
           echo "❌ Error: GPG signature verification failed for '$mapfile.sig'."
@@ -679,8 +782,8 @@ download_shard() {
       fi
       local _path=""
       while [[ "$need_download" == false ]] && [[ "$got" == "" ]]; do
-        if [[ -f "$local_path" ]] || [[ -f "$dl_path" ]]; then
-            if [[ -f "$local_path" ]]; then
+        if safe_file_exists "$local_path" || safe_file_exists "$dl_path"; then
+            if safe_file_exists "$local_path"; then
                 _path=$local_path
             else
                 _path=$dl_path
@@ -688,7 +791,12 @@ download_shard() {
             fi
             if command -v _sha256sum &>/dev/null; then
                 [ "$failed_hash" -gt 0 ] && sync || true
-                got=$(_sha256sum "$_path" | cut -d' ' -f1)
+                # use safe_sha256sum which will retry if symlink
+                if got="$(safe_sha256sum "$_path" 2>/dev/null)"; then
+                  got="${got%%[^0-9a-fA-F]*}"
+                else
+                  got=""
+                fi
                 local exp=$(get_t_hash "$qtype" "$tensor")
                 if [[ "$got" != "$exp" ]]; then
                     failed_hash=$((failed_hash + 1))
@@ -780,7 +888,7 @@ if [[ "$VERIFY_ONLY" == "true" ]]; then
                   kill -s TERM "$SCRIPT_PID"  # Kill parent
                   exit 5
               fi
-              if gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --verify "$LOCAL_MODEL_DIR/$gguf_first.sig" "$LOCAL_MODEL_DIR/$gguf_first" > /dev/null 2>&1; then
+              if safe_gpg_verify "$LOCAL_MODEL_DIR/$gguf_first.sig" "$LOCAL_MODEL_DIR/$gguf_first" > /dev/null 2>&1; then
                   echo "[$(timestamp)] GPG signature verification for '$gguf_first.sig' successful."
               else
                   echo "[$(timestamp)] VERIFY_ONLY: Error - GPG signature verification failed for '$gguf_first.sig'."
@@ -829,8 +937,9 @@ if [[ "$VERIFY_ONLY" == "true" ]]; then
             shardfile="${SHARD_FILENAMES[$idx]}"
             local_path="$LOCAL_MODEL_DIR/$shardfile"
 
-            if [[ -f "$local_path" ]] && command -v _sha256sum &>/dev/null; then
-              got=$(_sha256sum "$local_path" | cut -d' ' -f1)
+            if safe_file_exists "$local_path" && command -v _sha256sum &>/dev/null; then
+              got=$(safe_sha256sum "$local_path" 2>/dev/null || true)
+              got="${got%%[^0-9a-fA-F]*}"
               exp=$(get_t_hash "$qtype" "$tensor")
               if [[ "$got" != "$exp" ]]; then
                 echo "[$(timestamp)] WRONG HASH: $shardfile ($got != $exp) - tensor: '$tensor' - qtype: '$qtype'"
@@ -1077,7 +1186,7 @@ if [[ "$SKIP_GPG" != "true" ]]; then
           [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
           exit 5
       fi
-      if gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --verify "$LOCAL_MODEL_DIR/$gguf_first.sig" "$LOCAL_MODEL_DIR/$gguf_first" > /dev/null 2>&1; then
+      if safe_gpg_verify "$LOCAL_MODEL_DIR/$gguf_first.sig" "$LOCAL_MODEL_DIR/$gguf_first" > /dev/null 2>&1; then
           echo "[$(timestamp)] GPG signature verification for '$gguf_first.sig' successful."
       else
           echo "❌ Error: GPG signature verification failed for '$gguf_first.sig'."
