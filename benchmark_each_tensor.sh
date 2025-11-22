@@ -751,7 +751,7 @@ for entry in "${tasks[@]}"; do
   } 2>&1 &
 
   # throttle concurrency
-  while (( $( (jobs -p 2>/dev/null | wc -l) || echo 0 ) >= N_THREADS )); do
+  while (( $(jobs -p | wc -l) >= N_THREADS )); do
     sleep 0.2
   done
 done
@@ -1757,7 +1757,7 @@ run_main_loop() {
                       expected_hash="${shard_expected_hash[$s]:-}"
 
                       # throttle concurrency to N_THREADS (same approach as initial validation)
-                      while (( $( (jobs -p 2>/dev/null | wc -l) || echo 0 ) >= N_THREADS )); do
+                      while (( $(jobs -p | wc -l) >= N_THREADS )); do
                         sleep 0.2
                       done
 
