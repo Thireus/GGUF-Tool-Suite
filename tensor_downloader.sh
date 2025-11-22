@@ -5,7 +5,7 @@
 #** downloads pre-quantised tensors/shards to cook recipes.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-21-2025 -------------------- **#
+#** --------------- Updated: Nov-22-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -27,7 +27,7 @@ set -u
 
 # -----------------------------------------------------------------------------
 # Ensure required external tools are available.
-# The downloader relies on `curl` for HTTP/HTTPS downloads (HuggingFace/CURL fallbacks).
+# The downloader relies on `curl` for HTTP/HTTPS downloads (Hugging Face & direct URL fallback).
 # If curl is missing, display a big warning and exit with an error asking the user to install it.
 if ! command -v curl >/dev/null 2>&1; then
   cat >&2 <<'WARN'
@@ -169,6 +169,32 @@ CHUNKS=$(printf "%05d" "$CHUNKS_TOTAL") # Total number of chunks of the model
 # Logging helper
 log() {
   echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"
+}
+
+# -----------------------------------------------------------------------------
+# Indicator if any child process was killed by a signal (set to 1 if so)
+KILLED_BY_SIGNAL=0
+
+# mark_if_killed_by_signal STATUS DST METHOD
+# - If STATUS corresponds to a known "killed by signal" condition, set KILLED_BY_SIGNAL=1,
+#   remove partial DST, log a short message, and return 0.
+# - Otherwise return 1.
+mark_if_killed_by_signal() {
+  local status="$1"
+  local dst="$2"
+  local method="${3:-command}"
+
+  # rsync uses exit code 20 to indicate it received SIGINT / SIGUSR1 (rsync-specific).
+  if [ "$status" -eq 20 ] || [ "$status" -gt 128 ]; then
+    KILLED_BY_SIGNAL=1
+    # attempt to clean up partial file if present
+    if [[ -n "$dst" ]]; then
+      rm -f -- "$dst" 2>/dev/null || true
+    fi
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✗ ${method} terminated by signal (exit ${status}); cleaned up partial file ${dst}"
+    return 0
+  fi
+  return 1
 }
 
 # -----------------------------------------------------------------------------
@@ -332,8 +358,12 @@ do_rsync() {
     fi
     rsync ${RSYNC_OPTS} --inplace -t -c -e "ssh -p ${RPORT}" \
       "${SRC}" "${DST}"
-
-    if [ $? -eq 0 ]; then
+    status=$?
+    if mark_if_killed_by_signal "$status" "$DST" "rsync"; then
+      # mark_if_killed_by_signal already cleaned partial DST and set KILLED_BY_SIGNAL
+      # return non-zero so caller knows rsync didn't succeed
+      return 1
+    elif [ $status -eq 0 ]; then
       log "Download complete, verifying…"
       if verify_download "${DST}"; then
         log "✓ Verified and saved via rsync (${RHOST}) - ${DST} (${QUANT_U})"
@@ -378,8 +408,10 @@ do_huggingface() {
     fi
     curl --fail -L --retry 5 --retry-connrefused --retry-all-errors --retry-delay 5 --retry-max-time 600 --connect-timeout 15  -C - ${CURL_OPTS} -R \
       "${URL}" -o "${DST}"
-
-    if [ $? -eq 0 ]; then
+    status=$?
+    if mark_if_killed_by_signal "$status" "$DST" "curl (huggingface)"; then
+      return 1
+    elif [ $status -eq 0 ]; then
       log "Download complete, verifying…"
       if verify_download "${DST}"; then
         log "✓ Verified and saved via huggingface (org: ${ORG}, branch: ${BRANCH}) - ${DST} (${QUANT_U})"
@@ -493,11 +525,13 @@ do_curl() {
     fi
     curl --fail -L --retry 5 --retry-connrefused --retry-all-errors --retry-delay 5 --retry-max-time 600 --connect-timeout 15 -C - ${CURL_OPTS} -R \
       "${URL}" -o "${DST}"
-
-    if [ $? -eq 0 ]; then
+    status=$?
+    if mark_if_killed_by_signal "$status" "$DST" "curl"; then
+      return 1
+    elif [ $status -eq 0 ]; then
       log "Download complete, verifying…"
       if verify_download "${DST}"; then
-        log "✓ Verified and saved via curl (${DST} (${QUANT_U})"
+        log "✓ Verified and saved via curl - ${DST} (${QUANT_U})"
         chmod 444 "${DST}"
         return 0
       else
@@ -505,7 +539,7 @@ do_curl() {
         rm -f "${DST}"
       fi
     else
-      log "✗ Curl failed; trying next"
+      log "✗ Curl failed; trying next - $status"
     fi
   done
   return 1
@@ -537,7 +571,10 @@ do_copy() {
 
     log "Trying copy from ${SRC}"
     cp --preserve=mode,timestamps "${SRC}" "${DST}"
-    if [ $? -eq 0 ]; then
+    status=$?
+    if mark_if_killed_by_signal "$status" "$DST" "cp"; then
+      return 1
+    elif [ $status -eq 0 ]; then
       log "Copy complete, verifying…"
       if verify_download "${DST}"; then
         log "✓ Verified and saved via copy - ${DST} (${QUANT_U})"
@@ -579,7 +616,10 @@ do_symlink() {
 
     log "Trying symlink from ${SRC}"
     ln -s "${SRC}" "${DST}"
-    if [ $? -eq 0 ]; then
+    status=$?
+    if mark_if_killed_by_signal "$status" "$DST" "ln"; then
+      return 1
+    elif [ $status -eq 0 ]; then
       log "Symlink created, verifying…"
       if verify_download "${DST}"; then
         log "✓ Verified and linked - ${DST} → ${SRC}"
@@ -620,5 +660,11 @@ done
 
 # -----------------------------------------------------------------------------
 # All methods failed
-log "ERROR: All download methods failed for ${FILENAME}"
-exit 1
+if [ "${KILLED_BY_SIGNAL:-0}" -eq 1 ]; then
+  #log "💀 Received termination signal; cleaned up partial download for ${FILENAME}."
+  # Use SIGINT-style exit code 130 as conventional signal-terminated exit
+  exit 130
+else
+  log "ERROR: All download methods failed for ${FILENAME}"
+  exit 1
+fi

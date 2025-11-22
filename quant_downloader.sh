@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regexe entries.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-21-2025 -------------------- **#
+#** --------------- Updated: Nov-22-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -111,11 +111,10 @@ fi
 
 # ---------------- SIGNAL HANDLING ----------------
 # Graceful shutdown on Ctrl+C / SIGTERM
-INTERRUPTED=0
+INT_TIMESTAMP=0
 
 shutdown_on_signal() {
   local rc=130  # conventional exit code for SIGINT
-  INTERRUPTED=1
   DEBUG "shutdown_on_signal: received signal, initiating graceful shutdown (exit $rc)" >&2
 
   # Get running child PIDs started by this shell (jobs -rp)
@@ -155,7 +154,16 @@ shutdown_on_signal() {
   fi
 
   # If you have any cleanup traps for FIFOs etc, they will run because we exit now.
-  echo "💀 Received termination signal; initiating graceful shutdown (exit $rc)... Some sub-processes might still be ongoing for a short while after this script terminates!" >&2
+  if [[ $INT_TIMESTAMP -eq 0 ]]; then
+    echo "💀 Termination signal received — forwarding SIGINT to the entire process group and starting graceful shutdown (exit ${rc:-?})." >&2
+    echo "   Allowing up to 10 seconds for subprocesses to exit cleanly if possible." >&2
+    INT_TIMESTAMP=$(date +%s)
+  elif [[ $(( $(date +%s) - INT_TIMESTAMP )) -gt 10 ]]; then
+    echo "💀 10 seconds elapsed — forcing termination now: sending SIGKILL to the process group (-$$)." >&2
+    kill -s KILL -- -$$ 2>/dev/null || true
+  fi
+  sleep 1 # Slow down the shutdown_on_signal loop
+  kill -s INT -- -$$ 2>/dev/null || true
   exit "$rc"
 }
 
