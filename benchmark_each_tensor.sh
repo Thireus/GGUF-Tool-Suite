@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-21-2025 -------------------- **#
+#** --------------- Updated: Nov-22-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -27,11 +27,12 @@
 set -euo pipefail
 
 # ----------------------------------------------------------------------------
-# Add a flag for delayed exit: first SIGINT sets EXIT_PENDING=1, second sends SIGTERM to llama-perplexity, third exits immediately
+# Add a flag for delayed exit: first SIGINT sets EXIT_PENDING=1, second sends SIGTERM to llama-perplexity and all, third exits immediately
 EXIT_PENDING=0
 SIGINT_COUNT=0
 LLAMA_PID=""
-# Trap SIGINT (Ctrl+C) to set the flag on first, send SIGTERM on second, immediate exit on third
+INT_TIMESTAMP=0
+# Trap SIGINT (Ctrl+C) to set the flag on first, send SIGTERM on second, send SIGKILL on third, immediate exit on fourth
 trap '
   SIGINT_COUNT=$((SIGINT_COUNT+1))
   if [[ $SIGINT_COUNT -eq 1 ]]; then
@@ -40,13 +41,26 @@ trap '
   elif [[ $SIGINT_COUNT -eq 2 ]]; then
     echo "[$(date "+%Y-%m-%d %H:%M:%S")] Received second termination signal. Sending SIGTERM to llama-perplexity."
     [[ -n "$LLAMA_PID" ]] && kill -SIGTERM "$LLAMA_PID"
+  elif [[ $SIGINT_COUNT -eq 3 ]]; then
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Received third termination signal. Sending SIGKILL to llama-perplexity."
+    [[ -n "$LLAMA_PID" ]] && kill -SIGKILL "$LLAMA_PID"
   else
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Received third termination signal. Exiting immediately."
+    # If you have any cleanup traps for FIFOs etc, they will run because we exit now.
+    if [[ $INT_TIMESTAMP -eq 0 ]]; then
+      echo "💀 Received fourth termination signal — forwarding SIGINT to the entire process group and for graceful shutdown." >&2
+      echo "   Allowing up to 10 seconds for subprocesses to exit cleanly if possible." >&2
+      INT_TIMESTAMP=$(date +%s)
+    elif [[ $(( $(date +%s) - INT_TIMESTAMP )) -gt 10 ]]; then
+      echo "💀 10 seconds elapsed — forcing termination now: sending SIGKILL to the process group (-$$)." >&2
+      kill -s KILL -- -$$ 2>/dev/null || true
+    fi
+    sleep 1 # Slow down the shutdown_on_signal loop
+    kill -s INT -- -$$ 2>/dev/null || true
     exit 1
   fi
 ' SIGINT
 # You can leave SIGTERM as before if you prefer it to be immediate:
-trap 'echo "[$(date "+%Y-%m-%d %H:%M:%S")] Received termination signal. Exiting immediately."; exit 1' SIGTERM
+trap 'echo "[$(date "+%Y-%m-%d %H:%M:%S")] Received termination signal. Exiting immediately."; kill -s KILL -- -$$ 2>/dev/null || true; exit 1' SIGTERM
 # ----------------------------------------------------------------------------
 
 timestamp() { date "+%Y-%m-%d %H:%M:%S"; }
@@ -737,7 +751,7 @@ for entry in "${tasks[@]}"; do
   } 2>&1 &
 
   # throttle concurrency
-  while (( $(jobs -p | wc -l) >= N_THREADS )); do
+  while (( $( (jobs -p 2>/dev/null | wc -l) || echo 0 ) >= N_THREADS )); do
     sleep 0.2
   done
 done
@@ -1743,7 +1757,7 @@ run_main_loop() {
                       expected_hash="${shard_expected_hash[$s]:-}"
 
                       # throttle concurrency to N_THREADS (same approach as initial validation)
-                      while (( $(jobs -p | wc -l) >= N_THREADS )); do
+                      while (( $( (jobs -p 2>/dev/null | wc -l) || echo 0 ) >= N_THREADS )); do
                         sleep 0.2
                       done
 
