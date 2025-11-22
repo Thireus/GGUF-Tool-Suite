@@ -85,7 +85,7 @@ HUGGINGFACE_ORGS=(
 )
 # CURL_URLS: Complete URL where model shard repos can be found
 CURL_URLS=(
-  "https://gguf{0..4}.thireus.com/"
+  "https://gguf{5:20}.thireus.com/"
 )
 
 # Local fallbacks:
