@@ -76,7 +76,7 @@ Here's how DeepSeek-R1-0528 quantized with **Thireus' GGUF Tool Suite** compares
 | [DeepSeek-V3.1-Terminus](https://huggingface.co/collections/Thireus/deepseek-v31-terminus-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶✅ Tested and Working<br>🅴✅ Yes | Similar to DeepSeek-V3.1 |
 | [DeepSeek-V3.2-Exp](https://huggingface.co/collections/Thireus/deepseek-v32-exp-thireus-special-split3) |🅲⚠️ Not Started<br>🆀⚠️ Not Started<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | Similar to DeepSeek-V3.1-Terminus |
 | [Kimi-K2-Instruct](https://huggingface.co/collections/Thireus/kimi-k2-instruct-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶✅ Tested and Working<br>🅴✅ Yes | Examples provided. It would appear that it does really well on \_kt quants, likely because this is the target quant that was used for the calibration data. I may need to redo the calibration data using iq1\_s\_r4 to verify this theory. |
-| [Kimi-K2-Thinking](https://huggingface.co/collections/Thireus/kimi-k2-thinking-thireus-special-split) |🅲⚠️ Not Started<br>🆀⚠️ Not Started<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | https://github.com/Thireus/GGUF-Tool-Suite/issues/39 |
+| [Kimi-K2-Thinking](https://huggingface.co/collections/Thireus/kimi-k2-thinking-thireus-special-split) |🅲⚠️ Not Started<br>🆀⚠️ In progress...<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | https://github.com/Thireus/GGUF-Tool-Suite/issues/39 |
 | [Kimi-K2-Instruct-0905](https://huggingface.co/collections/Thireus/kimi-k2-instruct-0905-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | Similar to Kimi-K2-Instruct. |
 | [Qwen3-VL-235B-A22B-Thinking](https://huggingface.co/collections/Thireus/qwen3-vl-235b-a22b-thinking-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶✅ Tested and Working<br>🅴✅ Yes | Similar to Qwen3-235B-A22B-Thinking-2507 |
 | [mmproj-Qwen3-VL-235B-A22B-Thinking](https://huggingface.co/collections/Thireus/mmproj-qwen3-235b-a22b-thinking-2507-thireus-special-split) |🅲❌ Not planned<br>🆀✅ Complete<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | [mmproj](https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal.md) for Qwen3-VL-235B-A22B-Thinking. No plan to quantise below BF16. Consider converting it to FP32 if your hardware doesn't support BF16 to keep this model lossless! |
@@ -358,6 +358,9 @@ Big thanks to **ubergarm** for his support and for providing the invaluable **`i
 
 📄 Ubergarm's `imatrix` for Kimi-K2-Instruct-0905 can be found here:  
 🔗 [imatrix_Kimi-K2-Instruct-0905_ubergarm.dat](https://huggingface.co/ubergarm/Kimi-K2-Instruct-0905-GGUF/blob/main/imatrix-Kimi-K2-Instruct-0905-Q8_0.dat)
+
+📄 Ubergarm's `imatrix` for Kimi-K2-Thinking can be found here:  
+🔗 [imatrix_Kimi-K2-Thinking_ubergarm.dat](https://huggingface.co/ubergarm/Kimi-K2-Thinking-GGUF/blob/main/imatrix-Kimi-K2-Thinking-Q8_0-Q4_0.dat)
 
 📄 Thireus's computed Ubergarm's `imatrix` for Qwen3-VL-235B-A22B-Instruct can be found in the model directory:  
 🔗 [imatrix_Qwen3-VL-235B-A22B-Instruct_ubergarm.dat](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/models/Qwen3-VL-235B-A22B-Instruct/imatrix_ubergarm.dat)
