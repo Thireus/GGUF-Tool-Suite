@@ -13,8 +13,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.patreon.com/Thireus" target="_blank">👉 Become a Patron</a><br>
-  <a href="https://donate.thireus.com/" target="_blank">Other ways to help</a>
+  <a href="https://www.patreon.com/Thireus" target="_blank">👉 Become a Patron</a> | <a href="https://donate.thireus.com/" target="_blank">Other ways to help</a>
 </p>
 
 ---
