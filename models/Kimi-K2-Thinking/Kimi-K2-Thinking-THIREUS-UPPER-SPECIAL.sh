@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** Kimi-K2-Thinking-THIREUS-ANY-SPECIAL.sh used for model    **#
-#** quantization purpose. Adjust $1 in $custom to your needs! **#
+#** Kimi-K2-Thinking-THIREUS-LOWER-SPECIAL.sh used for model  **#
+#** quantization above Q4_0. Adjust $1 to your needs!         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-06-2025 -------------------- **#
+#** --------------- Updated: Nov-29-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -35,53 +35,57 @@ _debug() {
 custom="
 ## Quant mix recipe created using Thireus' GGUF Tool Suite - https://gguf.thireus.com/
 
-## Model head & embeddings — qbits: 32 16 
-^token_embd\.weight$=$1
+## Model head & embeddings
 ^output\.weight$=$1
+^token_embd\.weight$=$1
 ^output_norm\.weight$=f32
 
-## Special attention kernels — single-quant only (llama-quantize will choose a fallback qtype) — qbits: 16 
+## Special attention kernels — single-quant only (llama-quantize takes care of it)
 ^blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight$=$1
 
-## Multi-headed attention parameters — qbits: 32 16 
+## Multi-headed attention parameters
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_norm\.weight$=f32
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_output\.weight$=$1
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_mqa\.weight$=$1
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a\.weight$=$1
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a_norm\.weight$=f32
 ^blk\.([0-9]|[1-5][0-9]|60)\.attn_v_b\.weight$=$1
 ^blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_norm\.weight$=f32
-^blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_mqa\.weight$=$1
-^blk\.([0-9]|[1-5][0-9]|60)\.attn_output\.weight$=$1
-^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a_norm\.weight$=f32
 ^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_b\.weight$=$1
-^blk\.([0-9]|[1-5][0-9]|60)\.attn_norm\.weight$=f32
-^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a\.weight$=$1
 
-## Core FFN weights — qbits: 32 16 
-^blk\.0\.ffn_gate\.weight$=$1
-^blk\.([0-9]|[1-5][0-9]|60)\.ffn_norm\.weight$=f32
+## Dense Feed-Forward Network weights
 ^blk\.0\.ffn_down\.weight$=$1
 ^blk\.0\.ffn_up\.weight$=$1
-^blk\.([1-9]|[1-5][0-9]|60)\.ffn_gate_inp\.weight$=f32
 
-## Other tensors — qbits: 32 
+## MoE Gating & Routing
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_gate_inp\.weight$=f32
 ^blk\.([1-9]|[1-5][0-9]|60)\.exp_probs_b\.bias$=f32
 
-## GPU-loaded ffn_*_shexp
-# ffn_down_shexp (down-projection) — qbits: 16 
+## Gating network
+^blk\.0\.ffn_gate\.weight$=$1
+
+## Misc / Other tensors
+^blk\.([0-9]|[1-5][0-9]|60)\.ffn_norm\.weight$=f32
+
+## GPU-loaded - MoE Shared Experts Feed-Forward Network - ffn_*_shexp
+# ffn_down_shexp — down-projection (shared experts)
 ^blk\.([1-9]|[1-5][0-9]|60)\.ffn_down_shexp\.weight$=$1
 
-# ffn_up_shexp (up-projection) — qbits: 16 
+# ffn_up_shexp — up-projection (shared experts)
 ^blk\.([1-9]|[1-5][0-9]|60)\.ffn_up_shexp\.weight$=$1
 
-# ffn_gate_shexp (gate-projection) — qbits: 16 
+# ffn_gate_shexp — gating network (shared experts)
 ^blk\.([1-9]|[1-5][0-9]|60)\.ffn_gate_shexp\.weight$=$1
 
-## CPU-loaded ffn_*_exps
-# ffn_down_exps (down-extraction) — qbits: 16 
-^blk\.([1-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight$=$1
+## CPU-friendly - MoE Per-expert Feed-Forward Network - ffn_*_exps
+# ffn_down_exps — down-projection (per-expert)
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight$=q4_0
 
-# ffn_up_exps (up-extraction) — qbits: 16 
-^blk\.([1-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight$=$1
+# ffn_up_exps — up-projection (per-expert)
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight$=q4_0
 
-# ffn_gate_exps (gate-extraction) — qbits: 16 
-^blk\.([1-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight$=$1
+# ffn_gate_exps — gating network (per-expert)
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight$=q4_0
 
 
 

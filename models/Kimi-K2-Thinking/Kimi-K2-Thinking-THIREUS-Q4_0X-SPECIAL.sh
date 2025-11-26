@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** Qwen3-Coder-480B-A35B-Instruct-THIREUS-ANY-SPECIAL-SMOL-q **#
-#** 5_K.sh used for q5_K only. Adjust $1 in $custom!          **#
+#** Kimi-K2-Thinking-THIREUS-Q4_0X-SPECIAL.sh used with patch **#
+#** d=max/-7 https://github.com/ggml-org/llama.cpp/pull/17064 **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-06-2025 -------------------- **#
+#** --------------- Updated: Nov-29-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -35,33 +35,57 @@ _debug() {
 custom="
 ## Quant mix recipe created using Thireus' GGUF Tool Suite - https://gguf.thireus.com/
 
-## Model head & embeddings — qbits: 32 16 
-token_embd\.weight=$1
-output\.weight=$1
-output_norm\.weight=f32
+## Model head & embeddings
+^output\.weight$=bf16
+^token_embd\.weight$=bf16
+^output_norm\.weight$=f32
 
-## Multi-headed attention parameters — qbits: 32 16 
-blk\.([0-9]|[1-5][0-9]|6[0-1])\.attn_v\.weight=$1
-blk\.([0-9]|[1-5][0-9]|6[0-1])\.attn_output\.weight=$1
-blk\.([0-9]|[1-5][0-9]|6[0-1])\.attn_k_norm\.weight=f32
-blk\.([0-9]|[1-5][0-9]|6[0-1])\.attn_q\.weight=$1
-blk\.([0-9]|[1-5][0-9]|6[0-1])\.attn_norm\.weight=f32
-blk\.([0-9]|[1-5][0-9]|6[0-1])\.attn_k\.weight=$1
-blk\.([0-9]|[1-5][0-9]|6[0-1])\.attn_q_norm\.weight=f32
+## Special attention kernels — single-quant only (llama-quantize takes care of it)
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight$=bf16
 
-## Core FFN weights — qbits: 32 
-blk\.([0-9]|[1-5][0-9]|6[0-1])\.ffn_norm\.weight=f32
-blk\.([0-9]|[1-5][0-9]|6[0-1])\.ffn_gate_inp\.weight=f32
+## Multi-headed attention parameters
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_norm\.weight$=f32
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_output\.weight$=bf16
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_mqa\.weight$=bf16
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a\.weight$=bf16
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a_norm\.weight$=f32
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_v_b\.weight$=bf16
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_norm\.weight$=f32
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_b\.weight$=bf16
 
-## CPU-loaded ffn_*_exps
-# ffn_down_exps (down-extraction) — qbits: 16 - Set to q5_k_r4 to prevent segfaults
-blk\.([0-9]|[1-5][0-9]|6[0-1])\.ffn_down_exps\.weight=q5_k_r4
+## Dense Feed-Forward Network weights
+^blk\.0\.ffn_down\.weight$=bf16
+^blk\.0\.ffn_up\.weight$=bf16
 
-# ffn_up_exps (up-extraction) — qbits: 16 
-blk\.([0-9]|[1-5][0-9]|6[0-1])\.ffn_up_exps\.weight=$1
+## MoE Gating & Routing
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_gate_inp\.weight$=f32
+^blk\.([1-9]|[1-5][0-9]|60)\.exp_probs_b\.bias$=f32
 
-# ffn_gate_exps (gate-extraction) — qbits: 16 
-blk\.([0-9]|[1-5][0-9]|6[0-1])\.ffn_gate_exps\.weight=$1
+## Gating network
+^blk\.0\.ffn_gate\.weight$=bf16
+
+## Misc / Other tensors
+^blk\.([0-9]|[1-5][0-9]|60)\.ffn_norm\.weight$=f32
+
+## GPU-loaded - MoE Shared Experts Feed-Forward Network - ffn_*_shexp
+# ffn_down_shexp — down-projection (shared experts)
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_down_shexp\.weight$=bf16
+
+# ffn_up_shexp — up-projection (shared experts)
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_up_shexp\.weight$=bf16
+
+# ffn_gate_shexp — gating network (shared experts)
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_gate_shexp\.weight$=bf16
+
+## CPU-friendly - MoE Per-expert Feed-Forward Network - ffn_*_exps
+# ffn_down_exps — down-projection (per-expert)
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight$=q4_0
+
+# ffn_up_exps — up-projection (per-expert)
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight$=q4_0
+
+# ffn_gate_exps — gating network (per-expert)
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight$=q4_0
 
 
 
@@ -477,12 +501,12 @@ custom=$(
 ulimit -S -s unlimited
 ulimit -n 99999
 
-# Qwen3-Coder-480B-A35B-Instruct-THIREUS-TEMPLATE.gguf is too big and not worth using it because Q8_0 quanitsation is fast!
-mkdir Qwen3-Coder-480B-A35B-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
+# Use: https://github.com/Thireus/ik_llama.cpp/tree/kimi_k2_thinking_Q4_X
+mkdir Kimi-K2-Thinking-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
     --custom-q "$custom" \
-    --imatrix imatrix_ubergarm.dat \
-    Qwen3-Coder-480B-A35B-Instruct-THIREUS-BF16-SPECIAL_SPLIT/Qwen3-Coder-480B-A35B-Instruct-THIREUS-BF16-SPECIAL_TENSOR-00001-of-00748.gguf \
-    Qwen3-Coder-480B-A35B-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/Qwen3-Coder-480B-A35B-Instruct-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
+    Kimi-K2-Thinking-THIREUS-BF16-SPECIAL_SPLIT/Kimi-K2-Thinking-THIREUS-BF16-SPECIAL_TENSOR-00001-of-1097.gguf \
+    Kimi-K2-Thinking-THIREUS-${1^^}-SPECIAL_SPLIT/Kimi-K2-Thinking-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
     ${1^^} \
-    $(nproc) && chmod 444 Qwen3-Coder-480B-A35B-Instruct-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
-    
+    $(nproc) && chmod 444 Kimi-K2-Thinking-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
+
+# TODO - MANUALLY - Merge the exps ggufs into a classic q4_0 produced with Kimi-K2-Thinking-THIREUS-UPPER-SPECIAL.sh and main branch
