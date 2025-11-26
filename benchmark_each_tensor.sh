@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-22-2025 -------------------- **#
+#** --------------- Updated: Nov-26-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -669,9 +669,8 @@ process_line() {
                 exit 1
             fi
 
-            local TMPDIR
-            TMPDIR=$(mktemp -d)
-            local OUTPUT_FILE="$TMPDIR/${BASELINE_QTYPE}.recipe"
+            local OUTPUT_FILE=".benchmark_${BASELINE_QTYPE}.recipe"
+            > "$OUTPUT_FILE"
             for entry in "${USER_REGEX[@]}"; do
                 echo "${entry//=locked/}" >> "$OUTPUT_FILE"
             done
@@ -683,7 +682,7 @@ process_line() {
             fi
 
             # Run the downloader safely, capturing its exit status
-            if ! run_quant_downloader "$OUTPUT_FILE" "${_skip_gpg}"; then
+            if ! run_quant_downloader "${_skip_gpg}" "$OUTPUT_FILE"; then
                 echo "[$(timestamp)] Error: Failed to download model shards!" >&2
                 rm -f "$RECIPE_LOCK_FILE"   # release lock
                 exit 12

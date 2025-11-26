@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regexe entries.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-22-2025 -------------------- **#
+#** --------------- Updated: Nov-26-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -258,6 +258,19 @@ while true; do
   esac
 done
 
+# -----------------------------------------------------------------
+# Filter out accidental empty-string positional arguments (e.g. when caller passes "")
+# This preserves existing behavior for legitimate non-empty args but ignores blank placeholders.
+NEW_POS_ARGS=()
+for _arg in "$@"; do
+  if [[ -n "$_arg" ]]; then
+    NEW_POS_ARGS+=("$_arg")
+  fi
+done
+# Reset positional parameters to the filtered list (works even if empty)
+set -- "${NEW_POS_ARGS[@]:-}"
+# -----------------------------------------------------------------
+
 # Check recipe-file argument
 if [[ $# -ne 1 ]]; then
   usage
@@ -501,8 +514,7 @@ for entry in "${USER_REGEX[@]}"; do
   PATTERNS+=("$pat")
   PATTERN_QTYPES+=("$qtype")
 done
-readarray -t UNIQUE_QTYPES < <(printf "%s
-" "${PATTERN_QTYPES[@]}" | sort -u)
+readarray -t UNIQUE_QTYPES < <(printf "%s\n" "${PATTERN_QTYPES[@]}" | sort -u)
 
 # Ensure QTYPE is present and is the first element (case-insensitive)
 if [[ " ${UNIQUE_QTYPES[*]^^} " != *" ${QTYPE^^} "* ]]; then
