@@ -501,7 +501,7 @@ ulimit -n 99999
 mkdir Kimi-K2-Thinking-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
     --custom-q "$custom" \
     --imatrix imatrix_ubergarm.dat \
-    Kimi-K2-Thinking-THIREUS-BF16-SPECIAL_SPLIT/Kimi-K2-Thinking-THIREUS-BF16-SPECIAL_TENSOR-00001-of-00945.gguf \
+    Kimi-K2-Thinking-THIREUS-BF16-SPECIAL_SPLIT/Kimi-K2-Thinking-THIREUS-BF16-SPECIAL_TENSOR-00001-of-1097.gguf \
     Kimi-K2-Thinking-THIREUS-${1^^}-SPECIAL_SPLIT/Kimi-K2-Thinking-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
     ${1^^} \
     $(nproc) && chmod 444 Kimi-K2-Thinking-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
