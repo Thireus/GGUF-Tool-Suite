@@ -3,4 +3,6 @@ models/*/maps
 models/*/outdated_results
 models/*/benchmark_logs
 models/*/benchmark_files
+models/*/group0_logs
+models/*/group0_files
 .DS_Store
