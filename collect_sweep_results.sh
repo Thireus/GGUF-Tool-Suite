@@ -5,7 +5,7 @@
 #** the S_PP and S_TG values from bench_sweep_result.* files. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-15-2025 -------------------- **#
+#** --------------- Updated: Nov-27-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -25,6 +25,8 @@
 
 # Exit on error, undefined variable, or pipe failure
 set -euo pipefail
+
+timestamp() { date "+%Y-%m-%d %H:%M:%S"; }
 
 # Usage message
 usage() {
@@ -54,6 +56,7 @@ Options:
   --output-pp FILE                      Path to output PP CSV file (default: pp_results.csv)
   --output-tg FILE                      Path to output TG CSV file (default: tg_results.csv)
   --qtypes Q1,Q2,...                    Comma-separated list of qtypes to use (overrides auto-discovery)
+  --no-percentage                       Disable percent-delta computation (emit raw values; baseline values will be injected as-is)
   -h, --help                            Show this help message and exit
 EOF
 }
@@ -105,6 +108,7 @@ GROUP_TENSORS_DISABLED=true
 GROUPS_ONLY=false
 EXPAND_GROUPS=false
 GROUP_TENSORS_MAP_FILE=""
+NO_PERCENTAGE=false
 
 # Parse args
 while [[ $# -gt 0 ]]; do
@@ -161,6 +165,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --expand-groups)
       EXPAND_GROUPS=true
+      shift
+      ;;
+    --no-percentage)
+      NO_PERCENTAGE=true
       shift
       ;;
     -h|--help)
@@ -243,7 +251,7 @@ if [[ -n "${GROUP_TENSORS_MAP_FILE:-}" ]]; then
   if [[ ${#GROUP_TENSORS_RAW[@]} -eq 0 ]]; then
     echo "Warning: group mapping file '$GROUP_TENSORS_MAP_FILE' parsed but no groups found." >&2
   else
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Loaded ${#GROUP_TENSORS_RAW[@]} group(s) from mapping file: $GROUP_TENSORS_MAP_FILE"
+    echo "[$(timestamp) Loaded ${#GROUP_TENSORS_RAW[@]} group(s) from mapping file: $GROUP_TENSORS_MAP_FILE"
   fi
 fi
 
@@ -275,7 +283,7 @@ if [[ -n "$BASELINE_TG" ]] && ! [[ $BASELINE_TG =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
 fi
 
 # Echo chosen settings
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting collection of SWEEP results."
+echo "[$(timestamp) Starting collection of SWEEP results."
 echo "Context: $CONTEXT"
 echo "Requested N_KV: $N_KV"
 [[ -n "$BASELINE_PP" ]] && echo "Using global baseline PP: $BASELINE_PP"
@@ -287,9 +295,15 @@ echo "Requested N_KV: $N_KV"
 [[ -n "${qtypes:-}" ]] && echo "Overriding qtypes with: $qtypes"
 echo "Output PP CSV: $OUTPUT_PP_CSV"
 echo "Output TG CSV: $OUTPUT_TG_CSV"
+ALL_GROUP_IDS=()
 if [[ "$GROUP_TENSORS_DISABLED" != "true" ]]; then
   echo "Group tensors: ENABLED; groups:"
-  for g in "${GROUP_TENSORS_RAW[@]}"; do echo "  - $g"; done
+  gid=0
+  for g in "${GROUP_TENSORS_RAW[@]}"; do echo "  - group$gid: $g"; ALL_GROUP_IDS+=("$gid"); gid=$((gid + 1)); done
+  if [[ "$GROUPS_ONLY" == "true" ]] && (( ${#ALL_GROUP_IDS[@]} == 0 )); then
+    echo "[$(timestamp)] ❌ Error: --groups-only is set but there are no groups set!" >&2
+  fi
+
   if [[ "$EXPAND_GROUPS" == "true" ]]; then
     echo "Group expansion: ENABLED (show all member tensors)"
     if [[ "$GROUPS_ONLY" == "true" ]]; then
@@ -304,6 +318,7 @@ if [[ "$GROUP_TENSORS_DISABLED" != "true" ]]; then
     echo "Collecting group metrics only: DISABLED"
   fi
 fi
+[[ "$NO_PERCENTAGE" == "true" ]] && echo "Percentage computation: DISABLED ( --no-percentage )"
 
 # 1. Discover qtypes by finding tensors.{qtype}.map files in current directory
 declare -a QTYPES=()
@@ -410,25 +425,44 @@ if [[ -n "$AUTO_BASELINE_QTYPE" ]]; then
     if [[ -n "$parsed" ]]; then
       base_pp="${parsed%%|*}"
       base_tg="${parsed#*|}"
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Auto-baseline: extracted for qtype=${AUTO_BASELINE_QTYPE}: PP=${base_pp}, TG=${base_tg}"
-      [[ -n "$BASELINE_PP_QTYPE" && "$AUTO_BASELINE_QTYPE" == "$BASELINE_PP_QTYPE" && -n "$BASELINE_PP" ]] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] BASELINE_PP already user-defined, not replaced!" || { BASELINE_PP=${base_pp} && BASELINE_PP_QTYPE=${AUTO_BASELINE_QTYPE,,} && echo "[$(date '+%Y-%m-%d %H:%M:%S')] BASELINE_PP='$BASELINE_PP' and BASELINE_PP_QTYPE='$BASELINE_PP_QTYPE' have now been set"; }
-      [[ -n "$BASELINE_TG_QTYPE" && "$AUTO_BASELINE_QTYPE" == "$BASELINE_TG_QTYPE" && -n "$BASELINE_TG" ]] && echo "[$(date '+%Y-%m-%d %H:%M:%S')] BASELINE_TG already user-defined, not replaced!" || { BASELINE_TG=${base_tg} && BASELINE_TG_QTYPE=${AUTO_BASELINE_QTYPE,,} && echo "[$(date '+%Y-%m-%d %H:%M:%S')] BASELINE_TG='$BASELINE_TG' and BASELINE_TG_QTYPE='$BASELINE_TG_QTYPE' have now been set"; }
+      echo "[$(timestamp) Auto-baseline: extracted for qtype=${AUTO_BASELINE_QTYPE}: PP=${base_pp}, TG=${base_tg}"
+      [[ -n "$BASELINE_PP_QTYPE" && "$AUTO_BASELINE_QTYPE" == "$BASELINE_PP_QTYPE" && -n "$BASELINE_PP" ]] && echo "[$(timestamp) BASELINE_PP already user-defined, not replaced!" || { BASELINE_PP=${base_pp} && BASELINE_PP_QTYPE=${AUTO_BASELINE_QTYPE,,} && echo "[$(timestamp) BASELINE_PP='$BASELINE_PP' and BASELINE_PP_QTYPE='$BASELINE_PP_QTYPE' have now been set"; }
+      [[ -n "$BASELINE_TG_QTYPE" && "$AUTO_BASELINE_QTYPE" == "$BASELINE_TG_QTYPE" && -n "$BASELINE_TG" ]] && echo "[$(timestamp) BASELINE_TG already user-defined, not replaced!" || { BASELINE_TG=${base_tg} && BASELINE_TG_QTYPE=${AUTO_BASELINE_QTYPE,,} && echo "[$(timestamp) BASELINE_TG='$BASELINE_TG' and BASELINE_TG_QTYPE='$BASELINE_TG_QTYPE' have now been set"; }
     else
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Auto-baseline: baseline file exists but no N_KV=${N_KV} row found in $baseline_fname"
+      echo "[$(timestamp) Auto-baseline: baseline file exists but no N_KV=${N_KV} row found in $baseline_fname"
     fi
   else
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Auto-baseline: baseline file $baseline_fname not found for qtype=${AUTO_BASELINE_QTYPE}"
+    echo "[$(timestamp) Auto-baseline: baseline file $baseline_fname not found for qtype=${AUTO_BASELINE_QTYPE}"
   fi
 fi
+
+# write result into an output array passed by name
+remove_items_from_list_lines_inplace() {
+  local -n _list="$1"
+  local -n _remove="$2"
+  local -n _out="$3"
+
+  _out=()
+  for item in "${_list[@]}"; do
+    local skip=false
+    for rm in "${_remove[@]}"; do
+      [[ "$item" == "$rm" ]] && { skip=true; break; }
+    done
+    $skip || _out+=("$item")
+  done
+}
 
 # 2. For each qtype, parse tensors.{qtype}.map and collect results (with grouping support)
 for qtype in "${QTYPES[@]}"; do
   mapfile="tensors.${qtype}.map"
   if [[ ! -f "$mapfile" ]]; then
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: expected map file '$mapfile' not found. Skipping qtype='$qtype'." >&2
+    echo "[$(timestamp) Warning: expected map file '$mapfile' not found. Skipping qtype='$qtype'." >&2
     continue
   fi
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Processing map file: $mapfile"
+  echo "[$(timestamp) Processing map file: $mapfile"
+
+  # Track unprocessed group ids for this qtype
+  QTYPE_REMAINING_GROUP_IDS=("${ALL_GROUP_IDS[@]}")
 
   # read all lines of mapfile into array for flexible scanning/group collection
   mapfile -t MAP_LINES < "$mapfile"
@@ -441,8 +475,16 @@ for qtype in "${QTYPES[@]}"; do
     TENS_IN_MAP+=("$tensor_name")
   done
 
+  PROCESSED_GROUP_IDS=()
+
   # iterate through entries in MAP_LINES
   for line in "${MAP_LINES[@]}"; do
+    # If we are in --groups-only mode and there are no more groups to process, then we break this loop
+    if [[ "$GROUPS_ONLY" == "true" ]] && (( ${#QTYPE_REMAINING_GROUP_IDS[@]} == 0 )); then
+      echo "[$(timestamp)] There are no more groups to process. Moving to next qtype..."
+      break
+    fi
+
     [[ -z "$line" ]] && continue
     IFS=':' read -r fname file_hash tensor_name _ <<< "$line"
 
@@ -491,8 +533,13 @@ for qtype in "${QTYPES[@]}"; do
         done
 
         if (( ${#group_members[@]} == 0 )); then
-          echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: no group members found in map for group #${group_idx_for_tensor} (qtype=${qtype}). Skipping group." >&2
+          echo "[$(timestamp) Warning: no group members found in map for group #${group_idx_for_tensor} (qtype=${qtype}). Skipping group." >&2
           PROCESSED_GROUP_QTYPE["$proc_key"]=1
+          PROCESSED_GROUP_IDS+=(${group_idx_for_tensor})
+          _tmp_qtype_remaining=()
+          remove_items_from_list_lines_inplace QTYPE_REMAINING_GROUP_IDS PROCESSED_GROUP_IDS _tmp_qtype_remaining
+          QTYPE_REMAINING_GROUP_IDS=( "${_tmp_qtype_remaining[@]}" )
+          unset _tmp_qtype_remaining
           continue
         fi
       done
@@ -513,13 +560,18 @@ for qtype in "${QTYPES[@]}"; do
         if ! printf '%s\n' "$all_bench_sweep_result_files" | grep -qF -- "$group_result_filename"; then
           # Only log the "missing group file" message once per (qtype, group).
           if [[ -z "${PROCESSED_GROUP_QTYPE[$proc_key]:-}" ]]; then
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] No group sweep result file found for group #${group_idx_for_tensor}, qtype=${qtype}: expected '$group_result_filename'. Will fall back to individual tensor files (unless --groups-only is enabled)."
+            echo "[$(timestamp) No group sweep result file found for group #${group_idx_for_tensor}, qtype=${qtype}: expected '$group_result_filename'. Will fall back to individual tensor files (unless --groups-only is enabled)."
             # Mark as 'missing' so we don't re-print this for other members of the same group/qtype.
             PROCESSED_GROUP_QTYPE["$proc_key"]="MISSING"
+            PROCESSED_GROUP_IDS+=(${group_idx_for_tensor})
+            _tmp_qtype_remaining=()
+            remove_items_from_list_lines_inplace QTYPE_REMAINING_GROUP_IDS PROCESSED_GROUP_IDS _tmp_qtype_remaining
+            QTYPE_REMAINING_GROUP_IDS=( "${_tmp_qtype_remaining[@]}" )
+            unset _tmp_qtype_remaining
           fi
           # fall back to per-tensor handling
         elif [[ -z "${PROCESSED_GROUP_QTYPE[$proc_key]:-}" ]]; then
-          echo "[$(date '+%Y-%m-%d %H:%M:%S')] Found group sweep result file: $group_result_filename -> applying to ${#group_members[@]} member(s)."
+          echo "[$(timestamp) Found group sweep result file: $group_result_filename -> applying to ${#group_members[@]} member(s)."
           result_file="./${group_result_filename}"
 
           # parse file to extract S_PP and S_TG for requested N_KV
@@ -530,9 +582,9 @@ for qtype in "${QTYPES[@]}"; do
             STG_VAL="${parsed#*|}"
             SPP_VAL="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$SPP_VAL")"
             STG_VAL="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$STG_VAL")"
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracted group #${group_idx_for_tensor} (qtype=${qtype}): S_PP=$SPP_VAL, S_TG=$STG_VAL"
+            echo "[$(timestamp) Extracted group #${group_idx_for_tensor} (qtype=${qtype}): S_PP=$SPP_VAL, S_TG=$STG_VAL"
           else
-            echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: no row with N_KV=${N_KV} found in $result_file. Marking 404 for entire group."
+            echo "[$(timestamp) Warning: no row with N_KV=${N_KV} found in $result_file. Marking 404 for entire group."
             SPP_VAL="404"
             STG_VAL="404"
           fi
@@ -555,6 +607,11 @@ for qtype in "${QTYPES[@]}"; do
           fi
 
           PROCESSED_GROUP_QTYPE["$proc_key"]=1
+          PROCESSED_GROUP_IDS+=(${group_idx_for_tensor})
+          _tmp_qtype_remaining=()
+          remove_items_from_list_lines_inplace QTYPE_REMAINING_GROUP_IDS PROCESSED_GROUP_IDS _tmp_qtype_remaining
+          QTYPE_REMAINING_GROUP_IDS=( "${_tmp_qtype_remaining[@]}" )
+          unset _tmp_qtype_remaining
           continue
         fi
       done
@@ -576,7 +633,7 @@ for qtype in "${QTYPES[@]}"; do
       continue
     fi
 
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] Found sweep result file for tensor '$tensor_name': $bench_match"
+    echo "[$(timestamp) Found sweep result file for tensor '$tensor_name': $bench_match"
 
     # ensure included if hide-empty true
     [[ "$HIDE_EMPTY" == true ]] && TENSOR_SET["$tensor_name"]=1
@@ -615,9 +672,9 @@ for qtype in "${QTYPES[@]}"; do
       # ensure trimmed
       SPP_VAL="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$SPP_VAL")"
       STG_VAL="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$STG_VAL")"
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Extracted for tensor='$tensor_name', qtype='$qtype': S_PP=$SPP_VAL, S_TG=$STG_VAL"
+      echo "[$(timestamp) Extracted for tensor='$tensor_name', qtype='$qtype': S_PP=$SPP_VAL, S_TG=$STG_VAL"
     else
-      echo "[$(date '+%Y-%m-%d %H:%M:%S')] Warning: no row with N_KV=${N_KV} found in $result_file. Marking 404."
+      echo "[$(timestamp) Warning: no row with N_KV=${N_KV} found in $result_file. Marking 404."
       SPP_VAL="404"
       STG_VAL="404"
     fi
@@ -638,7 +695,7 @@ IFS=$'\n' sorted_tensors=($(printf '%s\n' "${tensor_list[@]}" | sort -Vu))
 unset IFS
 
 # 4. Write PP CSV
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Writing PP CSV to $OUTPUT_PP_CSV"
+echo "[$(timestamp) Writing PP CSV to $OUTPUT_PP_CSV"
 
 {
   printf 'QTYPE'
@@ -656,23 +713,43 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Writing PP CSV to $OUTPUT_PP_CSV"
       val="${PP_VALUES[$key]:-}"
       if [[ -n "$val" ]]; then
         echo "[DEBUG] Raw value for [$key] = '$val'" >&2
-      else
-        echo "[DEBUG] Empty value for [$key] = '$val', will use "404" instead" >&2
+      elif [[ "$BASELINE_PP_QTYPE" != "$qtype" || -z "${BASELINE_PP:-}" ]]; then
+        echo "[DEBUG] Empty value for [$key] = '$val', will use \"404\" instead" >&2
         val="404"
+      else
+        echo "[DEBUG] Empty value for [$key] = '$val' (expected for baseline), will use baseline value \"${BASELINE_PP:-}\" instead" >&2
+        val="$BASELINE_PP"
       fi
 
       # If a global baseline exists, compute percent-delta across all qtypes
-	  if [[ -n "$BASELINE_PP" && -n "$val" ]]; then
+      # Percentage computation: only when baseline present and --no-percentage not set
+      if [[ "$NO_PERCENTAGE" != "true" && -n "${BASELINE_PP:-}" ]]; then
         if [[ "$val" == "404" ]]; then
           val="404%"
         else
-          pct=$(awk -v b="$BASELINE_PP" -v v="$val" 'BEGIN{printf "%+.2f%%", (v-b)/b*100}')
-          val="$pct"
+          # detect division by zero for baseline (exactly zero numeric)
+          if awk -v b="$BASELINE_PP" 'BEGIN{ if ((b+0)==0) exit 0; exit 1 }'; then
+            # baseline is numeric zero -> avoid division by zero, mark as 404%
+            val="404%"
+            echo "[DEBUG] Baseline value is zero, avoiding division by zero for [$key]. Using '404%'" >&2
+          else
+            pct=$(awk -v b="$BASELINE_PP" -v v="$val" 'BEGIN{printf "%+.2f%%", (v-b)/b*100}')
+            val="$pct"
+            echo "[DEBUG] Final value for [$key] = '$val'" >&2
+          fi
         fi
-        echo "[DEBUG] Final value for [$key] = '$val'" >&2
-      elif [[ -n $BASELINE_PP && "$BASELINE_PP_QTYPE" == "$qtype" ]]; then
-        val="0%"
-        echo "[DEBUG] Final value set to baseline for [$key] = '$val'" >&2
+      elif [[ "$NO_PERCENTAGE" == "true" ]]; then
+        # when no-percentage requested: do not compute %, just output raw value.
+        # baseline numeric values were already injected earlier (if applicable).
+        # make sure baseline qtype row is not forced to "0%"; leave raw value.
+        :
+      else
+        # If baseline present but value empty? handled above; else, if baseline present and this qtype equals baseline qtype,
+        # the script previously forced "0%". Keep that behavior only if percentages are enabled.
+        if [[ -n "${BASELINE_PP:-}" && "$BASELINE_PP_QTYPE" == "$qtype" && "$NO_PERCENTAGE" != "true" ]]; then
+          val="0%"
+          echo "[DEBUG] Final value set to baseline for [$key] = '$val'" >&2
+        fi
       fi
 
       printf ',%s' "$val"
@@ -684,7 +761,7 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Writing PP CSV to $OUTPUT_PP_CSV"
 echo "[DEBUG] Finished writing PP CSV."
 
 # 5. Write TG CSV
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] Writing TG CSV to $OUTPUT_TG_CSV"
+echo "[$(timestamp) Writing TG CSV to $OUTPUT_TG_CSV"
 
 {
   printf 'QTYPE'
@@ -700,19 +777,45 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Writing TG CSV to $OUTPUT_TG_CSV"
     for t in "${sorted_tensors[@]}"; do
       key="${qtype}|${t}"
       val="${TG_VALUES[$key]:-}"
-      echo "[DEBUG] Raw value for [$key] = '$val'" >&2
+      if [[ -n "$val" ]]; then
+        echo "[DEBUG] Raw value for [$key] = '$val'" >&2
+      elif [[ "$BASELINE_TG_QTYPE" != "$qtype" || -z "${BASELINE_TG:-}" ]]; then
+        echo "[DEBUG] Empty value for [$key] = '$val', will use \"404\" instead" >&2
+        val="404"
+      else
+        echo "[DEBUG] Empty value for [$key] = '$val' (expected for baseline), will use baseline value \"${BASELINE_TG:-}\" instead" >&2
+        val="$BASELINE_TG"
+      fi
 
-      if [[ -n "$BASELINE_TG" && -n "$val" ]]; then
+      # If a global baseline exists, compute percent-delta across all qtypes
+      # Percentage computation: only when baseline present and --no-percentage not set
+      if [[ "$NO_PERCENTAGE" != "true" && -n "${BASELINE_TG:-}" ]]; then
         if [[ "$val" == "404" ]]; then
           val="404%"
         else
-          pct=$(awk -v b="$BASELINE_TG" -v v="$val" 'BEGIN{printf "%+.2f%%", (v-b)/b*100}')
-          val="$pct"
+          # detect division by zero for baseline (exactly zero numeric)
+          if awk -v b="$BASELINE_TG" 'BEGIN{ if ((b+0)==0) exit 0; exit 1 }'; then
+            # baseline is numeric zero -> avoid division by zero, mark as 404%
+            val="404%"
+            echo "[DEBUG] Baseline value is zero, avoiding division by zero for [$key]. Using '404%'" >&2
+          else
+            pct=$(awk -v b="$BASELINE_TG" -v v="$val" 'BEGIN{printf "%+.2f%%", (v-b)/b*100}')
+            val="$pct"
+            echo "[DEBUG] Final value for [$key] = '$val'" >&2
+          fi
         fi
-        echo "[DEBUG] Final value for [$key] = '$val'" >&2
-      elif [[ -n $BASELINE_TG && "$BASELINE_TG_QTYPE" == "$qtype" ]]; then
-        val="0%"
-        echo "[DEBUG] Final value set to baseline for [$key] = '$val'" >&2
+      elif [[ "$NO_PERCENTAGE" == "true" ]]; then
+        # when no-percentage requested: do not compute %, just output raw value.
+        # baseline numeric values were already injected earlier (if aTGlicable).
+        # make sure baseline qtype row is not forced to "0%"; leave raw value.
+        :
+      else
+        # If baseline present but value empty? handled above; else, if baseline present and this qtype equals baseline qtype,
+        # the script previously forced "0%". Keep that behavior only if percentages are enabled.
+        if [[ -n "${BASELINE_TG:-}" && "$BASELINE_TG_QTYPE" == "$qtype" && "$NO_PERCENTAGE" != "true" ]]; then
+          val="0%"
+          echo "[DEBUG] Final value set to baseline for [$key] = '$val'" >&2
+        fi
       fi
 
       printf ',%s' "$val"
@@ -724,5 +827,5 @@ echo "[$(date '+%Y-%m-%d %H:%M:%S')] Writing TG CSV to $OUTPUT_TG_CSV"
 
 # 6. The end!
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] All Done."
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] CSVs available at: $OUTPUT_PP_CSV and $OUTPUT_TG_CSV"
+echo "[$(timestamp) All Done."
+echo "[$(timestamp) CSVs available at: $OUTPUT_PP_CSV and $OUTPUT_TG_CSV"
