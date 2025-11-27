@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** Kimi-K2-Thinking-THIREUS-UPPER-SPECIAL.sh used for model  **#
-#** quantization above Q4_0. Adjust $1 to your needs!         **#
+#** Kimi-K2-Thinking-THIREUS-UPPER2-SPECIAL.sh used for model **#
+#** quantization above Q4_0 with BF16 for _exps. Adjust $1!   **#
 #**                                                           **#
 #** ********************************************************* **#
 #** --------------- Updated: Nov-29-2025 -------------------- **#
@@ -79,13 +79,13 @@ custom="
 
 ## CPU-friendly - MoE Per-expert Feed-Forward Network - ffn_*_exps
 # ffn_down_exps — down-projection (per-expert)
-^blk\.([1-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight$=q4_0
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight$=bf16
 
 # ffn_up_exps — up-projection (per-expert)
-^blk\.([1-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight$=q4_0
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight$=bf16
 
 # ffn_gate_exps — gating network (per-expert)
-^blk\.([1-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight$=q4_0
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight$=bf16
 
 
 
@@ -510,4 +510,4 @@ mkdir Kimi-K2-Thinking-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-sp
     ${1^^} \
     $(nproc) && chmod 444 Kimi-K2-Thinking-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
 
-# Alternatively, you can use bf16 tensors and replace the _exps tensors from the q4_0X quant. See Kimi-K2-Thinking-THIREUS-UPPER2-SPECIAL.sh
+# TODO - Manually: replace the _exps tensors from the q4_0X quant produced with Kimi-K2-Thinking-THIREUS-Q4_0X-SPECIAL.sh
