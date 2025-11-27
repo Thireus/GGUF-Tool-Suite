@@ -291,6 +291,39 @@ def _compute_resemblance_score(y_true: np.ndarray,
     return float(np.sum(resid ** 2))
 
 
+# mapping for pair -> result
+_pair_map = {
+    ('+', '-'): '-',
+    ('-', '+'): '-',
+    ('+', '+'): '+',
+    ('-', '-'): '+',
+}
+
+_pair_re = re.compile(r'([+\-])\s+([+\-])')  # at least one space between the signs
+
+def collapse_sign_pairs(s: str) -> str:
+    """
+    Collapse sign pairs separated by one or more spaces using simple algebraic rules.
+    Only matches sign1 <spaces> sign2 so it won't change signs that are part of numbers (e.g. "1e-5").
+    Repeats until no change (handles chains like "+ - - +").
+    """
+    prev = None
+    out = s
+    while prev != out:
+        prev = out
+        # Replace each matched pair with a single sign surrounded by single spaces.
+        # We use a function so we can look up the algebraic collapse result.
+        def _repl(m):
+            a, b = m.group(1), m.group(2)
+            new = _pair_map.get((a, b), '+' if a == b else '-')  # fallback (shouldn't be needed)
+            # keep single spaces on both sides of the resulting operator
+            return f' {new} '
+        out = _pair_re.sub(_repl, out)
+    # tidy up multiple spaces that may have been created, but preserve spacing around other tokens
+    out = re.sub(r'\s{2,}', ' ', out)
+    return out.strip()
+
+
 def fit_model_general(xarr: np.ndarray,
                       yarr: np.ndarray,
                       d_fixed: Optional[float] = None,
@@ -1463,6 +1496,8 @@ def compute_and_plot_from_csv(csv_path: str,
             grapher_eq = f"y = {params['d']:.12g} + {params['a']:.12g} * ( x - {params['c']:.12g} )^(-{params['p']:.12g})"
         else:
             grapher_eq = f"y = {params['d']:.12g} + {params['a']:.12g} * {grapher_transform}( {params['b']:.12g} * (x - {params['c']:.12g}) )^(-{params['p']:.12g})"
+        # normalize adjacent signs and tidy spacing
+        grapher_eq = collapse_sign_pairs(grapher_eq)
         # Print only the equation line to stdout.
         print(grapher_eq)
         return [grapher_eq]
@@ -1516,7 +1551,9 @@ def compute_and_plot_from_csv(csv_path: str,
         if grapher_transform == "identity":
             eq_str = f"y = {params['d']:.12g} + {params['a']:.12g} * ( x - {params['c']:.12g} )^(-{params['p']:.12g})"
         else:
-            eq_str = f"y = {params['d']:.12g} + {params['a']:.12g} * {grapher_transform}( {params['b']:.12g} * (x - {params['c']:.12g}) )^(-{params['p']:.12g})"
+            eq_str = f"y = {params['d']:.12g} + {params['a']:.12g} * {grapher_transform}( {params['b']:.12g} * (x - {params['c']:.12g}) )^(-{params['p']:.12g})"# normalize adjacent signs and tidy spacing
+        # normalize adjacent signs and tidy spacing
+        eq_str = collapse_sign_pairs(eq_str)
 
         # place multi-line text on the plot (transform, p, R² with drift if available, and equation)
         ax.text(
@@ -1562,6 +1599,8 @@ def compute_and_plot_from_csv(csv_path: str,
         grapher_eq = f"y = {params['d']:.12g} + {params['a']:.12g} * ( x - {params['c']:.12g} )^(-{params['p']:.12g})"
     else:
         grapher_eq = f"y = {params['d']:.12g} + {params['a']:.12g} * {grapher_transform}( {params['b']:.12g} * (x - {params['c']:.12g}) )^(-{params['p']:.12g})"
+    # normalize adjacent signs and tidy spacing
+    grapher_eq = collapse_sign_pairs(grapher_eq)
 
     # If the user requested equation_only in non-machine mode, we should print the equation to stdout
     # (and nothing else to stdout). The diagnostics above go to stderr.
