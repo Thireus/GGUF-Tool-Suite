@@ -510,4 +510,4 @@ mkdir Kimi-K2-Thinking-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-sp
     ${1^^} \
     $(nproc) && chmod 444 Kimi-K2-Thinking-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
 
-# TODO - Manually: replace the _exps tensors from the q4_0X quant produced with Kimi-K2-Thinking-THIREUS-Q4_0X-SPECIAL.sh
+# TODO - Manually: replace the _exps tensors from the q4_0X quant produced with Kimi-K2-Thinking-THIREUS-Q4_0X-SPECIAL.sh (see bottom notes of that script)
