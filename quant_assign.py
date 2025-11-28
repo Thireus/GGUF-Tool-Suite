@@ -46,7 +46,10 @@ import subprocess
 import tempfile
 from collections import Counter
 import textwrap
-from typing import Dict, Tuple, cast, Any
+from typing import cast, Dict, List, Iterable, Tuple, Optional
+import heapq
+
+GIB = 1024 ** 3
 
 # Global default quants list
 DEFAULT_QUANTS = ['q8_0', 'q4_0']
@@ -144,6 +147,41 @@ def compute_iqr_bounds(values, k):
     lower = Q1 - k * IQR
     upper = Q3 + k * IQR
     return lower, upper
+
+
+def load_quant_degradation_values(path: str):
+    """Load degradation factors from a CSV file at `path`.
+
+    The CSV is expected to have columns: "QTYPE" and "group0" (or similar).
+    Values may be percentages (e.g. "+2.12%") or absolute floats (e.g. "0.0212").
+    """
+    df = pd.read_csv(path)
+    # Expect columns: "QTYPE" and "group0"
+    degradation_factors = {}
+    for _, row in df.iterrows():
+        q = str(row["QTYPE"]).strip()
+        val = row["group0"]
+        # e.g. " +2.12%" or "0%" or absolute values like "0.0212"
+        if pd.isna(val):
+            continue
+        s = str(val).strip()
+        # detect percent form
+        is_percent = s.endswith('%')
+        if is_percent:
+            s = s[:-1].strip()
+        # strip optional leading sign
+        if s.startswith('+'):
+            s = s[1:].strip()
+        try:
+            f = float(s)
+        except ValueError:
+            continue
+        # if it was a percent string, convert to fraction; otherwise treat as absolute
+        if is_percent:
+            f = f / 100.0
+        degradation_factors[q] = f
+    return degradation_factors
+
 
 
 def _call_normalised_ppl(keys):
@@ -689,6 +727,395 @@ def total_size_for_quant(names, qtype):
     return sum(sizes_map.get(name, 0) for name in names)
 
 
+def adjust_losses_with_synergy(
+    synergistic_groups: List[List[str]],
+    loss: Dict[str, float],
+    tensor_sizes: Dict[str, Dict[str, int]],
+    strength: float = 0.5,
+    debug: bool = False
+) -> Dict[str, float]:
+    """
+    Softly harmonize loss values across related tensors (synergistic groups).
+    
+    For each group, computes a weighted average loss (weights based on tensor size)
+    and adjusts each tensor's loss toward that average, controlled by `strength`.
+
+    Args:
+        synergistic_groups: list of lists of tensor names belonging to the same layer
+        loss: dict mapping tensor name -> measured loss value
+        tensor_sizes: dict mapping tensor -> {quant_type: size_in_bytes}
+        strength: float between 0.0 and 1.0, how strongly to bias losses toward group mean
+        debug: print details if True
+
+    Returns:
+        Dict[str, float]: adjusted loss mapping
+    """
+    adjusted_loss = dict(loss)  # copy to modify
+
+    for group in synergistic_groups:
+        # find a quant type present in all tensors of the group
+        common_quants = set.intersection(*(set(tensor_sizes.get(t, {}).keys()) for t in group))
+        if not common_quants:
+            if debug:
+                print(f"[WARN] No common quant types found for group {group}, skipping.")
+            continue
+
+        # use any one (e.g., largest quant) for weighting
+        chosen_quant = sorted(list(common_quants))[0]
+        sizes = {t: tensor_sizes[t][chosen_quant] for t in group if chosen_quant in tensor_sizes[t]}
+
+        total_size = sum(sizes.values())
+        if total_size <= 0:
+            continue
+
+        # compute weighted average loss
+        weighted_avg_loss = sum(loss.get(t, 0.0) * sizes[t] for t in group if t in sizes) / total_size
+
+        if debug:
+            print(f"[SYNERGY] Group {group}")
+            print(f"  chosen_quant={chosen_quant}, weighted_avg_loss={weighted_avg_loss:.6f}")
+
+        # interpolate between original and group average
+        for t in group:
+            if t not in loss:
+                continue
+            orig_loss = loss[t]
+            new_loss = (1 - strength) * orig_loss + strength * weighted_avg_loss
+            adjusted_loss[t] = new_loss
+            if debug:
+                print(f"  {t}: {orig_loss:.6f} -> {new_loss:.6f}")
+
+    return adjusted_loss
+
+def greedy_quant_assign(
+    tensors: Iterable[str],
+    tensor_sizes: Dict[str, Dict[str, int]],
+    ppl_loss: Dict[str, float],
+    degradation_factors: Dict[str, float],
+    tensor_quants: Optional[Dict[str, List[str]]],
+    budget_bytes: int,
+    *,
+    preassign_missing_ppl: bool = True,
+    debug: bool = False,
+    harmonized_groups: Optional[List[List[str]]] = None,
+    loss_exponent: float = 1.0,
+    synergistic_groups: Optional[List[List[str]]] = None,
+    synergy_strength: float = 0.0,
+) -> Tuple[Dict[str, str], int]:
+    """
+    Greedy quant assignment using a min-heap (score = delta_deg / delta_size).
+    - tensors: iterable of tensor names to assign
+    - tensor_sizes[tensor][qtype] -> size in bytes (must exist for qtypes used)
+    - ppl_loss[tensor] -> sensitivity (float). If missing and preassign_missing_ppl True, the tensor is kept at initial quant.
+    - degradation_factors[qtype] -> numeric factor (bigger means worse quant)
+    - tensor_quants[tensor] -> list of qtypes allowed for that tensor (if None, fallback to all qtypes available in tensor_sizes[t])
+    - budget_bytes: absolute byte budget for this class (already adjusted by offsets)
+    - harmonized_groups: optional list of lists of tensor-names
+    - loss_exponent: exponent applied to ppl_loss values to adjust linearity of degradation accumulation
+    - returns (assignment dict, total_size_bytes)
+    """
+
+    # --- Step 0: Copy/normalize inputs to avoid mutating caller data
+    tensors = list(tensors)
+    # ensure tensor_quants is present for lookups
+    tensor_quants = tensor_quants or {}
+
+    # --- Validation & normalize tensor_quants into allowed_map (ordered largest->smallest)
+    allowed_map: Dict[str, List[str]] = {}
+    for t in tensors:
+        # allowed list fallback
+        allowed = None
+        if tensor_quants and t in tensor_quants and tensor_quants[t]:
+            allowed = list(tensor_quants[t])
+        else:
+            # fallback: take all qtypes present in tensor_sizes[t]
+            qtypes = list(tensor_sizes.get(t, {}).keys())
+            if not qtypes:
+                raise ValueError(f"No size map available for tensor '{t}' (cannot determine allowed quants).")
+            allowed = qtypes
+
+        # Filter allowed to qtypes that have sizes and degradation_factors
+        filtered = []
+        for q in allowed:
+            if q not in degradation_factors:
+                # skip qtypes with no degradation factor (can't evaluate)
+                continue
+            if q not in tensor_sizes.get(t, {}):
+                # skip qtypes with no size info for this tensor
+                continue
+            filtered.append(q)
+        if not filtered:
+            raise ValueError(f"No usable qtypes for tensor '{t}' after filtering (allowed: {allowed}).")
+
+        # Sort descending by size (largest first) so index 0 is highest-quality (largest bytes)
+        filtered.sort(key=lambda q: tensor_sizes[t][q], reverse=True)
+        allowed_map[t] = filtered
+
+    # --- Step 1a: Apply exponent scaling to all loss values (do not mutate original)
+    ppl_loss_exp: Dict[str, float] = {}
+    for t, v in ppl_loss.items():
+        try:
+            ppl_loss_exp[t] = float(v) ** float(loss_exponent)
+        except Exception:
+            # fallback to original float value
+            ppl_loss_exp[t] = float(v)
+
+    # --- Step 1b: Apply synergistic adjustment if requested ---
+    if synergistic_groups and synergy_strength > 0.0:
+        if debug:
+            print(f"[GREEDY] applying synergistic adjustment (strength={synergy_strength}) to loss values")
+        ppl_loss_exp = adjust_losses_with_synergy(
+            synergistic_groups=synergistic_groups,
+            loss=ppl_loss_exp,
+            tensor_sizes=tensor_sizes,
+            strength=synergy_strength
+        )
+
+    # --- Step 2: Harmonization (logical grouping) - build merged view if requested
+    # group_defs: mapping group_id -> [members]
+    group_defs: Dict[str, List[str]] = {}
+    if harmonized_groups:
+        # harmonized_groups contain exact tensor names
+        # We'll resolve each inner-group to concrete tensor names found in `tensors`.
+        for i, group in enumerate(harmonized_groups):
+            # group can be a list of patterns/strings
+            members = []
+            for pat in group:
+                # treat as exact name match
+                for t in tensors:
+                    if t == pat:
+                        if t not in members:
+                            members.append(t)
+            if members:
+                gid = f"HARM_GROUP_{i}"
+                group_defs[gid] = members
+
+    # Build merged structures if group_defs not empty
+    merged = False
+    merged_tensor_sizes = {}
+    merged_ppl_loss = {}
+    merged_allowed_map = {}
+    group_map = {}  # maps original tensor -> group_id (for expansion)
+    if group_defs:
+        merged = True
+        # For each group, compute intersection of allowed quants, aggregated sizes and aggregated (exponentiated) losses.
+        for gid, members in group_defs.items():
+            # intersection of allowed quants across all members
+            qs_sets = [set(allowed_map[m]) for m in members]
+            common_qs = set.intersection(*qs_sets) if qs_sets else set()
+            if not common_qs:
+                # if no common quant among members, fall back to union but keep order careful:
+                # union and then filter only quants that exist for all members when sizes computed
+                common_qs = set().union(*qs_sets)
+
+            # Build merged sizes only for qtypes that exist for at least one member,
+            # and ensure we only include qtypes that have size listed for all members (otherwise aggregated size meaningless).
+            qlist = []
+            for q in sorted(common_qs, key=lambda q: next(iter(tensor_sizes[m][q] for m in members if q in tensor_sizes[m])), reverse=True):
+                # but verify all members have size for q
+                if all((q in tensor_sizes.get(m, {})) for m in members):
+                    qlist.append(q)
+            if not qlist:
+                # as a final fallback, attempt to union any q present in members (but only include if sizes present for all)
+                all_qs = sorted(set().union(*qs_sets))
+                for q in all_qs:
+                    if all((q in tensor_sizes.get(m, {})) for m in members):
+                        qlist.append(q)
+            if not qlist:
+                raise ValueError(f"Unable to find compatible quants for harmonized group {gid} members {members}")
+
+            # aggregate sizes per q
+            merged_tensor_sizes[gid] = {q: sum(int(tensor_sizes[m][q]) for m in members) for q in qlist}
+
+            # aggregated loss = sum of exponentiated losses (ppl_loss_exp)
+            merged_ppl_loss[gid] = sum(ppl_loss_exp.get(m, 0.0) for m in members)
+
+            # allowed map for group (sorted descending by size)
+            merged_allowed_map[gid] = sorted(qlist, key=lambda q: merged_tensor_sizes[gid][q], reverse=True)
+
+            # map members to group
+            for m in members:
+                group_map[m] = gid
+
+        # Add ungrouped tensors into merged structures (they remain as-is)
+        for t in tensors:
+            if t not in group_map:
+                merged_tensor_sizes[t] = tensor_sizes[t].copy()
+                merged_ppl_loss[t] = ppl_loss_exp.get(t, 0.0)
+                merged_allowed_map[t] = allowed_map[t][:]  # copy
+
+        # Replace working views with merged views
+        tensor_sizes = merged_tensor_sizes
+        ppl_loss_exp = merged_ppl_loss
+        allowed_map = merged_allowed_map
+        tensors = list(tensor_sizes.keys())  # new set: group ids + ungrouped names
+
+    # --- Initial assignment: highest allowed quant (largest size)
+    assignment: Dict[str, str] = {}
+    preassigned_due_to_missing_ppl = set()
+    for t in tensors:
+        # pick top quant from allowed_map
+        top_q = allowed_map[t][0]
+        assignment[t] = top_q
+        # If ppl_loss missing and we should preassign, mark it and we will not push moves for it.
+        # Note: use ppl_loss_exp for merged/unmerged keys
+        if t not in ppl_loss_exp and preassign_missing_ppl:
+            preassigned_due_to_missing_ppl.add(t)
+
+    # --- initial total size
+    total_size = 0
+    for t in tensors:
+        q = assignment[t]
+        total_size += int(tensor_sizes[t][q])
+
+    if debug:
+        print(f"[GREEDY] initial total_size = {total_size / GIB:.3f} GiB; budget = {budget_bytes / GIB:.3f} GiB")
+
+    # --- prepare heap with (score, counter, tensor, from_q, to_q)
+    pq: List[Tuple[float, int, str, str, str]] = []
+    counter = 0
+
+    def push_moves(tensor: str, from_q: str):
+        nonlocal counter
+        # if tensor was preassigned due to missing ppl, do not push moves
+        if tensor in preassigned_due_to_missing_ppl:
+            return
+        allowed = allowed_map[tensor]
+        try:
+            from_idx = allowed.index(from_q)
+        except ValueError:
+            # from_q not in list (shouldn't happen) -> skip
+            return
+        # consider all smaller-quality quants (larger index)
+        for to_q in allowed[from_idx + 1:]:
+            size_from = int(tensor_sizes[tensor][from_q])
+            size_to = int(tensor_sizes[tensor][to_q])
+            delta_size = size_from - size_to
+            if delta_size <= 0:
+                continue
+            # use exponentiated/adjusted loss
+            loss = ppl_loss_exp.get(tensor, None)
+            if loss is None:
+                # If no ppl data and we didn't preassign, skip (safety)
+                continue
+            delta_deg = loss * (degradation_factors[to_q] - degradation_factors[from_q])
+            # Avoid division by zero, but delta_size>0 ensures denominator positive
+            score = float(delta_deg) / float(delta_size)
+            # push (score, counter) so heap is deterministic on ties
+            heapq.heappush(pq, (score, counter, tensor, from_q, to_q))
+            counter += 1
+
+    # initialize moves from top quant for every tensor
+    for t in tensors:
+        push_moves(t, assignment[t])
+
+    # --- main loop (downgrade until within budget)
+    while total_size > budget_bytes and pq:
+        score, _, tensor, from_q, to_q = heapq.heappop(pq)
+        # stale-check: must still be at from_q
+        if assignment.get(tensor) != from_q:
+            # stale entry; ignore
+            continue
+
+        # Apply downgrade
+        size_from = int(tensor_sizes[tensor][from_q])
+        size_to = int(tensor_sizes[tensor][to_q])
+        total_size -= (size_from - size_to)
+        assignment[tensor] = to_q
+
+        if debug:
+            print(f"[GREEDY] downgraded {tensor}: {from_q} -> {to_q}; saved {(size_from-size_to)/GIB:.3f} GiB; new total {(total_size)/GIB:.3f} GiB")
+
+        # push next possible moves for this tensor (relative to its new quant)
+        push_moves(tensor, to_q)
+
+    if debug:
+        print(f"[GREEDY] final total_size = {total_size / GIB:.3f} GiB")
+
+    # --- Second pass: promote tensors if we have headroom
+    promote_pq: List[Tuple[float, int, str, str, str]] = []
+    counter = 0
+
+    def push_promotions(tensor: str, from_q: str):
+        nonlocal counter
+        # skip preassigned or tensors without ppl data
+        if tensor in preassigned_due_to_missing_ppl or tensor not in ppl_loss_exp:
+            return
+        allowed = allowed_map[tensor]
+        try:
+            from_idx = allowed.index(from_q)
+        except ValueError:
+            return
+        # explore upgrades to higher quants (i.e. lower indices)
+        for to_q in reversed(allowed[:from_idx]):
+            size_from = int(tensor_sizes[tensor][from_q])
+            size_to = int(tensor_sizes[tensor][to_q])
+            delta_size = size_to - size_from
+            if delta_size <= 0:
+                continue
+            loss = ppl_loss_exp.get(tensor, 0.0)
+            delta_deg = loss * (degradation_factors[from_q] - degradation_factors[to_q])
+            score = float(delta_deg) / float(delta_size)
+            # push as max-heap (invert score)
+            heapq.heappush(promote_pq, (-score, counter, tensor, from_q, to_q))
+            counter += 1
+
+    # initialize promotion opportunities
+    for t in tensors:
+        push_promotions(t, assignment[t])
+
+    if debug:
+        print(f"[GREEDY] starting promotion phase (headroom = {(budget_bytes - total_size)/GIB:.3f} GiB)")
+
+    while promote_pq:
+        _, _, tensor, from_q, to_q = heapq.heappop(promote_pq)
+        size_from = int(tensor_sizes[tensor][from_q])
+        size_to = int(tensor_sizes[tensor][to_q])
+        new_total = total_size + (size_to - size_from)
+        if new_total > budget_bytes:
+            # can't afford this promotion, skip
+            continue
+
+        # stale-check
+        if assignment.get(tensor) != from_q:
+            continue
+
+        # apply promotion
+        total_size = new_total
+        assignment[tensor] = to_q
+
+        if debug:
+            print(f"[GREEDY] promoted {tensor}: {from_q} -> {to_q}; added {(size_to - size_from)/GIB:.3f} GiB; total = {total_size/GIB:.3f} GiB")
+
+        # push next possible promotion for this tensor
+        push_promotions(tensor, to_q)
+
+    if debug:
+        print(f"[GREEDY] promotion phase done; final total_size = {total_size / GIB:.3f} GiB")
+
+    # --- If harmonized groups were used, expand group assignments back to original tensor names
+    if merged and group_defs:
+        expanded_assignment: Dict[str, str] = {}
+        # group_defs maps gid -> members
+        for gid, members in group_defs.items():
+            q = assignment.get(gid)
+            if q is None:
+                # safety: if group not in assignment (shouldn't happen), skip
+                continue
+            for m in members:
+                expanded_assignment[m] = q
+        # add any ungrouped tensors (they kept their original names)
+        for t in tensors:
+            if t not in group_defs:
+                # If t is actually a group id, skip; otherwise copy assigned quant
+                if not t.startswith("HARM_GROUP_"):
+                    expanded_assignment[t] = assignment.get(t)
+        assignment = expanded_assignment
+
+    return assignment, total_size
+
+
+
 def optimize_midpoint_and_assign(quants, _, class_values,
                                  max_bytes, tolerance=0.05, exp_factor=1.0, harmonize_groups=None):
     """
@@ -1035,6 +1462,151 @@ def harmonize_row(row: pd.Series, cols: list, harmonize_groups: list, technique:
 
     return row
 
+
+def expand_harmonize_groups(harmonize_groups: List[List[str]], tensors: List[str]) -> List[List[str]]:
+    """
+    Expand list-of-regex-groups into concrete per-layer lists of tensor names.
+
+    - harmonize_groups: e.g. [["blk\\..*\\.ffn_up_exps.*","blk\\..*\\.ffn_gate_exps.*"]]
+    - tensors: list of available tensor names to match against (class-specific)
+
+    Returns a flattened list-of-lists where each inner list contains the concrete
+    tensor names paired index-wise per layer. If a group cannot be safely
+    expanded (mismatched counts, inconsistent IDs), the group is skipped with
+    an info message and not included in the returned list.
+    """
+    out: List[List[str]] = []
+    if not harmonize_groups:
+        return out
+
+    for gi, group in enumerate(harmonize_groups):
+        # compile patterns safely
+        try:
+            compiled = [re.compile(p) for p in group]
+        except Exception:
+            if INFO:
+                print(f"[Info] Skipping harmonize group {gi}: invalid regex in {group}")
+            continue
+
+        # collect matches for each pattern (use re.search semantics)
+        matches_per_pattern = []
+        for cre in compiled:
+            matched = [t for t in tensors if cre.search(t)]
+            # remove duplicates while preserving order
+            matched = list(dict.fromkeys(matched))
+            matches_per_pattern.append(matched)
+
+        lengths = [len(l) for l in matches_per_pattern]
+        if len(set(lengths)) != 1:
+            if INFO:
+                print(f"[Info] Skipping harmonize group {gi}: pattern match counts differ {lengths}")
+            continue
+
+        n = lengths[0]
+        if n == 0:
+            # nothing matched for this group
+            continue
+
+        # extract numeric id helper
+        def extract_id(name: str):
+            m = re.search(r"blk\.(\d+)", name)
+            if m:
+                return int(m.group(1))
+            m2 = re.search(r"(\d+)", name)
+            return int(m2.group(1)) if m2 else None
+
+        lists_with_ids = [[(name, extract_id(name)) for name in lst] for lst in matches_per_pattern]
+
+        all_ids = [iid for lst in lists_with_ids for (_, iid) in lst]
+        any_id = any(i is not None for i in all_ids)
+        all_have_id = all(i is not None for i in all_ids)
+
+        if all_have_id:
+            for l in lists_with_ids:
+                l.sort(key=lambda x: x[1])
+        elif not any_id:
+            for l in lists_with_ids:
+                l.sort(key=lambda x: x[0])
+        else:
+            if INFO:
+                print(f"[Info] Skipping harmonize group {gi}: inconsistent id presence across matches")
+            continue
+
+        # pair index-wise and append concrete tuples
+        for i in range(n):
+            pair = [lists_with_ids[j][i][0] for j in range(len(lists_with_ids))]
+            out.append(pair)
+
+    return out
+
+def parse_group_argument(arg_value, arg_name: str, parser, info_flag=False):
+    """
+    Normalize an argument like --harmonize-tensors or --synergistic-tensors
+    into a list-of-lists of strings.
+
+    Supports:
+      - Python literal strings (e.g. "[['p1','p2'],['p3','p4']]")
+      - List of comma-separated strings (via nargs='+')
+      - List-of-lists directly
+      - Single-element list containing a literal string
+
+    Returns:
+        list[list[str]] (empty list if disabled)
+    """
+    groups = []
+
+    if arg_value and arg_value == ['']:
+        if info_flag:
+            print(f"[Info] {arg_name} disabled by the user")
+        return groups
+
+    # Case 1: direct Python literal string
+    if isinstance(arg_value, str):
+        try:
+            parsed = ast.literal_eval(arg_value)
+            if not isinstance(parsed, list):
+                raise ValueError("not a list")
+            groups = parsed
+        except Exception:
+            parser.error(
+                f"Invalid {arg_name}: must be a Python literal list-of-lists, e.g. [['pat1','pat2'], ['p3','p4']]."
+            )
+
+    # Case 2: list form (from nargs='+')
+    elif isinstance(arg_value, list):
+        # Single-element list containing a literal string
+        if len(arg_value) == 1 and isinstance(arg_value[0], str) and arg_value[0].strip().startswith('['):
+            try:
+                parsed = ast.literal_eval(arg_value[0])
+                if not isinstance(parsed, list):
+                    raise ValueError("not a list")
+                groups = parsed
+            except Exception:
+                parser.error(
+                    f"Invalid {arg_name}: must be a Python literal list-of-lists, e.g. [['pat1','pat2'], ['p3','p4']]."
+                )
+
+        # List-of-lists directly
+        elif all(isinstance(elem, list) for elem in arg_value):
+            groups = arg_value
+
+        # List of comma-separated strings
+        else:
+            for elem in arg_value:
+                if isinstance(elem, str):
+                    parts = [p for p in re.split(r'\s*,\s*', elem.strip()) if p != '']
+                    if parts:
+                        groups.append(parts)
+                else:
+                    parser.error(
+                        f"Invalid {arg_name} element: expected string or list"
+                    )
+    else:
+        parser.error(f"Invalid {arg_name}: expected string or list")
+
+    return groups
+
+
 def main():
     global DEBUG, INFO, SKIP_GPG, ALL_GPG_SIGS_VALID, NO_FALLBACK
     parser = argparse.ArgumentParser(description="Assign optimal quants per tensor based on the calibration data CSV file.")
@@ -1060,8 +1632,8 @@ def main():
     parser.add_argument('--cpu-tensors-max-size', type=str, help='Max CPU-friendly tensors size in GiB or percent (e.g., 80%%)')
     parser.add_argument('--gpu-tensors-max-size', type=str, help='Max GPU-friendly tensors size in GiB or percent (e.g., 80%%)')
     parser.add_argument('--exponential-factor', type=float, default=1.0,
-                        help='Exponent controlling midpoint adjustment aggressiveness during stretch sweeps. '
-                             'Higher values push quantization toward extremes; default is 1.0.')
+                        help='Exponent controlling midpoint adjustment aggressiveness during stretch sweeps for default quant assignment method. Higher values push quantization toward extremes; default is 1.0. When using --use-greedy-quant-assign, the exponent is used to try to map per-tensor degradation values into a additively linear space. Recommended range for greedy quant assign is 1.0 to 5.0 when using KLD metrics with 3.0 being a good starting point.')
+    parser.add_argument('--quant-degradation-csv', type=str, help='Path to CSV file containing quant degradation values for use by greed quant assing method (overrides bundled quants_graphs/kld_results.csv)')
     parser.add_argument('--ignore-f32', action='store_true', help='Ignore f32 tensors (default: not ignored)')
     parser.add_argument('--tensors-from-csv', action='store_true', help='Obtains list of tensors from csv file only (default: tensors are obtained from map file)')
     parser.add_argument('--skip-gpg', action='store_true',
@@ -1077,6 +1649,22 @@ def main():
                         help=('Harmonization technique to use when --harmonize-tensors is set: 0=disabled, 1=max, 2=mean, 3=min (default). ' 
                             'Values are applied element-wise per layer across the matched tensors.'
                             'Max ensures calibration data measurement is not negatively degraded. Min will degrade calibration data accuracy but appears to give the best results. Mean is a compromise in-between. Disabled means harmonization is disabled.'))
+    parser.add_argument('--use-greedy-quant-assign', action='store_true', help='Use greedy priority-queue quant assignment instead of default spread/midpoint method. The method tries to minimize overall degradation by prioritizing quant downgrades that yield the least degradation per byte saved. This method requires per-tensor degradation data (e.g. KLD) to be present in the CSV file - perplexity data only works suboptimally. It also requires per quant type degradation estimates; per default KLD values are used from a qwen 3 4b benchmark. override with --quant-degradation-csv. It is recommended to use --exponential-factor between 1.0 and 5.0 when using this method to try to map per-tensor degradation values into a more linear space.')
+    parser.add_argument(
+        '--synergistic-tensors',
+        nargs='+',
+        default=[["blk\\..*\\.ffn_up_exps.*","blk\\..*\\.ffn_gate_exps.*","blk\\..*\\.ffn_down_exps.*"]],
+        help=(
+            'A Python literal list-of-lists of regex patterns. Each inner list defines tensors that '
+            'exhibit synergistic effects and should have their loss adjusted together. '
+            'Example: --synergistic-tensors blk\\..\\*\\.ffn_up_exps.\\*,blk\\..\\*\\.ffn_gate_exps.\\*,blk\\..\\*\\.ffn_down_exps.\\* '
+            "'another_pat1,another_pat2'. "
+            'Use --synergistic-tensors "" to disable synergy adjustment. '
+            'Note: synergy encourages similar quantization within each layer, '
+            'typically improving quality without strictly enforcing identical qtypes.'
+        )
+    )
+    parser.add_argument('--synergy-strength',type=float,default=0.0,help='Strength of synergy-based loss adjustment (0 = disabled, 1 = fully averaged losses). Default: 0')
     parser.add_argument('--no-fallback', action='store_true',
                         help=('Disable automatic fallback checks: do NOT attempt to inspect map files to detect per-tensor dtype mismatches. '
                               'When set, the script will act as if the quantized tensors of the map files were pure and any tensor mismatching the quant type will have its size "guessed" as if it had been quantized to that qtype.'))
@@ -1115,6 +1703,13 @@ def main():
     DEBUG = args.debug
     INFO = args.info or DEBUG
 
+    here = os.path.dirname(os.path.abspath(__file__))
+    default_quant_degradation_path = os.path.join(here, "quants_graphs", "kld_results.csv")
+    quant_degradation_path = args.degradation_csv if getattr(args, 'quant_degradation_csv', None) else default_quant_degradation_path
+    quant_degradation_values = load_quant_degradation_values(quant_degradation_path)
+
+    if INFO:
+        print(f"[Info] Loaded degradation values for ({len(quant_degradation_values)} quant types)")
     # make --no-fallback visible to top-level helpers
     NO_FALLBACK = bool(args.no_fallback)
 
@@ -1158,73 +1753,46 @@ def main():
     qtype = row['QTYPE']
     if INFO: print(f"[Info] Selected QTYPE: {qtype}")
 
+    # ---- NEW: Parse synergistic tensor groupps into per layer groups----
+    synergistic_groups = parse_group_argument(args.synergistic_tensors, "--synergistic-tensors", parser, info_flag=INFO)
+
     #print(row.to_string(max_rows=None))
     # ---- NEW: Harmonize matching tensor rows ----
     # Convert nargs='+' form (list of comma-separated strings) into list-of-lists
     harmonize_groups = []
-    if args.harmonization_technique == 0:
-        ht = [''] # Disables harmonization
-    else:
-        ht = args.harmonize_tensors
-    
-    if ht and ht == ['']:
-        if INFO: print(f"[Info] Harmonization disabled by the user")
-
-    if isinstance(ht, str):
-        # old behaviour: user passed a Python literal string like '[["p1","p2"],["p3","p4"]]'
-        try:
-            harmonize_groups = ast.literal_eval(ht)
-            if not isinstance(harmonize_groups, list):
-                raise ValueError("not a list")
-        except Exception:
-            parser.error("Invalid --harmonize-tensors: must be a Python literal list-of-lists, e.g. [['pat1','pat2'], ['p3','p4']].")
-    elif isinstance(ht, list):
-        # Could be:
-        #  - a list-of-lists already (default left as list-of-lists), or
-        #  - a list of strings from nargs='+' where each string is "pat1,pat2"
-        # Normalize both into list-of-lists of strings.
-        if all(isinstance(elem, list) for elem in ht):
-            harmonize_groups = ht
-        else:
-            for elem in ht:
-                if isinstance(elem, str):
-                    # split on commas allowing whitespace; empty elements removed
-                    parts = [p for p in re.split(r'\s*,\s*', elem.strip()) if p != '']
-                    if parts:
-                        harmonize_groups.append(parts)
-                else:
-                    parser.error("Invalid --harmonize-tensors element: expected string or list")
-    else:
-        parser.error("Invalid --harmonize-tensors: expected string or list")
+    if args.harmonization_technique != 0:
+        harmonize_groups = parse_group_argument(args.harmonize_tensors, "--harmonize-tensors", parser, info_flag=INFO)
 
     # harmonize_groups is now a list-of-lists of regex strings (or empty list to disable)
 
-    try:
-        # Provide df columns (excluding QTYPE) so the helper can match against available tensor names
-        harmonize_row(row, [c for c in df.columns if c != 'QTYPE'], harmonize_groups, args.harmonization_technique)
-    except ValueError as ve:
-        parser.error(str(ve))
+    # --- Disable harmonization here when using greedy quant assign. for greedy quant assign the harmonization is handled inside greedy_quant_assign itself ---
+    if not args.use_greedy_quant_assign:
+        try:
+            # Provide df columns (excluding QTYPE) so the helper can match against available tensor names
+            harmonize_row(row, [c for c in df.columns if c != 'QTYPE'], harmonize_groups, args.harmonization_technique)
+        except ValueError as ve:
+            parser.error(str(ve))
 
-    # Which columns we actually want to update
-    cols_to_update = [c for c in row.index if c != "QTYPE" and c in df.columns]
+        # Which columns we actually want to update
+        cols_to_update = [c for c in row.index if c != "QTYPE" and c in df.columns]
 
-    # Determine the df index to update
-    if hasattr(row, "name") and row.name is not None and row.name in df.index:
-        idx = row.name
-    else:
-        mask = (df["QTYPE"] == row["QTYPE"])
-        matches = df.index[mask].tolist()
-        if len(matches) == 0:
-            raise ValueError(f"Could not find any row in df with QTYPE == {row['QTYPE']!r} to update.")
-        if len(matches) > 1:
-            # warning; choose first. Adjust if you prefer to update all matches.
-            print(f"[Warning] Multiple rows with QTYPE == {row['QTYPE']!r}; updating the first match.")
-        idx = matches[0]
+        # Determine the df index to update
+        if hasattr(row, "name") and row.name is not None and row.name in df.index:
+            idx = row.name
+        else:
+            mask = (df["QTYPE"] == row["QTYPE"])
+            matches = df.index[mask].tolist()
+            if len(matches) == 0:
+                raise ValueError(f"Could not find any row in df with QTYPE == {row['QTYPE']!r} to update.")
+            if len(matches) > 1:
+                # warning; choose first. Adjust if you prefer to update all matches.
+                print(f"[Warning] Multiple rows with QTYPE == {row['QTYPE']!r}; updating the first match.")
+            idx = matches[0]
 
-    # Update columns one-by-one (avoids type-checker issues and is explicit)
-    for col in cols_to_update:
-        # row[col] might be a numpy scalar or python scalar — both are fine
-        df.at[cast(Any, idx), col] = row[col]
+        # Update columns one-by-one (avoids type-checker issues and is explicit)
+        for col in cols_to_update:
+            # row[col] might be a numpy scalar or python scalar — both are fine
+            df.at[idx, col] = row[col]
 
     # ---- END harmonization ----
     #print(row.to_string(max_rows=None))
@@ -1497,13 +2065,14 @@ def main():
                         if INFO:
                             print(f"[Info] Assigned {desc} quant {assigned_q} to outlier {nm}, size={size_harmonized/GIB:.3f} GiB (harmonized group {group_idx})")
 
-        # process low and high outliers (lowest quant = quants[-1], highest quant = quants[0])
-        _process_outliers_list(out_low, quants[-1], "lowest")
-        _process_outliers_list(out_high, quants[0], "highest")
+        if not args.use_greedy_quant_assign:
+	    # process low and high outliers (lowest quant = quants[-1], highest quant = quants[0])
+            _process_outliers_list(out_low, quants[-1], "lowest")
+            _process_outliers_list(out_high, quants[0], "highest")
 
-        # remove processed outliers from class_vals so they are not considered in normal assignment
-        for n in list(processed_outliers):
-            class_vals.pop(n, None)
+            # remove processed outliers from class_vals so they are not considered in normal assignment
+            for n in list(processed_outliers):
+                class_vals.pop(n, None)
 
         # Normal assignment on remaining
         
@@ -1547,9 +2116,47 @@ def main():
                 [lowest_q], None, class_vals)
             total_bytes = sum(sizes.values())
         elif max_arg_bytes:
-            assignment, total_bytes = optimize_midpoint_and_assign(
-                quants, None, class_vals,
-                max_arg_bytes, args.tolerance, args.exponential_factor, harmonize_groups=harmonize_groups)
+            if args.use_greedy_quant_assign:
+                # Build tensor_quants mapping (default to cls-specific quants)
+                tensor_quants = {n: (gpu_quants if cls == 'gpu' else cpu_quants) for n in names_to_assign}
+
+                # ---- Expand CLI regex groups into concrete per-layer lists restricted to this class' tensors ----
+                # Harmonization groups
+                try:
+                    expanded_harmonize_groups = expand_harmonize_groups(harmonize_groups, names_to_assign) if harmonize_groups else []
+                except Exception:
+                    expanded_harmonize_groups = []
+                if INFO and harmonize_groups and not expanded_harmonize_groups:
+                    print(f"[Info] No harmonize groups expanded for class {cls}.")
+
+                # Synergistic groups
+                try:
+                    expanded_synergistic_groups = expand_harmonize_groups(synergistic_groups, names_to_assign) if synergistic_groups else []
+                except Exception:
+                    expanded_synergistic_groups = []
+                if INFO and synergistic_groups and not expanded_synergistic_groups:
+                    print(f"[Info] No synergistic groups expanded for class {cls}.")
+
+                # ---- Call greedy quant assignment with all parameters ----
+                assignment, total_bytes = greedy_quant_assign(
+                    tensors=names_to_assign,
+                    tensor_sizes={
+                        n: {q: get_map_sizes(q)[0].get(n, 0)
+                            for q in (gpu_quants if cls == 'gpu' else cpu_quants)}
+                        for n in names_to_assign
+                    },
+                    ppl_loss=class_vals,
+                    degradation_factors=quant_degradation_values,
+                    tensor_quants=tensor_quants,
+                    budget_bytes=max_arg_bytes,
+                    debug=DEBUG,
+                    harmonized_groups=expanded_harmonize_groups,
+                    loss_exponent=args.exponential_factor,
+                    synergistic_groups=expanded_synergistic_groups,
+                    synergy_strength=args.synergy_strength
+                )
+            else:
+                assignment, total_bytes = optimize_midpoint_and_assign( quants, None, class_vals, max_arg_bytes, args.tolerance, args.exponential_factor, harmonize_groups=harmonize_groups)
             #print(f"# Optimized sub-total {cls.upper()} size excluding outliers and f32: {total_bytes/GIB:.3f} GiB")
         else:
             assignment, sizes = assign_quants(
