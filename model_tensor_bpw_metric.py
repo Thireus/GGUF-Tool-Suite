@@ -5,7 +5,7 @@
 #** quantized model bpw versus reported metrics such as KLD.  **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-16-2025 -------------------- **#
+#** --------------- Updated: Nov-27-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -1496,7 +1496,7 @@ def compute_and_plot_from_csv(csv_path: str,
             grapher_eq = f"y = {params['d']:.12g} + {params['a']:.12g} * ( x - {params['c']:.12g} )^(-{params['p']:.12g})"
         else:
             grapher_eq = f"y = {params['d']:.12g} + {params['a']:.12g} * {grapher_transform}( {params['b']:.12g} * (x - {params['c']:.12g}) )^(-{params['p']:.12g})"
-        # normalize adjacent signs and tidy spacing
+        # normalize adjacent signs
         grapher_eq = collapse_sign_pairs(grapher_eq)
         # Print only the equation line to stdout.
         print(grapher_eq)
@@ -1551,8 +1551,8 @@ def compute_and_plot_from_csv(csv_path: str,
         if grapher_transform == "identity":
             eq_str = f"y = {params['d']:.12g} + {params['a']:.12g} * ( x - {params['c']:.12g} )^(-{params['p']:.12g})"
         else:
-            eq_str = f"y = {params['d']:.12g} + {params['a']:.12g} * {grapher_transform}( {params['b']:.12g} * (x - {params['c']:.12g}) )^(-{params['p']:.12g})"# normalize adjacent signs and tidy spacing
-        # normalize adjacent signs and tidy spacing
+            eq_str = f"y = {params['d']:.12g} + {params['a']:.12g} * {grapher_transform}( {params['b']:.12g} * (x - {params['c']:.12g}) )^(-{params['p']:.12g})"# normalize adjacent signs
+        # normalize adjacent signs
         eq_str = collapse_sign_pairs(eq_str)
 
         # place multi-line text on the plot (transform, p, R² with drift if available, and equation)
@@ -1599,7 +1599,7 @@ def compute_and_plot_from_csv(csv_path: str,
         grapher_eq = f"y = {params['d']:.12g} + {params['a']:.12g} * ( x - {params['c']:.12g} )^(-{params['p']:.12g})"
     else:
         grapher_eq = f"y = {params['d']:.12g} + {params['a']:.12g} * {grapher_transform}( {params['b']:.12g} * (x - {params['c']:.12g}) )^(-{params['p']:.12g})"
-    # normalize adjacent signs and tidy spacing
+    # normalize adjacent signs
     grapher_eq = collapse_sign_pairs(grapher_eq)
 
     # If the user requested equation_only in non-machine mode, we should print the equation to stdout

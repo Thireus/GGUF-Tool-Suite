@@ -397,7 +397,7 @@ Also sincere thanks to **ikawrakow** and all **co-authors** of `ik_llama.cpp` fo
 
 ## 📜 License & Attribution
 
-Any **use, reproduction, or modification** of this software **must give clear and visible credit** to **Thireus** and the **GGUF Tool Suite**.  
+Any **use, reproduction, or modification** of this software **must give clear and visible credit** to **Thireus**, the **GGUF Tool Suite** and **its contributors**.  
 See the [LICENSE](./LICENSE) file for more details.
 
 🔗 https://gguf.thireus.com/
