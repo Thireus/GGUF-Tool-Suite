@@ -5,7 +5,7 @@
 #** benchmark PPL and KLD results of benchmark_each_tensor.sh **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-27-2025 -------------------- **#
+#** --------------- Updated: Dec-02-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -37,7 +37,7 @@ usage() {
 Usage: $(basename "$0") [OPTIONS]
 
 Options:
-  --chunks CHUNKS                       Number of PPL chunks to process (integer)
+  --chunks CHUNKS                       Number of PPL chunks to process, default is 250 if not specified (integer)
   --baseline-ppl PPL_VALUE              Baseline PPL value for percent-delta computation (float)
   --baseline-regex REGEX_VALUE          Baseline value for metrics obtained via REGEX for percent-delta computation (float), see --regex parameter
   --inject-baseline-qtype QTYPE         Baseline PPL/REGEX value will be injected in results for this specific qtype (e.g. bf16)
@@ -116,7 +116,7 @@ OUTPUT_REGEX_CSV="regex_results.csv"
 # =========== End USER CONFIGURATION ============
 
 # Initialize variables
-PPL_CHUNKS=""
+PPL_CHUNKS="250"                  # Default value
 BASELINE_PPL_VALUE=""             # global baseline for PPL
 BASELINE_REGEX_VALUE=""           # global baseline for REGEX
 BASELINE_QTYPE=""                 # qtype that should get injected baseline (if set)
