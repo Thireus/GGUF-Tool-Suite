@@ -509,7 +509,7 @@ mkdir Kimi-K2-Thinking-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-sp
     ${1^^} \
     $(nproc) && chmod 444 Kimi-K2-Thinking-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
 
-# TODO - MANUALLY - Merge the exps ggufs into a classic q4_0 produced with Kimi-K2-Thinking-THIREUS-UPPER-SPECIAL.sh and main branch
+# TODO - MANUALLY - Merge the exps ggufs into a classic q4_0 (same for q4_0_r4) produced with Kimi-K2-Thinking-THIREUS-UPPER-SPECIAL.sh and main branch
 # 1. Rename the repo Kimi-K2-Thinking-THIREUS-Q4_0X-SPECIAL_SPLIT
 # 2. Obtain the name of the gguf files that contain these tensors from the tensors.map file (in that case we've used BF16's tensors.map):
 # cat Kimi-K2-Thinking-THIREUS-BF16-SPECIAL_SPLIT/tensors.map | grep '_exps\.' | cut -d: -f1 | sed 's/\-BF16-/-Q4_0-/'
