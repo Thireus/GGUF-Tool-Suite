@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** DeepSeek-V3.2-Exp-THIREUS-ANY-SPECIAL.sh used for         **#
+#** DeepSeek-V3.2-THIREUS-ANY-SPECIAL.sh used for             **#
 #** quantization. Adjust $1 in $custom to your needs!         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-06-2025 -------------------- **#
+#** --------------- Updated: Dec-14-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -31,7 +31,7 @@ _debug() {
   printf '[DEBUG] %s\n' "$*" >&2
 }
 
-# echo "$(for f in `ls DeepSeek-V3.2-Exp-DQ4_K_R4-*.gguf`; do gguf_info.py "$f"; done)" | grep 'dtype=' | awk -F $'\t' '{print $1 "=" $3}' | sed 's/=dtype=/=/g' | sed 's/\./\\./g'
+# echo "$(for f in `ls DeepSeek-V3.2-DQ4_K_R4-*.gguf`; do gguf_info.py "$f"; done)" | grep 'dtype=' | awk -F $'\t' '{print $1 "=" $3}' | sed 's/=dtype=/=/g' | sed 's/\./\\./g'
 custom="
 ## Model head & embeddings
 token_embd\.weight=$1
@@ -491,11 +491,11 @@ custom=$(
 ulimit -S -s unlimited
 ulimit -n 99999
 
-# DeepSeek-V3.2-Exp-THIREUS-TEMPLATE.gguf is too big and not worth using it because Q8_0 quanitsation is fast!
-mkdir DeepSeek-V3.2-Exp-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
+# DeepSeek-V3.2-THIREUS-TEMPLATE.gguf is too big and not worth using it because Q8_0 quanitsation is fast!
+mkdir DeepSeek-V3.2-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
     --custom-q "$custom" \
     --imatrix imatrix_ubergarm.dat \
-    DeepSeek-V3.2-Exp-THIREUS-BF16-SPECIAL_SPLIT/DeepSeek-V3.2-Exp-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01087.gguf \
-    DeepSeek-V3.2-Exp-THIREUS-${1^^}-SPECIAL_SPLIT/DeepSeek-V3.2-Exp-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
+    DeepSeek-V3.2-THIREUS-BF16-SPECIAL_SPLIT/DeepSeek-V3.2-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01087.gguf \
+    DeepSeek-V3.2-THIREUS-${1^^}-SPECIAL_SPLIT/DeepSeek-V3.2-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
     ${1^^} \
-    $(nproc) && chmod 444 DeepSeek-V3.2-Exp-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
+    $(nproc) && chmod 444 DeepSeek-V3.2-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"

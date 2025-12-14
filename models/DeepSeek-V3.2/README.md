@@ -1,11 +1,11 @@
 ---
 license: mit
 ---
-# DeepSeek-V3.2-Exp
+# DeepSeek-V3.2
 
-## 🤔 What is this [HuggingFace repository](https://huggingface.co/Thireus/DeepSeek-V3.2-Exp-THIREUS-BF16-SPECIAL_SPLIT/) about?
+## 🤔 What is this [HuggingFace repository](https://huggingface.co/Thireus/DeepSeek-V3.2-THIREUS-BF16-SPECIAL_SPLIT/) about?
 
-This repository provides **GGUF-quantized tensors** for the DeepSeek-V3.2-Exp model (official repo: https://huggingface.co/deepseek-ai/DeepSeek-V3.2-Exp). These GGUF shards are designed to be used with **Thireus’ GGUF Tool Suite** (https://gguf.thireus.com), a collection of tools that automatically finds the perplexity-optimal mix of quantizations for any given VRAM and RAM target. With the Tool Suite, you can generate and download custom quantization “recipes” effortlessly.
+This repository provides **GGUF-quantized tensors** for the DeepSeek-V3.2 model (official repo: https://huggingface.co/deepseek-ai/DeepSeek-V3.2). These GGUF shards are designed to be used with **Thireus’ GGUF Tool Suite** (https://gguf.thireus.com), a collection of tools that automatically finds the perplexity-optimal mix of quantizations for any given VRAM and RAM target. With the Tool Suite, you can generate and download custom quantization “recipes” effortlessly.
 
 - 📖 Read more: https://github.com/Thireus/GGUF-Tool-Suite  
 - 🔍 Example quant mixes: https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples  
