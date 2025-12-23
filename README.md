@@ -66,6 +66,10 @@ Here's how DeepSeek-R1-0528 quantized with **Thireus' GGUF Tool Suite** compares
 
 > All Thireus' model shards can be found on https://huggingface.co/Thireus/collections and on https://gguf.thireus.com/.
 
+See which models are officially supported:
+
+<details>
+
 | **Model** | **Status** | **Comments** |
 |---|---|---|
 | [DeepSeek-R1-0528](https://huggingface.co/collections/Thireus/deepseek-r1-0528-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶✅ Tested and Working<br>🅴✅ Yes | Works like a charm. When the quant\_assign settings are right, it produces recipes with better ppl than any other reputable GGUFs. |
@@ -95,6 +99,8 @@ Here's how DeepSeek-R1-0528 quantized with **Thireus' GGUF Tool Suite** compares
 🆀 = Quantized Shards  
 🅶 = Google Colabs  
 🅴 = Evaluated
+
+</details>
 
 ### ⚠️ Requirements
 
@@ -198,6 +204,8 @@ Examples of recipes are included in the `recipe_examples` folder. Have a look at
 ---
 
 ## 📥 Download Model Shards from a Recipe
+
+> 🎉 A web-based port of quant_downloader.sh is available at https://gguf.thireus.com/quant_downloader.html
 
 ```bash
 GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/Thireus/GGUF-Tool-Suite
@@ -334,6 +342,8 @@ cp -f models/DeepSeek-R1-0528/download.conf .
 
 Big thanks to **ubergarm** for his support and for providing the invaluable **`imatrix` files**.
 
+<details>
+
 📄 Ubergarm's `imatrix` for DeepSeek-R1-0528 can be found here:  
 🔗 [imatrix_DeepSeek-R1-0528_ubergarm.dat](https://huggingface.co/ubergarm/DeepSeek-R1-0528-GGUF/blob/main/imatrix-DeepSeek-R1-0528.dat)
 
@@ -390,6 +400,8 @@ Big thanks to **ubergarm** for his support and for providing the invaluable **`i
 
 📄 Ubergarm's `imatrix` for GLM-4.5-Air can be found here:  
 🔗 [imatrix_GLM-4.5-Air_ubergarm.dat](https://huggingface.co/ubergarm/GLM-4.5-Air-GGUF/blob/main/imatrix-GLM-4.5-Air-BF16.dat)
+</details>
+<br>
 
 Also sincere thanks to **ikawrakow** and all **co-authors** of `ik_llama.cpp` for making this entire toolchain possible.
 
