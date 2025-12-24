@@ -308,7 +308,7 @@ Additional research refs:
 - https://github.com/Thireus/GGUF-Tool-Suite/issues/34
 - https://github.com/Thireus/GGUF-Tool-Suite/discussions/23
 
-## 📊 About `ppl_results.csv`
+## 📊 About `ppl_results.csv` and `kld_results.csv`
 
 The file `ppl_results.csv` present in some model directories contains **individual tensor-level PPL benchmarks**. It has since been replaced in favour of `kld_results.csv` which results in better recipes.
 
@@ -321,7 +321,7 @@ For example for **DeepSeek-R1-0528**:
 > ⚠️ Generating this CSV usually takes **several days of GPU + CPU compute time** for big models.
 
 - `iq3_xxs` was chosen for CPU-friendly tensors baseline as it helped fit the model within **256GB RAM** and isn't degrading PPL excessively
-- ![wikitext](wiki.test.raw) is used as the dataset file for perplexity compute
+- @ubergarm's [imatrix-calibration-corpus-v02.txt](https://gist.github.com/ubergarm/edfeb3ff9c6ec8b49e88cdf627b0711a) dataset is used for newest benchmarking - found to produce better calibration data files than ![wikitext](wiki.test.raw).
 - Scripts used to produce this file (edit the "USER CONFIGURATION" section in the bash scripts as needed):
 
 ```bash
