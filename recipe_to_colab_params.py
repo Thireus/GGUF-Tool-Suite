@@ -5,7 +5,7 @@
 #** Colab pipeline parameters for quant_recipe_pipeline.ipynb **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-21-2025 -------------------- **#
+#** --------------- Updated: Dec-27-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -66,6 +66,11 @@ DEFAULTS: Dict[str, Any] = {
     "harmonization_technique": 3,
     "csv_filename": "",
     "qtype": "",
+    "use_greedy_quant_assign": False,
+    "quant_degradation_csv": "",
+    "quant_degradation_equation": "",
+    "synergistic_tensors": [[r"blk\..*\.ffn_up_exps.*", r"blk\..*\.ffn_gate_exps.*", r"blk\..*\.ffn_down_exps.*"]],
+    "synergy_strength": 0.0,
     "debug": False,
     "info": False,
     "ignore_f32": False,
@@ -74,7 +79,7 @@ DEFAULTS: Dict[str, Any] = {
     "cpu_irq_k": 1.5,
     "gpu_irq_k": 1.5,
     "skip_gpg": False,
-    "display_graphs": True,
+    "display_graphs": True
 }
 
 
@@ -238,6 +243,22 @@ def emit_parameters(params: Dict[str, Any]) -> str:
     lines.append("# calibration data qtype (leave empty for auto-selection which will choose the lowest bpw) - list of available qtypes can be found in the calibration data file")
     lines.append(f'qtype = "{params["qtype"]}"                  #@param {{type:"string"}}')
     lines.append("")
+    lines.append("# Use the greedy priority-queue quant assignment instead of the default method.")
+    lines.append(f'use_greedy_quant_assign = {params["use_greedy_quant_assign"]}  #@param {{type:"boolean"}}')
+    lines.append("# Optional path to CSV with quant degradation values. Only valid when use_greedy_quant_assign=True.")
+    lines.append(f'quant_degradation_csv = "{params["quant_degradation_csv"]}"     #@param {{type:"string"}}')
+    lines.append("# Optional equation to compute degradation from bpw. Only valid when use_greedy_quant_assign=True.")
+    lines.append(f'quant_degradation_equation = "{params["quant_degradation_equation"]}" #@param {{type:"string"}}')
+    lines.append("# Synergistic tensors for greedy quant assignment: list-of-lists of regex patterns. Each inner list defines tensors whose losses should be adjusted together. Use \"\" to disable.")
+    st = params.get("synergistic_tensors", "")
+    if st == "" or st is None:
+        lines.append('synergistic_tensors = ""  #@param {type:"raw"}')
+    else:
+        st_print = "[" + ", ".join(pretty_py_list(group) for group in st) + "]"
+        lines.append(f'synergistic_tensors = {st_print}  #@param {{type:"raw"}}')
+    lines.append("# Strength of synergy-based loss adjustment (0 = disabled, 1 = fully averaged losses). Only valid when synergistic_tensors is set.")
+    lines.append(f'synergy_strength = {params["synergy_strength"]}          #@param {{type:"number"}}')
+    lines.append("")
     lines.append("# additional flags (advanced and optional)")
     lines.append(f'debug = {params["debug"]}               #@param {{type:"boolean"}}')
     lines.append(f'info = {params["info"]}                #@param {{type:"boolean"}}')
@@ -359,6 +380,9 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
             '--cpu-irq-k': 'cpu_irq_k',
             '--gpu-irq-k': 'gpu_irq_k',
             '--qtype': 'qtype',
+            '--quant-degradation-csv': 'quant_degradation_csv',
+            '--quant-degradation-equation': 'quant_degradation_equation',
+            '--synergy-strength': 'synergy_strength',
         }
         i = 0
         while i < len(tokens):
@@ -368,6 +392,7 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
                 i += 1
                 if i < len(tokens):
                     val = tokens[i]
+                    # numeric detection
                     if re.fullmatch(r"-?\d+\.\d+", val):
                         try:
                             params[out] = float(val)
@@ -389,6 +414,8 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
             '--tensors-from-csv': 'tensors_from_csv',
             '--skip-gpg': 'skip_gpg',
             '--no-fallback': 'no_fallback',
+            # NEW greedy lonely flag
+            '--use-greedy-quant-assign': 'use_greedy_quant_assign',
         }
         i = 0
         while i < len(tokens):
@@ -411,6 +438,29 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
             else:
                 params['harmonize_tensors'] = ""
 
+        # Synergistic groups parsing (only meaningful if present)
+        svals = collect_flag_values(tokens, '--synergistic-tensors')
+        if svals:
+            sgroups: List[List[str]] = []
+            explicit_empty = False
+            for sv in svals:
+                # sv might be empty string token '""' -> treat as explicit empty
+                if sv.strip() == "":
+                    # explicit empty -> represent as explicit_empty flag and break
+                    explicit_empty = True
+                    break
+                parts = [p.strip() for p in sv.split(",") if p.strip()]
+                if parts:
+                    sgroups.append(parts)
+            if explicit_empty:
+                # keep legacy behavior: explicit disable represented as empty string in params
+                params['synergistic_tensors'] = ""
+            elif sgroups:
+                params['synergistic_tensors'] = sgroups
+            else:
+                # if flag present but produced no useful groups, set to empty string
+                params['synergistic_tensors'] = ""
+
     # Fallback heuristics for gpu_quants if still missing
     if 'gpu_quants' not in params:
         qtypes = sorted(set(re.findall(r"\b(iq[0-9]_[a-z0-9_]+|q[0-9]_[a-z0-9_]+|[+]?f32|[+]?q8_0)\b", recipe_text)))
@@ -431,6 +481,11 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
     if 'harmonization_technique' in params:
         try:
             params['harmonization_technique'] = int(params['harmonization_technique'])
+        except Exception:
+            pass
+    if 'synergy_strength' in params:
+        try:
+            params['synergy_strength'] = float(params['synergy_strength'])
         except Exception:
             pass
 
