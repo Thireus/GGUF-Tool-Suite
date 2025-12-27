@@ -1671,7 +1671,7 @@ def main():
     parser.add_argument('--gpu-tensors-max-size', type=str, help='Max GPU-friendly tensors size in GiB or percent (e.g., 80%%)')
     parser.add_argument('--exponential-factor', type=float, default=1.0,
                         help='Exponent controlling midpoint adjustment aggressiveness during stretch sweeps for default quant assignment method. Higher values push quantization toward extremes; default is 1.0. When using --use-greedy-quant-assign, the exponent is used to try to map per-tensor degradation values into a additively linear space. Recommended range for greedy quant assign is 1.0 to 5.0 when using KLD metrics with 3.0 being a good starting point.')
-    parser.add_argument('--quant-degradation-csv', type=str, help='Path to CSV file containing quant degradation values for use by greedy quant assign method (optional). If not provided, an internal default degradation EQUATION is used. If both CSV and equation are provided, the CSV values take precedence and the equation is used only as a fallback for missing qtypes (the equation MUST come from the same CSV source to be meaningful).')
+    parser.add_argument('--quant-degradation-csv', type=str, help='Path to CSV file containing quant degradation values for use by greedy quant assign method (optional). If not provided, hardcoded Qwen3-4B-Thinking-2507 degradation values are used. If both CSV and equation are provided, the CSV values take precedence and the equation is used only as a fallback for missing qtypes (the equation MUST derive from the same CSV source to be meaningful).')
     # New CLI parameter for user-provided equation (see docstring/help)
     parser.add_argument('--quant-degradation-equation', type=str,
                         help=('Optional equation to compute degradation y from bpw x, e.g. '
@@ -1694,7 +1694,7 @@ def main():
                         help=('Harmonization technique to use when --harmonize-tensors is set: 0=disabled, 1=max, 2=mean, 3=min (default). ' 
                             'Values are applied element-wise per layer across the matched tensors.'
                             'Max ensures calibration data measurement is not negatively degraded. Min will degrade calibration data accuracy but appears to give the best results. Mean is a compromise in-between. Disabled means harmonization is disabled.'))
-    parser.add_argument('--use-greedy-quant-assign', action='store_true', help='Use greedy priority-queue quant assignment instead of default spread/midpoint method. The method tries to minimize overall degradation by prioritizing quant downgrades that yield the least degradation per byte saved. This method requires per-tensor degradation data (e.g. KLD) to be present in the CSV file - perplexity data only works suboptimally. It also requires per quant type degradation estimates; per default KLD values are used from a qwen 3 4b benchmark. override with --quant-degradation-csv. It is recommended to use --exponential-factor between 1.0 and 5.0 when using this method to try to map per-tensor degradation values into a more linear space.')
+    parser.add_argument('--use-greedy-quant-assign', action='store_true', help='Use greedy priority-queue quant assignment instead of default spread/midpoint method. The method tries to minimize overall degradation by prioritizing quant downgrades that yield the least degradation per byte saved. This method requires per-tensor degradation data (e.g. KLD) to be present in the csv_file - perplexity data only works suboptimally. It also requires per quant type degradation estimates which can be supplied either via --quant-degradation-csv or --quant-degradation-equation (or both) - if not present hardcoded Qwen3-4B-Thinking-2507 degradation values are used. override with --quant-degradation-csv. It is recommended to use --exponential-factor between 1.0 and 5.0 when using this method to try to map per-tensor degradation values into a more linear space.')
     parser.add_argument('--synergistic-tensors', nargs='+', default=[["blk\\..*\\.ffn_up_exps.*","blk\\..*\\.ffn_gate_exps.*","blk\\..*\\.ffn_down_exps.*"]],
                         help=('A Python literal list-of-lists of regex patterns. Each inner list defines tensors that '
                             'exhibit synergistic effects and should have their loss adjusted together. '
@@ -1748,10 +1748,10 @@ def main():
 
     # Default quant degradation EQUATION (used when user does not supply --quant-degradation-csv).
     # This default equation was obtained by running:
-    # cd quants_graphs && ../model_tensor_bpw_metric.py --results-csv kld_results.csv --d-free --c-free --exclude-qtypes '.*_bn.*$' --transforms "identity" --ignore-outliers 50 --allow-impure-map --plot --p-grid-max 15 --p-grid-steps 100 --penalize-above 15 --drift-below 15
+    # cd quants_graphs && ../model_tensor_bpw_metric.py --results-csv kld_results.csv --c-free --exclude-qtypes '.*_bn.*$' --transforms "identity" --ignore-outliers 50 --allow-impure-map --plot --p-grid-max 15 --p-grid-steps 100 --d-from-lowest 1 --penalize-above 15
     # against the Qwen3-4B-Thinking-2507's kld_results.csv found in the quants_graphs directory.
     default_quant_degradation_equation = (
-        "y = -2.33272059116e-05 + 22999864.6043 * ( x + 3.39657355202 )^(-9.97331206805)"
+        "y = 0 + 1.46225343196e+14 * ( x + 6.69279912132 )^(-14.9755023923)"
     )
 
     # Parse user-supplied equation or use default
@@ -1798,67 +1798,87 @@ def main():
 
     # User provided CSV?
     quant_degradation_values: Dict[str, float] = {}
-    quant_degradation_csv_provided = False
     if args.quant_degradation_csv:
-        quant_degradation_csv_provided = True
         try:
             quant_degradation_values = load_quant_degradation_values(args.quant_degradation_csv)
         except Exception as e:
             print(f"[Error] Failed to load quant degradation CSV {args.quant_degradation_csv}: {e}", file=sys.stderr)
             sys.exit(2)
-    else:
-        # No CSV provided: use equation-only default (quant_degradation_values remains empty)
+    elif args.quant_degradation_equation:
+        # No csv provided, but equation provided, meaning the user wants to base degradation results on equation only
         quant_degradation_values = {}
+    else:
+        # No CSV and not equation provided: use Qwen3-4B-Thinking-2507's degradation values from quants_graphs/kld_results.csv
+        quant_degradation_values = {'bf16': 0.0, 'iq1_kt': 1.837747, 'iq2_bn_r4': 14.521723, 'iq2_k': 0.668209, 'iq2_k_r4': 0.668209, 'iq2_kl': 0.466686, 'iq2_ks': 0.933896, 'iq2_kt': 0.930509, 'iq3_k': 0.145984, 'iq3_k_r4': 0.145984, 'iq3_ks': 0.170068, 'iq3_kt': 0.179994, 'iq3_s': 0.169096, 'iq3_s_r4': 0.170365, 'iq3_xxs': 0.265262, 'iq3_xxs_r4': 0.266305, 'iq4_k': 0.0299, 'iq4_k_r4': 0.0299, 'iq4_ks': 0.042148, 'iq4_ks_r4': 0.042148, 'iq4_kss': 0.067568, 'iq4_kt': 0.061647, 'iq4_nl': 0.044675, 'iq4_nl_r4': 0.044744, 'iq4_xs': 0.043045, 'iq4_xs_r8': 0.044511, 'iq5_k': 0.007876, 'iq5_k_r4': 0.007876, 'iq5_ks': 0.010381, 'iq5_ks_r4': 0.010381, 'iq6_k': 0.002599, 'q2_K': 0.668667, 'q2_k_r4': 0.669954, 'q3_K': 0.213769, 'q3_k_r4': 0.214849, 'q4_0': 0.055857, 'q4_0_r8': 0.055877, 'q4_1': 0.045343, 'q4_K': 0.037003, 'q4_k_r4': 0.036972, 'q5_0': 0.01498, 'q5_0_r4': 0.014922, 'q5_1': 0.012937, 'q5_K': 0.01225, 'q5_k_r4': 0.01205, 'q6_0': 0.004148, 'q6_0_r4': 0.004145, 'q6_K': 0.003351, 'q6_k_r4': 0.004877, 'q8_0': 0.001257, 'q8_0_r8': 0.001287, 'q8_k_r8': 0.002864, 'q8_KV': 0.035117}
 
     if INFO:
-        print(f"[Info] Loaded degradation values for ({len(quant_degradation_values)} quant types) from CSV" + (f": {args.quant_degradation_csv}" if quant_degradation_csv_provided else " (none)"))
-        print(f"[Info] Using quant degradation equation: {quant_equation_str}")
-
-    # If both provided, warn that equation must come from same data
-    if quant_degradation_csv_provided and args.quant_degradation_equation:
-        print("[Info] Both --quant-degradation-csv and --quant-degradation-equation were provided. "
-              "CSV values take precedence; the equation will be used only as a fallback for qtypes missing in the CSV. "
-              "IMPORTANT: the equation should be derived from the same CSV file or results will be inconsistent.")
+        if args.quant_degradation_csv:
+            print(f"[Info] Loaded degradation values for ({len(quant_degradation_values)} quant types) from CSV" + f": {args.quant_degradation_csv}")
+        else:
+            print(f"[Info] Loaded default degradation values for ({len(quant_degradation_values)} quant types)")
+        if args.quant_degradation_equation:
+            print(f"[Info] Using quant degradation equation: {quant_equation_str}")
+        else:
+            print(f"[Info] Using default quant degradation equation: {quant_equation_str}")
+        # If both provided, warn that equation must come from same data
+        if args.quant_degradation_csv and args.quant_degradation_equation:
+            print("[Info] Both --quant-degradation-csv and --quant-degradation-equation were provided. "
+                "CSV values take precedence; the equation will be used only as a fallback for qtypes missing in the CSV. "
+                "IMPORTANT: the equation should be derived from the same CSV file or results will be inconsistent.")
 
     # helper lookup that greedy_quant_assign will use (returns float or None)
     warned_missing_qtypes = set()
+    @functools.lru_cache(maxsize=None)
     def quant_deg_lookup(qtype: str):
         # Prefer CSV value
+
+        # 1. Exact match
         if qtype in quant_degradation_values:
             return quant_degradation_values[qtype]
+
+        # 2. If qtype ends with _r4 or _r8 → try base
+        base_qtype = re.sub(r"_r[48]$", "", qtype)
+        if base_qtype != qtype and base_qtype in quant_degradation_values:
+            return quant_degradation_values[base_qtype]
+
+        # 3. If base not found → try adding _r4 and _r8
+        for suffix in ("_r4", "_r8"):
+            candidate = base_qtype + suffix
+            if candidate in quant_degradation_values:
+                return quant_degradation_values[candidate]
+            
         # If absent, try to guess from equation using bpw
-        try:
+
+        # Force user to supply equation
+        if args.quant_degradation_csv and not args.quant_degradation_equation:
+            suggested_cmd = (
+                f'./model_tensor_bpw_metric.py --results-csv {shlex.quote(args.quant_degradation_csv)} '
+                '--d-free --c-free --exclude-qtypes \'.*_bn.*$\' --transforms "identity" --ignore-outliers 50 '
+                '--allow-impure-map --plot --p-grid-max 15 --p-grid-steps 100 --penalize-above 15'
+            )
+            print(f"[Error] Quant degradation value for qtype '{qtype}' missing from custom CSV. "
+                "You can produce a fallback --quant-degradation-equation from your CSV with a command like:", file=sys.stderr)
+            print(f"[Error]   {suggested_cmd}", file=sys.stderr)
+            sys.exit(2)
+        else:
             x = get_bpw(qtype)
-        except Exception:
-            x = None
-        if x is None or (isinstance(x, float) and not math.isfinite(x)):
-            if quant_degradation_csv_provided and qtype not in warned_missing_qtypes:
-                # Suggest the user generate an equation from their CSV
-                suggested_cmd = (
-                    f'./model_tensor_bpw_metric.py --results-csv {shlex.quote(args.quant_degradation_csv)} '
-                    '--d-free --c-free --exclude-qtypes \'.*_bn.*$\' --transforms "identity" --ignore-outliers 50 '
-                    '--allow-impure-map --plot --p-grid-max 15 --p-grid-steps 100 --penalize-above 15 --drift-below 15'
-                )
-                print(f"[Info] Quant degradation value for qtype '{qtype}' missing from CSV. "
-                      "You can produce a fallback equation from your CSV with a command like:")
-                print(f"[Info]   {suggested_cmd}")
-                warned_missing_qtypes.add(qtype)
-            return None
+
         try:
             val = float(quant_equation_func(x))
             if DEBUG:
                 print(f"[Debug] Estimated degradation for {qtype} using equation at x={x}: {val}")
             return val
         except Exception as e:
-            if quant_degradation_csv_provided and qtype not in warned_missing_qtypes:
-                suggested_cmd = (
-                    f'./model_tensor_bpw_metric.py --results-csv {shlex.quote(args.quant_degradation_csv)} '
-                    '--d-free --c-free --exclude-qtypes \'.*_bn.*$\' --transforms "identity" --ignore-outliers 50 '
-                    '--allow-impure-map --plot --p-grid-max 15 --p-grid-steps 100 --penalize-above 15 --drift-below 15'
-                )
-                print(f"[Info] Quant degradation value for qtype '{qtype}' missing from CSV and equation evaluation failed. "
-                      "You can produce a fallback equation from your CSV with a command like:")
-                print(f"[Info]   {suggested_cmd}")
+            if qtype not in warned_missing_qtypes:
+                if INFO:
+                    suggested_cmd = (
+                        f'./model_tensor_bpw_metric.py --results-csv {shlex.quote(args.quant_degradation_csv)} '
+                        '--d-free --c-free --exclude-qtypes \'.*_bn.*$\' --transforms "identity" --ignore-outliers 50 '
+                        '--allow-impure-map --plot --p-grid-max 15 --p-grid-steps 100 --penalize-above 15 --drift-below 15'
+                    )
+                    print(f"[Info] Quant degradation value for qtype '{qtype}' missing from CSV and equation evaluation failed. "
+                        "You can produce a fallback equation from your CSV with a command like:")
+                    print(f"[Info]   {suggested_cmd}")
                 warned_missing_qtypes.add(qtype)
             return None
 
