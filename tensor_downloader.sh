@@ -5,7 +5,7 @@
 #** downloads pre-quantised tensors/shards to cook recipes.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-22-2025 -------------------- **#
+#** --------------- Updated: Dec-27-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -191,7 +191,7 @@ mark_if_killed_by_signal() {
     if [[ -n "$dst" ]]; then
       rm -f -- "$dst" 2>/dev/null || true
     fi
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✗ ${method} terminated by signal (exit ${status}); cleaned up partial file ${dst}"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] ✗ ${method} terminated by signal (exit ${status}); cleaned up partial file ${dst}" >&2
     return 0
   fi
   return 1

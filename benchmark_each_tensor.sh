@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-26-2025 -------------------- **#
+#** --------------- Updated: Dec-27-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -37,12 +37,12 @@ trap '
   SIGINT_COUNT=$((SIGINT_COUNT+1))
   if [[ $SIGINT_COUNT -eq 1 ]]; then
     EXIT_PENDING=1
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Received termination signal. Will exit after current operation finishes."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Received termination signal. Will exit after current operation finishes." >&2
   elif [[ $SIGINT_COUNT -eq 2 ]]; then
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Received second termination signal. Sending SIGTERM to llama-perplexity."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Received second termination signal. Sending SIGTERM to llama-perplexity." >&2
     [[ -n "$LLAMA_PID" ]] && kill -SIGTERM "$LLAMA_PID"
   elif [[ $SIGINT_COUNT -eq 3 ]]; then
-    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Received third termination signal. Sending SIGKILL to llama-perplexity."
+    echo "[$(date "+%Y-%m-%d %H:%M:%S")] Received third termination signal. Sending SIGKILL to llama-perplexity." >&2
     [[ -n "$LLAMA_PID" ]] && kill -SIGKILL "$LLAMA_PID"
   else
     # If you have any cleanup traps for FIFOs etc, they will run because we exit now.
@@ -60,7 +60,7 @@ trap '
   fi
 ' SIGINT
 # You can leave SIGTERM as before if you prefer it to be immediate:
-trap 'echo "[$(date "+%Y-%m-%d %H:%M:%S")] Received termination signal. Exiting immediately."; kill -s KILL -- -$$ 2>/dev/null || true; exit 1' SIGTERM
+trap 'echo "[$(date "+%Y-%m-%d %H:%M:%S")] Received termination signal. Exiting immediately." >&2; kill -s KILL -- -$$ 2>/dev/null || true; exit 1' SIGTERM
 # ----------------------------------------------------------------------------
 
 timestamp() { date "+%Y-%m-%d %H:%M:%S"; }
