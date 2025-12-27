@@ -5,7 +5,7 @@
 #** tensor sizes for matched regex tensors.                   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-31-2025 -------------------- **#
+#** --------------- Updated: Dec-27-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -24,7 +24,7 @@
 #***************************************************************#
 
 set -euo pipefail
-trap 'echo; echo "[$(date "+%Y-%m-%d %H:%M:%S")] Interrupted. Exiting."; exit 1' SIGINT SIGTERM
+trap 'echo; echo "[$(date "+%Y-%m-%d %H:%M:%S")] Interrupted. Exiting." >&2; exit 1' SIGINT SIGTERM
 
 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Starting GGUF size estimation..."
 

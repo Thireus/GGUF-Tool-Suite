@@ -5,7 +5,7 @@
 #** models.                                                   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-19-2025 -------------------- **#
+#** --------------- Updated: Dec-27-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -31,7 +31,7 @@ set -euo pipefail
 DELETE_ORIGINAL="${DELETE_ORIGINAL:-false}"
 
 # Trap SIGINT/SIGTERM to allow a clean exit message
-trap 'echo "[$(date "+%Y-%m-%d %H:%M:%S")] Received termination signal. Exiting."; exit 0' SIGINT SIGTERM
+trap 'echo "[$(date "+%Y-%m-%d %H:%M:%S")] Received termination signal. Exiting." >&2; exit 0' SIGINT SIGTERM
 
 # Directory to monitor: first argument, default to current directory if not provided
 WATCH_DIR="${1:-.}"

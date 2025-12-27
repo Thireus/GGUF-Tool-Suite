@@ -5,7 +5,7 @@
 #** for your gguf models.                                     **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-20-2025 -------------------- **#
+#** --------------- Updated: Dec-27-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -27,7 +27,7 @@
 set -euo pipefail
 
 # Trap SIGINT/SIGTERM for clean exit
-trap 'echo "[$(date "+%Y-%m-%d %H:%M:%S")] Received termination signal. Exiting."; exit 0' SIGINT SIGTERM
+trap 'echo "[$(date "+%Y-%m-%d %H:%M:%S")] Received termination signal. Exiting." >&2; exit 0' SIGINT SIGTERM
 
 #
 # USER CONFIGURATION

@@ -5,7 +5,7 @@
 #** tensors.map files and optionally deletes unused shards.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Aug-31-2025 -------------------- **#
+#** --------------- Updated: Dec-27-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -28,7 +28,7 @@ set -euo pipefail
 
 # Trap SIGINT/SIGTERM for clean exit
 tap_signal() {
-  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Received termination signal. Exiting."
+  echo "[$(date '+%Y-%m-%d %H:%M:%S')] Received termination signal. Exiting." >&2
   exit 0
 }
 trap 'tap_signal' SIGINT SIGTERM

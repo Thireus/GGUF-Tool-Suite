@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regexe entries.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-26-2025 -------------------- **#
+#** --------------- Updated: Dec-27-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -122,7 +122,7 @@ shutdown_on_signal() {
   pids="$(jobs -rp 2>/dev/null || true)"
 
   if [[ -n "${pids:-}" ]]; then
-    DEBUG "shutdown_on_signal: killing child PIDs: $pids"
+    DEBUG "shutdown_on_signal: killing child PIDs: $pids" >&2
 
     # ask nicely first
     kill $pids 2>/dev/null || true
@@ -132,7 +132,7 @@ shutdown_on_signal() {
     # force-kill any remaining
     pids="$(jobs -rp 2>/dev/null || true)"
     if [[ -n "${pids:-}" ]]; then
-      DEBUG "shutdown_on_signal: force-killing remaining PIDs: $pids"
+      DEBUG "shutdown_on_signal: force-killing remaining PIDs: $pids" >&2
       kill -KILL $pids 2>/dev/null || true
     fi
 
@@ -142,12 +142,12 @@ shutdown_on_signal() {
     wait
     set -e
   else
-    DEBUG "shutdown_on_signal: no running child jobs found"
+    DEBUG "shutdown_on_signal: no running child jobs found" >&2
   fi
 
   # Optionally print partial state if you maintain WRAPPER_STATUS/WRAPPER_RAW
   if declare -p WRAPPER_STATUS >/dev/null 2>&1; then
-    DEBUG "shutdown_on_signal: current WRAPPER_STATUS snapshot:"
+    DEBUG "shutdown_on_signal: current WRAPPER_STATUS snapshot:" >&2
     for k in "${!WRAPPER_STATUS[@]:-}"; do
       printf "DEBUG: idx=%s status=%s raw=%s\n" "$k" "${WRAPPER_STATUS[$k]:-}" "${WRAPPER_RAW[$k]:-}" >&2
     done
