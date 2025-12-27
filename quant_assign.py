@@ -1713,11 +1713,11 @@ def main():
         parser.error("--quant-degradation-csv and --quant-degradation-equation may only be used with --use-greedy-quant-assign")
     
     # Enforce: --synergistic-tensors is only valid when using --use-greedy-quant-assign
-    if args.synergistic_tensors and not args.use_greedy_quant_assign:
+    if args.synergistic_tensors and args.synergy_strength > 0 and not args.use_greedy_quant_assign:
         parser.error("--synergistic-tensors may only be used with --use-greedy-quant-assign")
     
     # Enforce: --synergy-strength is only valid when using --synergistic-tensors
-    if args.synergy_strength and args.synergy_strength > 0 and not args.synergistic_tensors:
+    if args.synergistic_tensors and args.synergy_strength > 0 and not args.synergistic_tensors:
         parser.error("--synergy-strength may only be used with --synergistic-tensors")
 
     # ---- BEGIN pgpy-based “trusted-keys.asc” check ----
