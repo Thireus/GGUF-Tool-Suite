@@ -152,18 +152,27 @@ def load_quant_degradation_values(path: str):
 
     The CSV is expected to have columns: "QTYPE" and "group0" (or similar).
     Values may be percentages (e.g. "+2.12%") or absolute floats (e.g. "0.0212").
+
+    Improvements:
+    - Drop empty / missing values and values that equal 404 / '404%' (treated as missing).
+      Log dropped qtypes with [Info] Dropping ...
     """
     df = pd.read_csv(path)
     # Expect columns: "QTYPE" and "group0"
     degradation_factors = {}
+    dropped = []
     for _, row in df.iterrows():
-        q = str(row["QTYPE"]).strip()
-        val = row["group0"]
-        # e.g. " +2.12%" or "0%" or absolute values like "0.0212"
+        q = str(row.get("QTYPE", "")).strip()
+        val = row.get("group0")
+        # handle missing / NaN
         if pd.isna(val):
+            dropped.append(q)
             continue
         s = str(val).strip()
-        # detect percent form
+        # treat 404 and variants as missing
+        if s.lower() in ('404', '404.0', '404%', '404.0%'):
+            dropped.append(q)
+            continue
         is_percent = s.endswith('%')
         if is_percent:
             s = s[:-1].strip()
@@ -173,11 +182,18 @@ def load_quant_degradation_values(path: str):
         try:
             f = float(s)
         except ValueError:
+            dropped.append(q)
             continue
         # if it was a percent string, convert to fraction; otherwise treat as absolute
         if is_percent:
             f = f / 100.0
         degradation_factors[q] = f
+
+    if INFO and dropped:
+        # Filter out empty q names for nicer message
+        nice = [dq for dq in dropped if dq]
+        print(f"[Info] Dropping quant degradation entries for missing/404 values: {nice}")
+
     return degradation_factors
 
 
@@ -789,7 +805,7 @@ def greedy_quant_assign(
     tensors: Iterable[str],
     tensor_sizes: Dict[str, Dict[str, int]],
     ppl_loss: Dict[str, float],
-    degradation_factors: Dict[str, float],
+    degradation_factors: Any,  # can be Dict[str, float] or a callable(qtype)->Optional[float]
     tensor_quants: Optional[Dict[str, List[str]]],
     budget_bytes: int,
     *,
@@ -805,7 +821,7 @@ def greedy_quant_assign(
     - tensors: iterable of tensor names to assign
     - tensor_sizes[tensor][qtype] -> size in bytes (must exist for qtypes used)
     - ppl_loss[tensor] -> sensitivity (float). If missing and preassign_missing_ppl True, the tensor is kept at initial quant.
-    - degradation_factors[qtype] -> numeric factor (bigger means worse quant)
+    - degradation_factors[qtype] -> size/deg mapping OR a callable(qtype)->float (bigger means worse quant)
     - tensor_quants[tensor] -> list of qtypes allowed for that tensor (if None, fallback to all qtypes available in tensor_sizes[t])
     - budget_bytes: absolute byte budget for this class (already adjusted by offsets)
     - harmonized_groups: optional list of lists of tensor-names
@@ -817,6 +833,14 @@ def greedy_quant_assign(
     tensors = list(tensors)
     # ensure tensor_quants is present for lookups
     tensor_quants = tensor_quants or {}
+
+    # --- Accept both mapping or callable for degradation_factors ---
+    if callable(degradation_factors):
+        get_deg = degradation_factors
+    else:
+        def get_deg(q):
+            # mapping fallback
+            return degradation_factors.get(q)
 
     # --- Validation & normalize tensor_quants into allowed_map (ordered largest->smallest)
     allowed_map: Dict[str, List[str]] = {}
@@ -832,12 +856,9 @@ def greedy_quant_assign(
                 raise ValueError(f"No size map available for tensor '{t}' (cannot determine allowed quants).")
             allowed = qtypes
 
-        # Filter allowed to qtypes that have sizes and degradation_factors
+        # Filter allowed to qtypes that have sizes and degradation_factors (or callable)
         filtered = []
         for q in allowed:
-            if q not in degradation_factors:
-                # skip qtypes with no degradation factor (can't evaluate)
-                continue
             if q not in tensor_sizes.get(t, {}):
                 # skip qtypes with no size info for this tensor
                 continue
@@ -996,7 +1017,15 @@ def greedy_quant_assign(
             if loss is None:
                 # If no ppl data and we didn't preassign, skip (safety)
                 continue
-            delta_deg = loss * (degradation_factors[to_q] - degradation_factors[from_q])
+            # get degradation values via get_deg (callable)
+            deg_from = get_deg(from_q)
+            deg_to = get_deg(to_q)
+            # if either is None, we cannot compute score reliably -> skip this move
+            if deg_from is None or deg_to is None:
+                if debug:
+                    print(f"[GREEDY] missing degradation estimate for {from_q} or {to_q}; skipping move {tensor}:{from_q}->{to_q}")
+                continue
+            delta_deg = loss * (deg_to - deg_from)
             # Avoid division by zero, but delta_size>0 ensures denominator positive
             score = float(delta_deg) / float(delta_size)
             # push (score, counter) so heap is deterministic on ties
@@ -1052,7 +1081,13 @@ def greedy_quant_assign(
             if delta_size <= 0:
                 continue
             loss = ppl_loss_exp.get(tensor, 0.0)
-            delta_deg = loss * (degradation_factors[from_q] - degradation_factors[to_q])
+            deg_from = get_deg(from_q)
+            deg_to = get_deg(to_q)
+            if deg_from is None or deg_to is None:
+                if debug:
+                    print(f"[GREEDY] missing degradation estimate for promotion {tensor}:{from_q}->{to_q}; skipping")
+                continue
+            delta_deg = loss * (deg_from - deg_to)
             score = float(delta_deg) / float(delta_size)
             # push as max-heap (invert score)
             heapq.heappush(promote_pq, (-score, counter, tensor, from_q, to_q))
@@ -1589,11 +1624,11 @@ def parse_group_argument(arg_value, arg_name: str, parser, info_flag=False):
                     f"Invalid {arg_name}: must be a Python literal list-of-lists, e.g. [['pat1','pat2'], ['p3','p4']]."
                 )
 
-        # List-of-lists directly
+        # List form directly, possibly list-of-lists
         elif all(isinstance(elem, list) for elem in arg_value):
             groups = arg_value
 
-        # List of comma-separated strings
+        # List of comma-separated strings (e.g. 'pat1,pat2')
         else:
             for elem in arg_value:
                 if isinstance(elem, str):
@@ -1636,7 +1671,14 @@ def main():
     parser.add_argument('--gpu-tensors-max-size', type=str, help='Max GPU-friendly tensors size in GiB or percent (e.g., 80%%)')
     parser.add_argument('--exponential-factor', type=float, default=1.0,
                         help='Exponent controlling midpoint adjustment aggressiveness during stretch sweeps for default quant assignment method. Higher values push quantization toward extremes; default is 1.0. When using --use-greedy-quant-assign, the exponent is used to try to map per-tensor degradation values into a additively linear space. Recommended range for greedy quant assign is 1.0 to 5.0 when using KLD metrics with 3.0 being a good starting point.')
-    parser.add_argument('--quant-degradation-csv', type=str, help='Path to CSV file containing quant degradation values for use by greed quant assing method (overrides bundled quants_graphs/kld_results.csv)')
+    parser.add_argument('--quant-degradation-csv', type=str, help='Path to CSV file containing quant degradation values for use by greedy quant assign method (optional). If not provided, an internal default degradation EQUATION is used. If both CSV and equation are provided, the CSV values take precedence and the equation is used only as a fallback for missing qtypes (the equation MUST come from the same CSV source to be meaningful).')
+    # New CLI parameter for user-provided equation (see docstring/help)
+    parser.add_argument('--quant-degradation-equation', type=str,
+                        help=('Optional equation to compute degradation y from bpw x, e.g. '
+                              '"y = -0.0772258662462 + 0.399144361667 * ( x - 1.31650903625 )^(-1.41531100478)". '
+                              'If provided, the equation will be used to estimate degradation for any qtype missing in the CSV. '
+                              'WARNING: if you also supply --quant-degradation-csv, the equation MUST originate from the same CSV '
+                              'or results will be inconsistent. This requirement is logged at INFO level when both are supplied.'))
     parser.add_argument('--ignore-f32', action='store_true', help='Ignore f32 tensors (default: not ignored)')
     parser.add_argument('--tensors-from-csv', action='store_true', help='Obtains list of tensors from csv file only (default: tensors are obtained from map file)')
     parser.add_argument('--skip-gpg', action='store_true',
@@ -1647,26 +1689,20 @@ def main():
                             "Use --harmonize-tensors \"\" to disable harmonization. Or use --harmonization-technique 0. "
                             "Note: harmonizing tensors to allow for fused ffn_up_exps and ffn_gate_exps can improve PP and TG speed, at the cost of slim restrictive dynamic quantization flexibility. "
                             "It is highly recommended to leave this parameter value default when using ik_llama.cpp for significant speed improvements (can be as high as +20%% speed gain) with MoE models - when using ik_llama.cpp with fmoe these tensors are fused, which can only happen if they are of the same qtype. " 
-                            "Future versions of ik_llama.cpp may also take advantage of fused ffn_up_shexp and ffn_gate_shexp tensors. " ) )
+                            "Future versions of ik_llama.cpp may also take advantage of fused ffn_up_shexp and ffn_gate_shexp tensors."))
     parser.add_argument('--harmonization-technique', type=int, default=3, choices=[0,1,2,3],
                         help=('Harmonization technique to use when --harmonize-tensors is set: 0=disabled, 1=max, 2=mean, 3=min (default). ' 
                             'Values are applied element-wise per layer across the matched tensors.'
                             'Max ensures calibration data measurement is not negatively degraded. Min will degrade calibration data accuracy but appears to give the best results. Mean is a compromise in-between. Disabled means harmonization is disabled.'))
     parser.add_argument('--use-greedy-quant-assign', action='store_true', help='Use greedy priority-queue quant assignment instead of default spread/midpoint method. The method tries to minimize overall degradation by prioritizing quant downgrades that yield the least degradation per byte saved. This method requires per-tensor degradation data (e.g. KLD) to be present in the CSV file - perplexity data only works suboptimally. It also requires per quant type degradation estimates; per default KLD values are used from a qwen 3 4b benchmark. override with --quant-degradation-csv. It is recommended to use --exponential-factor between 1.0 and 5.0 when using this method to try to map per-tensor degradation values into a more linear space.')
-    parser.add_argument(
-        '--synergistic-tensors',
-        nargs='+',
-        default=[["blk\\..*\\.ffn_up_exps.*","blk\\..*\\.ffn_gate_exps.*","blk\\..*\\.ffn_down_exps.*"]],
-        help=(
-            'A Python literal list-of-lists of regex patterns. Each inner list defines tensors that '
-            'exhibit synergistic effects and should have their loss adjusted together. '
-            'Example: --synergistic-tensors blk\\..\\*\\.ffn_up_exps.\\*,blk\\..\\*\\.ffn_gate_exps.\\*,blk\\..\\*\\.ffn_down_exps.\\* '
-            "'another_pat1,another_pat2'. "
-            'Use --synergistic-tensors "" to disable synergy adjustment. '
-            'Note: synergy encourages similar quantization within each layer, '
-            'typically improving quality without strictly enforcing identical qtypes.'
-        )
-    )
+    parser.add_argument('--synergistic-tensors', nargs='+', default=[["blk\\..*\\.ffn_up_exps.*","blk\\..*\\.ffn_gate_exps.*","blk\\..*\\.ffn_down_exps.*"]],
+                        help=('A Python literal list-of-lists of regex patterns. Each inner list defines tensors that '
+                            'exhibit synergistic effects and should have their loss adjusted together. '
+                            'Example: --synergistic-tensors blk\\..\\*\\.ffn_up_exps.\\*,blk\\..\\*\\.ffn_gate_exps.\\*,blk\\..\\*\\.ffn_down_exps.\\* '
+                            "'another_pat1,another_pat2'. "
+                            'Use --synergistic-tensors "" to disable synergy adjustment. '
+                            'Note: synergy encourages similar quantization within each layer, '
+                            'typically improving quality without strictly enforcing identical qtypes.'))
     parser.add_argument('--synergy-strength',type=float,default=0.0,help='Strength of synergy-based loss adjustment (0 = disabled, 1 = fully averaged losses). Default: 0')
     parser.add_argument('--no-fallback', action='store_true',
                         help=('Disable automatic fallback checks: do NOT attempt to inspect map files to detect per-tensor dtype mismatches. '
@@ -1706,13 +1742,125 @@ def main():
     DEBUG = args.debug
     INFO = args.info or DEBUG
 
-    here = os.path.dirname(os.path.abspath(__file__))
-    default_quant_degradation_path = os.path.join(here, "quants_graphs", "kld_results.csv")
-    quant_degradation_path = args.degradation_csv if getattr(args, 'quant_degradation_csv', None) else default_quant_degradation_path
-    quant_degradation_values = load_quant_degradation_values(quant_degradation_path)
+    # ---------------------------
+    # Quant degradation handling
+    # ---------------------------
+
+    # Default quant degradation EQUATION (used when user does not supply --quant-degradation-csv).
+    # This default equation was obtained by running:
+    # cd quants_graphs && ../model_tensor_bpw_metric.py --results-csv kld_results.csv --d-free --c-free --exclude-qtypes '.*_bn.*$' --transforms "identity" --ignore-outliers 50 --allow-impure-map --plot --p-grid-max 15 --p-grid-steps 100 --penalize-above 15 --drift-below 15
+    # against the Qwen3-4B-Thinking-2507's kld_results.csv found in the quants_graphs directory.
+    default_quant_degradation_equation = (
+        "y = -2.33272059116e-05 + 22999864.6043 * ( x + 3.39657355202 )^(-9.97331206805)"
+    )
+
+    # Parse user-supplied equation or use default
+    quant_equation_str = args.quant_degradation_equation if args.quant_degradation_equation else default_quant_degradation_equation
+
+    # helper: parse equation string into callable f(x) -> float
+    def parse_equation_to_callable(eq_str: str):
+        if not eq_str or not isinstance(eq_str, str):
+            return None
+        # normalize: remove "y=" if present and replace ^ with **
+        s = eq_str.strip()
+        if s.lower().startswith('y'):
+            parts = s.split('=', 1)
+            if len(parts) == 2:
+                s = parts[1].strip()
+        # Replace '^' power notation with python **
+        s = s.replace('^', '**')
+        # compile once to check validity
+        try:
+            code = compile(s, "<quant-equation>", "eval")
+        except Exception as e:
+            print(f"[Error] Failed to parse quant degradation equation: {e}", file=sys.stderr)
+            return None
+        # build a safe globals dict with math functions only
+        safe_globals = {'__builtins__': None}
+        # expose math functions/constants
+        math_names = [n for n in dir(math) if not n.startswith('_')]
+        for name in math_names:
+            safe_globals[name] = getattr(math, name)
+        # Also expose built-in float/int/pow via math if desired (pow via math.pow is present)
+        def f(x_val):
+            try:
+                # locals contain x
+                locals_map = {'x': float(x_val)}
+                return float(eval(code, safe_globals, locals_map))
+            except Exception as e:
+                raise RuntimeError(f"Error evaluating quant degradation equation at x={x_val}: {e}")
+        return f
+
+    quant_equation_func = parse_equation_to_callable(quant_equation_str)
+    if quant_equation_func is None:
+        print("[Error] Invalid --quant-degradation-equation provided; aborting.", file=sys.stderr)
+        sys.exit(2)
+
+    # User provided CSV?
+    quant_degradation_values: Dict[str, float] = {}
+    quant_degradation_csv_provided = False
+    if args.quant_degradation_csv:
+        quant_degradation_csv_provided = True
+        try:
+            quant_degradation_values = load_quant_degradation_values(args.quant_degradation_csv)
+        except Exception as e:
+            print(f"[Error] Failed to load quant degradation CSV {args.quant_degradation_csv}: {e}", file=sys.stderr)
+            sys.exit(2)
+    else:
+        # No CSV provided: use equation-only default (quant_degradation_values remains empty)
+        quant_degradation_values = {}
 
     if INFO:
-        print(f"[Info] Loaded degradation values for ({len(quant_degradation_values)} quant types)")
+        print(f"[Info] Loaded degradation values for ({len(quant_degradation_values)} quant types) from CSV" + (f": {args.quant_degradation_csv}" if quant_degradation_csv_provided else " (none)"))
+        print(f"[Info] Using quant degradation equation: {quant_equation_str}")
+
+    # If both provided, warn that equation must come from same data
+    if quant_degradation_csv_provided and args.quant_degradation_equation:
+        print("[Info] Both --quant-degradation-csv and --quant-degradation-equation were provided. "
+              "CSV values take precedence; the equation will be used only as a fallback for qtypes missing in the CSV. "
+              "IMPORTANT: the equation should be derived from the same CSV file or results will be inconsistent.")
+
+    # helper lookup that greedy_quant_assign will use (returns float or None)
+    warned_missing_qtypes = set()
+    def quant_deg_lookup(qtype: str):
+        # Prefer CSV value
+        if qtype in quant_degradation_values:
+            return quant_degradation_values[qtype]
+        # If absent, try to guess from equation using bpw
+        try:
+            x = get_bpw(qtype)
+        except Exception:
+            x = None
+        if x is None or (isinstance(x, float) and not math.isfinite(x)):
+            if quant_degradation_csv_provided and qtype not in warned_missing_qtypes:
+                # Suggest the user generate an equation from their CSV
+                suggested_cmd = (
+                    f'./model_tensor_bpw_metric.py --results-csv {shlex.quote(args.quant_degradation_csv)} '
+                    '--d-free --c-free --exclude-qtypes \'.*_bn.*$\' --transforms "identity" --ignore-outliers 50 '
+                    '--allow-impure-map --plot --p-grid-max 15 --p-grid-steps 100 --penalize-above 15 --drift-below 15'
+                )
+                print(f"[Info] Quant degradation value for qtype '{qtype}' missing from CSV. "
+                      "You can produce a fallback equation from your CSV with a command like:")
+                print(f"[Info]   {suggested_cmd}")
+                warned_missing_qtypes.add(qtype)
+            return None
+        try:
+            val = float(quant_equation_func(x))
+            if DEBUG:
+                print(f"[Debug] Estimated degradation for {qtype} using equation at x={x}: {val}")
+            return val
+        except Exception as e:
+            if quant_degradation_csv_provided and qtype not in warned_missing_qtypes:
+                suggested_cmd = (
+                    f'./model_tensor_bpw_metric.py --results-csv {shlex.quote(args.quant_degradation_csv)} '
+                    '--d-free --c-free --exclude-qtypes \'.*_bn.*$\' --transforms "identity" --ignore-outliers 50 '
+                    '--allow-impure-map --plot --p-grid-max 15 --p-grid-steps 100 --penalize-above 15 --drift-below 15'
+                )
+                print(f"[Info] Quant degradation value for qtype '{qtype}' missing from CSV and equation evaluation failed. "
+                      "You can produce a fallback equation from your CSV with a command like:")
+                print(f"[Info]   {suggested_cmd}")
+                warned_missing_qtypes.add(qtype)
+            return None
 
     # make --no-fallback visible to top-level helpers
     NO_FALLBACK = bool(args.no_fallback)
@@ -2151,7 +2299,7 @@ def main():
                         for n in names_to_assign
                     },
                     ppl_loss=class_vals,
-                    degradation_factors=quant_degradation_values,
+                    degradation_factors=quant_deg_lookup,  # pass the lookup callable
                     tensor_quants=tensor_quants_local,
                     budget_bytes=int(max_arg_bytes),
                     debug=DEBUG,
