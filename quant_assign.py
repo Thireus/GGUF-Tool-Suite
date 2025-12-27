@@ -1717,7 +1717,7 @@ def main():
         parser.error("--synergistic-tensors may only be used with --use-greedy-quant-assign")
     
     # Enforce: --synergy-strength is only valid when using --synergistic-tensors
-    if args.synergy_strength and not args.synergistic_tensors:
+    if args.synergy_strength and args.synergy_strength > 0 and not args.synergistic_tensors:
         parser.error("--synergy-strength may only be used with --synergistic-tensors")
 
     # ---- BEGIN pgpy-based “trusted-keys.asc” check ----
