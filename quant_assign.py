@@ -1671,14 +1671,6 @@ def main():
     parser.add_argument('--gpu-tensors-max-size', type=str, help='Max GPU-friendly tensors size in GiB or percent (e.g., 80%%)')
     parser.add_argument('--exponential-factor', type=float, default=1.0,
                         help='Exponent controlling midpoint adjustment aggressiveness during stretch sweeps for default quant assignment method. Higher values push quantization toward extremes; default is 1.0. When using --use-greedy-quant-assign, the exponent is used to try to map per-tensor degradation values into a additively linear space. Recommended range for greedy quant assign is 1.0 to 5.0 when using KLD metrics with 3.0 being a good starting point.')
-    parser.add_argument('--quant-degradation-csv', type=str, help='Path to CSV file containing quant degradation values for use by greedy quant assign method (optional). If not provided, hardcoded Qwen3-4B-Thinking-2507 degradation values are used. If both CSV and equation are provided, the CSV values take precedence and the equation is used only as a fallback for missing qtypes (the equation MUST derive from the same CSV source to be meaningful).')
-    # New CLI parameter for user-provided equation (see docstring/help)
-    parser.add_argument('--quant-degradation-equation', type=str,
-                        help=('Optional equation to compute degradation y from bpw x, e.g. '
-                              '"y = -0.0772258662462 + 0.399144361667 * ( x - 1.31650903625 )^(-1.41531100478)". '
-                              'If provided, the equation will be used to estimate degradation for any qtype missing in the CSV. '
-                              'WARNING: if you also supply --quant-degradation-csv, the equation MUST originate from the same CSV '
-                              'or results will be inconsistent. This requirement is logged at INFO level when both are supplied.'))
     parser.add_argument('--ignore-f32', action='store_true', help='Ignore f32 tensors (default: not ignored)')
     parser.add_argument('--tensors-from-csv', action='store_true', help='Obtains list of tensors from csv file only (default: tensors are obtained from map file)')
     parser.add_argument('--skip-gpg', action='store_true',
@@ -1695,6 +1687,13 @@ def main():
                             'Values are applied element-wise per layer across the matched tensors.'
                             'Max ensures calibration data measurement is not negatively degraded. Min will degrade calibration data accuracy but appears to give the best results. Mean is a compromise in-between. Disabled means harmonization is disabled.'))
     parser.add_argument('--use-greedy-quant-assign', action='store_true', help='Use greedy priority-queue quant assignment instead of default spread/midpoint method. The method tries to minimize overall degradation by prioritizing quant downgrades that yield the least degradation per byte saved. This method requires per-tensor degradation data (e.g. KLD) to be present in the csv_file - perplexity data only works suboptimally. It also requires per quant type degradation estimates which can be supplied either via --quant-degradation-csv or --quant-degradation-equation (or both) - if not present hardcoded Qwen3-4B-Thinking-2507 degradation values are used. override with --quant-degradation-csv. It is recommended to use --exponential-factor between 1.0 and 5.0 when using this method to try to map per-tensor degradation values into a more linear space.')
+    parser.add_argument('--quant-degradation-csv', type=str, help='Path to CSV file containing quant degradation values for use by greedy quant assign method (optional). If not provided, hardcoded Qwen3-4B-Thinking-2507 degradation values are used. If both CSV and equation are provided, the CSV values take precedence and the equation is used only as a fallback for missing qtypes (the equation MUST derive from the same CSV source to be meaningful).')
+    parser.add_argument('--quant-degradation-equation', type=str,
+                        help=('Optional equation to compute degradation y from bpw x, e.g. '
+                              '"y = -0.0772258662462 + 0.399144361667 * ( x - 1.31650903625 )^(-1.41531100478)". '
+                              'If provided, the equation will be used to estimate degradation for any qtype missing in the CSV. '
+                              'WARNING: if you also supply --quant-degradation-csv, the equation MUST originate from the same CSV '
+                              'or results will be inconsistent. This requirement is logged at INFO level when both are supplied.'))
     parser.add_argument('--synergistic-tensors', nargs='+', default=[["blk\\..*\\.ffn_up_exps.*","blk\\..*\\.ffn_gate_exps.*","blk\\..*\\.ffn_down_exps.*"]],
                         help=('A Python literal list-of-lists of regex patterns. Each inner list defines tensors that '
                             'exhibit synergistic effects and should have their loss adjusted together. '
@@ -1708,6 +1707,18 @@ def main():
                         help=('Disable automatic fallback checks: do NOT attempt to inspect map files to detect per-tensor dtype mismatches. '
                               'When set, the script will act as if the quantized tensors of the map files were pure and any tensor mismatching the quant type will have its size "guessed" as if it had been quantized to that qtype.'))
     args = parser.parse_args()
+
+    # Enforce: --quant-degradation-csv and --quant-degradation-equation are only valid when using --use-greedy-quant-assign
+    if (args.quant_degradation_csv or args.quant_degradation_equation) and not args.use_greedy_quant_assign:
+        parser.error("--quant-degradation-csv and --quant-degradation-equation may only be used with --use-greedy-quant-assign")
+    
+    # Enforce: --synergistic-tensors is only valid when using --use-greedy-quant-assign
+    if args.synergistic_tensors and not args.use_greedy_quant_assign:
+        parser.error("--synergistic-tensors may only be used with --use-greedy-quant-assign")
+    
+    # Enforce: --synergy-strength is only valid when using --synergistic-tensors
+    if args.synergy_strength and not args.synergistic_tensors:
+        parser.error("--synergy-strength may only be used with --synergistic-tensors")
 
     # ---- BEGIN pgpy-based “trusted-keys.asc” check ----
     if not SKIP_GPG:
@@ -2769,6 +2780,18 @@ def main():
     else:
         sha256 = "N/A"
     print(f"# - Calibration dataset '{args.csv_file}' SHA-256: {sha256}")
+
+    # Compute SHA-256 for --quant-degradation-csv if provided (improvement #1)
+    if args.quant_degradation_csv:
+        if os.path.isfile(args.quant_degradation_csv):
+            try:
+                with open(args.quant_degradation_csv, 'rb') as f:
+                    sha256 = hashlib.sha256(f.read()).hexdigest()
+            except Exception:
+                sha256 = "ERROR"
+        else:
+            sha256 = "N/A"
+        print(f"# - Degradation dataset '{args.quant_degradation_csv}' SHA-256: {sha256}")
 
     def print_maps_sorted_by_bpw(MAP_FILE_INFO: Dict[str, Tuple[str, str, str]]) -> None:
         """
