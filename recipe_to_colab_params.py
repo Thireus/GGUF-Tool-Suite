@@ -27,12 +27,6 @@
 recipe_to_colab_params.py
 
 Read a .recipe file and emit a Python snippet containing Google Colab pipeline parameters.
-
-This version:
-- Replaces occurrences of https://gguf.thireus.com with the GitHub URL.
-- Conservatively extracts the "# - Command used:" block.
-- Ensures a complete default parameter set is present when missing, while preserving any
-  values discovered in the recipe.
 """
 
 from __future__ import annotations
@@ -263,7 +257,7 @@ def emit_parameters(params: Dict[str, Any]) -> str:
     lines.append(f'debug = {params["debug"]}               #@param {{type:"boolean"}}')
     lines.append(f'info = {params["info"]}                #@param {{type:"boolean"}}')
     lines.append(f'ignore_f32 = {params["ignore_f32"]}          #@param {{type:"boolean"}}')
-    lines.append(f'no_fallback = {params["no_fallback"]}          #@param {{type:"boolean"}}')
+    lines.append(f'no_fallback = {params["no_fallback"]}         #@param {{type:"boolean"}}')
     lines.append(f'tensors_from_csv = {params["tensors_from_csv"]}    #@param {{type:"boolean"}}')
     lines.append(f'cpu_irq_k = {params["cpu_irq_k"]}             #@param {{type:"number"}}')
     lines.append(f'gpu_irq_k = {params["gpu_irq_k"]}             #@param {{type:"number"}}')
