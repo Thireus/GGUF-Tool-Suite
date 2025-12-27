@@ -46,7 +46,7 @@ import subprocess
 import tempfile
 from collections import Counter
 import textwrap
-from typing import cast, Dict, List, Iterable, Tuple, Optional
+from typing import Any, cast, Dict, List, Iterable, Tuple, Optional
 import heapq
 
 # Global default quants list
@@ -1107,7 +1107,11 @@ def greedy_quant_assign(
             if t not in group_defs:
                 # If t is actually a group id, skip; otherwise copy assigned quant
                 if not t.startswith("HARM_GROUP_"):
-                    expanded_assignment[t] = assignment.get(t)
+                    val = assignment.get(t)
+                    if val is None:
+                        # safety: if no assignment exists for this ungrouped tensor, skip
+                        continue
+                    expanded_assignment[t] = val
         assignment = expanded_assignment
 
     return assignment, total_size
@@ -1395,9 +1399,9 @@ def harmonize_row(row: pd.Series, cols: list, harmonize_groups: list, technique:
         all_have_id = all(id is not None for id in all_ids)
 
         if all_have_id:
-            # sort each list by id
+            # sort each list by id (convert None to -1 for type-safety; here all_have_id so None shouldn't appear)
             for i in range(len(lists_with_ids)):
-                lists_with_ids[i].sort(key=lambda t: t[1])
+                lists_with_ids[i].sort(key=lambda t: (-1 if t[1] is None else t[1]))
         elif not any_id:
             # no ids anywhere -> deterministic sort by name
             for i in range(len(lists_with_ids)):
@@ -1521,7 +1525,8 @@ def expand_harmonize_groups(harmonize_groups: List[List[str]], tensors: List[str
 
         if all_have_id:
             for l in lists_with_ids:
-                l.sort(key=lambda x: x[1])
+                # convert None to -1 if present; primarily for type-safety (shouldn't be None when all_have_id)
+                l.sort(key=lambda x: (-1 if x[1] is None else x[1]))
         elif not any_id:
             for l in lists_with_ids:
                 l.sort(key=lambda x: x[0])
@@ -1791,7 +1796,7 @@ def main():
         # Update columns one-by-one (avoids type-checker issues and is explicit)
         for col in cols_to_update:
             # row[col] might be a numpy scalar or python scalar — both are fine
-            df.at[idx, col] = row[col]
+            df.at[cast(Any, idx), col] = row[col]
 
     # ---- END harmonization ----
     #print(row.to_string(max_rows=None))
@@ -2117,7 +2122,7 @@ def main():
         elif max_arg_bytes:
             if args.use_greedy_quant_assign:
                 # Build tensor_quants mapping (default to cls-specific quants)
-                tensor_quants = {n: (gpu_quants if cls == 'gpu' else cpu_quants) for n in names_to_assign}
+                tensor_quants_local = {n: (gpu_quants if cls == 'gpu' else cpu_quants) for n in names_to_assign}
 
                 # ---- Expand CLI regex groups into concrete per-layer lists restricted to this class' tensors ----
                 # Harmonization groups
@@ -2137,17 +2142,18 @@ def main():
                     print(f"[Info] No synergistic groups expanded for class {cls}.")
 
                 # ---- Call greedy quant assignment with all parameters ----
+                # Use get_map_sizes_and_elements to build the tensor_sizes mapping
                 assignment, total_bytes = greedy_quant_assign(
                     tensors=names_to_assign,
                     tensor_sizes={
-                        n: {q: get_map_sizes(q)[0].get(n, 0)
+                        n: {q: get_map_sizes_and_elements(q)[0].get(n, 0)
                             for q in (gpu_quants if cls == 'gpu' else cpu_quants)}
                         for n in names_to_assign
                     },
                     ppl_loss=class_vals,
                     degradation_factors=quant_degradation_values,
-                    tensor_quants=tensor_quants,
-                    budget_bytes=max_arg_bytes,
+                    tensor_quants=tensor_quants_local,
+                    budget_bytes=int(max_arg_bytes),
                     debug=DEBUG,
                     harmonized_groups=expanded_harmonize_groups,
                     loss_exponent=args.exponential_factor,
