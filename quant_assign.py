@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-21-2025 -------------------- **#
+#** --------------- Updated: Dec-27-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -48,8 +48,6 @@ from collections import Counter
 import textwrap
 from typing import cast, Dict, List, Iterable, Tuple, Optional
 import heapq
-
-GIB = 1024 ** 3
 
 # Global default quants list
 DEFAULT_QUANTS = ['q8_0', 'q4_0']
@@ -1710,6 +1708,7 @@ def main():
 
     if INFO:
         print(f"[Info] Loaded degradation values for ({len(quant_degradation_values)} quant types)")
+
     # make --no-fallback visible to top-level helpers
     NO_FALLBACK = bool(args.no_fallback)
 
@@ -2066,7 +2065,7 @@ def main():
                             print(f"[Info] Assigned {desc} quant {assigned_q} to outlier {nm}, size={size_harmonized/GIB:.3f} GiB (harmonized group {group_idx})")
 
         if not args.use_greedy_quant_assign:
-	    # process low and high outliers (lowest quant = quants[-1], highest quant = quants[0])
+            # process low and high outliers (lowest quant = quants[-1], highest quant = quants[0])
             _process_outliers_list(out_low, quants[-1], "lowest")
             _process_outliers_list(out_high, quants[0], "highest")
 
@@ -2156,7 +2155,9 @@ def main():
                     synergy_strength=args.synergy_strength
                 )
             else:
-                assignment, total_bytes = optimize_midpoint_and_assign( quants, None, class_vals, max_arg_bytes, args.tolerance, args.exponential_factor, harmonize_groups=harmonize_groups)
+                assignment, total_bytes = optimize_midpoint_and_assign(
+                    quants, None, class_vals,
+                    max_arg_bytes, args.tolerance, args.exponential_factor, harmonize_groups=harmonize_groups)
             #print(f"# Optimized sub-total {cls.upper()} size excluding outliers and f32: {total_bytes/GIB:.3f} GiB")
         else:
             assignment, sizes = assign_quants(
