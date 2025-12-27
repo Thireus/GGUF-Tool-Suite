@@ -308,7 +308,7 @@ Additional research refs:
 - https://github.com/Thireus/GGUF-Tool-Suite/issues/34
 - https://github.com/Thireus/GGUF-Tool-Suite/discussions/23
 
-## 📊 About `ppl_results.csv` and `kld_results.csv`
+## 📊 About `ppl_results.csv`
 
 The file `ppl_results.csv` present in some model directories contains **individual tensor-level PPL benchmarks**. It has since been replaced in favour of `kld_results.csv` which results in better recipes.
 
