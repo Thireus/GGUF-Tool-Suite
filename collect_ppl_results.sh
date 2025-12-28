@@ -5,7 +5,7 @@
 #** benchmark PPL and KLD results of benchmark_each_tensor.sh **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Dec-02-2025 -------------------- **#
+#** --------------- Updated: Dec-28-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -427,7 +427,7 @@ declare -A PROCESSED_GROUP_QTYPE  # key: "qtype|groupidx" => 1/MISSING
 
 # gather list of ppl (and ppl_kld) result files in current dir matching chunks (includes group and baseline files)
 bench_files_list=$(
-  for f in ./* ./.?*; do
+  for f in ./bench_ppl_*.txt; do
     [ -e "$f" ] || continue    # skip non-matching globs
     [ -f "$f" ] && printf '%s\n' "${f##*/}"
   done 2>/dev/null
@@ -568,7 +568,7 @@ fi
 # If auto-baseline requested, attempt to read bench_ppl(_kld)_result.baseline.<qtype>.<CHUNKS>.txt
 if [[ -n "$AUTO_BASELINE_QTYPE" ]]; then
   baseline_fname="bench_ppl${_kld}_result.baseline.${AUTO_BASELINE_QTYPE}.${PPL_CHUNKS}.txt"
-  if printf '%s\n' "$all_bench_ppl_result_files" | grep -qF -- "$baseline_fname"; then
+  if grep -qF -- "$baseline_fname" <<< "$all_bench_ppl_result_files"; then
     base_ppl_val=$(extract_ppl_from_file "./${baseline_fname}" || true)
     [[ "$REGEX" != "" ]] && base_regex_val=$(extract_regex_from_file "./${baseline_fname}" || true)
     if [[ -n "${base_ppl_val:-}" ]]; then
@@ -834,7 +834,7 @@ for qtype in "${QTYPES[@]}"; do
         # Look for group result file: bench_ppl${_kld}_result.group{group_idx_for_tensor}.{qtype}.{PPL_CHUNKS}.txt
         group_result_filename="bench_ppl${_kld}_result.group${group_idx_for_tensor}.${qtype}.${PPL_CHUNKS}.txt"
         # confirm it exists in directory listing
-        if ! printf '%s\n' "$all_bench_ppl_result_files" | grep -qF -- "$group_result_filename"; then
+        if ! grep -qF -- "$group_result_filename" <<< "$all_bench_ppl_result_files"; then
           # Only log the "missing group file" message once per (qtype, group).
           if [[ -z "${PROCESSED_GROUP_QTYPE[$proc_key]:-}" ]]; then
             echo "[$(timestamp)] No group PPL result file found for group #${group_idx_for_tensor}, qtype=${qtype}: expected '$group_result_filename'. Will fall back to individual tensor files (unless --groups-only is enabled)."
@@ -928,7 +928,7 @@ for qtype in "${QTYPES[@]}"; do
     # If we reach here: either grouping disabled, tensor not in group, OR group file not present -> handle per-tensor file
 
     result_file="bench_ppl${_kld}_result.${tensor_name}.${qtype}.${PPL_CHUNKS}.txt"
-    if ! printf '%s\n' "$all_bench_ppl_result_files" | grep -qF -- "$result_file"; then
+    if ! grep -qF -- "$result_file" <<< "$all_bench_ppl_result_files"; then
       # no individual file: leave empty
       continue
     fi
