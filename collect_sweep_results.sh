@@ -5,7 +5,7 @@
 #** the S_PP and S_TG values from bench_sweep_result.* files. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-27-2025 -------------------- **#
+#** --------------- Updated: Dec-28-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -354,7 +354,7 @@ declare -A PROCESSED_GROUP_QTYPE  # key: "qtype|groupidx" => 1 when group's resu
 
 # gather list of sweep result files in current dir matching context (includes group files)
 bench_files_list=$(
-  for f in ./* ./.?*; do
+  for f in ./bench_sweep_*.txt; do
     [ -e "$f" ] || continue    # skip non-matching globs
     [ -f "$f" ] && printf '%s\n' "${f##*/}"
   done 2>/dev/null
@@ -420,7 +420,7 @@ fi
 # If auto-baseline requested, attempt to read bench_sweep_result.baseline.<qtype>.<CONTEXT>.txt
 if [[ -n "$AUTO_BASELINE_QTYPE" ]]; then
   baseline_fname="bench_sweep_result.baseline.${AUTO_BASELINE_QTYPE,,}.${CONTEXT}.txt"
-  if printf '%s\n' "$all_bench_sweep_result_files" | grep -qF -- "$baseline_fname"; then
+  if grep -qF -- "$baseline_fname" <<< "$all_bench_sweep_result_files"; then
     parsed=$(extract_pp_tg_from_file "./${baseline_fname}" || true)
     if [[ -n "$parsed" ]]; then
       base_pp="${parsed%%|*}"
@@ -557,7 +557,7 @@ for qtype in "${QTYPES[@]}"; do
         # Look for group result file: bench_sweep_result.group{group_idx_for_tensor}.{qtype}.{CONTEXT}.txt
         group_result_filename="bench_sweep_result.group${group_idx_for_tensor}.${qtype}.${CONTEXT}.txt"
         # confirm it exists in directory listing
-        if ! printf '%s\n' "$all_bench_sweep_result_files" | grep -qF -- "$group_result_filename"; then
+        if ! grep -qF -- "$group_result_filename" <<< "$all_bench_sweep_result_files"; then
           # Only log the "missing group file" message once per (qtype, group).
           if [[ -z "${PROCESSED_GROUP_QTYPE[$proc_key]:-}" ]]; then
             echo "[$(timestamp) No group sweep result file found for group #${group_idx_for_tensor}, qtype=${qtype}: expected '$group_result_filename'. Will fall back to individual tensor files (unless --groups-only is enabled)."
