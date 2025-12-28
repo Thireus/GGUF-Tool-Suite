@@ -191,3 +191,11 @@ GLM-4.6|ubergarm|IQ3_KS|3.573|3.6427|https://huggingface.co/ubergarm/GLM-4.6-GGU
 GLM-4.6|ubergarm|IQ2_KL|3.070|4.1456|https://huggingface.co/ubergarm/GLM-4.6-GGUF/tree/main/IQ2_KL
 GLM-4.6|ubergarm|smol-IQ2_KS|2.359|5.2760|https://huggingface.co/ubergarm/GLM-4.6-GGUF/tree/main/smol-IQ2_KS
 GLM-4.6|ubergarm|smol-IQ1_KT|1.948|5.9034|https://huggingface.co/ubergarm/GLM-4.6-GGUF/tree/main/smol-IQ1_KT
+Kimi-K2-Thinking|ubergarm|Q4_X|4.549|2.0818|https://huggingface.co/ubergarm/Kimi-K2-Thinking-GGUF/tree/main/Q4_X
+Kimi-K2-Thinking|ubergarm|smol-IQ4_KSS|4.059|2.1343|https://huggingface.co/ubergarm/Kimi-K2-Thinking-GGUF/tree/main/smol-IQ4_KSS
+Kimi-K2-Thinking|ubergarm|IQ3_K|3.845|2.1456|https://huggingface.co/ubergarm/Kimi-K2-Thinking-GGUF/tree/main/IQ3_K
+Kimi-K2-Thinking|ubergarm|smol-IQ3_KS|3.249|2.2363|https://huggingface.co/ubergarm/Kimi-K2-Thinking-GGUF/tree/main/smol-IQ3_KS
+Kimi-K2-Thinking|ubergarm|IQ2_KL|2.920|2.3735|https://huggingface.co/ubergarm/Kimi-K2-Thinking-GGUF/tree/main/IQ2_KL
+Kimi-K2-Thinking|ubergarm|smol-IQ2_KL|2.755|2.4550|https://huggingface.co/ubergarm/Kimi-K2-Thinking-GGUF/tree/main/smol-IQ2_KL
+Kimi-K2-Thinking|ubergarm|smol-IQ2_KS|2.261|2.9361|https://huggingface.co/ubergarm/Kimi-K2-Thinking-GGUF/tree/main/smol-IQ2_KS
+Kimi-K2-Thinking|ubergarm|smol-IQ1_KT|1.832|3.5931|https://huggingface.co/ubergarm/Kimi-K2-Thinking-GGUF/tree/main/smol-IQ1_KT
