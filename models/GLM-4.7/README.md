@@ -1,11 +1,11 @@
 ---
 license: mit
 ---
-# Qwen3-235B-A22B-Instruct-2507
+# GLM-4.7
 
-## 🤔 What is this [HuggingFace repository](https://huggingface.co/Thireus/Qwen3-235B-A22B-Instruct-2507-THIREUS-BF16-SPECIAL_SPLIT/) about?
+## 🤔 What is this [HuggingFace repository](https://huggingface.co/Thireus/GLM-4.7-THIREUS-BF16-SPECIAL_SPLIT/) about?
 
-This repository provides **GGUF-quantized tensors** for the Qwen3-235B-A22B-Instruct-2507 model (official repo: https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507). These GGUF shards are designed to be used with **Thireus’ GGUF Tool Suite** (https://gguf.thireus.com), a collection of tools that automatically finds the perplexity-optimal mix of quantizations for any given VRAM and RAM target. With this GGUF Tool Suite, you can produce your own Dynamic 3.0 Quants recipes and achieve optimum accuracy & SOTA quantization performance.
+This repository provides **GGUF-quantized tensors** for the GLM-4.7 model (official repo: https://huggingface.co/zai-org/GLM-4.7). These GGUF shards are designed to be used with **Thireus’ GGUF Tool Suite** (https://gguf.thireus.com), a collection of tools that automatically finds the perplexity-optimal mix of quantizations for any given VRAM and RAM target. With this GGUF Tool Suite, you can produce your own Dynamic 3.0 Quants recipes and achieve optimum accuracy & SOTA quantization performance.
 
 - 📖 Read more: https://github.com/Thireus/GGUF-Tool-Suite  
 - 🔍 Example of GGUF recipes: https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples  
@@ -37,22 +37,23 @@ GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/Thireus/GGUF-Tool-Suite
 # Download model quant mix from recipe file - you can also try the web version: https://gguf.thireus.com/quant_downloader.html
 cd GGUF-Tool-Suite
 rm -f download.conf # Make sure to copy the relevant download.conf for the model before running quant_assign.py
-cp -f models/DeepSeek-R1-0528/download.conf . # Use the download.conf of the chosen model
+cp -f models/GLM-4.7/download.conf . # Use the download.conf of the chosen model
 mkdir -p kitchen && cd kitchen
-../quant_downloader.sh ../recipe_examples/ik_harmonized_recipes/DeepSeek-R1-0528.ROOT-2.7921bpw-3.4451ppl.218GB-GGUF_14GB-GPU_204GB-CPU.90e3c2f_6f5170d.recipe
+../quant_downloader.sh ../recipe_examples/ik_harmonized_recipes/GLM-4.7.ROOT-4.1636bpw-3.2647ppl.173GB-GGUF_12GB-GPU_160GB-CPU.90e3c2f_1ac651c.recipe
 
 # Other recipe examples can be found at https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples
 
-# Launch ik_llama's llama-cli:
+# Launch ik_llama's llama-server:
 ulimit -n 9999 # Lifts "too many open files" limitation on Linux
-~/ik_llama.cpp/build/bin/llama-cli \
-  -m DeepSeek-R1-0528-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
-  -mla 3 -fa auto -amb 512 -ctk f16 -c 4096 -ngl 99 \
-  -ot "blk\.(3|4|5|6)\.ffn_.*=CUDA0" \
-  -ot "blk\.(7|8|9|10)\.ffn_.*=CUDA1" \
+~/ik_llama.cpp/build/bin/llama-server \
+  -m GLM-4.7-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01762.gguf \
+  -fa auto -ctk f16 -c 4096 -ngl 99 \
+  -ot "blk\.([0-9]|[1-2][0-9]|3[0-6])\.ffn_.*=CUDA0" \
+  -ot "blk\.(37|38|39|[4-6][0-9]|7[0-2])\.ffn_.*=CUDA1" \
+  -ot "blk\.(7[3-9])\.ffn_.*=CUDA2" \
+  -ot "blk\.(8[0-9]|90|91|92)\.ffn_.*=CPU" \
   -ot exps=CPU -b 2048 -ub 1024 --warmup-batch --no-mmap --threads 36 \
-  --main-gpu 0 \
-  -p '<｜begin▁of▁sentence｜><｜User｜>What is the solution of x+5=-2?<｜Assistant｜><think>\n'
+  --main-gpu 0
 ```
 
 </details>
@@ -69,9 +70,9 @@ ulimit -n 9999 # Lifts "too many open files" limitation on Linux
 
 ## 📊 How does it compare to other GGUFs?
 
-Here’s how DeepSeek-R1-0528 quantized with **Thireus’ GGUF Tool Suite** stacks up against other quantizers (lower perplexity = better at equal or lower bpw):
+Here’s how GLM-4.7 quantized with **Thireus’ GGUF Tool Suite** stacks up against other quantizers (lower perplexity = better at equal or lower bpw):
 
-![PPLs Compared With Others](https://github.com/Thireus/GGUF-Tool-Suite/raw/main/ppl_graphs/DeepSeek-R1-0528.svg)
+![PPLs Compared With Others](https://github.com/Thireus/GGUF-Tool-Suite/raw/main/ppl_graphs/GLM-4.7.svg)
 
 > _Note: The `recipe_examples` files illustrate good recipes. The Tool Suite computes the optimal ppl/bpw curve for you — just specify your target RAM, VRAM, and quant types, and `quant_assign.py` finds the best mix._  
 

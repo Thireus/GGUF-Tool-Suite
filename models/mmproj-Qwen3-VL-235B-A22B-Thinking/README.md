@@ -16,12 +16,13 @@ Proceed with caution and keep an eye on the upstream PRs for any additional upda
 
 ## 🤔 What is this [HuggingFace repository](https://huggingface.co/Thireus/mmproj-Qwen3-VL-235B-A22B-Thinking-THIREUS-BF16-SPECIAL_SPLIT/) about?
 
-This repository provides **GGUF-quantized tensors** for the [mmproj](https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal.md) version of the mmproj-Qwen3-VL-235B-A22B-Thinking model (official repo: https://huggingface.co/Qwen/Qwen3-VL-235B-A22B-Thinking). These GGUF shards are designed to be used with **Thireus’ GGUF Tool Suite** (https://gguf.thireus.com), a collection of tools that automatically finds the perplexity-optimal mix of quantizations for any given VRAM and RAM target. With the Tool Suite, you can generate and download custom quantization “recipes” effortlessly.
+This repository provides **GGUF-quantized tensors** for the [mmproj](https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal.md) version of the mmproj-Qwen3-VL-235B-A22B-Thinking model (official repo: https://huggingface.co/Qwen/Qwen3-VL-235B-A22B-Thinking). These GGUF shards are designed to be used with **Thireus’ GGUF Tool Suite** (https://gguf.thireus.com), a collection of tools that automatically finds the perplexity-optimal mix of quantizations for any given VRAM and RAM target. With this GGUF Tool Suite, you can produce your own Dynamic 3.0 Quants recipes and achieve optimum accuracy & SOTA quantization performance.
 
 - 📖 Read more: https://github.com/Thireus/GGUF-Tool-Suite  
-- 🔍 Example quant mixes: https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples  
-- 🛠️ Create your own recipe: https://colab.research.google.com/github/Thireus/GGUF-Tool-Suite/blob/main/quant_recipe_pipeline.ipynb  
-- 📂 Browse available quant shards: https://huggingface.co/Thireus/collections  
+- 🔍 Example of GGUF recipes: https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples  
+- ☁️ Download GGUF models from recipe files: https://gguf.thireus.com/quant_downloader.html  
+- 🛠️ Create your own recipes: https://colab.research.google.com/github/Thireus/GGUF-Tool-Suite/blob/main/quant_recipe_pipeline.ipynb  
+- 📂 Browse available models: https://gguf.thireus.com  
 
 *tl;dr: Expand the details section below*
 <details>
@@ -44,7 +45,7 @@ cd ..
 # Obtain Thireus' GGUF-Tool-Suite
 GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/Thireus/GGUF-Tool-Suite
 
-# Download model quant mix from recipe file:
+# Download model quant mix from recipe file - you can also try the web version: https://gguf.thireus.com/quant_downloader.html
 cd GGUF-Tool-Suite
 rm -f download.conf # Make sure to copy the relevant download.conf for the model before running quant_assign.py
 cp -f models/mmproj-Qwen3-VL-235B-A22B-Thinking/download.conf . # Use the download.conf of the chosen model
@@ -97,7 +98,7 @@ Check out the [GGUF Tool Suite README](https://github.com/Thireus/GGUF-Tool-Suit
 
 1. ⚠️ **Requirements** – Which `ik_llama.cpp` (or `llama.cpp`) version to use and how to compile.  
    - Windows binaries (no patching needed) at: https://github.com/Thireus/ik_llama.cpp/releases  
-2. 📥 **Download Model Shards** – Use `quant_downloader.sh` to fetch GGUF shards from any recipe.  
+2. 📥 **Download Model Shards** – Use `quant_downloader.sh` or [quant_downloader.html](https://gguf.thireus.com/quant_downloader.html) to fetch GGUF shards from any recipe.  
    - Recipe examples: https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples  
 3. 🧠 **Run a Downloaded Model** – Sample usage with `llama-cli`.  
 4. 🛠️ **Generate a Custom Recipe** – Produce recipes tailored to your VRAM/RAM target usage for optimum perplexity.  
@@ -114,7 +115,7 @@ Supported models are listed under `models/` in the [Tool Suite Github repo](http
 
 No, because I believe in **tailored quantization** for each user’s hardware. If you prefer ready-made shards, you are welcome to merge them via `llama-gguf-split --merge`, or request someone to publish them, or rely on generic GGUF dynamic quants such as [unsloth](https://huggingface.co/unsloth)'s.
 
-Instead, I prefer to share examples of recipes so users can see exactly how they were produced (command included inside these recipe files) and tweak them for their own rigs. The `quant_downloader.sh` script handles automatic fetching and verification of each shard. Note that recipes provided by [Ubergarm](https://huggingface.co/ubergarm) on his model cards are also compatible with `quant_downloader.sh`.
+Instead, I prefer to share examples of recipes so users can see exactly how they were produced (command included inside these recipe files) and tweak them for their own rigs. The `quant_downloader.sh` script or [quant_downloader.html](https://gguf.thireus.com/quant_downloader.html) (web port of this script) handles automatic fetching and verification of each shard. Note that recipes provided by [Ubergarm](https://huggingface.co/ubergarm) on his model cards are also compatible with `quant_downloader.sh` and [quant_downloader.html](https://gguf.thireus.com/quant_downloader.html), providing a "SPECIAL_SPLIT" version of these models exists (see https://gguf.thireus.com/).
 
 Users who don’t trust the GGUF shards on HuggingFace can also quantize their own by passing recipe lines to `llama-quantize --custom-q` ([see example](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/models/mmproj-Qwen3-VL-235B-A22B-Thinking/mmproj-Qwen3-VL-235B-A22B-Thinking-THIREUS-ANY-SPECIAL.sh#L482-L486)). Run `llama-quantize --help` to list compatible quants for `quant_assign.py`. This approach is especially useful if you prefer `llama.cpp` over `ik_llama.cpp`.  
 
