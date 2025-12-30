@@ -8,4 +8,11 @@ else
 fi
 
 # Find CSV files and save to csv_list.txt
-$FIND_CMD . -name "*.csv" -printf "%P\n" > csv_list.txt
+$FIND_CMD . -name "*.csv" \
+  -not -path "*/maps/*" \
+  -not -path "*/outdated_results/*" \
+  -not -path "*/benchmark_logs/*" \
+  -not -path "*/benchmark_files/*" \
+  -not -path "*/group0_logs/*" \
+  -not -path "*/group0_files/*" \
+  -printf "%P\n" > csv_list.txt
