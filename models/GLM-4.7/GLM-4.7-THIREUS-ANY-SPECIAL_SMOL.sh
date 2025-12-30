@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** GLM-4.7-THIREUS-ANY-SPECIAL.sh used for model quant.      **#
-#** purpose. Adjust $1 in $custom to your needs!              **#
+#** GLM-4.7-THIREUS-ANY-SPECIAL_SMOL.sh used for iq1_m*       **#
+#** qyptes only. Adjust $1 in $custom!                        **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Dec-29-2025 -------------------- **#
+#** --------------- Updated: Dec-30-2025 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -42,15 +42,19 @@ custom="
 
 ## Multi-headed attention parameters — qbits: 32 16 
 ^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_norm\.weight$=f32
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_v\.weight$=$1
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_output\.weight$=$1
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k\.weight$=$1
+^blk\.([0-9]|[1-8][0-9]|9[0-1])\.attn_v\.weight$=$1
+^blk\.(92)\.attn_v\.weight$=iq2_ks
+^blk\.([0-9]|[1-8][0-9]|9[0-1])\.attn_output\.weight$=$1
+^blk\.(92)\.attn_output\.weight$=iq2_ks
+^blk\.([0-9]|[1-8][0-9]|9[0-1])\.attn_k\.weight$=$1
+^blk\.(92)\.attn_k\.weight$=iq2_ks
 ^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k_norm\.weight$=f32
 ^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_v\.bias$=f32
 ^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q\.bias$=f32
 ^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q_norm\.weight$=f32
 ^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k\.bias$=f32
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q\.weight$=$1
+^blk\.([0-9]|[1-8][0-9]|9[0-1])\.attn_q\.weight$=$1
+^blk\.(92)\.attn_q\.weight$=iq2_ks
 
 ## Dense Feed-Forward Network weights — qbits: 16 
 ^blk\.[0-2]\.ffn_down\.weight$=$1
@@ -58,10 +62,10 @@ custom="
 ^blk\.[0-2]\.ffn_gate\.weight$=$1
 
 ## NextN tensors — qbits: 32 16 
-^blk\.92\.nextn\.embed_tokens\.weight$=$1
+^blk\.92\.nextn\.embed_tokens\.weight$=iq2_ks
 ^blk\.92\.nextn\.enorm\.weight$=f32
-^blk\.92\.nextn\.eh_proj\.weight$=$1
-^blk\.92\.nextn\.shared_head_head\.weight$=$1
+^blk\.92\.nextn\.eh_proj\.weight$=iq2_ks
+^blk\.92\.nextn\.shared_head_head\.weight$=iq2_ks
 ^blk\.92\.nextn\.shared_head_norm\.weight$=f32
 ^blk\.92\.nextn\.hnorm\.weight$=f32
 
@@ -74,23 +78,29 @@ custom="
 
 ## GPU-loaded - MoE Shared Experts Feed-Forward Network - ffn_*_shexp
 # ffn_down_shexp — down-projection (shared experts) — qbits: 16 
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_down_shexp\.weight$=$1
+^blk\.([3-9]|[1-8][0-9]|9[0-1])\.ffn_down_shexp\.weight$=$1
+^blk\.(92)\.ffn_down_shexp\.weight$=iq2_ks
 
 # ffn_up_shexp — up-projection (shared experts) — qbits: 16 
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_up_shexp\.weight$=$1
+^blk\.([3-9]|[1-8][0-9]|9[0-1])\.ffn_up_shexp\.weight$=$1
+^blk\.(92)\.ffn_up_shexp\.weight$=iq2_ks
 
 # ffn_gate_shexp — gating network (shared experts) — qbits: 16 
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_shexp\.weight$=$1
+^blk\.([3-9]|[1-8][0-9]|9[0-1])\.ffn_gate_shexp\.weight$=$1
+^blk\.(92)\.ffn_gate_shexp\.weight$=iq2_ks
 
 ## CPU-friendly - MoE Per-expert Feed-Forward Network - ffn_*_exps
 # ffn_down_exps — down-projection (per-expert) — qbits: 16 
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_down_exps\.weight$=$1
+^blk\.([3-9]|[1-8][0-9]|9[0-1])\.ffn_down_exps\.weight$=$1
+^blk\.(92)\.ffn_down_exps\.weight$=iq2_ks
 
 # ffn_up_exps — up-projection (per-expert) — qbits: 16 
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_up_exps\.weight$=$1
+^blk\.([3-9]|[1-8][0-9]|9[0-1])\.ffn_up_exps\.weight$=$1
+^blk\.(92)\.ffn_up_exps\.weight$=iq2_ks
 
 # ffn_gate_exps — gating network (per-expert) — qbits: 16 
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_exps\.weight$=$1
+^blk\.([3-9]|[1-8][0-9]|9[0-1])\.ffn_gate_exps\.weight$=$1
+^blk\.(92)\.ffn_gate_exps\.weight$=iq2_ks
 
 
 
