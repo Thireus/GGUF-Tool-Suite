@@ -392,6 +392,9 @@ Big thanks to **ubergarm** for his support and for providing the invaluable **`i
 📄 Ubergarm's `imatrix` for Qwen3-Coder-480B-A35B-Instruct can be found here:  
 🔗 [imatrix_Qwen3-Coder-480B-A35B-Instruct_ubergarm.dat](https://huggingface.co/ubergarm/Qwen3-Coder-480B-A35B-Instruct-GGUF/blob/main/imatrix-Qwen3-Coder-480B-A35B-Instruct-Q8_0.dat)
 
+📄 Ubergarm's `imatrix` for GLM-4.7 can be found here:  
+🔗 [imatrix_GLM-4.7_ubergarm.dat](https://huggingface.co/ubergarm/GLM-4.7-GGUF/blob/main/imatrix-GLM-4.7-BF16.dat)
+
 📄 Ubergarm's `imatrix` for GLM-4.6 can be found here:  
 🔗 [imatrix_GLM-4.6_ubergarm.dat](https://huggingface.co/ubergarm/GLM-4.6-GGUF/blob/main/imatrix-GLM-4.6-BF16.dat)
 
