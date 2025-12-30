@@ -35,58 +35,60 @@ _debug() {
 custom="
 ## Quant mix recipe created using Thireus' GGUF Tool Suite - https://gguf.thireus.com/
 
-## Model head & embeddings
-^token_embd\.weight$=$1
+## Model head & embeddings — qbits: 32 16
 ^output\.weight$=$1
+^token_embd\.weight$=$1
 ^output_norm\.weight$=f32
 
-## Multi-headed attention parameters
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_v\.bias$=f32
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_v\.weight$=$1
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q\.weight$=$1
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_output\.weight$=$1
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k\.weight$=$1
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q\.bias$=f32
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q_norm\.weight$=f32
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k_norm\.weight$=f32
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k\.bias$=f32
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_norm\.weight$=f32
+## Special attention kernels — single-quant only (llama-quantize takes care of it) — qbits: 16
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight$=$1
 
-## Core FFN weights
-^blk\.[0-2]\.ffn_down\.weight$=$1
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_inp\.weight$=f32
-^blk\.[0-2]\.ffn_gate\.weight$=$1
-^blk\.[0-2]\.ffn_up\.weight$=$1
+## Multi-headed attention parameters — qbits: 32 16
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_mqa\.weight$=$1
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_norm\.weight$=f32
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_norm\.weight$=f32
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_output\.weight$=$1
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a\.weight$=$1
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a_norm\.weight$=f32
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_q_b\.weight$=$1
+^blk\.([0-9]|[1-5][0-9]|60)\.attn_v_b\.weight$=$1
 
-## Other tensors
-^blk\.92\.nextn\.embed_tokens\.weight$=$1
-^blk\.92\.nextn\.shared_head_head\.weight$=$1
-^blk\.92\.nextn\.shared_head_norm\.weight$=f32
-^blk\.92\.nextn\.enorm\.weight$=f32
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.post_attention_norm\.weight$=f32
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.exp_probs_b\.bias$=f32
-^blk\.92\.nextn\.eh_proj\.weight$=$1
-^blk\.92\.nextn\.hnorm\.weight$=f32
+## Dense Feed-Forward Network weights — qbits: 16
+^blk\.0\.ffn_down\.weight$=$1
+^blk\.0\.ffn_up\.weight$=$1
 
-## GPU-loaded ffn_*_shexp
-# ffn_down_shexp (down-projection)
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_down_shexp\.weight$=$1
+## MoE Gating & Routing — qbits: 32
+^blk\.([1-9]|[1-5][0-9]|60)\.exp_probs_b\.bias$=f32
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_gate_inp\.weight$=f32
 
-# ffn_up_shexp (up-projection)
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_up_shexp\.weight$=$1
+## Gating network — qbits: 16
+^blk\.0\.ffn_gate\.weight$=$1
 
-# ffn_gate_shexp (gate-projection)
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_shexp\.weight$=$1
+## Misc / Other tensors — qbits: 32
+^blk\.([0-9]|[1-5][0-9]|60)\.ffn_norm\.weight$=f32
 
-## CPU-friendly ffn_*_exps
-# ffn_down_exps (down-extraction)
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_down_exps\.weight$=$1
+## GPU-loaded - MoE Shared Experts Feed-Forward Network - ffn_*_shexp
+# ffn_down_shexp — down-projection (shared experts) — qbits: 16
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_down_shexp\.weight$=$1
 
-# ffn_up_exps (up-extraction)
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_up_exps\.weight$=$1
+# ffn_up_shexp — up-projection (shared experts) — qbits: 16
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_up_shexp\.weight$=$1
 
-# ffn_gate_exps (gate-extraction)
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_exps\.weight$=$1
+# ffn_gate_shexp — gating network (shared experts) — qbits: 16
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_gate_shexp\.weight$=$1
+
+## CPU-friendly - MoE Per-expert Feed-Forward Network - ffn_*_exps
+# ffn_down_exps — down-projection (per-expert) — qbits: 16
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight$=$1
+
+# ffn_up_exps — up-projection (per-expert) — qbits: 16
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight$=$1
+
+# ffn_gate_exps — gating network (per-expert) — qbits: 16
+^blk\.([1-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight$=$1
+
+
+## THE END!
 "
 
 #custom="
