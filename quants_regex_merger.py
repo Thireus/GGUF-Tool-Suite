@@ -5,7 +5,7 @@
 #** tensors are the heaviest, thus to be benchmarked.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Dec-29-2025 -------------------- **#
+#** --------------- Updated: Jan-02-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -49,16 +49,13 @@ from typing import List, Dict, Tuple
 
 DEBUG = os.environ.get("DEBUG", "0") == "1"
 
-
 def _debug(*args):
     if not DEBUG:
         return
     print("[DEBUG]", *args, file=sys.stderr)
 
-
 # Capture outputs in list and also print them (like the bash script's echo override)
 OUTPUTS: List[str] = []
-
 
 def out(msg: str = ""):
     """Append to OUTPUTS and print to stdout (with newline)."""
@@ -67,7 +64,6 @@ def out(msg: str = ""):
         msg = msg[:-1]
     OUTPUTS.append(msg)
     print(msg)
-
 
 # -----------------------
 # sha256 helper detection
@@ -80,9 +76,9 @@ def out(msg: str = ""):
 # -----------------------
 def build_range_regex(S: int, E: int) -> str:
     """
-    Re-implement build_range_regex from the bash script.
-    Returns a joined alternation (with |) describing numbers/ranges between S and E.
-    """
+        Re-implement build_range_regex from the bash script.
+        Returns a joined alternation (with |) describing numbers/ranges between S and E.
+        """
     _debug("    build_range_regex S=%s E=%s", S, E)
     parts: List[str] = []
     full_decades: List[int] = []
@@ -158,7 +154,6 @@ def build_range_regex(S: int, E: int) -> str:
     joined = "|".join(parts)
     _debug("    build_range_regex returns %s", joined)
     return joined
-
 
 # --------------------------------------------------------------------------------
 # shorten_regex_list(): collapse consecutive blk.N (and similar) lines
@@ -240,7 +235,6 @@ def shorten_regex_list(lines: List[str]) -> List[str]:
             out_lines.append(f"^{prefix}\\.{block_regex}\\.{suffix}")
 
     return out_lines
-
 
 # -----------------------------------------------------------------------------------------
 # optimise_regex_list(): merges consecutive bracket-prefix/suffix pieces
@@ -421,7 +415,6 @@ def optimise_regex_list(lines: List[str]) -> List[str]:
 
     return out_lines
 
-
 # ---------------------------------------------------------------------------------------------
 # expand_ranges(): separate regex range entries if not supported by llama-quantize
 # ---------------------------------------------------------------------------------------------
@@ -484,7 +477,6 @@ def expand_ranges(lines: List[str]) -> List[str]:
                 expanded_lines.append(f"{prefix}{part}{suffix}")
 
     return expanded_lines
-
 
 # -------------------------------------------------------------------
 # reorder_and_group(): reorganise and group the final output
@@ -708,7 +700,6 @@ def reorder_and_group(lines: List[str], model_name: str = "", model_link: str = 
 
     return out_lines
 
-
 # extract_summaries
 def extract_summaries(custom_text: str) -> List[str]:
     lines = custom_text.splitlines()
@@ -730,7 +721,6 @@ def extract_summaries(custom_text: str) -> List[str]:
                 result.append(ln)
     return result
 
-
 # -----------------------
 # MAIN
 # -----------------------
@@ -742,6 +732,7 @@ def main():
     parser.add_argument("--model-name", dest="model_name", type=str, default="", help="Optional. Prepends NAME to the output filename.")
     parser.add_argument("--model-link", dest="model_link", type=str, default="", help="Optional. Link to original model.")
     parser.add_argument("--add-ppl", dest="add_ppl", type=str, default="", help="Optional. Adds VALUE_PPL right after username in the filename.")
+    parser.add_argument("--input", dest="input_file", type=str, default="", help="Optional. Read custom regex block from FILE instead of stdin.")
     args = parser.parse_args()
 
     # Validate add_ppl numeric
@@ -757,13 +748,23 @@ def main():
         except Exception:
             PPL = f"{float(raw_ppl):.4f}"
 
-    # If stdin piped, read; otherwise use default
-    if not sys.stdin.isatty():
-        _debug("Reading custom from stdin")
-        custom = sys.stdin.read()
+    # If --input provided, read file; else if stdin piped, read; otherwise use default
+    if args.input_file:
+        _debug("Reading custom from input file: %s", args.input_file)
+        try:
+            with open(args.input_file, "r", encoding="utf-8") as fh:
+                custom = fh.read()
+        except Exception as e:
+            print(f"Error: could not read input file {args.input_file}: {e}", file=sys.stderr)
+            sys.exit(1)
     else:
-        custom = r"""
-^blk\.15\.attn_norm\.weight$=f32
+        # If stdin piped, read; otherwise use default
+        if not sys.stdin.isatty():
+            _debug("Reading custom from stdin")
+            custom = sys.stdin.read()
+        else:
+            custom = r"""
+  ^blk\.15\.attn_norm\.weight$=f32
 ^blk\.15\.exp_probs_b\.bias$=f32
 ^blk\.15\.ffn_gate_inp\.weight$=f32
 ^blk\.15\.ffn_down_shexp\.weight$=bf16
@@ -1860,6 +1861,7 @@ def main():
 ^blk\.27\.ffn_gate_exps\.weight$=bf16
 ^blk\.27\.ffn_up_exps\.weight$=bf16
 """
+
     # Prepare the line pipeline:
     # grep -v '^#' | grep -v '^$' | shorten_regex_list | optimise_regex_list | reorder_and_group
 
@@ -1962,7 +1964,6 @@ def main():
             sys.exit(1)
     else:
         out(f"# --no-file: would have written to {filename}")
-
 
 if __name__ == "__main__":
     main()
