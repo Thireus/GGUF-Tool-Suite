@@ -1927,11 +1927,50 @@ def main():
                 # So we do NOT include the marker line itself; include subsequent lines only.
                 continue
         else:
-            # remove any leading '# - Command used: ' if present and remove backslashes
+            # remove any leading '# - Command used: ' if present and remove trailing backslashes (only at end of line)
             l = re.sub(r"^# - Command used:\s*", "", ln)
-            l = l.replace("\\", "")
+            l = re.sub(r"\\+$", "", l)
             fullCmd_lines.append(l)
-    fullCmd = "".join(fullCmd_lines)
+
+    # The bash pipeline then restricted to a block of comment lines and transformed them:
+    #   sed -n '/^#/,/^# /p'   (select a contiguous comment block)
+    #   sed -E 's/^# //;s/\\$//' (remove leading '# ' and trailing backslashes)
+    #   tr '\n' ' ' | sed 's/  */ /g;s/^ //;s/ $//'  (join with spaces and normalize)
+    #
+    # Implement the same behavior in Python: find the first contiguous block of lines that start with '#'
+    # and take all of those lines (stop when a non-comment line is encountered).
+    block_lines = []
+    in_block = False
+    for l in fullCmd_lines:
+        if not in_block:
+            if l.startswith("#"):
+                in_block = True
+                block_lines.append(l)
+            else:
+                # skip lines until the first comment line
+                continue
+        else:
+            if l.startswith("#"):
+                block_lines.append(l)
+            else:
+                # stop at the first non-comment line after the block
+                break
+
+    # Now remove a leading '# ' (only that exact sequence) and strip any trailing backslashes again,
+    # join with spaces, compress multiple spaces and trim.
+    transformed = []
+    for l in block_lines:
+        l = re.sub(r"^# ", "", l)
+        l = re.sub(r"\\+$", "", l)
+        transformed.append(l)
+
+    if transformed:
+        fullCmd = " ".join(transformed)
+        # compress runs of whitespace to a single space and trim ends (mimics sed 's/  */ /g;s/^ //;s/ $//')
+        fullCmd = re.sub(r"\s+", " ", fullCmd).strip()
+    else:
+        fullCmd = ""
+
     if fullCmd:
         cmdPart = hashlib.sha256(fullCmd.encode("utf-8")).hexdigest()[:7]
     else:
