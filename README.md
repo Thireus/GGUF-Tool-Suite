@@ -18,6 +18,26 @@
 
 ---
 
+<h3 align="center">🔥 Cook High Quality Custom GGUF Dynamic Quants in 3 Steps</h3>
+
+*✨ Target exact VRAM/RAM sizes. Mix quantization types. Done in minutes!*
+
+#### Step 1 - 🍳 Automatically make a GGUF recipe sized perfectly for your hardware with **[quant_assign.html](https://gguf.thireus.com/quant_assign.html)**
+
+#### Step 2 - ☁️ Download your GGUF using your recipe with **[quant_downloader.html](https://gguf.thireus.com/quant_downloader.html)**
+
+#### Step 3 - 🚀 Run anywhere - Use **llama.cpp**, **ik_llama.cpp**, or any GGUF-compatible framework.
+
+<br>
+📚 Useful Resources:
+
+- **🔍 Recipe Examples:** [GitHub](https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples)
+- **📂 Model Browser:** [gguf.thireus.com](https://gguf.thireus.com)
+
+<br>
+
+---
+
 ### 🔧 How to Download Models Locally
 
 You can download and store desired quantised models locally using the following example:
@@ -90,6 +110,7 @@ See which models are officially supported:
 | [Qwen3-4B-Instruct-2507](https://huggingface.co/collections/Thireus/Qwen3-4B-Instruct-2507-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶✅ Tested and Working<br>🅴✅ Tested and Working | Just a proof of concept that this tool suite isn't limited to massive models. |
 | [Qwen3-4B-Thinking-2507](https://huggingface.co/collections/Thireus/qwen3-4b-thinking-2507-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | Just a proof of concept that this tool suite isn't limited to massive models. |
 | [Qwen3-Coder-480B-A35B-Instruct](https://huggingface.co/collections/Thireus/qwen3-coder-480b-a35b-instruct-thireus-special-split) |🅲✅ Complete<br>🆀✅ Best effort (a few quants are still missing)<br>🅶✅ Tested and Working<br>🅴✅ Yes | Looks like [iq3\_k is faulty](https://huggingface.co/Thireus/Qwen3-Coder-480B-A35B-Instruct-THIREUS-IQ3\_K-SPECIAL\_SPLIT/discussions/1) - avoid using it. Good coding abilities and excellent compatibility with [Cline](https://github.com/cline/cline)/[Kilo Code](https://github.com/Kilo-Org/kilocode)/[Roo Code](https://github.com/RooCodeInc/Roo-Code) for [Visual Studio Code](https://code.visualstudio.com/Download) using "Openai Compatible" API provider. |
+| [GLM-4.7](https://huggingface.co/collections/Thireus/glm-47-thireus-special-split) |🅲⚠️ In progress...<br>🆀⚠️ In progress...<br>🅶⚠️ Untested<br>🅴⚠️ Not evaluated | Similar to GLM-4.6. |
 | [GLM-4.6](https://huggingface.co/collections/Thireus/glm-46-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶✅ Tested and Working<br>🅴✅ Yes | Less constraining to quantize than GLM-4.5 or GLM-4.5-Air, and recipes are straightforward. |
 | [GLM-4.5](https://huggingface.co/collections/Thireus/glm-45-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶✅ Tested and Working<br>🅴✅ Yes | Users are encouraged to read [the following methodology](https://huggingface.co/ubergarm/GLM-4.5-GGUF/discussions/6#68c786f1d0c6560e153b786a) which provides advanced techniques and tips to produce high quality GLM-4.5 recipes using this tool suite. |
 | [GLM-4.5-Air](https://huggingface.co/collections/Thireus/glm-45-air-thireus-special-split) |🅲✅ Complete<br>🆀✅ Complete<br>🅶✅ Tested and Working<br>🅴✅ Yes | Similar to GLM-4.5. |
@@ -240,6 +261,8 @@ ulimit -n 9999 # Required on Linux - Also make sure you have compiled ik_llama.c
 ---
 
 ## 🛠️ Generate a Custom Recipe for Your Config
+
+> 🎉 A web-based port of quant_assign.sh is available at https://gguf.thireus.com/quant_assign.html
 
 > Recipe files can also be turned back into Google Colab pipeline parameters - [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Thireus/GGUF-Tool-Suite/blob/main/recipe_to_colab_params.ipynb) or locally with `recipe_to_colab_params.py`.
 
