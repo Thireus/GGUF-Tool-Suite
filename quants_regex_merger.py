@@ -1930,8 +1930,6 @@ def main():
             l = l.replace("\\", "")
             fullCmd_lines.append(l)
     fullCmd = "".join(fullCmd_lines)
-    out("# DEBUG:")
-    out(fullCmd) # Testing something
     if fullCmd:
         cmdPart = hashlib.sha256(fullCmd.encode("utf-8")).hexdigest()[:7]
     else:
