@@ -1914,32 +1914,22 @@ def main():
     gsha = m.group(1) if m else ""
     shaPart = gsha[:7] if gsha else "0000000"
 
-    # Extract full command block from the *last* "# - Command used:" entry,
-    # concatenate lines, then take first 7 chars later as before.
-    #
-    # sed equivalent (but for the last occurrence):
-    # take lines AFTER the last line matching '^# - Command used:',
-    # remove '# - Command used: ' from lines if present,
-    # then remove trailing backslashes and join without newlines.
-
-    lines = all_text.splitlines()
-
-    # Step 1: find the index of the LAST marker line
-    last_marker_idx = None
-    for i, ln in enumerate(lines):
-        if ln.startswith("# - Command used:"):
-            last_marker_idx = i
-
-    # Step 2: collect lines only after the last marker (if any)
+    # Extract full command block, concatenate lines, then first 7 chars
+    # sed equivalent: take lines AFTER the first line matching '^# - Command used:' and remove '# - Command used: ' from lines if present, then remove backslashes, join without newlines.
     fullCmd_lines = []
-    if last_marker_idx is not None:
-        for ln in lines[last_marker_idx + 1:]:
-            # remove any leading '# - Command used: ' if present
+    found = False
+    for ln in all_text.splitlines():
+        if not found:
+            if ln.startswith("# - Command used:"):
+                found = True
+                # this line is the marker itself; the sed in original deleted up to that line, then started printing following lines;
+                # but sed pattern '1,/^# - Command used:/d; s/^# - Command used: //; ...' deletes up to that line, i.e. printing only lines after it.
+                # So we do NOT include the marker line itself; include subsequent lines only.
+                continue
+        else:
+            # remove any leading '# - Command used: ' if present and remove trailing backslashes (only at end of line)
             l = re.sub(r"^# - Command used:\s*", "", ln)
-
-            # remove trailing backslashes (only at end of line)
             l = re.sub(r"\\+$", "", l)
-
             fullCmd_lines.append(l)
 
     # The bash pipeline then restricted to a block of comment lines and transformed them:
