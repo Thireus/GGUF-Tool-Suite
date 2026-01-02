@@ -1920,7 +1920,7 @@ def main():
 
     # Extract integer GPU+CPU GiB or default to 0
     m = re.search(r"^# GPU\+CPU Total: ([0-9]+)\..*$", all_text, flags=re.M)
-    totalGiB = int(m.group(1)) if m else 0
+    totalGiB = int(m.group(1)) if m else gpuGiB+cpuGiB
 
     # Extract BPW or default to 0
     m = re.search(r"^# -Average BPW: ([0-9]+\.[0-9]+).*$", all_text, flags=re.M)
