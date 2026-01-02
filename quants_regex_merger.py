@@ -2005,4 +2005,5 @@ def main():
         out(f"# --no-file: would have written to {filename}")
 
 if __name__ == "__main__":
+    OUTPUTS = []
     main()
