@@ -5,7 +5,7 @@
 #** regex for llama-quantize consumption.                     **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Oct-05-2025 -------------------- **#
+#** --------------- Updated: Jan-02-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -2006,7 +2006,10 @@ shaPart=${gsha:0:7}
 # Extract full command block, concatenate lines, then first 7 chars
 fullCmd=$(printf "%s\n" "$all" \
   | sed -E -n '1,/^# - Command used:/d; s/^# - Command used: //; s/\\$//g; p' \
-  | tr -d '\\n')
+  | sed -n '/^#/,/^# /p' \
+  | sed -E 's/^# //;s/\\$//' \
+  | tr '\n' ' ' \
+  | sed 's/  */ /g;s/^ //;s/ $//')
 
 # compute first 7 chars of SHA-256 of $fullCmd, if possible
 if command -v _sha256sum >/dev/null 2>&1; then
