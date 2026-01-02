@@ -54,15 +54,21 @@ def _debug(*args):
         return
     print("[DEBUG]", *args, file=sys.stderr)
 
-# Capture outputs in list and also print them (like the bash script's echo override)
-OUTPUTS: List[str] = []
-
+# Capture outputs and print them (like the bash script's echo override).
+# NOTE: to avoid a persistent module-level global that accumulates across repeated
+# calls to main() in the same interpreter, the actual per-run outputs list is
+# attached to the 'out' function as out._outputs and is initialized at the start
+# of main(). This keeps the rest of the script unchanged while ensuring each
+# run of main() gets a fresh outputs list.
 def out(msg: str = ""):
-    """Append to OUTPUTS and print to stdout (with newline)."""
+    """Append to the current run's outputs (if initialized) and print to stdout (with newline)."""
     # ensure not to append trailing newline twice
     if msg.endswith("\n"):
         msg = msg[:-1]
-    OUTPUTS.append(msg)
+    # Append to per-run outputs list if initialized on the function
+    outputs = getattr(out, "_outputs", None)
+    if outputs is not None:
+        outputs.append(msg)
     print(msg)
 
 # -----------------------
@@ -734,6 +740,17 @@ def main():
     parser.add_argument("--add-ppl", dest="add_ppl", type=str, default="", help="Optional. Adds VALUE_PPL right after username in the filename.")
     parser.add_argument("--input", dest="input_file", type=str, default="", help="Optional. Read custom regex block from FILE instead of stdin.")
     args = parser.parse_args()
+
+    # Initialize per-run outputs storage as a plain local list (do NOT attach it to a function).
+    outputs: List[str] = []
+
+    # Local out() that appends to the per-run outputs list and prints.
+    def out(msg: str = ""):
+        """Append to the current run's outputs and print to stdout (with newline)."""
+        if msg.endswith("\n"):
+            msg = msg[:-1]
+        outputs.append(msg)
+        print(msg)
 
     # Validate add_ppl numeric
     PPL = ""
@@ -1891,7 +1908,7 @@ def main():
             out(ln)
 
     # At script end: extract metrics and generate filename
-    all_text = "\n".join(OUTPUTS)
+    all_text = "\n".join(outputs)
 
     # Extract integer GPU GiB or default to 0
     m = re.search(r"^# GPU Total: ([0-9]+)\..*$", all_text, flags=re.M)
@@ -1914,8 +1931,7 @@ def main():
     gsha = m.group(1) if m else ""
     shaPart = gsha[:7] if gsha else "0000000"
 
-    # Extract full command block, concatenate lines, then first 7 chars
-    # sed equivalent: take lines AFTER the first line matching '^# - Command used:' and remove '# - Command used: ' from lines if present, then remove backslashes, join without newlines.
+    # Extract full command block...
     fullCmd_lines = []
     found = False
     for ln in all_text.splitlines():
@@ -1993,10 +2009,10 @@ def main():
         filename = f"{args.model_name}.{filename}"
 
     if not args.no_file:
-        # Write OUTPUTS to file
+        # Write outputs to file
         try:
             with open(filename, "w", encoding="utf-8") as fh:
-                fh.write("\n".join(OUTPUTS) + "\n")
+                fh.write("\n".join(outputs) + "\n")
             out(f"# Saved recipe to file: {filename}")
         except Exception as e:
             print(f"Error: could not write file {filename}: {e}", file=sys.stderr)
@@ -2005,5 +2021,4 @@ def main():
         out(f"# --no-file: would have written to {filename}")
 
 if __name__ == "__main__":
-    OUTPUTS = []
     main()
