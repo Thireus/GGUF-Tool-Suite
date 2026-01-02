@@ -9,8 +9,8 @@ This repository provides **GGUF-quantized tensors** for the DeepSeek-V3.1 model 
 
 - 📖 Read more: https://github.com/Thireus/GGUF-Tool-Suite  
 - 🔍 Example of GGUF recipes: https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples  
+- 🍳 Cook your own recipe files: https://gguf.thireus.com/quant_assign.html  
 - ☁️ Download GGUF models from recipe files: https://gguf.thireus.com/quant_downloader.html  
-- 🛠️ Create your own recipes: https://colab.research.google.com/github/Thireus/GGUF-Tool-Suite/blob/main/quant_recipe_pipeline.ipynb  
 - 📂 Browse available models: https://gguf.thireus.com  
 
 *tl;dr: Expand the details section below*

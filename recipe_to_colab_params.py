@@ -5,7 +5,7 @@
 #** Colab pipeline parameters for quant_recipe_pipeline.ipynb **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Dec-27-2025 -------------------- **#
+#** --------------- Updated: Jan-01-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -42,36 +42,36 @@ REPLACE_TO = "https://github.com/Thireus/GGUF-Tool-Suite/"
 # Complete defaults requested
 DEFAULTS: Dict[str, Any] = {
     "repo_url": "https://github.com/Thireus/GGUF-Tool-Suite.git",
-    "model_name": "DeepSeek-R1-0528",
-    "model_link": "https://huggingface.co/deepseek-ai/DeepSeek-R1-0528",
+    "model_name": "",
+    "model_link": "",
     "cpu_tensors": [],
-    "gpu_tensors": [r".*"],
-    "cpu_quants": ["iq4_ks", "iq3_k", "iq2_ks", "iq1_m_r4"],
-    "gpu_quants": ["q8_0", "iq5_k_r4", "iq6_k"],
-    "cpu_tensors_max_size": "230",
-    "gpu_tensors_max_size": "95%",
-    "tolerance": 0.01,
-    "exponential_factor": 8,
+    "gpu_tensors": [],
+    "cpu_quants": [],
+    "gpu_quants": [],
+    "cpu_tensors_max_size": "",
+    "gpu_tensors_max_size": "",
+    "tolerance": None,
+    "exponential_factor": None,
     "cpu_assign_qtype": "",
     "cpu_assign_tensors": [],
-    "gpu_assign_qtype": "iq4_xs",
-    "gpu_assign_tensors": [r"^blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight$=q8_0"],
-    "harmonize_tensors": [[r"^blk\..*\.ffn_up_exps.*", r"blk\..*\.ffn_gate_exps.*"]],
-    "harmonization_technique": 3,
+    "gpu_assign_qtype": "",
+    "gpu_assign_tensors": [],
+    "harmonize_tensors": [],
+    "harmonization_technique": None,
     "csv_filename": "",
     "qtype": "",
     "use_greedy_quant_assign": False,
     "quant_degradation_csv": "",
     "quant_degradation_equation": "",
-    "synergistic_tensors": [[r"blk\..*\.ffn_up_exps.*", r"blk\..*\.ffn_gate_exps.*", r"blk\..*\.ffn_down_exps.*"]],
-    "synergy_strength": 0.0,
+    "synergistic_tensors": [],
+    "synergy_strength": None,
     "debug": False,
     "info": False,
     "ignore_f32": False,
     "no_fallback": False,
     "tensors_from_csv": False,
-    "cpu_irq_k": 1.5,
-    "gpu_irq_k": 1.5,
+    "cpu_irq_k": None,
+    "gpu_irq_k": None,
     "skip_gpg": False,
     "display_graphs": True
 }
