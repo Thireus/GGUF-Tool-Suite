@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Dec-27-2025 -------------------- **#
+#** --------------- Updated: Jan-03-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -367,15 +367,26 @@ def transform_q_suffix(s: str) -> str:
 
 def select_qtype(df, qtype_arg):
     """
-    Select the row for given QTYPE or lowest quant.
+    Select the row for given QTYPE or lowest quant,
+    preferring QTYPEs that do NOT end with '_bn'.
     """
     if qtype_arg:
         if qtype_arg not in df['QTYPE'].values:
             print(f"Error: qtype '{qtype_arg}' not found in CSV.")
             sys.exit(1)
         return df[df['QTYPE'] == qtype_arg].iloc[0]
+
     df['__quant_num__'] = df['QTYPE'].map(extract_quant_num)
-    sel = df.nsmallest(1, '__quant_num__').iloc[0]
+
+    # Prefer QTYPEs that do NOT end with '_bn'
+    df_non_bn = df[~df['QTYPE'].str.endswith('_bn')]
+
+    if not df_non_bn.empty:
+        sel = df_non_bn.nsmallest(1, '__quant_num__').iloc[0]
+    else:
+        # Fallback: all QTYPEs end with '_bn'
+        sel = df.nsmallest(1, '__quant_num__').iloc[0]
+
     df.drop(columns='__quant_num__', inplace=True)
     return sel
 
@@ -1657,7 +1668,7 @@ def main():
     parser.add_argument('--gpu-irq-k', type=float, default=1.5,
                         help='IQR multiplier k for GPU-friendly outlier detection')
     parser.add_argument('csv_file', help='Input CSV file')
-    parser.add_argument('--qtype', help='Case-sensitive qtype (e.g. q3_K) to analyze from the calibration data CSV file (default: lowest quant)')
+    parser.add_argument('--qtype', help='Case-sensitive qtype (e.g. q3_K) to analyze from the calibration data CSV file (default: lowest quant, preferring QTYPEs that do NOT end with "_bn")')
     parser.add_argument('--cpu-assign-qtype', help='Case-sensitive qtype (e.g. q6_K) to assign to non-measured CPU-friendly tensors or tensors missing from csv (default: highest quant)')
     parser.add_argument('--gpu-assign-qtype', help='Case-sensitive qtype (e.g. q3_K) to assign to non-measured GPU-friendly tensors or tensors missing from csv (default: highest quant)')
     parser.add_argument('--cpu-assign-tensors', nargs='+', default=[], help="List of regex=qtype (case-sensitive, e.g. q6_K) patterns for CPU-friendly tensors to force-assign")
