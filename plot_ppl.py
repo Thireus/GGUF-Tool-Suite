@@ -5,7 +5,7 @@
 #** to visualise tensor quantisation sensitiveness patterns.  **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Oct-12-2025 -------------------- **#
+#** --------------- Updated: Jan-03-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -45,7 +45,7 @@ def parse_args():
         description='Interactive METRIC % bar chart with dynamic QTYPE and tensor filtering.'
     )
     p.add_argument('csv_file', help='Path to the primary CSV file (OUTPUT_CSV)')
-    p.add_argument('--interp_csv', help='Path to the second CSV file with interpolated % results', default=None)
+    p.add_argument('--interp_csv', help='Path to the second CSV file with interpolated %% results', default=None)
     p.add_argument('--qtypes', nargs='+', default=None,
                    help='List of QTYPEs to pre-select (default: all)')
     p.add_argument('--tensors', nargs='+', default=None,
