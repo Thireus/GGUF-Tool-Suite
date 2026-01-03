@@ -5,7 +5,7 @@
 #** partial tensor metric benchmarks.                         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Oct-10-2025 -------------------- **#
+#** --------------- Updated: Jan-03-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -62,8 +62,12 @@ def detect_classes_and_layers(columns):
     Scan column names to identify tensor classes and layers.
     Groups columns matching:
       blk.{layer}.ffn_{direction}_{metric}.weight
-    into classes keyed by metric, each with:
-      - 'dirs': {'up': [...], 'down': [...], 'gate': [...]}
+    and also:
+      blk.{layer}.attn_{sub}.weight  (where sub can be q,k,v,output, etc.)
+    into classes keyed by metric (for ffn the metric is the optional suffix;
+    for attn we key the class as 'attn' and treat the suffix (q,k,v,output,...) as a direction).
+    Each class will have:
+      - 'dirs': dict(subname -> [colnames sorted by layer])
       - 'layers': sorted list of layer indices seen for that metric
 
     Returns:
@@ -71,31 +75,55 @@ def detect_classes_and_layers(columns):
       all_layers: sorted list of all layer indices
     """
     global NB_EXISTS
-    pattern = re.compile(
+    # ffn pattern: blk.<layer>.ffn_<dir>[_<metric>].weight
+    pattern_ffn = re.compile(
         r"^blk\.(?P<layer>\d+)\.ffn_(?P<dir>up|down|gate)(?:_(?P<metric>\w+))?\.weight$"
     )
+    # attn pattern: blk.<layer>.attn[_<sub>].weight  (sub could be q, k, v, output, etc.)
+    pattern_attn = re.compile(
+        r"^blk\.(?P<layer>\d+)\.attn(?:_(?P<sub>\w+))?\.weight$"
+    )
+
     classes = {}
     all_layer_set = set()
     
     for col in columns:
-        m = pattern.match(col)
-        if not m:
-            print(f"Unmatched column: {col}")
-            NB_EXISTS += 1 # We'll assume these have already been computed (if not the script won't move pass the other layers because not computed either)
+        m = pattern_ffn.match(col)
+        if m:
+            layer = int(m.group('layer'))
+            dir_ = m.group('dir')
+            metric = m.group('metric')  # can be None
+            all_layer_set.add(layer)
+            # use metric as class key (same behavior as original code)
+            if metric not in classes:
+                # for ffn we used fixed dirs before; now use dynamic dict to support attn too
+                classes[metric] = {'dirs': {}, 'layer_set': set()}
+            if dir_ not in classes[metric]['dirs']:
+                classes[metric]['dirs'][dir_] = []
+            classes[metric]['dirs'][dir_].append((layer, col))
+            classes[metric]['layer_set'].add(layer)
             continue
 
-        layer = int(m.group('layer'))
-        dir_ = m.group('dir')
-        metric = m.group('metric')
-        
-        all_layer_set.add(layer)
-        
-        if metric not in classes:
-            classes[metric] = {'dirs': {'up': [], 'down': [], 'gate': []}, 'layer_set': set()}
-        
-        classes[metric]['dirs'][dir_].append((layer, col))
-        classes[metric]['layer_set'].add(layer)
-    
+        m2 = pattern_attn.match(col)
+        if m2:
+            layer = int(m2.group('layer'))
+            sub = m2.group('sub')  # could be None, 'q', 'k', 'v', 'output', etc.
+            # For attn we want class key 'attn' and treat the suffix as a direction/sub-type
+            metric_key = 'attn'
+            dir_ = sub if sub is not None else 'main'
+            all_layer_set.add(layer)
+            if metric_key not in classes:
+                classes[metric_key] = {'dirs': {}, 'layer_set': set()}
+            if dir_ not in classes[metric_key]['dirs']:
+                classes[metric_key]['dirs'][dir_] = []
+            classes[metric_key]['dirs'][dir_].append((layer, col))
+            classes[metric_key]['layer_set'].add(layer)
+            continue
+
+        # if neither pattern matched, keep previous behavior (print and increment)
+        print(f"Unmatched column: {col}")
+        NB_EXISTS += 1 # We'll assume these have already been computed (if not the script won't move pass the other layers because not computed either)
+
     # Finalize structure: sort layers and columns
     for parts in classes.values():
         for d, col_tuples in parts['dirs'].items():
@@ -213,7 +241,7 @@ def transform_to_pct_if_needed(df):
             return False
         return True
 
-    orig_present_mask = original_raw.applymap(was_present)
+    orig_present_mask = original_raw.map(was_present)
 
     # Always filter out missing codes 404 (str or float) and '404%'
     df[metric_columns] = df[metric_columns].replace({"404": np.nan, "404%": np.nan, 404.0: np.nan})
