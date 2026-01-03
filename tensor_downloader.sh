@@ -5,7 +5,7 @@
 #** downloads pre-quantised tensors/shards to cook recipes.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Dec-27-2025 -------------------- **#
+#** --------------- Updated: Jan-03-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -598,13 +598,37 @@ do_symlink() {
     SRC="${folder}/${REPOSITORY_NAME}/${FILENAME}"
     DST="${DEST}/${CUSTOM_FILENAME}"
 
+    # make SRC an absolute, canonical path
+    if command -v readlink >/dev/null 2>&1 && readlink -f / >/dev/null 2>&1; then
+      SRC="$(readlink -f "${SRC}")"
+    else
+      SRC="$(cd "$(dirname "${SRC}")" 2>/dev/null && pwd -P)/$(basename "${SRC}")"
+    fi
+
     if [ ! -f "${SRC}" ]; then
       log "✗ Source not found for symlink: ${SRC}; trying next"
       continue
     fi
 
     if [ -e "${DST}" ]; then
-      if [ -L "${DST}" ] && [ "$(readlink "${DST}")" = "${SRC}" ] && verify_download "${DST}"; then
+      # if DST is a symlink, resolve its target to an absolute path for comparison
+      if [ -L "${DST}" ]; then
+        if command -v readlink >/dev/null 2>&1 && readlink -f / >/dev/null 2>&1; then
+          LINK_TARGET="$(readlink -f "${DST}")"
+        else
+          STORED="$(readlink "${DST}")"
+          if [ "${STORED#/}" = "${STORED}" ]; then
+            # stored target is relative; resolve it relative to DST's directory
+            LINK_TARGET="$(cd "$(dirname "${DST}")" 2>/dev/null && cd "$(dirname "${STORED}")" 2>/dev/null && pwd -P)/$(basename "${STORED}")"
+          else
+            LINK_TARGET="${STORED}"
+          fi
+        fi
+      else
+        LINK_TARGET=""
+      fi
+
+      if [ -L "${DST}" ] && [ "${LINK_TARGET}" = "${SRC}" ] && verify_download "${DST}"; then
         log "✓ Verified existing symlink - ${DST} → ${SRC}"
         chmod 444 "${DST}"
         return 0
