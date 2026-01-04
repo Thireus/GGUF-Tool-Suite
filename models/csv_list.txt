@@ -1,4 +1,8 @@
 DeepSeek-R1-0528/ppl_results.csv
+GLM-4.7/kld_results_partial_15percent_interpolated.csv
+GLM-4.7/kld_results_partial.csv
+GLM-4.7/ppl_results_partial_15percent_interpolated.csv
+GLM-4.7/ppl_results_partial.csv
 GLM-4.6/ppl_results.csv
 GLM-4.6/kld_results.csv
 GLM-4.6/group0/ppl_results.csv
