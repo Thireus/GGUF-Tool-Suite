@@ -5,7 +5,7 @@
 #** Colab pipeline parameters for quant_recipe_pipeline.ipynb **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jan-01-2026 -------------------- **#
+#** --------------- Updated: Jan-09-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -151,12 +151,21 @@ def tokenize_command(cmd: str) -> List[str]:
         # ignore lone comment markers
         if t == "#":
             continue
-        # ignore pure punctuation tokens
-        if re.fullmatch(r'^[\W_]+$', t):
-            continue
         # ignore short narrative ALL-CAPS tokens like THE, END, NOTE, etc.
         if re.fullmatch(r'^[A-Z]{2,10}\W*$', t):
             continue
+
+        # OLD behavior removed tokens that are pure punctuation (this broke pure-regex tokens like '.*').
+        # New behavior: if the token is pure punctuation, keep it if it contains regex metacharacters
+        # that are likely intended as regex patterns (.,*,+,?,^,$,[],(),{},\ ,|). Otherwise drop it.
+        if re.fullmatch(r'^[\W_]+$', t):
+            # if contains regex-special chars, keep it (it's probably a regex like '.*' or '^m_' etc)
+            if re.search(r'[.\[\]\^\$\*\+\?\(\)\\\{\}|]', t):
+                filtered.append(t)
+                continue
+            # else drop noisy punctuation tokens
+            continue
+
         filtered.append(t)
     return filtered
 
@@ -181,14 +190,26 @@ def collect_flag_values(tokens: List[str], flag: str) -> List[str]:
 
 
 def pretty_py_list(items: List[str]) -> str:
-    """Format a list of strings as a Python raw-string list literal."""
+    """Format a list of strings as a Python list literal using safe quoting.
+
+    Preference: use raw-string r"..." when safe (no double-quote and not ending with backslash),
+    which preserves backslashes in regex patterns. If not safe, fall back to a normal escaped 
+    double-quoted literal.
+    """
     if not items:
         return "[]"
     elems = []
-    for it in items:
-        s = it
-        s_escaped = s.replace('"', '\\"')
-        elems.append(f'r"{s_escaped}"')
+
+    for s in items:
+        has_double_quote = '"' in s
+        ends_with_backslash = s.endswith("\\")
+        # Use raw string when safe: no double-quote and doesn't end with backslash
+        if not has_double_quote and not ends_with_backslash:
+            elems.append(f'r"{s}"')
+        else:
+            s_escaped = s.replace("\\", "\\\\").replace('"', '\\"')
+            elems.append(f'"{s_escaped}"')
+
     return "[{}]".format(", ".join(elems))
 
 
