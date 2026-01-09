@@ -235,7 +235,7 @@ def emit_parameters(params: Dict[str, Any]) -> str:
     lines.append(f'cpu_tensors_max_size = "{params["cpu_tensors_max_size"]}"    #@param {{type:"string"}}')
     lines.append(f'gpu_tensors_max_size = "{params["gpu_tensors_max_size"]}"    #@param {{type:"string"}}')
     lines.append(f'tolerance = {params["tolerance"]}                #@param {{type:"number"}}')
-    lines.append(f'exponential_factor = {params["exponential_factor"]}          #@param {{type:"integer"}}')
+    lines.append(f'exponential_factor = {params["exponential_factor"]}        #@param {{type:"number"}}')
     lines.append("")
     lines.append("# assignment override")
     lines.append(f'cpu_assign_qtype = "{params["cpu_assign_qtype"]}"        #@param {{type:"string"}}')
@@ -490,7 +490,7 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
             pass
     if 'exponential_factor' in params:
         try:
-            params['exponential_factor'] = int(params['exponential_factor'])
+            params['exponential_factor'] = float(params['exponential_factor'])
         except Exception:
             pass
     if 'harmonization_technique' in params:
