@@ -5,7 +5,7 @@
 #** identify tensor quantisation sensitiveness patterns.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Sep-05-2025 -------------------- **#
+#** --------------- Updated: Jan-10-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -75,7 +75,7 @@ def collect_recipe_data(recipe_dir):
     try:
         with os.scandir(recipe_dir) as it:
             for entry in it:
-                if entry.is_file() and entry.name.endswith('.recipe'):
+                if entry.is_file() and (entry.name.endswith('.recipe') or entry.name.endswith('.recipe.txt')):
                     model, bpw, ppl = parse_filename(entry.name)
                     if None in (bpw, ppl):
                         continue
@@ -93,7 +93,7 @@ def collect_recipe_data(recipe_dir):
                 subpath = entry.path
                 label = subdir  # only subdir name (no dir_name prefix)
                 for fname in os.listdir(subpath):
-                    if not fname.endswith('.recipe'):
+                    if not fname.endswith('.recipe') and not fname.endswith('.recipe.txt'):
                         continue
                     model, bpw, ppl = parse_filename(fname)
                     if None in (bpw, ppl):

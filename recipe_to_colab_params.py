@@ -5,7 +5,7 @@
 #** Colab pipeline parameters for quant_recipe_pipeline.ipynb **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jan-09-2026 -------------------- **#
+#** --------------- Updated: Jan-10-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -84,8 +84,9 @@ def error(msg: str) -> None:
 def load_recipe(path: pathlib.Path) -> str:
     if not path.exists():
         error(f"Error: file not found: {path}")
-    if path.suffix.lower() != ".recipe":
-        error(f"Error: file must have a .recipe extension: {path}")
+    name = path.name.lower()
+    if not (name.endswith(".recipe") or name.endswith(".recipe.txt")):
+        error(f"Error: file must have a .recipe or .recipe.txt extension: {path}")
     text = path.read_text(encoding="utf-8", errors="ignore")
     # Replace the requested URL when found
     if REPLACE_FROM in text:
@@ -514,8 +515,8 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Convert a .recipe file to Google Colab pipeline parameters")
-    parser.add_argument("recipe", type=pathlib.Path, help=".recipe file to parse")
+    parser = argparse.ArgumentParser(description="Convert a .recipe (or .recipe.txt) file to Google Colab pipeline parameters")
+    parser.add_argument("recipe", type=pathlib.Path, help=".recipe (or .recipe.txt) file to parse")
     parser.add_argument("-o", "--out", type=pathlib.Path, default=None, help="Optional output file to write (defaults to stdout)")
     args = parser.parse_args()
 
