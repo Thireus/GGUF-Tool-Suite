@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regexe entries.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Dec-27-2025 -------------------- **#
+#** --------------- Updated: Jan-10-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -277,8 +277,8 @@ if [[ $# -ne 1 ]]; then
 fi
 RECIPE_FILE="$1"
 # Enforce .recipe extension
-if [[ "${RECIPE_FILE##*.}" != "recipe" ]]; then
-  echo "❌ Error: Recipe file '$RECIPE_FILE' must have a .recipe extension." >&2
+if [[ ! "$RECIPE_FILE" == *.recipe && ! "$RECIPE_FILE" == *.recipe.txt ]]; then
+  echo "❌ Error: Recipe file '$RECIPE_FILE' must have a .recipe or .recipe.txt extension." >&2
   exit 1
 fi
 if [[ ! -f "$RECIPE_FILE" ]]; then
