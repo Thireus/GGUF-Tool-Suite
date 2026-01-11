@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** plot_ppl.py a useful tensor ppl visualisation utility to  **#
-#** identify tensor quantisation sensitiveness patterns.      **#
+#** plot_recipes.py a tool that plots model recipe perplexity **#
+#** results on a graph and saves them as svg and csv files.   **#
 #**                                                           **#
 #** ********************************************************* **#
 #** --------------- Updated: Jan-10-2026 -------------------- **#
