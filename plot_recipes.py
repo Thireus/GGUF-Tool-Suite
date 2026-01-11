@@ -29,6 +29,73 @@ import os
 import re
 import argparse
 import matplotlib
+import csv
+
+# --- BPW lookup table for GGUF quant dtypes ---
+BPW_TABLE = {
+    'F32': 32, 'F16': 16, 'BF16': 16, 'F8': 8,
+    # fill known Q/IQ formats
+    'Q8_0': 8.25,
+    'Q8_0_R8': 8.5,
+    'Q8_KV': 8,
+    'Q6_K': 6.5625,
+    'Q6_0': 6.5,
+    'IQ6_K': 6.5,
+    'Q6_0_R4': 6.5,
+    'Q5_K': 5.5,
+    'Q5_0': 5.1875,
+    'Q5_1': 5.375,
+    'IQ5_KS_R4': 5.25,
+    'IQ5_KS': 5.25,
+    'IQ5_K': 5.5,
+    'IQ5_K_R4': 5.5,
+    'Q5_0_R4': 5.5,
+    'IQ4_XS': 4.25,
+    'Q4_K': 4.5,
+    'Q4_1': 4.375,
+    'IQ4_KS_R4': 4.25,
+    'IQ4_KS': 4.25,
+    'IQ4_NL': 4.1,
+    'IQ4_KT': 4,
+    'Q4_0': 4.1875,
+    'IQ4_K': 4.5,
+    'IQ4_K_R4': 4.5,
+    'IQ4_KSS': 4,
+    'Q4_0_R8': 4.5,
+    'IQ4_XS_R8': 4.25,
+    'IQ4_NL_R4': 4.5,
+    'IQ3_K': 3.4375,
+    'IQ3_S': 3.44,
+    'IQ3_XXS': 3.06,
+    'IQ3_KT': 3.125,
+    'Q3_K': 3.4375,
+    'IQ3_K_R4': 3.44,
+    'IQ3_XXS_R4': 3.06,
+    'IQ3_S_R4': 3.44,
+    'IQ3_KL': 4,
+    'IQ3_M': 3.66,
+    'IQ3_XS': 3.3,
+    'IQ2_KS': 2.1875,
+    'IQ2_BN': 2,
+    'IQ2_KT': 2.125,
+    'IQ2_S': 2.5,
+    'IQ2_XXS': 2.06,
+    'IQ2_XS': 2.31,
+    'IQ2_K': 2.375,
+    'Q2_K': 2.625,
+    'IQ2_K_R4': 2.375,
+    'IQ2_BN_R4': 2,
+    'IQ2_XXS_R4': 2.06,
+    'IQ2_XS_R4': 2.31,
+    'IQ2_M': 2.7,
+    'IQ2_M_R4': 2.7,
+    'IQ1_M': 1.75,
+    'IQ1_S': 1.56,
+    'IQ1_S_R4': 1.5,
+    'IQ1_BN': 1.62,
+    'IQ1_KT': 1.75,
+    'IQ1_M_R4': 1.75
+}
 
 def extract_model_name(base: str) -> str:
     """
@@ -130,7 +197,76 @@ def collect_imported_data(import_file):
             imported.setdefault(model_name, {}).setdefault(author, []).append((bpw, ppl))
     return imported
 
-def plot_data(recipe_data, recipe_dir, imported_data=None, export=False, out_dir=None):
+# Helper: map a numeric bpw to the nearest QTYPE from BPW_TABLE with filtering and tie-break rules.
+def map_bpw_to_qtype(bpw):
+    """
+    Map a numeric bpw to the nearest QTYPE key from BPW_TABLE.
+
+    Important rules implemented:
+    - Filter out keys that begin with f (case-insensitive).
+    - Filter out keys that end with _bn, _kv or _r<digit> (case-insensitive).
+    - Prefer non-IQ variants over IQ when distances are equal.
+    - Return the selected nearest QTYPE formatted in lower case, except:
+      * if it begins with 'q' and ends with '_k' -> format as e.g. 'q4_K'
+      * if it begins with 'q' and ends with '_kv' -> format as e.g. 'q8_KV'
+    """
+    if bpw is None:
+        return ''  # fallback empty
+
+    # prepare regex for filtering prefixes (f)
+    prefix_filter_re = re.compile(r'^f', re.IGNORECASE)
+    # prepare regex for filtering suffixes (_bn, _kv, _r[0-9]+)
+    suffix_filter_re = re.compile(r'_(bn|kv|r\d+)$', re.IGNORECASE)
+
+    best_candidates = []
+    best_diff = None
+
+    for key, val in BPW_TABLE.items():
+        # skip filtered keys
+        if prefix_filter_re.search(key):
+            continue
+        if suffix_filter_re.search(key):
+            continue
+        diff = abs(bpw - float(val))
+        if (best_diff is None) or (diff < best_diff - 1e-9):
+            best_diff = diff
+            best_candidates = [key]
+        elif abs(diff - best_diff) <= 1e-9:
+            best_candidates.append(key)
+
+    if not best_candidates:
+        # If nothing remains after filtering, fall back to all keys (no filter)
+        for key, val in BPW_TABLE.items():
+            diff = abs(bpw - float(val))
+            if (best_diff is None) or (diff < best_diff - 1e-9):
+                best_diff = diff
+                best_candidates = [key]
+            elif abs(diff - best_diff) <= 1e-9:
+                best_candidates.append(key)
+
+    # If multiple candidates, prefer non-IQ over IQ
+    if len(best_candidates) > 1:
+        non_iq = [k for k in best_candidates if not k.upper().startswith('IQ')]
+        if non_iq:
+            chosen = sorted(non_iq)[0]
+        else:
+            chosen = sorted(best_candidates)[0]
+    else:
+        chosen = best_candidates[0]
+
+    # format chosen according to rules: lower case, but special _K/_KV uppercase if begins with q
+    chosen_lower = chosen.lower()
+    if chosen_lower.startswith('q') and chosen_lower.endswith('_k'):
+        # e.g. chosen 'Q4_K' -> result 'q4_K'
+        prefix = chosen_lower[:-2]  # drop '_k'
+        return f"{prefix}_K"
+    if chosen_lower.startswith('q') and chosen_lower.endswith('_kv'):
+        prefix = chosen_lower[:-3]  # drop '_kv'
+        return f"{prefix}_KV"
+    # default: lower case
+    return chosen_lower
+
+def plot_data(recipe_data, recipe_dir, imported_data=None, export=False, out_dir=None, export_csv=False):
     # Use non-interactive backend if exporting
     if export:
         matplotlib.use('Agg')
@@ -243,6 +379,9 @@ def plot_data(recipe_data, recipe_dir, imported_data=None, export=False, out_dir
         imported_handles = []
         imported_labels = []
 
+        # collect CSV rows for this model if requested
+        csv_rows = []  # list of (QTYPE, bpw, ppl)
+
         # Plot any imported series for this model FIRST so they appear behind recipe series
         if imported_data and model in imported_data:
             for idx, (author, series_vals) in enumerate(imported_data[model].items()):
@@ -256,6 +395,10 @@ def plot_data(recipe_data, recipe_dir, imported_data=None, export=False, out_dir
                 line = plt.plot(xs_imp, ys_imp, marker=marker, markersize=3, linestyle='', label=author, zorder=1, color=color, alpha=0.75)[0]
                 imported_handles.append(line)
                 imported_labels.append(author)
+                # add to csv rows: map bpw to nearest QTYPE
+                for x, y in zip(xs_imp, ys_imp):
+                    qtype = map_bpw_to_qtype(x)
+                    csv_rows.append((qtype, x, y))
 
         # plot each source series (root and each subdir) for this model (drawn after imported -> on top)
         for idx, (source_label, vals) in enumerate(sorted(sources.items())):
@@ -275,6 +418,10 @@ def plot_data(recipe_data, recipe_dir, imported_data=None, export=False, out_dir
             line = plt.plot(xs, ys, marker=marker, linestyle='', label=series_label, zorder=2, color=color)[0]
             recipe_handles.append(line)
             recipe_labels.append(series_label)
+            # add to csv rows: map bpw to nearest QTYPE
+            for x, y in zip(xs, ys):
+                qtype = map_bpw_to_qtype(x)
+                csv_rows.append((qtype, x, y))
 
         plt.xlabel('Bits per weight (bpw)')
         plt.ylabel('Perplexity (ppl)')
@@ -284,6 +431,13 @@ def plot_data(recipe_data, recipe_dir, imported_data=None, export=False, out_dir
         labels = recipe_labels + imported_labels
         plt.legend(handles, labels, fontsize='small')
 
+        # Ensure out_dir exists if we will export files
+        if (export or export_csv) and out_dir:
+            try:
+                os.makedirs(out_dir, exist_ok=True)
+            except Exception:
+                pass
+
         if export:
             filename = f"{model}.svg"
             out_path = os.path.join(out_dir or '.', filename)
@@ -291,6 +445,21 @@ def plot_data(recipe_data, recipe_dir, imported_data=None, export=False, out_dir
             plt.close(fig)
         else:
             fig.show()
+
+        # Write CSV for this model if requested
+        if export_csv:
+            csv_filename = f"{model}.csv"
+            csv_path = os.path.join(out_dir or '.', csv_filename)
+            try:
+                with open(csv_path, 'w', newline='') as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerow(['QTYPE', 'bpw', 'ppl'])
+                    for row in sorted(csv_rows, key=lambda r: r[1], reverse=True):
+                        # row is (QTYPE, bpw, ppl)
+                        writer.writerow([row[0], row[1], row[2]])
+            except Exception as e:
+                # If writing fails, print a warning but continue
+                print(f"Warning: failed to write CSV {csv_path}: {e}")
 
     if not export:
         print("Plots are displayed in separate windows. Close them manually when done.")
@@ -303,7 +472,8 @@ def main():
     parser.add_argument('recipe_dir', help='Directory containing .recipe files')
     parser.add_argument('--import', dest='import_file', help='Import additional series from DB file')
     parser.add_argument('--export', action='store_true', help='Export plots as SVG without rendering')
-    parser.add_argument('--out-dir', default='.', help='Output directory for exported SVG files')
+    parser.add_argument('--export-csv', action='store_true', help='Export CSV files with plotted points for each model (same base name as SVG)')
+    parser.add_argument('--out-dir', default='.', help='Output directory for exported SVG and CSV files')
     args = parser.parse_args()
 
     recipe_data = collect_recipe_data(args.recipe_dir)
@@ -316,7 +486,8 @@ def main():
         args.recipe_dir,
         imported_data=imported_data,
         export=args.export,
-        out_dir=args.out_dir
+        out_dir=args.out_dir,
+        export_csv=args.export_csv
     )
 
 if __name__ == '__main__':

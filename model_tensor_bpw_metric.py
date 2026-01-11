@@ -5,7 +5,7 @@
 #** quantized model bpw versus reported metrics such as KLD.  **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Nov-27-2025 -------------------- **#
+#** --------------- Updated: Jan-11-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -22,6 +22,12 @@
 #***************************************************************#
 #**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
 #***************************************************************#
+
+"""
+This script can also be used to compute the ppl (or kld) estimate equation displayed on https://gguf.thireus.com/quant_assign.html
+For example:
+../model_tensor_bpw_metric.py --recipe-results-csv GLM-4.7.csv --d-free --c-free --transforms "identity" --ignore-outliers 50 --p-grid-max 15 --p-grid-steps 100 --penalize-above 15 --drift-below 5 --metric-name "perplexity" --plot
+"""
 
 from __future__ import annotations
 import argparse
@@ -1973,6 +1979,9 @@ def main():
                     help="R^2 drift threshold in percent - removes values above and furthest to the theoretical curve. Example: --drift-below 5 means an allowed R^2 drop of 5%% of the baseline R^2 (baseline 0.95 -> allowed lower bound 0.95*(1-0.05)=0.9025). When provided this triggers the reconsideration loop.")
     ap.add_argument("--drift-above", type=float, default=0.0,
                     help="R^2 drift threshold in percent - removes values below and furthest to the theoretical curve. Example: --drift-above 5 means an allowed R^2 drop of 5%% of the baseline R^2 (baseline 0.95 -> allowed lower bound 0.95*(1-0.05)=0.9025). When provided this triggers the reconsideration loop.")
+    # New: recipe results csv - preprocessed CSV with QTYPE, bpw, <metric> (skip mapping & purity checks)
+    ap.add_argument("--recipe-results-csv", type=str, default=None,
+                    help="Provide a pre-processed CSV containing QTYPE, bpw and a metric column (e.g. ppl or kld). This skips map parsing and purity checks and moves directly to plotting/fitting.")
     args = ap.parse_args()
 
     if args.map_files and args.qtypes:
@@ -2036,6 +2045,101 @@ def main():
                 continue
             filtered.append(q)
         return filtered
+
+    # If recipe-results-csv is provided, bypass mapping and purity checks, and directly run plotting/fitting.
+    if args.recipe_results_csv:
+        in_csv = args.recipe_results_csv
+        if not os.path.exists(in_csv):
+            print(f"ERROR: recipe results CSV '{in_csv}' not found.", file=sys.stderr)
+            sys.exit(4)
+        # Infer metric column: expect headers QTYPE, bpw, <metric>
+        with open(in_csv, newline="", encoding="utf-8") as inf:
+            reader = csv.DictReader(inf)
+            headers = list(reader.fieldnames or [])
+            if not headers:
+                print(f"ERROR: recipe CSV {in_csv} has no header.", file=sys.stderr)
+                sys.exit(4)
+            # ensure qtype and bpw columns exist (case-insensitive)
+            qcol = None
+            bpwcol = None
+            for h in headers:
+                if h.lower() == "qtype":
+                    qcol = h
+                if h.lower() == "bpw":
+                    bpwcol = h
+            if qcol is None or bpwcol is None:
+                print(f"ERROR: recipe CSV must contain 'QTYPE' and 'bpw' columns (case-insensitive).", file=sys.stderr)
+                sys.exit(4)
+            # pick metric column: prefer the third column if present, otherwise first header not qtype/bpw
+            metric_col = None
+            if len(headers) >= 3:
+                # Ensure headers[2] is not qtype or bpw
+                if headers[2].lower() not in {"qtype", "bpw"}:
+                    metric_col = headers[2]
+            if metric_col is None:
+                for h in headers:
+                    if h.lower() not in {"qtype", "bpw"}:
+                        metric_col = h
+                        break
+            if metric_col is None:
+                print(f"ERROR: recipe CSV must contain a metric column in addition to QTYPE and bpw.", file=sys.stderr)
+                sys.exit(4)
+            # infer a metric_name for labels if not provided
+            metric_name = args.metric_name
+            if not metric_name:
+                metric_name = metric_col
+
+        # Now call compute_and_plot_from_csv directly, bypassing any mapping or bpw computation.
+        try:
+            preds = compute_and_plot_from_csv(
+                in_csv,
+                bpw_column="bpw",
+                ycol_identifier=metric_col,
+                hide_empty=args.hide_empty,
+                plot_output=args.plot_output,
+                fit_equation=(not args.no_equation),
+                d_from_lowest_k=args.d_from_lowest,
+                d_free=args.d_free,
+                c_from_lowest_k=args.c_from_lowest,
+                c_free=args.c_free,
+                ignore_outliers_threshold=(args.ignore_outliers if args.ignore_outliers and float(args.ignore_outliers) > 0.0 else 0.0),
+                threads=(args.threads if args.threads and int(args.threads) > 0 else None),
+                metric_name=metric_name,
+                predict_bpw_values=args.predict_bpw_values,
+                transforms=transforms_arg,
+                suppress_plot=(not args.plot),
+                equation_only=args.equation_only,
+                identity_s_min=args.identity_scale_min,
+                identity_s_max=args.identity_scale_max,
+                identity_s_steps=args.identity_scale_steps,
+                p_grid_min=args.p_grid_min,
+                p_grid_max=args.p_grid_max,
+                p_grid_steps=args.p_grid_steps,
+                logn_base_min=args.logn_base_min,
+                logn_base_max=args.logn_base_max,
+                logn_base_steps=args.logn_base_steps,
+                c_mult_min=args.c_mult_min,
+                c_mult_max=args.c_mult_max,
+                c_mult_steps=args.c_mult_steps,
+                b_grid_steps=args.b_grid_steps,
+                b_refine_steps=args.b_refine_steps,
+                c_refine_steps=args.c_refine_steps,
+                p_refine_steps=args.p_refine_steps,
+                N_refine_steps=args.N_refine_steps,
+                resemblance_metric=args.resemblance_metric,
+                penalize_above=args.penalize_above,
+                penalize_below=args.penalize_below,
+                drift_below=args.drift_below,
+                drift_above=args.drift_above
+            )
+            # If compute_and_plot_from_csv returned predictions (machine mode), the function already printed them.
+            # We print a diagnostics message to stderr.
+            print(f"[recipe] Processed recipe CSV: {in_csv}", file=sys.stderr)
+            return
+        except Exception as ex:
+            # In recipe mode, report error and exit with non-zero
+            print(f"ERROR: failed to process recipe CSV {in_csv}: {ex}", file=sys.stderr)
+            sys.exit(5)
 
     if args.results_csv:
         with open(args.results_csv, newline="", encoding="utf-8") as inf:
