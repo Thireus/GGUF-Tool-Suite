@@ -107,7 +107,7 @@ STRETCH_STEP = 0.01
 # ─── Create a unique temp‐dir at script launch ────────────────────────────────
 # This will give you something like /tmp/gguf.thireus.com.ab12cd
 TMP_DIR = tempfile.mkdtemp(prefix="gguf.thireus.com.", dir=tempfile.gettempdir())
-if DEBUG: print(f"[Debug] Using temp directory: {TMP_DIR}")
+if DEBUG: print(f"[Debug] Using temp directory: {TMP_DIR}", file=sys.stderr)
 
 # Optionally, register cleanup at exit
 import atexit
@@ -116,7 +116,7 @@ import shutil
 def _cleanup_tempdir(path=TMP_DIR):
     try:
         shutil.rmtree(path)
-        if DEBUG: print(f"[Debug] Cleaned up temp directory: {path}")
+        if DEBUG: print(f"[Debug] Cleaned up temp directory: {path}", file=sys.stderr)
     except Exception:
         pass
 
@@ -192,7 +192,7 @@ def load_quant_degradation_values(path: str):
     if INFO and dropped:
         # Filter out empty q names for nicer message
         nice = [dq for dq in dropped if dq]
-        print(f"[Info] Dropping quant degradation entries for missing/404 values: {nice}")
+        print(f"[Info] Dropping quant degradation entries for missing/404 values: {nice}", file=sys.stderr)
 
     return degradation_factors
 
@@ -207,19 +207,19 @@ def _call_normalised_ppl(keys):
     script_path = os.path.join(os.path.dirname(__file__), 'normalised_ppl.py')
     keys_list = list(keys)
     if INFO:
-        print(f"[Info] Calling normalised_ppl.py for keys: {keys_list}")
+        print(f"[Info] Calling normalised_ppl.py for keys: {keys_list}", file=sys.stderr)
     # Compose command: include 1 and 32 as edge values
     bpw_args = ['1'] + [str(k) for k in keys_list] + ['32']
     cmd = ['python', script_path, '--bpw-list'] + bpw_args
     if DEBUG:
-        print(f"[Debug] Running command: {' '.join(shlex.quote(c) for c in cmd)}")
+        print(f"[Debug] Running command: {' '.join(shlex.quote(c) for c in cmd)}", file=sys.stderr)
     try:
         output = subprocess.check_output(cmd, text=True, stderr=subprocess.STDOUT)
         if DEBUG:
-            print(f"[Debug] normalised_ppl.py output:\n{output}")
+            print(f"[Debug] normalised_ppl.py output:\n{output}", file=sys.stderr)
     except Exception as e:
         if INFO:
-            print(f"[Warning] normalised_ppl.py call failed: {e}")
+            print(f"[Warning] normalised_ppl.py call failed: {e}", file=sys.stderr)
         raise
 
     # Parse output lines like 'KEY: VALUE'
@@ -263,11 +263,11 @@ def get_default_factor(qtype):
     bpw = get_bpw(qtype)
     try:
         if INFO:
-            print(f"[Info] bpw for qtype {qtype}: {bpw}")
+            print(f"[Info] bpw for qtype {qtype}: {bpw}", file=sys.stderr)
         key = bpw
     except Exception:
         if DEBUG:
-            print(f"[Debug] Could not parse bpw from qtype '{qtype}', returning 1.0")
+            print(f"[Debug] Could not parse bpw from qtype '{qtype}', returning 1.0", file=sys.stderr)
         return 1.0
 
     # fallback default
@@ -276,7 +276,7 @@ def get_default_factor(qtype):
     # return cached if available
     if bpw in _factor_cache:
         if DEBUG:
-            print(f"[Debug] Returning cached factor for bpw {bpw}: {_factor_cache[bpw]}")
+            print(f"[Debug] Returning cached factor for bpw {bpw}: {_factor_cache[bpw]}", file=sys.stderr)
         return _factor_cache[bpw]
 
     # try to fetch from script for this single key
@@ -287,7 +287,7 @@ def get_default_factor(qtype):
         factor = default_value
     else:
         if DEBUG:
-            print(f"[Debug] Caching factor for bpw {bpw}: {factor}")
+            print(f"[Debug] Caching factor for bpw {bpw}: {factor}", file=sys.stderr)
         _factor_cache[bpw] = factor
 
     return factor
@@ -429,34 +429,34 @@ def fetch_map_for_qtype(qtype: str):
         )
     local_map = os.path.join(TMP_DIR, f"tensors.{qtype}.map")
     cmd = ["bash", tensor_downloader, qtype.upper(), "0", TMP_DIR, f"tensors.{qtype}.map"]
-    if INFO: print(f"[Info] Fetching map for {qtype}...")
+    if INFO: print(f"[Info] Fetching map for {qtype}...", file=sys.stderr)
     try:
         if DEBUG or INFO:
             subprocess.run(cmd, check=True)
         else:
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if INFO: print(f"[Info] Saved map to {local_map}")
+        if INFO: print(f"[Info] Saved map to {local_map}", file=sys.stderr)
         if not SKIP_GPG:
             cmd_sig = ["bash", tensor_downloader, qtype.upper(), "-1", TMP_DIR, f"tensors.{qtype}.map.sig"]
-            if INFO: print(f"[Info] Fetching map gpg signature for {qtype}...")
+            if INFO: print(f"[Info] Fetching map gpg signature for {qtype}...", file=sys.stderr)
             try:
                 if DEBUG or INFO:
                     subprocess.run(cmd_sig, check=True)
                 else:
                     subprocess.run(cmd_sig, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                if DEBUG: print(f"[Debug] Saved map gpg signature to {local_map}.sig")
+                if DEBUG: print(f"[Debug] Saved map gpg signature to {local_map}.sig", file=sys.stderr)
                 if not verify_detached_signature(local_map):
                     print(f"[Error] gpg signature verification of tensors.{qtype}.map failed.", file=sys.stderr)
                     ALL_GPG_SIGS_VALID = False
                     return False
                 else:
-                    if INFO: print(f"[Info] gpg signature of tensors.{qtype}.map succesful.")
+                    if INFO: print(f"[Info] gpg signature of tensors.{qtype}.map succesful.", file=sys.stderr)
             except subprocess.CalledProcessError as e:
                 print(f"[Warning] failed to fetch tensors.map.sig: {e}")
                 ALL_GPG_SIGS_VALID = False
                 return False
         else:
-            if INFO: print(f"[Warning] gpg signature verification is disabled and won't be checked for {local_map}.sig")
+            if INFO: print(f"[Warning] gpg signature verification is disabled and won't be checked for {local_map}.sig", file=sys.stderr)
 
         # Record fetch and compute hashes
         _fetched_maps.add(qtype)
@@ -554,7 +554,7 @@ def parse_map_file(qtype, collect_raw = False):
         for t in actual_qtypes:
             if actual_qtypes[t] != qtype:
                 if INFO:
-                    print(f"[Info] --no-fallback: Enforcing {qtype} qtype for {t} instead of fallback {actual_qtypes[t]} dtype present in tensors map file.")
+                    print(f"[Info] --no-fallback: Enforcing {qtype} qtype for {t} instead of fallback {actual_qtypes[t]} dtype present in tensors map file.", file=sys.stderr)
                 actual_qtypes[t] = qtype
                 sizes[t] = int(round(elements[t] * (QTYPE_BPW_CACHE[qtype] / 8)))
 
@@ -568,7 +568,7 @@ def load_sample_ppl_table(path):
     sample_df = sample_df.replace(['404','404.0'], np.nan)
     dropped = [c for c in sample_df.columns if sample_df[c].isna().any()]
     if dropped and INFO:
-        print(f"[Info] Dropping sample PPL columns with missing values: {dropped}")
+        print(f"[Info] Dropping sample PPL columns with missing values: {dropped}", file=sys.stderr)
     sample_df = sample_df.drop(columns=dropped)
     max_vals = sample_df.max()
     red = sample_df.div(max_vals)
@@ -582,10 +582,10 @@ def compute_class_midpoint(class_values, forced_mid=None):
     """
     if forced_mid is not None:
         mid = forced_mid
-        if DEBUG: print(f"[Debug] Forced midpoint: {mid:.4f}")
+        if DEBUG: print(f"[Debug] Forced midpoint: {mid:.4f}", file=sys.stderr)
     else:
         mid = np.mean(list(class_values.values()))
-        if DEBUG: print(f"[Debug] Class midpoint (mean PPL): {mid:.4f}")
+        if DEBUG: print(f"[Debug] Class midpoint (mean PPL): {mid:.4f}", file=sys.stderr)
     return mid
 
 
@@ -607,7 +607,7 @@ def compute_group_spreads(class_values, forced_mid=None):
             rel = (max_ppl - ppl) / up  # corrected
             spread = 1 - min(1, rel)
         spreads[name] = spread
-        if DEBUG: print(f"[Debug] Tensor {name}: PPL={ppl:.4f}, spread={spread:.4f}")
+        if DEBUG: print(f"[Debug] Tensor {name}: PPL={ppl:.4f}, spread={spread:.4f}", file=sys.stderr)
     return spreads
 
 
@@ -632,7 +632,7 @@ def compute_quant_intervals(quants, stretch=1.0):
         bottom = top - span
         intervals.append((q, top, bottom))
         if DEBUG:
-            print(f"[Debug] Quant {q} @stretch={stretch:.2f}: interval ({bottom:.4f}, {top:.4f}]")
+            print(f"[Debug] Quant {q} @stretch={stretch:.2f}: interval ({bottom:.4f}, {top:.4f}]", file=sys.stderr)
         top = bottom
     return intervals
 
@@ -647,7 +647,7 @@ def assign_quants(quants, _, class_values, forced_mid=None, stretch=1.0, harmoni
     lengths, harmonization for that group/quant is skipped with an [Info] warning.
     """
     if INFO:
-        print(f"[Info] Performing spread-based quant assignment (stretch={stretch:.2f})...")
+        print(f"[Info] Performing spread-based quant assignment (stretch={stretch:.2f})...", file=sys.stderr)
     spreads = compute_group_spreads(class_values, forced_mid)
     intervals = compute_quant_intervals(quants, stretch)
     assignment = {}
@@ -711,7 +711,7 @@ def assign_quants(quants, _, class_values, forced_mid=None, stretch=1.0, harmoni
                 if len(set(lengths)) != 1:
                     # User split tensors across CPU/GPU (or other reason) — skip harmonization for this group
                     if INFO:
-                        print(f"[Warning] skipping harmonization for group {matched_group_idx} quant {q_assigned} because pattern match counts differ (counts={lengths}); using per-tensor sizes.")
+                        print(f"[Warning] skipping harmonization for group {matched_group_idx} quant {q_assigned} because pattern match counts differ (counts={lengths}); using per-tensor sizes.", file=sys.stderr)
                 else:
                     group_n = lengths[0]
                     if group_n == 0:
@@ -723,7 +723,7 @@ def assign_quants(quants, _, class_values, forced_mid=None, stretch=1.0, harmoni
                         if name not in my_list:
                             # shouldn't normally happen but be safe: skip harmonization
                             if INFO:
-                                print(f"[Warning] {name!r} not found among pattern matches for harmonize group {matched_group_idx}; skipping harmonization for this tensor.")
+                                print(f"[Warning] {name!r} not found among pattern matches for harmonize group {matched_group_idx}; skipping harmonization for this tensor.", file=sys.stderr)
                         else:
                             idx_in = my_list.index(name)
                             # pair index-wise across all lists
@@ -735,12 +735,12 @@ def assign_quants(quants, _, class_values, forced_mid=None, stretch=1.0, harmoni
                                 final_size = size_harmonized
                                 if INFO:
                                     details = ", ".join(f"{nm}={sizes_map.get(nm,0)}" for nm in matched_names)
-                                    print(f"[Info] Size-harmonized group {matched_group_idx} quant {q_assigned} index {idx_in}: {details} -> harmonized={size_harmonized}")
+                                    print(f"[Info] Size-harmonized group {matched_group_idx} quant {q_assigned} index {idx_in}: {details} -> harmonized={size_harmonized}", file=sys.stderr)
 
         sizes[name] = final_size
 
         if INFO:
-            print(f"[Info] Assigned {assignment[name]} to {name} (spread={spreads[name]:.4f}) size={sizes[name]}")
+            print(f"[Info] Assigned {assignment[name]} to {name} (spread={spreads[name]:.4f}) size={sizes[name]}", file=sys.stderr)
 
     return assignment, sizes
 
@@ -782,7 +782,7 @@ def adjust_losses_with_synergy(
         common_quants = set.intersection(*(set(tensor_sizes.get(t, {}).keys()) for t in group))
         if not common_quants:
             if debug:
-                print(f"[WARN] No common quant types found for group {group}, skipping.")
+                print(f"[WARN] No common quant types found for group {group}, skipping.", file=sys.stderr)
             continue
 
         # use any one (e.g., largest quant) for weighting
@@ -797,8 +797,8 @@ def adjust_losses_with_synergy(
         weighted_avg_loss = sum(loss.get(t, 0.0) * sizes[t] for t in group if t in sizes) / total_size
 
         if debug:
-            print(f"[SYNERGY] Group {group}")
-            print(f"  chosen_quant={chosen_quant}, weighted_avg_loss={weighted_avg_loss:.6f}")
+            print(f"[SYNERGY] Group {group}", file=sys.stderr)
+            print(f"  chosen_quant={chosen_quant}, weighted_avg_loss={weighted_avg_loss:.6f}", file=sys.stderr)
 
         # interpolate between original and group average
         for t in group:
@@ -808,7 +808,7 @@ def adjust_losses_with_synergy(
             new_loss = (1 - strength) * orig_loss + strength * weighted_avg_loss
             adjusted_loss[t] = new_loss
             if debug:
-                print(f"  {t}: {orig_loss:.6f} -> {new_loss:.6f}")
+                print(f"  {t}: {orig_loss:.6f} -> {new_loss:.6f}", file=sys.stderr)
 
     return adjusted_loss
 
@@ -893,7 +893,7 @@ def greedy_quant_assign(
     # --- Step 1b: Apply synergistic adjustment if requested ---
     if synergistic_groups and synergy_strength > 0.0:
         if debug:
-            print(f"[GREEDY] applying synergistic adjustment (strength={synergy_strength}) to loss values")
+            print(f"[GREEDY] applying synergistic adjustment (strength={synergy_strength}) to loss values", file=sys.stderr)
         ppl_loss_exp = adjust_losses_with_synergy(
             synergistic_groups=synergistic_groups,
             loss=ppl_loss_exp,
@@ -999,7 +999,7 @@ def greedy_quant_assign(
         total_size += int(tensor_sizes[t][q])
 
     if debug:
-        print(f"[GREEDY] initial total_size = {total_size / GIB:.3f} GiB; budget = {budget_bytes / GIB:.3f} GiB")
+        print(f"[GREEDY] initial total_size = {total_size / GIB:.3f} GiB; budget = {budget_bytes / GIB:.3f} GiB", file=sys.stderr)
 
     # --- prepare heap with (score, counter, tensor, from_q, to_q)
     pq: List[Tuple[float, int, str, str, str]] = []
@@ -1034,7 +1034,7 @@ def greedy_quant_assign(
             # if either is None, we cannot compute score reliably -> skip this move
             if deg_from is None or deg_to is None:
                 if debug:
-                    print(f"[GREEDY] missing degradation estimate for {from_q} or {to_q}; skipping move {tensor}:{from_q}->{to_q}")
+                    print(f"[GREEDY] missing degradation estimate for {from_q} or {to_q}; skipping move {tensor}:{from_q}->{to_q}", file=sys.stderr)
                 continue
             delta_deg = loss * (deg_to - deg_from)
             # Avoid division by zero, but delta_size>0 ensures denominator positive
@@ -1062,13 +1062,13 @@ def greedy_quant_assign(
         assignment[tensor] = to_q
 
         if debug:
-            print(f"[GREEDY] downgraded {tensor}: {from_q} -> {to_q}; saved {(size_from-size_to)/GIB:.3f} GiB; new total {(total_size)/GIB:.3f} GiB")
+            print(f"[GREEDY] downgraded {tensor}: {from_q} -> {to_q}; saved {(size_from-size_to)/GIB:.3f} GiB; new total {(total_size)/GIB:.3f} GiB", file=sys.stderr)
 
         # push next possible moves for this tensor (relative to its new quant)
         push_moves(tensor, to_q)
 
     if debug:
-        print(f"[GREEDY] final total_size = {total_size / GIB:.3f} GiB")
+        print(f"[GREEDY] final total_size = {total_size / GIB:.3f} GiB", file=sys.stderr)
 
     # --- Second pass: promote tensors if we have headroom
     promote_pq: List[Tuple[float, int, str, str, str]] = []
@@ -1096,7 +1096,7 @@ def greedy_quant_assign(
             deg_to = get_deg(to_q)
             if deg_from is None or deg_to is None:
                 if debug:
-                    print(f"[GREEDY] missing degradation estimate for promotion {tensor}:{from_q}->{to_q}; skipping")
+                    print(f"[GREEDY] missing degradation estimate for promotion {tensor}:{from_q}->{to_q}; skipping", file=sys.stderr)
                 continue
             delta_deg = loss * (deg_from - deg_to)
             score = float(delta_deg) / float(delta_size)
@@ -1109,7 +1109,7 @@ def greedy_quant_assign(
         push_promotions(t, assignment[t])
 
     if debug:
-        print(f"[GREEDY] starting promotion phase (headroom = {(budget_bytes - total_size)/GIB:.3f} GiB)")
+        print(f"[GREEDY] starting promotion phase (headroom = {(budget_bytes - total_size)/GIB:.3f} GiB)", file=sys.stderr)
 
     while promote_pq:
         _, _, tensor, from_q, to_q = heapq.heappop(promote_pq)
@@ -1129,13 +1129,13 @@ def greedy_quant_assign(
         assignment[tensor] = to_q
 
         if debug:
-            print(f"[GREEDY] promoted {tensor}: {from_q} -> {to_q}; added {(size_to - size_from)/GIB:.3f} GiB; total = {total_size/GIB:.3f} GiB")
+            print(f"[GREEDY] promoted {tensor}: {from_q} -> {to_q}; added {(size_to - size_from)/GIB:.3f} GiB; total = {total_size/GIB:.3f} GiB", file=sys.stderr)
 
         # push next possible promotion for this tensor
         push_promotions(tensor, to_q)
 
     if debug:
-        print(f"[GREEDY] promotion phase done; final total_size = {total_size / GIB:.3f} GiB")
+        print(f"[GREEDY] promotion phase done; final total_size = {total_size / GIB:.3f} GiB", file=sys.stderr)
 
     # --- If harmonized groups were used, expand group assignments back to original tensor names
     if merged and group_defs:
@@ -1171,7 +1171,7 @@ def optimize_midpoint_and_assign(quants, _, class_values,
     exp_factor controls exponent in stretch calculation: higher = more aggressive extremes.
     """
     if INFO:
-        print(f"[Info] Starting optimization for target size {max_bytes} bytes ±{tolerance*100}% with exp_factor={exp_factor:.2f}...")
+        print(f"[Info] Starting optimization for target size {max_bytes} bytes ±{tolerance*100}% with exp_factor={exp_factor:.2f}...", file=sys.stderr)
     best_assign, best_size = {}, float('inf')
     # compute initial midpoint as class mean
     class_mid = compute_class_midpoint(class_values)
@@ -1179,7 +1179,7 @@ def optimize_midpoint_and_assign(quants, _, class_values,
     stretch = STRETCH_MIN
     while stretch <= STRETCH_MAX:
         if INFO and stretch > STRETCH_MIN:
-            print(f"[Info] Trying stretch factor {stretch:.2f}...")
+            print(f"[Info] Trying stretch factor {stretch:.2f}...", file=sys.stderr)
         # reset bisection bounds for each stretch
         low_val, high_val = min(class_values.values()), max(class_values.values())
         # compute exponential boundary modifier
@@ -1193,11 +1193,11 @@ def optimize_midpoint_and_assign(quants, _, class_values,
         change_min_threshold = 0.0001
         mid_min_threshold = 0.00001
         if INFO:
-            print(f"[Info] Progress: {stretch/STRETCH_MAX*100:.2f}%")
+            print(f"[Info] Progress: {stretch/STRETCH_MAX*100:.2f}%", file=sys.stderr)
         # inner loop: dichotomy until converged
         while (prev_mid == None or prev_mid > mid_min_threshold) and (change == None or change >= change_min_threshold):
             if INFO:
-                print(f"[Info] Evaluating midpoint={mid:.6f}, stretch={stretch:.2f}...")
+                print(f"[Info] Evaluating midpoint={mid:.6f}, stretch={stretch:.2f}...", file=sys.stderr)
             assignment, sizes = assign_quants(quants, None,
                                              class_values,
                                              forced_mid=mid, stretch=stretch, harmonize_groups=harmonize_groups)
@@ -1205,14 +1205,14 @@ def optimize_midpoint_and_assign(quants, _, class_values,
             # tolerance check
             if abs(size - max_bytes) / max_bytes <= tolerance:
                 if INFO:
-                    print(f"[Info] Found acceptable size {size} at midpoint={mid:.6f}, stretch={stretch:.2f}.")
+                    print(f"[Info] Found acceptable size {size} at midpoint={mid:.6f}, stretch={stretch:.2f}.", file=sys.stderr)
                 return assignment, size
             # check midpoint change
             if prev_mid is not None:
                 change = abs(mid - prev_mid) / prev_mid
                 if change < change_min_threshold:  # less than 0.01%
                     if INFO:
-                        print(f"[Info] Midpoint change {change*100:.4f}% below threshold; breaking inner loop.")
+                        print(f"[Info] Midpoint change {change*100:.4f}% below threshold; breaking inner loop.", file=sys.stderr)
                     break
             prev_mid = mid
             # decide direction and update bounds
@@ -1223,7 +1223,7 @@ def optimize_midpoint_and_assign(quants, _, class_values,
             if INFO:
                 reason = 'too small' if size < max_bytes else 'too large'
                 direction = 'down' if size < max_bytes else 'up'
-                print(f"[Info] Size {size} is {reason}; moving midpoint {direction}.")
+                print(f"[Info] Size {size} is {reason}; moving midpoint {direction}.", file=sys.stderr)
             # compute next midpoint by dichotomy
             mid = (low_val + high_val) / 2
             # track best
@@ -1232,7 +1232,7 @@ def optimize_midpoint_and_assign(quants, _, class_values,
         # increment stretch factor
         stretch = round(stretch + STRETCH_STEP, 2)
     if INFO:
-        print("[Warning] Optimization finished; using best found assignment.")
+        print("[Warning] Optimization finished; using best found assignment.", file=sys.stderr)
     return best_assign, best_size
 
 def scale_for_size(assignment, sizes, quants, max_size_bytes):
@@ -1240,7 +1240,7 @@ def scale_for_size(assignment, sizes, quants, max_size_bytes):
     Fallback simple scaling if optimized assignment not used.
     """
     total = sum(sizes.values())
-    if INFO: print(f"[Info] Starting fallback scaling: current total {total}, target {max_size_bytes}")
+    if INFO: print(f"[Info] Starting fallback scaling: current total {total}, target {max_size_bytes}", file=sys.stderr)
     if total <= max_size_bytes:
         return assignment, total
     items = list(assignment.items())
@@ -1255,11 +1255,11 @@ def scale_for_size(assignment, sizes, quants, max_size_bytes):
                 sizes[name] = sizes[name].get(name, 0)
                 made_change = True
                 total = sum(sizes.values())
-                if INFO: print(f"[Info] Scaling {name} from {q} to {new_q}, new total {total}")
+                if INFO: print(f"[Info] Scaling {name} from {q} to {new_q}, new total {total}", file=sys.stderr)
                 if total <= max_size_bytes:
                     return assignment, total
         if not made_change:
-            if INFO: print("[Warning] Cannot reduce size further via fallback scaling.")
+            if INFO: print("[Warning] Cannot reduce size further via fallback scaling.", file=sys.stderr)
             break
     return assignment, total
 
@@ -1506,7 +1506,7 @@ def harmonize_row(row: pd.Series, cols: list, harmonize_groups: list, technique:
 
             if INFO:
                 lid_str = tuple_ids[0] if tuple_ids and tuple_ids[0] is not None else "no-id"
-                print(f"[Info] Harmonized group {gi} layer {lid_str}: {tuple_names} -> {new_val}")
+                print(f"[Info] Harmonized group {gi} layer {lid_str}: {tuple_names} -> {new_val}", file=sys.stderr)
 
     return row
 
@@ -1533,7 +1533,7 @@ def expand_harmonize_groups(harmonize_groups: List[List[str]], tensors: List[str
             compiled = [re.compile(p) for p in group]
         except Exception:
             if INFO:
-                print(f"[Info] Skipping harmonize group {gi}: invalid regex in {group}")
+                print(f"[Info] Skipping harmonize group {gi}: invalid regex in {group}", file=sys.stderr)
             continue
 
         # collect matches for each pattern (use re.search semantics)
@@ -1547,7 +1547,7 @@ def expand_harmonize_groups(harmonize_groups: List[List[str]], tensors: List[str
         lengths = [len(l) for l in matches_per_pattern]
         if len(set(lengths)) != 1:
             if INFO:
-                print(f"[Info] Skipping harmonize group {gi}: pattern match counts differ {lengths}")
+                print(f"[Info] Skipping harmonize group {gi}: pattern match counts differ {lengths}", file=sys.stderr)
             continue
 
         n = lengths[0]
@@ -1578,7 +1578,7 @@ def expand_harmonize_groups(harmonize_groups: List[List[str]], tensors: List[str
                 l.sort(key=lambda x: x[0])
         else:
             if INFO:
-                print(f"[Info] Skipping harmonize group {gi}: inconsistent id presence across matches")
+                print(f"[Info] Skipping harmonize group {gi}: inconsistent id presence across matches", file=sys.stderr)
             continue
 
         # pair index-wise and append concrete tuples
@@ -1606,7 +1606,7 @@ def parse_group_argument(arg_value, arg_name: str, parser, info_flag=False):
 
     if arg_value and arg_value == ['']:
         if info_flag:
-            print(f"[Info] {arg_name} disabled by the user")
+            print(f"[Info] {arg_name} disabled by the user", file=sys.stderr)
         return groups
 
     # Case 1: direct Python literal string
@@ -1838,18 +1838,18 @@ def main():
 
     if INFO:
         if args.quant_degradation_csv:
-            print(f"[Info] Loaded degradation values for ({len(quant_degradation_values)} quant types) from CSV" + f": {args.quant_degradation_csv}")
+            print(f"[Info] Loaded degradation values for ({len(quant_degradation_values)} quant types) from CSV" + f": {args.quant_degradation_csv}", file=sys.stderr)
         else:
-            print(f"[Info] Loaded default degradation values for ({len(quant_degradation_values)} quant types)")
+            print(f"[Info] Loaded default degradation values for ({len(quant_degradation_values)} quant types)", file=sys.stderr)
         if args.quant_degradation_equation:
-            print(f"[Info] Using quant degradation equation: {quant_equation_str}")
+            print(f"[Info] Using quant degradation equation: {quant_equation_str}", file=sys.stderr)
         else:
-            print(f"[Info] Using default quant degradation equation: {quant_equation_str}")
+            print(f"[Info] Using default quant degradation equation: {quant_equation_str}", file=sys.stderr)
         # If both provided, warn that equation must come from same data
         if args.quant_degradation_csv and args.quant_degradation_equation:
             print("[Info] Both --quant-degradation-csv and --quant-degradation-equation were provided. "
                 "CSV values take precedence; the equation will be used only as a fallback for qtypes missing in the CSV. "
-                "IMPORTANT: the equation should be derived from the same CSV file or results will be inconsistent.")
+                "IMPORTANT: the equation should be derived from the same CSV file or results will be inconsistent.", file=sys.stderr)
 
     # helper lookup that greedy_quant_assign will use (returns float or None)
     warned_missing_qtypes = set()
@@ -1891,7 +1891,7 @@ def main():
         try:
             val = float(quant_equation_func(x))
             if DEBUG:
-                print(f"[Debug] Estimated degradation for {qtype} using equation at x={x}: {val}")
+                print(f"[Debug] Estimated degradation for {qtype} using equation at x={x}: {val}", file=sys.stderr)
             return val
         except Exception as e:
             if qtype not in warned_missing_qtypes:
@@ -1902,8 +1902,8 @@ def main():
                         '--allow-impure-map --plot --p-grid-max 15 --p-grid-steps 100 --penalize-above 15 --drift-below 15'
                     )
                     print(f"[Info] Quant degradation value for qtype '{qtype}' missing from CSV and equation evaluation failed. "
-                        "You can produce a fallback equation from your CSV with a command like:")
-                    print(f"[Info]   {suggested_cmd}")
+                        "You can produce a fallback equation from your CSV with a command like:", file=sys.stderr)
+                    print(f"[Info]   {suggested_cmd}", file=sys.stderr)
                 warned_missing_qtypes.add(qtype)
             return None
 
@@ -1921,25 +1921,25 @@ def main():
     # Reorder cpu_quants from highest to lowest bpw
     try:
         cpu_quants = sorted(cpu_quants, key=get_bpw, reverse=True)
-        if INFO: print(f"[Info] CPU-friendly quants reordered by bpw: {cpu_quants}")
+        if INFO: print(f"[Info] CPU-friendly quants reordered by bpw: {cpu_quants}", file=sys.stderr)
     except Exception:
         pass
 
     gpu_quants = args.gpu_quants
     # By default we assume the user wants everything on the GPU
     if not cpu_quants and not gpu_quants:
-        if INFO: print(f"[Info] No quants selected, reverting to GPU default selection: {DEFAULT_QUANTS}")
+        if INFO: print(f"[Info] No quants selected, reverting to GPU default selection: {DEFAULT_QUANTS}", file=sys.stderr)
         gpu_quants = DEFAULT_QUANTS
     # if not gpu_quants and args.cpu_quants:
     #     gpu_quants = DEFAULT_QUANTS
     # Reorder gpu_quants from highest to lowest bpw
     try:
         gpu_quants = sorted(gpu_quants, key=get_bpw, reverse=True)
-        if INFO: print(f"[Info] GPU-friendly quants reordered by bpw: {gpu_quants}")
+        if INFO: print(f"[Info] GPU-friendly quants reordered by bpw: {gpu_quants}", file=sys.stderr)
     except Exception:
         pass
 
-    if INFO: print(f"[Info] Loading CSV: {args.csv_file}")
+    if INFO: print(f"[Info] Loading CSV: {args.csv_file}", file=sys.stderr)
     df = pd.read_csv(args.csv_file)
     if 'QTYPE' not in df.columns:
         print("Error: CSV must have 'QTYPE' as first column.")
@@ -1948,7 +1948,7 @@ def main():
     #reduction_factors = load_sample_ppl_table(args.sample_ppl)
     row = select_qtype(df, args.qtype)
     qtype = row['QTYPE']
-    if INFO: print(f"[Info] Selected QTYPE: {qtype}")
+    if INFO: print(f"[Info] Selected QTYPE: {qtype}", file=sys.stderr)
 
     # ---- NEW: Parse synergistic tensor groupps into per layer groups----
     synergistic_groups = parse_group_argument(args.synergistic_tensors, "--synergistic-tensors", parser, info_flag=INFO)
@@ -2033,22 +2033,22 @@ def main():
                     if y <= 0 or not math.isfinite(y):
                         # If the computed y is not positive (or not finite), fall back conservatively
                         if INFO:
-                            print(f"[Info] Computed y = 0.5*ln(x) with x={bf16_total_gib:.6f} GiB produced non-positive/invalid value {y}; falling back to 3.0")
+                            print(f"[Info] Computed y = 0.5*ln(x) with x={bf16_total_gib:.6f} GiB produced non-positive/invalid value {y}; falling back to 3.0", file=sys.stderr)
                         exp_factor_final = 3.0
                     else:
                         exp_factor_final = float(y)
                 else:
                     if INFO:
-                        print(f"[Info] BF16 total size x is {bf16_total_gib:.6f} GiB (<=0); cannot compute ln(x). Falling back to exponential-factor=3.0")
+                        print(f"[Info] BF16 total size x is {bf16_total_gib:.6f} GiB (<=0); cannot compute ln(x). Falling back to exponential-factor=3.0", file=sys.stderr)
                     exp_factor_final = 3.0
             except Exception as e:
                 if INFO:
-                    print(f"[Info] Failed to compute automatic exponential-factor from bf16 size: {e}; falling back to 3.0")
+                    print(f"[Info] Failed to compute automatic exponential-factor from bf16 size: {e}; falling back to 3.0", file=sys.stderr)
                 exp_factor_final = 3.0
 
             if INFO:
-                print(f"[Info] Automatic exponential-factor equation: y = 0.5 * ln(x) (x = bf16 total size in GiB).")
-                print(f"[Info] bf16 total size x = {bf16_total_gib:.6f} GiB -> y = {exp_factor_final}")
+                print(f"[Info] Automatic exponential-factor equation: y = 0.5 * ln(x) (x = bf16 total size in GiB).", file=sys.stderr)
+                print(f"[Info] bf16 total size x = {bf16_total_gib:.6f} GiB -> y = {exp_factor_final}", file=sys.stderr)
         else:
             # Not using greedy and user did not specify => default 8.0
             exp_factor_final = 8.0
@@ -2056,14 +2056,14 @@ def main():
     # -------------------------
 
     # Collect tensor names (either from csv or from map file)
-    if INFO: print(f"[Info] Get all tensor names")
+    if INFO: print(f"[Info] Get all tensor names", file=sys.stderr)
     if args.tensors_from_csv:
         tensor_names = [c for c in df.columns if c != 'QTYPE']
     else:
         tensor_names = [n for n,d in _items.items()]
 
     # Identify all f32 tensors once
-    if INFO: print(f"[Info] Get f32 tensor names")
+    if INFO: print(f"[Info] Get f32 tensor names", file=sys.stderr)
     # get_map_sizes_and_elements returns (sizes, actual_qtypes, elements)
     f32_names = [n for n,d in _items.items() if d == 'f32']
 
@@ -2079,10 +2079,10 @@ def main():
     pre_assignments_offset = {'cpu': 0, 'gpu': 0}
     for cls in ['cpu', 'gpu']:
         if cls == 'cpu' and not cpu_quants:
-            if INFO: print(f"[Info] CPU-friendly quants skipped because not being user-specified.")
+            if INFO: print(f"[Info] CPU-friendly quants skipped because not being user-specified.", file=sys.stderr)
             continue # Skip loop if empty quants
         if cls == 'gpu' and not gpu_quants:
-            if INFO: print(f"[Info] GPU-friendly quants skipped because not being user-specified.")
+            if INFO: print(f"[Info] GPU-friendly quants skipped because not being user-specified.", file=sys.stderr)
             continue # Skip loop if empty quants
         quants = cpu_quants if cls == 'cpu' else gpu_quants
         pat_assign_tensors = [pat.split('=')[0] for pat in args.cpu_assign_tensors] if cls == 'cpu' else [pat.split('=')[0] for pat in args.gpu_assign_tensors]
@@ -2102,7 +2102,7 @@ def main():
                 pre_assignments[name] = _assign_qtype[name]
 
                 subclasses_assigned[cls].append(name)
-                if INFO: print(f"[Info] Assigning {name!r} → {pre_assignments[name]!r} (in --cpu/gpu-assign-tensors parameter)")
+                if INFO: print(f"[Info] Assigning {name!r} → {pre_assignments[name]!r} (in --cpu/gpu-assign-tensors parameter)", file=sys.stderr)
 
                 # jump to next tensor
                 continue
@@ -2114,7 +2114,7 @@ def main():
                 pre_assignments[name] = _assign_qtype[name]
 
                 subclasses_assigned[cls].append(name)
-                if INFO: print(f"[Info] Assigning {name!r} → {pre_assignments[name]!r} (missing metrics)")
+                if INFO: print(f"[Info] Assigning {name!r} → {pre_assignments[name]!r} (missing metrics)", file=sys.stderr)
 
                 # jump to next tensor
                 continue
@@ -2199,11 +2199,11 @@ def main():
         # Determine bounds and outliers
         k_val = args.cpu_irq_k if cls=='cpu' else args.gpu_irq_k
         lower, upper = compute_iqr_bounds(class_vals, k_val)
-        if INFO: print(f"[Info] {cls.upper()} outlier bounds: lower={lower:.4f}, upper={upper:.4f}")
+        if INFO: print(f"[Info] {cls.upper()} outlier bounds: lower={lower:.4f}, upper={upper:.4f}", file=sys.stderr)
         out_low = [n for n,v in class_vals.items() if v < lower]
         out_high = [n for n,v in class_vals.items() if v > upper]
-        if DEBUG: print(f"[Debug] {cls.upper()} low outliers: {out_low}")
-        if DEBUG: print(f"[Debug] {cls.upper()} high outliers: {out_high}")
+        if DEBUG: print(f"[Debug] {cls.upper()} low outliers: {out_low}", file=sys.stderr)
+        if DEBUG: print(f"[Debug] {cls.upper()} high outliers: {out_high}", file=sys.stderr)
 
         # Assign extremes and compute outlier size deduction
         outlier_bytes = 0
@@ -2257,7 +2257,7 @@ def main():
                 if len(set(lengths)) != 1:
                     # counts differ => user likely split tensors across CPU/GPU or similar.
                     if INFO:
-                        print(f"[Info] Warning: skipping harmonization for group {gi} quant {extreme_q} because pattern match counts differ (counts={lengths}); using per-tensor sizes.")
+                        print(f"[Info] Warning: skipping harmonization for group {gi} quant {extreme_q} because pattern match counts differ (counts={lengths}); using per-tensor sizes.", file=sys.stderr)
                     return None
 
                 if lengths[0] == 0:
@@ -2268,7 +2268,7 @@ def main():
                 if name not in my_list:
                     # safety: unexpected
                     if INFO:
-                        print(f"[Info] Warning: {name!r} not present in pattern list for harmonization group {gi}; skipping harmonization for this tensor.")
+                        print(f"[Info] Warning: {name!r} not present in pattern list for harmonization group {gi}; skipping harmonization for this tensor.", file=sys.stderr)
                     return None
                 idx_in = my_list.index(name)
 
@@ -2299,7 +2299,7 @@ def main():
                     outlier_bytes += size
                     processed_outliers.add(n)
                     if INFO:
-                        print(f"[Info] Assigned {desc} quant {assigned_q} to outlier {n}, size={size/GIB:.3f} GiB")
+                        print(f"[Info] Assigned {desc} quant {assigned_q} to outlier {n}, size={size/GIB:.3f} GiB", file=sys.stderr)
                 else:
                     matched_names, size_harmonized, group_idx = found
                     # assign same extreme quant and harmonized size to each matched partner
@@ -2310,7 +2310,7 @@ def main():
                         outlier_bytes += size_harmonized
                         processed_outliers.add(nm)
                         if INFO:
-                            print(f"[Info] Assigned {desc} quant {assigned_q} to outlier {nm}, size={size_harmonized/GIB:.3f} GiB (harmonized group {group_idx})")
+                            print(f"[Info] Assigned {desc} quant {assigned_q} to outlier {nm}, size={size_harmonized/GIB:.3f} GiB (harmonized group {group_idx})", file=sys.stderr)
 
         if not args.use_greedy_quant_assign:
             # process low and high outliers (lowest quant = quants[-1], highest quant = quants[0])
@@ -2341,24 +2341,24 @@ def main():
             if isinstance(raw_max, str) and raw_max.endswith('%'):
                 pct = float(raw_max.rstrip('%')) / 100.0
                 _max_arg_bytes = pct * max_ref
-                if INFO: print(f"[Info] {cls.upper()} max-size set to {raw_max} of {highest_q} total ({max_ref/GIB:.3f} GiB) = {_max_arg_bytes/GIB:.3f} GiB")
+                if INFO: print(f"[Info] {cls.upper()} max-size set to {raw_max} of {highest_q} total ({max_ref/GIB:.3f} GiB) = {_max_arg_bytes/GIB:.3f} GiB", file=sys.stderr)
             else:
                 _max_arg_bytes = float(raw_max) * GIB
             max_arg_bytes = _max_arg_bytes
             max_arg_bytes -= outlier_bytes # deduct outliers
             max_arg_bytes -= f32_offset.get(cls, 0) # deduct f32 offset
             max_arg_bytes -= pre_assignments_offset.get(cls, 0) # deduct pre-assigned offset
-            if INFO: print(f"[Info] Deducted outliers and f32 total {outlier_bytes/GIB:.3f} GiB from target, adjusted max={max_arg_bytes/GIB:.3f} GiB")
+            if INFO: print(f"[Info] Deducted outliers and f32 total {outlier_bytes/GIB:.3f} GiB from target, adjusted max={max_arg_bytes/GIB:.3f} GiB", file=sys.stderr)
 
         if _max_arg_bytes >= (max_ref - max_ref*0.0001):
             # Assign highest quant to all (except extremes)
-            if INFO: print(f"[Info] Reasonably assigning highest quant to all tensors...")
+            if INFO: print(f"[Info] Reasonably assigning highest quant to all tensors...", file=sys.stderr)
             assignment, sizes = assign_quants(
                 [highest_q], None, class_vals)
             total_bytes = sum(sizes.values())
         elif _max_arg_bytes == 0:
             # Assign lowest quant to all (except extremes)
-            if INFO: print(f"[Info] Reasonably assigning lowest quant to all tensors...")
+            if INFO: print(f"[Info] Reasonably assigning lowest quant to all tensors...", file=sys.stderr)
             assignment, sizes = assign_quants(
                 [lowest_q], None, class_vals)
             total_bytes = sum(sizes.values())
@@ -2374,7 +2374,7 @@ def main():
                 except Exception:
                     expanded_harmonize_groups = []
                 if INFO and harmonize_groups and not expanded_harmonize_groups:
-                    print(f"[Info] No harmonize groups expanded for class {cls}.")
+                    print(f"[Info] No harmonize groups expanded for class {cls}.", file=sys.stderr)
 
                 # Synergistic groups
                 try:
@@ -2382,7 +2382,7 @@ def main():
                 except Exception:
                     expanded_synergistic_groups = []
                 if INFO and synergistic_groups and not expanded_synergistic_groups:
-                    print(f"[Info] No synergistic groups expanded for class {cls}.")
+                    print(f"[Info] No synergistic groups expanded for class {cls}.", file=sys.stderr)
 
                 # ---- Call greedy quant assignment with all parameters ----
                 # Use get_map_sizes_and_elements to build the tensor_sizes mapping
@@ -2440,17 +2440,17 @@ def main():
                     for cre, qt in cpu_regex_assign:
                         if cre.fullmatch(name):
                             if DEBUG:
-                                print(f"[Debug] Regex override (cpu) matched {name} -> {qt}")
+                                print(f"[Debug] Regex override (cpu) matched {name} -> {qt}", file=sys.stderr)
                             return qt
                 else:
                     for cre, qt in gpu_regex_assign:
                         if cre.fullmatch(name):
                             if DEBUG:
-                                print(f"[Debug] Regex override (gpu) matched {name} -> {qt}")
+                                print(f"[Debug] Regex override (gpu) matched {name} -> {qt}", file=sys.stderr)
                             return qt
             except Exception as e:
                 if DEBUG:
-                    print(f"[Debug] Regex override check error for {name}: {e}")
+                    print(f"[Debug] Regex override check error for {name}: {e}", file=sys.stderr)
             return None
 
         def _infer_assigned_q(name, cls_local):
@@ -2467,7 +2467,7 @@ def main():
             if name in pre_assignments:
                 q = pre_assignments.get(name)
                 if DEBUG:
-                    print(f"[Debug] Inferred from pre_assignments: {name} -> {q}")
+                    print(f"[Debug] Inferred from pre_assignments: {name} -> {q}", file=sys.stderr)
                 return q
             # 2) regex override lists (user-provided patterns)
             overridden = _regex_override_for(name, cls_local)
@@ -2477,19 +2477,19 @@ def main():
             if name in assignments.get(cls_local, {}):
                 q = assignments[cls_local].get(name)
                 if DEBUG:
-                    print(f"[Debug] Inferred from assignments[{cls_local}]: {name} -> {q}")
+                    print(f"[Debug] Inferred from assignments[{cls_local}]: {name} -> {q}", file=sys.stderr)
                 return q
             # 4) the explicit class-level default qtype flags
             if cls_local == 'cpu' and args.cpu_assign_qtype:
                 if DEBUG:
-                    print(f"[Debug] Inferred class default cpu_assign_qtype for {name} -> {args.cpu_assign_qtype}")
+                    print(f"[Debug] Inferred class default cpu_assign_qtype for {name} -> {args.cpu_assign_qtype}", file=sys.stderr)
                 return args.cpu_assign_qtype
             if cls_local == 'gpu' and args.gpu_assign_qtype:
                 if DEBUG:
-                    print(f"[Debug] Inferred class default gpu_assign_qtype for {name} -> {args.gpu_assign_qtype}")
+                    print(f"[Debug] Inferred class default gpu_assign_qtype for {name} -> {args.gpu_assign_qtype}", file=sys.stderr)
                 return args.gpu_assign_qtype
             if DEBUG:
-                print(f"[Debug] No inferred assignment for {name}")
+                print(f"[Debug] No inferred assignment for {name}", file=sys.stderr)
             return None
 
         def _basename_of_tensor(name: str) -> str:
@@ -2539,7 +2539,7 @@ def main():
 
             phase_mismatch_count = sum(len(v) for v in pair_to_names.values())
             if INFO:
-                print(f"[Info] f32 phase mismatches: {phase_mismatch_count}")
+                print(f"[Info] f32 phase mismatches: {phase_mismatch_count}", file=sys.stderr)
 
             for (o, f), names_list in pair_to_names.items():
                 type_list_str = _format_type_list(names_list)
@@ -2604,7 +2604,7 @@ def main():
             pre_mismatch = sum(len(v) for v in pre_pair_to_names.values())
             val_mismatch = sum(len(v) for v in val_pair_to_names.values())
             if INFO:
-                print(f"[Info] Group '{base}' pre_mismatch={pre_mismatch} val_mismatch={val_mismatch}")
+                print(f"[Info] Group '{base}' pre_mismatch={pre_mismatch} val_mismatch={val_mismatch}", file=sys.stderr)
 
             if pre_entries or val_entries:
                 printed_group_header = False
@@ -2619,7 +2619,7 @@ def main():
                         print(f"^{re.escape(name)}$={f if f is not None else ''}")
 
         if INFO:
-            print(f"[Info] Completed verbose assignment inspection for class '{cls}'.")
+            print(f"[Info] Completed verbose assignment inspection for class '{cls}'.", file=sys.stderr)
 
     # Recompute fallback_corrections from the single canonical registry (avoid double counting)
     fallback_corrections = sum(
@@ -2628,7 +2628,7 @@ def main():
     )
 
     if DEBUG:
-        print(f"[Debug] tensor_index - ", tensor_index)
+        print(f"[Debug] tensor_index - ", tensor_index, file=sys.stderr)
 
     # ----------------- SUMMARY: build everything from tensor_index (single source-of-truth) -----------------
     print("\n## Summary of tensor sizes per class")
@@ -2712,15 +2712,15 @@ def main():
 
         # candidate list: union of user quants and discovered qtypes
         if DEBUG:
-            print(f"[Debug] quants_list - ", quants_list)
+            print(f"[Debug] quants_list - ", quants_list, file=sys.stderr)
         if DEBUG:
-            print(f"[Debug] _quants_list - ", _quants_list)
+            print(f"[Debug] _quants_list - ", _quants_list, file=sys.stderr)
         if DEBUG:
-            print(f"[Debug] ordered_qtypes - ", ordered_qtypes)
+            print(f"[Debug] ordered_qtypes - ", ordered_qtypes, file=sys.stderr)
         candidate_quants = list(dict.fromkeys((quants_list or []) + list(ordered_qtypes)))
         sorted_quants = sorted(candidate_quants, key=lambda q: get_bpw(q) or 0, reverse=True)
         if DEBUG:
-            print(f"[Debug] sorted_quants - ", sorted_quants)
+            print(f"[Debug] sorted_quants - ", sorted_quants, file=sys.stderr)
 
         # build quick index for this class by final_q
         by_final = {}
