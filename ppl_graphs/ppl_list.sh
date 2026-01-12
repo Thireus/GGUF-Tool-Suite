@@ -23,7 +23,6 @@
 #**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
 #***************************************************************#
 
-# collect_ppl.sh
 # Finds all .csv in current dir, runs the model script on those with >5 data rows,
 # extracts the "y = ..." equation from stdout and writes model_name:equation to ppl_list.txt
 

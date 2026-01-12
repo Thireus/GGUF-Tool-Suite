@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jan-03-2026 -------------------- **#
+#** --------------- Updated: Jan-12-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -1680,8 +1680,11 @@ def main():
     parser.add_argument('--gpu-quants', nargs='+', help='Ordered list of GPU-friendly case-sensitive quants (e.g. q3_K)')
     parser.add_argument('--cpu-tensors-max-size', type=str, help='Max CPU-friendly tensors size in GiB or percent (e.g., 80%%)')
     parser.add_argument('--gpu-tensors-max-size', type=str, help='Max GPU-friendly tensors size in GiB or percent (e.g., 80%%)')
-    parser.add_argument('--exponential-factor', type=float, default=1.0,
-                        help='Exponent controlling midpoint adjustment aggressiveness during stretch sweeps for default quant assignment method. Higher values push quantization toward extremes; default is 1.0. When using --use-greedy-quant-assign, the exponent is used to try to map per-tensor degradation values into a additively linear space. Recommended range for greedy quant assign is 1.0 to 5.0 when using KLD metrics with 3.0 being a good starting point.')
+    parser.add_argument('--exponential-factor', type=float, default=None,
+                        help=('Exponent controlling midpoint adjustment aggressiveness during stretch sweeps for default quant assignment method. '
+                              'Higher values push quantization toward extremes. When not using --use-greedy-quant-assign the default value is 8. When using --use-greedy-quant-assign, the script will compute a default value using the equation: y = 0.5 * ln(x), '
+                              'where x is the bf16 total tensor size in GiB, and use that as the exponential-factor. If computation fails, it will fallback to 3.0 as default value.'
+                              'If you do provide --exponential-factor it overrides the automatic calculation. Recommended manual range for greedy quant assign is 1.0 to 5.0 when using KLD metrics with 3.0 being a good starting point.'))
     parser.add_argument('--ignore-f32', action='store_true', help='Ignore f32 tensors (default: not ignored)')
     parser.add_argument('--tensors-from-csv', action='store_true', help='Obtains list of tensors from csv file only (default: tensors are obtained from map file)')
     parser.add_argument('--skip-gpg', action='store_true',
@@ -2001,6 +2004,56 @@ def main():
     _items = items_f32
     if not _items:
         _items = items
+
+    # -------------------------
+    # Compute bf16 total size and determine exponential-factor default (if needed)
+    # -------------------------
+    # We'll compute a final effective exponential-factor (exp_factor_final) which will be used
+    # throughout the assignment flow instead of directly using args.exponential_factor, so we
+    # can substitute the automatic value when --use-greedy-quant-assign is used and the user
+    # did not explicitly pass --exponential-factor.
+    try:
+        bf16_sizes, _, _ = get_map_sizes_and_elements('bf16', True)
+    except Exception:
+        bf16_sizes = {}
+    bf16_total_bytes = sum(bf16_sizes.values()) if bf16_sizes else 0
+    bf16_total_gib = bf16_total_bytes / GIB if bf16_total_bytes else 0.0
+
+    # Determine effective exponential-factor
+    if args.exponential_factor is not None:
+        exp_factor_final = float(args.exponential_factor)
+    else:
+        # Not specified by user
+        if args.use_greedy_quant_assign:
+            # Use the requested equation: y = 0.5 * ln(x), where x is the bf16 total tensor size in GiB.
+            # If bf16_total_gib is <= 0 or ln is non-positive result, fallback to 8.0
+            try:
+                if bf16_total_gib > 0:
+                    y = 0.5 * math.log(bf16_total_gib)
+                    if y <= 0 or not math.isfinite(y):
+                        # If the computed y is not positive (or not finite), fall back conservatively
+                        if INFO:
+                            print(f"[Info] Computed y = 0.5*ln(x) with x={bf16_total_gib:.6f} GiB produced non-positive/invalid value {y}; falling back to 3.0")
+                        exp_factor_final = 3.0
+                    else:
+                        exp_factor_final = float(y)
+                else:
+                    if INFO:
+                        print(f"[Info] BF16 total size x is {bf16_total_gib:.6f} GiB (<=0); cannot compute ln(x). Falling back to exponential-factor=3.0")
+                    exp_factor_final = 3.0
+            except Exception as e:
+                if INFO:
+                    print(f"[Info] Failed to compute automatic exponential-factor from bf16 size: {e}; falling back to 3.0")
+                exp_factor_final = 3.0
+
+            if INFO:
+                print(f"[Info] Automatic exponential-factor equation: y = 0.5 * ln(x) (x = bf16 total size in GiB).")
+                print(f"[Info] bf16 total size x = {bf16_total_gib:.6f} GiB -> y = {exp_factor_final}")
+        else:
+            # Not using greedy and user did not specify => default 8.0
+            exp_factor_final = 8.0
+
+    # -------------------------
 
     # Collect tensor names (either from csv or from map file)
     if INFO: print(f"[Info] Get all tensor names")
@@ -2346,14 +2399,14 @@ def main():
                     budget_bytes=int(max_arg_bytes),
                     debug=DEBUG,
                     harmonized_groups=expanded_harmonize_groups,
-                    loss_exponent=args.exponential_factor,
+                    loss_exponent=exp_factor_final,
                     synergistic_groups=expanded_synergistic_groups,
                     synergy_strength=args.synergy_strength
                 )
             else:
                 assignment, total_bytes = optimize_midpoint_and_assign(
                     quants, None, class_vals,
-                    max_arg_bytes, args.tolerance, args.exponential_factor, harmonize_groups=harmonize_groups)
+                    max_arg_bytes, args.tolerance, exp_factor_final, harmonize_groups=harmonize_groups)
             #print(f"# Optimized sub-total {cls.upper()} size excluding outliers and f32: {total_bytes/GIB:.3f} GiB")
         else:
             assignment, sizes = assign_quants(
