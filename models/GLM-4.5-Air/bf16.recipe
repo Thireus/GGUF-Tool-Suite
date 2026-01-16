@@ -1,0 +1,56 @@
+## Model head & embeddings — qbits: 32 16
+^token_embd\.weight$=bf16
+^output\.weight$=bf16
+^output_norm\.weight$=f32
+
+## Multi-headed attention parameters — qbits: 32 16
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_norm\.weight$=f32
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_v\.weight$=bf16
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_output\.weight$=bf16
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k\.weight$=bf16
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k_norm\.weight$=f32
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_v\.bias$=f32
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q\.bias$=f32
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q_norm\.weight$=f32
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k\.bias$=f32
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q\.weight$=bf16
+
+## Dense Feed-Forward Network weights — qbits: 16
+^blk\.[0-2]\.ffn_down\.weight$=bf16
+^blk\.[0-2]\.ffn_up\.weight$=bf16
+^blk\.[0-2]\.ffn_gate\.weight$=bf16
+
+## NextN tensors — qbits: 32 16
+^blk\.92\.nextn\.embed_tokens\.weight$=bf16
+^blk\.92\.nextn\.enorm\.weight$=f32
+^blk\.92\.nextn\.eh_proj\.weight$=bf16
+^blk\.92\.nextn\.shared_head_head\.weight$=bf16
+^blk\.92\.nextn\.shared_head_norm\.weight$=f32
+^blk\.92\.nextn\.hnorm\.weight$=f32
+
+## MoE Gating & Routing — qbits: 32
+^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_inp\.weight$=f32
+^blk\.([3-9]|[1-8][0-9]|9[0-2])\.exp_probs_b\.bias$=f32
+
+## Misc / Other tensors — qbits: 32
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.post_attention_norm\.weight$=f32
+
+## GPU-loaded - MoE Shared Experts Feed-Forward Network - ffn_*_shexp
+# ffn_down_shexp — down-projection (shared experts) — qbits: 16
+^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_down_shexp\.weight$=bf16
+
+# ffn_up_shexp — up-projection (shared experts) — qbits: 16
+^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_up_shexp\.weight$=bf16
+
+# ffn_gate_shexp — gating network (shared experts) — qbits: 16
+^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_shexp\.weight$=bf16
+
+## CPU-friendly - MoE Per-expert Feed-Forward Network - ffn_*_exps
+# ffn_down_exps — down-projection (per-expert) — qbits: 16
+^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_down_exps\.weight$=bf16
+
+# ffn_up_exps — up-projection (per-expert) — qbits: 16
+^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_up_exps\.weight$=bf16
+
+# ffn_gate_exps — gating network (per-expert) — qbits: 16
+^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_exps\.weight$=bf16
