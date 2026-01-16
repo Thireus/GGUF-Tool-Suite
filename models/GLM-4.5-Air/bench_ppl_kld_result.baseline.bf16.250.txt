@@ -1,0 +1,206 @@
+main: build = 1 (d73fe98)
+main: built with MSVC 19.44.35222.0 for 
+main: seed  = 1337
+ggml_cuda_init: GGML_CUDA_FORCE_MMQ:    no
+ggml_cuda_init: GGML_CUDA_FORCE_CUBLAS: no
+ggml_cuda_init: found 3 CUDA devices:
+  Device 0: NVIDIA RTX PRO 6000 Blackwell Workstation Edition, compute capability 12.0, VMM: yes, VRAM: 97886 MiB
+  Device 1: NVIDIA RTX PRO 6000 Blackwell Workstation Edition, compute capability 12.0, VMM: yes, VRAM: 97886 MiB
+  Device 2: NVIDIA RTX PRO 6000 Blackwell Workstation Edition, compute capability 12.0, VMM: yes, VRAM: 97886 MiB
+CUDA0: using device CUDA0 - 95287 MiB free
+CUDA1: using device CUDA1 - 95287 MiB free
+CUDA2: using device CUDA2 - 95287 MiB free
+llama_model_loader: max stdio successfully set to 2048
+llama_model_loader: additional 803 GGUFs metadata loaded.
+llama_model_loader: loaded meta data with 44 key-value pairs and 803 tensors from ./GLM-4.5-Air-THIREUS-BF16-SPECIAL_TENSOR-00001-of-00804.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = glm4moe
+llama_model_loader: - kv   1:                               general.type str              = model
+llama_model_loader: - kv   2:                               general.name str              = GLM 4.5 Air
+llama_model_loader: - kv   3:                         general.size_label str              = 128x9.4B
+llama_model_loader: - kv   4:                            general.license str              = mit
+llama_model_loader: - kv   5:                               general.tags arr[str,1]       = ["text-generation"]
+llama_model_loader: - kv   6:                          general.languages arr[str,2]       = ["en", "zh"]
+llama_model_loader: - kv   7:                        glm4moe.block_count u32              = 47
+llama_model_loader: - kv   8:                     glm4moe.context_length u32              = 131072
+llama_model_loader: - kv   9:                   glm4moe.embedding_length u32              = 4096
+llama_model_loader: - kv  10:                glm4moe.feed_forward_length u32              = 10944
+llama_model_loader: - kv  11:               glm4moe.attention.head_count u32              = 96
+llama_model_loader: - kv  12:            glm4moe.attention.head_count_kv u32              = 8
+llama_model_loader: - kv  13:                     glm4moe.rope.freq_base f32              = 1000000.000000
+llama_model_loader: - kv  14:   glm4moe.attention.layer_norm_rms_epsilon f32              = 0.000010
+llama_model_loader: - kv  15:                  glm4moe.expert_used_count u32              = 8
+llama_model_loader: - kv  16:               glm4moe.attention.key_length u32              = 128
+llama_model_loader: - kv  17:             glm4moe.attention.value_length u32              = 128
+llama_model_loader: - kv  18:                          general.file_type u32              = 24
+llama_model_loader: - kv  19:               glm4moe.rope.dimension_count u32              = 64
+llama_model_loader: - kv  20:                       glm4moe.expert_count u32              = 128
+llama_model_loader: - kv  21:         glm4moe.expert_feed_forward_length u32              = 1408
+llama_model_loader: - kv  22:                glm4moe.expert_shared_count u32              = 1
+llama_model_loader: - kv  23:          glm4moe.leading_dense_block_count u32              = 1
+llama_model_loader: - kv  24:                 glm4moe.expert_gating_func u32              = 2
+llama_model_loader: - kv  25:               glm4moe.expert_weights_scale f32              = 1.000000
+llama_model_loader: - kv  26:                glm4moe.expert_weights_norm bool             = true
+llama_model_loader: - kv  27:               glm4moe.nextn_predict_layers u32              = 1
+llama_model_loader: - kv  28:                       tokenizer.ggml.model str              = gpt2
+llama_model_loader: - kv  29:                         tokenizer.ggml.pre str              = glm4
+llama_model_loader: - kv  30:                      tokenizer.ggml.tokens arr[str,151552]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+llama_model_loader: - kv  31:                  tokenizer.ggml.token_type arr[i32,151552]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  32:                      tokenizer.ggml.merges arr[str,318088]  = ["Ġ Ġ", "Ġ ĠĠĠ", "ĠĠ ĠĠ", "...
+llama_model_loader: - kv  33:                tokenizer.ggml.eos_token_id u32              = 151329
+llama_model_loader: - kv  34:            tokenizer.ggml.padding_token_id u32              = 151329
+llama_model_loader: - kv  35:                tokenizer.ggml.bos_token_id u32              = 151331
+llama_model_loader: - kv  36:                tokenizer.ggml.eot_token_id u32              = 151336
+llama_model_loader: - kv  37:            tokenizer.ggml.unknown_token_id u32              = 151329
+llama_model_loader: - kv  38:                tokenizer.ggml.eom_token_id u32              = 151338
+llama_model_loader: - kv  39:                    tokenizer.chat_template str              = [gMASK]<sop>\n{%- if tools -%}\n<|syste...
+llama_model_loader: - kv  40:               general.quantization_version u32              = 2
+llama_model_loader: - kv  41:                                   split.no u16              = 0
+llama_model_loader: - kv  42:                                split.count u16              = 804
+llama_model_loader: - kv  43:                        split.tensors.count i32              = 803
+llama_model_loader: - type  f32:  331 tensors
+llama_model_loader: - type bf16:  472 tensors
+load: special_eot_id is not in special_eog_ids - the tokenizer config may be incorrect
+load: special_eom_id is not in special_eog_ids - the tokenizer config may be incorrect
+load: printing all EOG tokens:
+load:   - 151329 ('<|endoftext|>')
+load:   - 151336 ('<|user|>')
+load:   - 151338 ('<|observation|>')
+load: special tokens cache size = 36
+load: token to piece cache size = 0.9713 MB
+llm_load_print_meta: format           = GGUF V3 (latest)
+llm_load_print_meta: arch             = glm4moe
+llm_load_print_meta: n_ctx_train      = 131072
+llm_load_print_meta: n_embd           = 4096
+llm_load_print_meta: n_layer          = 47
+llm_load_print_meta: n_head           = 96
+llm_load_print_meta: n_head_kv        = 8
+llm_load_print_meta: n_rot            = 64
+llm_load_print_meta: n_swa            = 0
+llm_load_print_meta: n_swa_pattern    = 1
+llm_load_print_meta: n_embd_head_k    = 128
+llm_load_print_meta: n_embd_head_v    = 128
+llm_load_print_meta: n_gqa            = 12
+llm_load_print_meta: n_embd_k_gqa     = 1024
+llm_load_print_meta: n_embd_v_gqa     = 1024
+llm_load_print_meta: f_norm_eps       = 0.0e+00
+llm_load_print_meta: f_norm_rms_eps   = 1.0e-05
+llm_load_print_meta: f_clamp_kqv      = 0.0e+00
+llm_load_print_meta: f_max_alibi_bias = 0.0e+00
+llm_load_print_meta: f_logit_scale    = 0.0e+00
+llm_load_print_meta: n_ff             = 10944
+llm_load_print_meta: n_expert         = 128
+llm_load_print_meta: n_expert_used    = 8
+llm_load_print_meta: causal attn      = 1
+llm_load_print_meta: pooling type     = 0
+llm_load_print_meta: rope type        = 2
+llm_load_print_meta: rope scaling     = linear
+llm_load_print_meta: freq_base_train  = 1000000.0
+llm_load_print_meta: freq_scale_train = 1
+llm_load_print_meta: n_ctx_orig_yarn  = 131072
+llm_load_print_meta: rope_finetuned   = unknown
+llm_load_print_meta: ssm_d_conv       = 0
+llm_load_print_meta: ssm_d_inner      = 0
+llm_load_print_meta: ssm_d_state      = 0
+llm_load_print_meta: ssm_dt_rank      = 0
+llm_load_print_meta: model type       = 106B.A12B
+llm_load_print_meta: model ftype      = IQ1_S - 1.5625 bpw
+llm_load_print_meta: model params     = 110.469 B
+llm_load_print_meta: model size       = 205.811 GiB (16.004 BPW) 
+llm_load_print_meta: repeating layers = 203.499 GiB (16.004 BPW, 109.227 B parameters)
+llm_load_print_meta: general.name     = GLM 4.5 Air
+print_info: vocab type       = BPE
+print_info: n_vocab          = 151552
+print_info: n_merges         = 318088
+print_info: BOS token        = 151331 '[gMASK]'
+print_info: EOS token        = 151329 '<|endoftext|>'
+print_info: EOT token        = 151336 '<|user|>'
+print_info: EOM token        = 151338 '<|observation|>'
+print_info: UNK token        = 151329 '<|endoftext|>'
+print_info: PAD token        = 151329 '<|endoftext|>'
+print_info: LF token         = 198 'Ċ'
+print_info: FIM PRE token    = 151347 '<|code_prefix|>'
+print_info: FIM SUF token    = 151349 '<|code_suffix|>'
+print_info: FIM MID token    = 151348 '<|code_middle|>'
+print_info: EOG token        = 151329 '<|endoftext|>'
+print_info: EOG token        = 151336 '<|user|>'
+print_info: EOG token        = 151338 '<|observation|>'
+print_info: max token length = 1024
+llm_load_tensors: ggml ctx size =    6.36 MiB
+model has unused tensor blk.46.attn_norm.weight (size = 16384 bytes) -- ignoring
+model has unused tensor blk.46.attn_q.weight (size = 100663296 bytes) -- ignoring
+model has unused tensor blk.46.attn_k.weight (size = 8388608 bytes) -- ignoring
+model has unused tensor blk.46.attn_v.weight (size = 8388608 bytes) -- ignoring
+model has unused tensor blk.46.attn_q.bias (size = 49152 bytes) -- ignoring
+model has unused tensor blk.46.attn_k.bias (size = 4096 bytes) -- ignoring
+model has unused tensor blk.46.attn_v.bias (size = 4096 bytes) -- ignoring
+model has unused tensor blk.46.attn_output.weight (size = 100663296 bytes) -- ignoring
+model has unused tensor blk.46.post_attention_norm.weight (size = 16384 bytes) -- ignoring
+model has unused tensor blk.46.ffn_gate_inp.weight (size = 2097152 bytes) -- ignoring
+model has unused tensor blk.46.exp_probs_b.bias (size = 512 bytes) -- ignoring
+model has unused tensor blk.46.ffn_gate_exps.weight (size = 1476395008 bytes) -- ignoring
+model has unused tensor blk.46.ffn_down_exps.weight (size = 1476395008 bytes) -- ignoring
+model has unused tensor blk.46.ffn_up_exps.weight (size = 1476395008 bytes) -- ignoring
+model has unused tensor blk.46.ffn_gate_shexp.weight (size = 11534336 bytes) -- ignoring
+model has unused tensor blk.46.ffn_down_shexp.weight (size = 11534336 bytes) -- ignoring
+model has unused tensor blk.46.ffn_up_shexp.weight (size = 11534336 bytes) -- ignoring
+model has unused tensor blk.46.nextn.eh_proj.weight (size = 67108864 bytes) -- ignoring
+model has unused tensor blk.46.nextn.embed_tokens.weight (size = 1241513984 bytes) -- ignoring
+model has unused tensor blk.46.nextn.enorm.weight (size = 16384 bytes) -- ignoring
+model has unused tensor blk.46.nextn.hnorm.weight (size = 16384 bytes) -- ignoring
+model has unused tensor blk.46.nextn.shared_head_head.weight (size = 1241513984 bytes) -- ignoring
+model has unused tensor blk.46.nextn.shared_head_norm.weight (size = 16384 bytes) -- ignoring
+llm_load_tensors: offloading 47 repeating layers to GPU
+llm_load_tensors: offloading non-repeating layers to GPU
+llm_load_tensors: offloaded 48/48 layers to GPU
+llm_load_tensors:  CUDA_Host buffer size =  1184.00 MiB
+llm_load_tensors:      CUDA0 buffer size = 67470.88 MiB
+llm_load_tensors:      CUDA1 buffer size = 71473.38 MiB
+llm_load_tensors:      CUDA2 buffer size = 63723.23 MiB
+....................................................................................................
+llama_new_context_with_model: n_ctx         = 4096
+llama_new_context_with_model: n_batch       = 4096
+llama_new_context_with_model: n_ubatch      = 4096
+llama_new_context_with_model: flash_attn    = 1
+llama_new_context_with_model: attn_max_b    = 1024
+llama_new_context_with_model: fused_moe     = 1
+llama_new_context_with_model: grouped er    = 0
+llama_new_context_with_model: fused_up_gate = 1
+llama_new_context_with_model: fused_mmad    = 1
+llama_new_context_with_model: rope_cache    = 0
+llama_new_context_with_model: graph_reuse   = 1
+llama_new_context_with_model: k_cache_hadam = 0
+llama_new_context_with_model: split_mode_graph_scheduling = 0
+llama_new_context_with_model: split_mode_f16= 1
+llama_new_context_with_model: sched_async   = 0
+llama_new_context_with_model: ser           = -1, 0
+llama_new_context_with_model: freq_base     = 1000000.0
+llama_new_context_with_model: freq_scale    = 1
+llama_kv_cache_init:      CUDA0 KV buffer size =   256.00 MiB
+llama_kv_cache_init:      CUDA1 KV buffer size =   256.00 MiB
+llama_kv_cache_init:      CUDA2 KV buffer size =   224.00 MiB
+llama_new_context_with_model: KV self size  =  736.00 MiB, K (f16):  368.00 MiB, V (f16):  368.00 MiB
+llama_new_context_with_model:  CUDA_Host  output buffer size =     4.62 MiB
+llama_new_context_with_model: pipeline parallelism enabled (n_copies=1)
+llama_new_context_with_model:      CUDA0 compute buffer size =   864.02 MiB
+llama_new_context_with_model:      CUDA1 compute buffer size =   864.02 MiB
+llama_new_context_with_model:      CUDA2 compute buffer size =  2432.00 MiB
+llama_new_context_with_model:  CUDA_Host compute buffer size =    96.05 MiB
+llama_new_context_with_model: graph nodes  = 2012
+llama_new_context_with_model: graph splits = 4
+XXXXXXXXXXXXXXXXXXXXX Setting only active experts offload
+
+system_info: n_threads = 36 / 36 | AVX = 1 | AVX_VNNI = 0 | AVX2 = 1 | AVX512 = 1 | AVX512_VBMI = 0 | AVX512_VNNI = 0 | AVX512_BF16 = 0 | FMA = 1 | NEON = 0 | SVE = 0 | ARM_FMA = 0 | F16C = 1 | FP16_VA = 0 | WASM_SIMD = 0 | BLAS = 1 | SSE3 = 1 | SSSE3 = 1 | VSX = 0 | MATMUL_INT8 = 0 | LLAMAFILE = 1 | 
+perplexity: saving all logits to bench_kld_result.baseline.bf16.250.bin
+perplexity: tokenizing the input ..
+perplexity: tokenization took 718.289 ms
+perplexity: calculating perplexity over 250 chunks, n_ctx=512, batch_size=4096, n_seq=8
+perplexity: 1.91 seconds per pass - ETA 0.98 minutes
+[1]17.8322,[2]7.5453,[3]4.8941,[4]3.4981,[5]2.7846,[6]2.3565,[7]2.1021,[8]1.9349,[9]1.9313,[10]1.8449,[11]1.9695,[12]2.1253,[13]2.1944,[14]2.2693,[15]2.1577,[16]2.0594,[17]2.0105,[18]1.9582,[19]1.8910,[20]1.8631,[21]1.8106,[22]1.7759,[23]1.7737,[24]1.7585,[25]1.7198,[26]1.8016,[27]1.8985,[28]2.0200,[29]2.0244,[30]2.0050,[31]2.0494,[32]2.0576,[33]2.1402,[34]2.1407,[35]2.1492,[36]2.1732,[37]2.1862,[38]2.2312,[39]2.2558,[40]2.2379,[41]2.2826,[42]2.2902,[43]2.3170,[44]2.3443,[45]2.3580,[46]2.3446,[47]2.3531,[48]2.3467,[49]2.3467,[50]2.3298,[51]2.3452,[52]2.3580,[53]2.3357,[54]2.3451,[55]2.3475,[56]2.3519,[57]2.3443,[58]2.3937,[59]2.4435,[60]2.4978,[61]2.5077,[62]2.5578,[63]2.5881,[64]2.5777,[65]2.5784,[66]2.5814,[67]2.5558,[68]2.5722,[69]2.6378,[70]2.6923,[71]2.7246,[72]2.7609,[73]2.7907,[74]2.8091,[75]2.8357,[76]2.8576,[77]2.8989,[78]2.8894,[79]2.8666,[80]2.8616,[81]2.8611,[82]2.8904,[83]2.9359,[84]2.9497,[85]2.9512,[86]2.9521,[87]2.9377,[88]2.9492,[89]2.9324,[90]2.9206,[91]2.9078,[92]2.8871,[93]2.8613,[94]2.8956,[95]2.9488,[96]2.9686,[97]2.9670,[98]2.9733,[99]2.9917,[100]3.0086,[101]3.0197,[102]3.0448,[103]3.0798,[104]3.1068,[105]3.0968,[106]3.1288,[107]3.1769,[108]3.2099,[109]3.2582,[110]3.2901,[111]3.3297,[112]3.3635,[113]3.3557,[114]3.3711,[115]3.3859,[116]3.4019,[117]3.4073,[118]3.4423,[119]3.4789,[120]3.5160,[121]3.5135,[122]3.4898,[123]3.4746,[124]3.4958,[125]3.4815,[126]3.4544,[127]3.4543,[128]3.4534,[129]3.4610,[130]3.4702,[131]3.4849,[132]3.5020,[133]3.5205,[134]3.5609,[135]3.5824,[136]3.5594,[137]3.5351,[138]3.5185,[139]3.4927,[140]3.5021,[141]3.5121,[142]3.5531,[143]3.5855,[144]3.5908,[145]3.6171,[146]3.6434,[147]3.6744,[148]3.7134,[149]3.7434,[150]3.7707,[151]3.7896,[152]3.8072,[153]3.8250,[154]3.8296,[155]3.8248,[156]3.8396,[157]3.8504,[158]3.8602,[159]3.8735,[160]3.8881,[161]3.8920,[162]3.8961,[163]3.9112,[164]3.9157,[165]3.9236,[166]3.9410,[167]3.9430,[168]3.9424,[169]3.9486,[170]3.9561,[171]3.9600,[172]3.9657,[173]3.9728,[174]3.9895,[175]4.0039,[176]4.0077,[177]4.0136,[178]4.0337,[179]4.0183,[180]4.0302,[181]4.0469,[182]4.0679,[183]4.0884,[184]4.0916,[185]4.0923,[186]4.0879,[187]4.0836,[188]4.0817,[189]4.0785,[190]4.0777,[191]4.0747,[192]4.0899,[193]4.1217,[194]4.1508,[195]4.1803,[196]4.2015,[197]4.2424,[198]4.2529,[199]4.2704,[200]4.2601,[201]4.2762,[202]4.2702,[203]4.2460,[204]4.2217,[205]4.2424,[206]4.2648,[207]4.2736,[208]4.2830,[209]4.3045,[210]4.3218,[211]4.3394,[212]4.3593,[213]4.3771,[214]4.3759,[215]4.3599,[216]4.3412,[217]4.3234,[218]4.3085,[219]4.2936,[220]4.2818,[221]4.2833,[222]4.2850,[223]4.2849,[224]4.2740,[225]4.2625,[226]4.2686,[227]4.2763,[228]4.3014,[229]4.3271,[230]4.3396,[231]4.3653,[232]4.3759,[233]4.4051,[234]4.4426,[235]4.4558,[236]4.4796,[237]4.4993,[238]4.5258,[239]4.5592,[240]4.5644,[241]4.5800,[242]4.5953,[243]4.6185,[244]4.6403,[245]4.6565,[246]4.6707,[247]4.6814,[248]4.6795,[249]4.7085,[250]4.7233,
+llama_print_timings:        load time =   58535.75 ms
+llama_print_timings:      sample time =       0.00 ms /     1 runs   (    0.00 ms per token,      inf tokens per second)
+llama_print_timings: prompt eval time =   52041.98 ms / 128000 tokens (    0.41 ms per token,  2459.55 tokens per second)
+llama_print_timings:        eval time =       0.00 ms /     1 runs   (    0.00 ms per token,      inf tokens per second)
+llama_print_timings:       total time =   86421.65 ms / 128001 tokens
+
+Final estimate: PPL over 250 chunks for n_ctx=512 = 4.7233 +/- 0.04619
