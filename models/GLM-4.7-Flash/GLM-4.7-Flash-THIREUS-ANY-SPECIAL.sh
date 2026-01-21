@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** GLM-4.7-THIREUS-ANY-SPECIAL.sh used for model quant       **#
+#** GLM-4.7-Flash-THIREUS-ANY-SPECIAL.sh used for model quant **#
 #** purpose. Adjust $1 in $custom to your needs!              **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Dec-29-2025 -------------------- **#
+#** --------------- Updated: Jan-21-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -18,7 +18,7 @@
 #**    /    o―ヽニニフ))             · · ɪǫ3_xxs      ~·°        **#
 #**    し―-J                                                   **#
 #**                                                           **#
-#** Copyright © 2025 - Thireus.        Cₕₐₜᵦₒₜₛ ₙₑₑ𝒹 ₜₕₑᵣₐₚᵧ ₜₒₒ **#
+#** Copyright © 2026 - Thireus.        Cₕₐₜᵦₒₜₛ ₙₑₑ𝒹 ₜₕₑᵣₐₚᵧ ₜₒₒ **#
 #***************************************************************#
 #**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
 #***************************************************************#
@@ -31,7 +31,7 @@ _debug() {
   printf '[DEBUG] %s\n' "$*" >&2
 }
 
-# echo "$(for f in `ls GLM-4.7-DQ4_K_R4-*.gguf`; do gguf_info.py "$f"; done)" | grep 'dtype=' | awk -F $'\t' '{print $1 "=" $3}' | sed 's/=dtype=/=/g' | sed 's/\./\\./g'
+# echo "$(for f in `ls GLM-4.7-Flash-DQ4_K_R4-*.gguf`; do gguf_info.py "$f"; done)" | grep 'dtype=' | awk -F $'\t' '{print $1 "=" $3}' | sed 's/=dtype=/=/g' | sed 's/\./\\./g'
 custom="
 ## Quant mix recipe created using Thireus' GGUF Tool Suite - https://gguf.thireus.com/
 
@@ -40,58 +40,52 @@ custom="
 ^output\.weight$=$1
 ^output_norm\.weight$=f32
 
+## Special attention kernels — single-quant only (llama-quantize takes care of it) — qbits: 16 
+^blk\.([0-9]|[1-3][0-9]|4[0-6])\.attn_k_b\.weight$=$1
+
 ## Multi-headed attention parameters — qbits: 32 16 
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_norm\.weight$=f32
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_v\.weight$=$1
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_output\.weight$=$1
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k\.weight$=$1
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k_norm\.weight$=f32
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_v\.bias$=f32
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q\.bias$=f32
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q_norm\.weight$=f32
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k\.bias$=f32
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q\.weight$=$1
+^blk\.([0-9]|[1-3][0-9]|4[0-6])\.attn_norm\.weight$=f32
+^blk\.([0-9]|[1-3][0-9]|4[0-6])\.attn_output\.weight$=$1
+^blk\.([0-9]|[1-3][0-9]|4[0-6])\.attn_kv_a_mqa\.weight$=$1
+^blk\.([0-9]|[1-3][0-9]|4[0-6])\.attn_q_a\.weight$=$1
+^blk\.([0-9]|[1-3][0-9]|4[0-6])\.attn_q_a_norm\.weight$=f32
+^blk\.([0-9]|[1-3][0-9]|4[0-6])\.attn_v_b\.weight$=$1
+^blk\.([0-9]|[1-3][0-9]|4[0-6])\.attn_kv_a_norm\.weight$=f32
+^blk\.([0-9]|[1-3][0-9]|4[0-6])\.attn_q_b\.weight$=$1
 
 ## Dense Feed-Forward Network weights — qbits: 16 
-^blk\.[0-2]\.ffn_down\.weight$=$1
-^blk\.[0-2]\.ffn_up\.weight$=$1
-^blk\.[0-2]\.ffn_gate\.weight$=$1
-
-## NextN tensors — qbits: 32 16 
-^blk\.92\.nextn\.embed_tokens\.weight$=$1
-^blk\.92\.nextn\.enorm\.weight$=f32
-^blk\.92\.nextn\.eh_proj\.weight$=$1
-^blk\.92\.nextn\.shared_head_head\.weight$=$1
-^blk\.92\.nextn\.shared_head_norm\.weight$=f32
-^blk\.92\.nextn\.hnorm\.weight$=f32
+^blk\.0\.ffn_down\.weight$=$1
+^blk\.0\.ffn_up\.weight$=$1
 
 ## MoE Gating & Routing — qbits: 32 
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_inp\.weight$=f32
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.exp_probs_b\.bias$=f32
+^blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_gate_inp\.weight$=f32
+^blk\.([1-9]|[1-3][0-9]|4[0-6])\.exp_probs_b\.bias$=f32
+
+## Gating network — qbits: 16 
+^blk\.0\.ffn_gate\.weight$=$1
 
 ## Misc / Other tensors — qbits: 32 
-
-^blk\.([0-9]|[1-8][0-9]|9[0-2])\.post_attention_norm\.weight$=f32
+^blk\.([0-9]|[1-3][0-9]|4[0-6])\.ffn_norm\.weight$=f32
 
 ## GPU-loaded - MoE Shared Experts Feed-Forward Network - ffn_*_shexp
 # ffn_down_shexp — down-projection (shared experts) — qbits: 16 
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_down_shexp\.weight$=$1
+^blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_down_shexp\.weight$=$1
 
 # ffn_up_shexp — up-projection (shared experts) — qbits: 16 
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_up_shexp\.weight$=$1
+^blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_up_shexp\.weight$=$1
 
 # ffn_gate_shexp — gating network (shared experts) — qbits: 16 
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_shexp\.weight$=$1
+^blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_gate_shexp\.weight$=$1
 
 ## CPU-friendly - MoE Per-expert Feed-Forward Network - ffn_*_exps
 # ffn_down_exps — down-projection (per-expert) — qbits: 16 
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_down_exps\.weight$=$1
+^blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_down_exps\.weight$=$1
 
 # ffn_up_exps — up-projection (per-expert) — qbits: 16 
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_up_exps\.weight$=$1
+^blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_up_exps\.weight$=$1
 
 # ffn_gate_exps — gating network (per-expert) — qbits: 16 
-^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_exps\.weight$=$1
+^blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_gate_exps\.weight$=$1
 
 
 
@@ -507,11 +501,11 @@ custom=$(
 ulimit -S -s unlimited
 ulimit -n 99999
 
-# GLM-4.7-THIREUS-TEMPLATE.gguf is too big and not worth using it because Q8_0 quanitsation is fast!
-mkdir GLM-4.7-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
+# GLM-4.7-Flash-THIREUS-TEMPLATE.gguf is too big and not worth using it because Q8_0 quanitsation is fast!
+mkdir GLM-4.7-Flash-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-split \
     --custom-q "$custom" \
     --imatrix imatrix_ubergarm.dat \
-    GLM-4.7-THIREUS-BF16-SPECIAL_SPLIT/GLM-4.7-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01762.gguf \
-    GLM-4.7-THIREUS-${1^^}-SPECIAL_SPLIT/GLM-4.7-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
+    GLM-4.7-Flash-THIREUS-BF16-SPECIAL_SPLIT/GLM-4.7-Flash-THIREUS-BF16-SPECIAL_TENSOR-00001-of-00845.gguf \
+    GLM-4.7-Flash-THIREUS-${1^^}-SPECIAL_SPLIT/GLM-4.7-Flash-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
     ${1^^} \
-    $(nproc) && chmod 444 GLM-4.7-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
+    $(nproc) && chmod 444 GLM-4.7-Flash-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
