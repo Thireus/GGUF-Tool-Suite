@@ -36,7 +36,7 @@ custom="
 ## Quant mix recipe created using Thireus' GGUF Tool Suite - https://gguf.thireus.com/
 
 ## Model head & embeddings — qbits: 32 16 
-^token_embd\.weight$=iq2_m
+^token_embd\.weight$=q2_K
 ^output\.weight$=$1
 ^output_norm\.weight$=f32
 
