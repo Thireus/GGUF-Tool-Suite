@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** GLM-4.7-Flash-THIREUS-ANY-SPECIAL_SMOL.sh used iq2_x*,    **#
+#** GLM-4.7-Flash-THIREUS-ANY-SPECIAL_SMOL.sh used for iq2_x* **#
 #** and iq2_s* qyptes only. Adjust $1 in $custom!             **#
 #**                                                           **#
 #** ********************************************************* **#
