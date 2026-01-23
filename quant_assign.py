@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jan-12-2026 -------------------- **#
+#** --------------- Updated: Jan-23-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -1773,10 +1773,10 @@ def main():
 
     # Default quant degradation EQUATION (used when user does not supply --quant-degradation-csv).
     # This default equation was obtained by running:
-    # cd quants_graphs && ../model_tensor_bpw_metric.py --results-csv kld_results.csv --c-free --exclude-qtypes '.*_bn.*$' --transforms "identity" --ignore-outliers 50 --allow-impure-map --plot --p-grid-max 15 --p-grid-steps 100 --d-from-lowest 1 --penalize-above 15
-    # against the Qwen3-4B-Thinking-2507's kld_results.csv found in the quants_graphs directory.
+    # cd models/Qwen3-4B-Thinking-2507/group0 && ../../../model_tensor_bpw_metric.py --results-csv kld_results.csv --c-free --exclude-qtypes '.*_bn.*$' --transforms "identity" --ignore-outliers 50 --allow-impure-map --plot --p-grid-max 15 --p-grid-steps 100 --d-from-lowest 1 --penalize-above 15 --resemblance-metric r2
+    # against the Qwen3-4B-Thinking-2507's kld_results.csv found in the models/Qwen3-4B-Thinking-2507/group0 directory.
     default_quant_degradation_equation = (
-        "y = 0 + 1.46225343196e+14 * ( x + 6.69279912132 )^(-14.9755023923)"
+        "y = 0 + 3.07123144682e+17 * ( x + 6.95719165416 )^(-18.0541201489)"
     )
 
     # Parse user-supplied equation or use default
@@ -1833,8 +1833,8 @@ def main():
         # No csv provided, but equation provided, meaning the user wants to base degradation results on equation only
         quant_degradation_values = {}
     else:
-        # No CSV and not equation provided: use Qwen3-4B-Thinking-2507's degradation values from quants_graphs/kld_results.csv
-        quant_degradation_values = {'bf16': 0.0, 'iq1_kt': 1.837747, 'iq2_bn_r4': 14.521723, 'iq2_k': 0.668209, 'iq2_k_r4': 0.668209, 'iq2_kl': 0.466686, 'iq2_ks': 0.933896, 'iq2_kt': 0.930509, 'iq3_k': 0.145984, 'iq3_k_r4': 0.145984, 'iq3_ks': 0.170068, 'iq3_kt': 0.179994, 'iq3_s': 0.169096, 'iq3_s_r4': 0.170365, 'iq3_xxs': 0.265262, 'iq3_xxs_r4': 0.266305, 'iq4_k': 0.0299, 'iq4_k_r4': 0.0299, 'iq4_ks': 0.042148, 'iq4_ks_r4': 0.042148, 'iq4_kss': 0.067568, 'iq4_kt': 0.061647, 'iq4_nl': 0.044675, 'iq4_nl_r4': 0.044744, 'iq4_xs': 0.043045, 'iq4_xs_r8': 0.044511, 'iq5_k': 0.007876, 'iq5_k_r4': 0.007876, 'iq5_ks': 0.010381, 'iq5_ks_r4': 0.010381, 'iq6_k': 0.002599, 'q2_K': 0.668667, 'q2_k_r4': 0.669954, 'q3_K': 0.213769, 'q3_k_r4': 0.214849, 'q4_0': 0.055857, 'q4_0_r8': 0.055877, 'q4_1': 0.045343, 'q4_K': 0.037003, 'q4_k_r4': 0.036972, 'q5_0': 0.01498, 'q5_0_r4': 0.014922, 'q5_1': 0.012937, 'q5_K': 0.01225, 'q5_k_r4': 0.01205, 'q6_0': 0.004148, 'q6_0_r4': 0.004145, 'q6_K': 0.003351, 'q6_k_r4': 0.004877, 'q8_0': 0.001257, 'q8_0_r8': 0.001287, 'q8_k_r8': 0.002864, 'q8_KV': 0.035117}
+        # No CSV and not equation provided: use Qwen3-4B-Thinking-2507's degradation values from models/Qwen3-4B-Thinking-2507/group0/kld_results.csv
+        quant_degradation_values = {'bf16': 0.0, 'iq1_bn': 14.758228, 'iq1_kt': 2.692801, 'iq1_m': 4.684445, 'iq1_m_r4': 4.617296, 'iq2_bn': 15.467749, 'iq2_bn_r4': 15.445743, 'iq2_k': 0.883945, 'iq2_k_r4': 0.883945, 'iq2_kl': 0.584754, 'iq2_ks': 1.347207, 'iq2_kt': 1.214565, 'iq3_k': 0.164337, 'iq3_k_r4': 0.164337, 'iq3_ks': 0.211158, 'iq3_kt': 0.214378, 'iq3_s': 0.210123, 'iq3_s_r4': 0.213001, 'iq3_xxs': 0.348842, 'iq3_xxs_r4': 0.351102, 'iq4_k': 0.034494, 'iq4_k_r4': 0.034494, 'iq4_ks': 0.047722, 'iq4_ks_r4': 0.047722, 'iq4_kss': 0.073993, 'iq4_kt': 0.071823, 'iq4_nl': 0.052065, 'iq4_nl_r4': 0.051893, 'iq4_xs': 0.052575, 'iq4_xs_r8': 0.055797, 'iq5_k': 0.009814, 'iq5_k_r4': 0.009814, 'iq5_ks': 0.012268, 'iq5_ks_r4': 0.012268, 'iq6_k': 0.003411, 'q2_K': 0.895361, 'q2_k_r4': 0.896636, 'q3_K': 0.226457, 'q3_k_r4': 0.228156, 'q4_0': 0.070737, 'q4_0_r8': 0.070601, 'q4_1': 0.050200, 'q4_K': 0.046677, 'q4_k_r4': 0.046609, 'q5_0': 0.018810, 'q5_0_r4': 0.018876, 'q5_1': 0.014465, 'q5_K': 0.015590, 'q5_k_r4': 0.015766, 'q6_0': 0.005317, 'q6_0_r4': 0.005244, 'q6_K': 0.004040, 'q6_k_r4': 0.006687, 'q8_0': 0.001449, 'q8_0_r8': 0.001515, 'q8_k_r8': 0.004102, 'q8_KV': 0.038383, 'iq1_s': 4.562480, 'iq1_s_r4': 5.124850, 'iq2_s': 0.465971, 'iq2_xs': 0.633596, 'iq2_xs_r4': 0.636844, 'iq2_xxs': 1.202639, 'iq2_xxs_r4': 1.208328}
 
     if INFO:
         if args.quant_degradation_csv:
