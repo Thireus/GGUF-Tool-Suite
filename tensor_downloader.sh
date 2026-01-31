@@ -5,7 +5,7 @@
 #** downloads pre-quantised tensors/shards to cook recipes.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jan-03-2026 -------------------- **#
+#** --------------- Updated: Jan-31-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -62,7 +62,7 @@ fi
 #
 # Params:
 #   QUANT           (mandatory) quantization tag, e.g. "BF16"
-#   FileID          (mandatory) integer chunk ID; 0 => "tensors.map"; -1 => "tensors.map.sig"; -2 => "*-00001-of-*.gguf.sig"
+#   FileID          (mandatory) integer chunk ID (prepend + for .gguf.zbst); 0 => "tensors.map"; -1 => "tensors.map.sig"; -2 => "*-00001-of-*.gguf.sig;"
 #   DestinationDir  (optional)  default: "."
 #   Filename        (optional)  default: same as downloaded file
 #
@@ -145,7 +145,7 @@ show_help() {
 Usage: $0 QUANT FileID [DestinationDir] [Filename]
 
 QUANT           (mandatory) quantization tag, e.g. "BF16"
-FileID          (mandatory) integer chunk ID; 0 => "tensors.map"
+FileID          (mandatory) integer chunk ID (prepend + for .gguf.zbst); 0 => "tensors.map"; -1 => "tensors.map.sig"; -2 => "*-00001-of-*.gguf.sig;"
 DestinationDir  (optional)  default: "."
 Filename        (optional)  default: same as downloaded file
 EOF
@@ -158,7 +158,14 @@ if [ $# -lt 2 ]; then
 fi
 
 QUANT="$1"
-FileID="$(expr $2 + 0)"
+FileID_zbst_chunk=false
+if [[ "$2" == +* ]]; then
+  # Remove the leading +, it is used to inform of the .zbst extension
+  FileID="$(expr ${2#+} + 0)"
+  FileID_zbst_chunk=true
+else
+  FileID="$(expr $2 + 0)"
+fi
 DEST="${3:-.}"
 CUSTOM_FILENAME="${4:-}"
 QUANT_U="${QUANT^^}"
@@ -201,8 +208,13 @@ mark_if_killed_by_signal() {
 # Verification functions
 verify_chunk() {
   local f=$1
-  if ! head -c 4 "$f" | grep -q '^GGUF'; then
-    return 1
+  if [[ "$FileID_zbst_chunk" == true ]]; then
+    # zbst files cannot be validated the same way, so we always return 0
+    return 0
+  else
+    if ! head -c 4 "$f" | grep -q '^GGUF'; then
+      return 1
+    fi
   fi
   return 0
 }
@@ -313,7 +325,10 @@ verify_download() {
 
 # -----------------------------------------------------------------------------
 # Build filename and prepare download
-if [ "$FileID" -eq 0 ]; then
+if [[ "$FileID_zbst_chunk" == true ]]; then
+  IDX=$(printf "%05d" "${FileID#+}")
+  FILENAME="${MODEL_NAME}-${MAINTAINER}-${QUANT_U}-SPECIAL_TENSOR-${IDX}-of-${CHUNKS}.gguf.zbst"
+elif [ "$FileID" -eq 0 ]; then
   FILENAME="tensors.map"
 elif [ "$FileID" -eq -1 ]; then
   FILENAME="tensors.map.sig"
@@ -596,6 +611,7 @@ do_copy() {
 do_symlink() {
   for folder in "${SYMLINK_FOLDERS[@]}"; do
     SRC="${folder}/${REPOSITORY_NAME}/${FILENAME}"
+    _SRC=$SRC
     DST="${DEST}/${CUSTOM_FILENAME}"
 
     # make SRC an absolute, canonical path
@@ -606,7 +622,7 @@ do_symlink() {
     fi
 
     if [ ! -f "${SRC}" ]; then
-      log "✗ Source not found for symlink: ${SRC}; trying next"
+      log "✗ File not found for: ${_SRC} resolving to '${SRC}'; trying next"
       continue
     fi
 
