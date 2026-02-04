@@ -134,8 +134,8 @@ You have **four options** for using `ik_llama.cpp` or `llama.cpp`:
 I would strongly encourage users to assess the TG and PP speed of both `ik_llama.cpp` and `llama.cpp` for their use cases using llama-sweep-bench which can be found in `ik_llama.cpp` and [here](https://github.com/ubergarm/llama.cpp/tree/ug/port-sweep-bench) for `llama.cpp` (binaries can also be found in Thireus' distributed Release archives). `llama.cpp` can sometimes achieve slightly better speeds than `ik_llama.cpp` for some models and use-cases (especially when all layers are offloaded to the GPU)! However, note that using `llama.cpp` is quite restrictive in terms of quantisation options which limits producing optimum quant mixes.
 
 1. **Use the Thireus fork of `ik_llama.cpp` (recommended)**  
-   - **Linux**: compile as usual.  
-   - **Windows builds available**. Windows users can also use [WSL2](https://documentation.ubuntu.com/wsl/stable/tutorials/develop-with-ubuntu-wsl/), see compilation instructions below:  
+   - **Linux/macOS**: compile as usual.  
+   - **Windows/macOS/Ubuntu builds also available**. Windows users can also use [WSL2](https://documentation.ubuntu.com/wsl/stable/tutorials/develop-with-ubuntu-wsl/), see compilation instructions below:  
         <details>
 
         ```
@@ -189,19 +189,20 @@ I would strongly encourage users to assess the TG and PP speed of both `ik_llama
      👉 https://github.com/Thireus/ik_llama.cpp/releases  
 
 2. **Use the official `ik_llama.cpp` repo**  
-   - You must compile with: `-DGGML_MAX_CONTEXTS=2048`  
+   - You must compile with the following option to lift the limit of the number of gguf shards that can be loaded for a single model: `-DGGML_MAX_CONTEXTS=2048`  
    - Windows users: see notes in Option 1.  
    - Official repo:  
      👉 https://github.com/ikawrakow/ik_llama.cpp  
 
 3. **Use the Thireus fork of `llama.cpp`**  
    - **Compatibility with GGUF shards produced by Thireus is not guaranteed or always tested**.  
-   - **Windows builds available**.  
+   - **Windows/macOS/Ubuntu builds available**.  
    - Source code and builds:  
      👉 https://github.com/Thireus/llama.cpp/releases  
 
 4. **Use `llama.cpp` from ggml-org**   
    - **Compatibility with GGUF shards produced by Thireus is not guaranteed or always tested**.  
+   - For Windows, you must compile with the following option to lift the limit of the number of gguf shards that can be loaded for a single model: https://github.com/ggml-org/llama.cpp/commit/d7b5465f49a7cd3c63ebb5e97235a6d01c00e0fc
    - Source code and builds:  
      👉 https://github.com/ggml-org/llama.cpp/releases  
 
@@ -214,6 +215,18 @@ Run the following command on Linux/macOS **before launching llama binaries**:
 # Lifts "too many open files" limitation
 ulimit -n 9999
 ```
+
+### Quantize individual BF16 tensors
+
+BF16 model shards can also be individually quantized using a special version of ik_llama.cpp's `llama-quantize` utility which comes with the `--individual-tensors` option. This allows users to only download the required .gguf BF16 shard files that need to be quantized instead of the entire BF16 model.
+
+- Source code: https://github.com/Thireus/ik_llama.cpp/tree/th/quantize_individual_tensors
+- Builds (macOS, Windows and Ubuntu): https://github.com/Thireus/ik_llama.cpp/releases/tag/th-quantize_individual_tensors-b4210-7a44805
+
+Usage example:
+`./llama-quantize --keep-split --imatrix imatrix_ubergarm.dat --individual-tensors 2,3,1094 Kimi-K2-Thinking-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01097.gguf my_new_shards.gguf iq3_s 12`
+
+For more information about how to use it: https://github.com/Thireus/GGUF-Tool-Suite/issues/45
 
 ---
 
