@@ -216,7 +216,7 @@ Run the following command on Linux/macOS **before launching llama binaries**:
 ulimit -n 9999
 ```
 
-### Quantize individual BF16 tensors
+### 🗜️ Quantize individual BF16 tensors
 
 BF16 model shards can also be individually quantized using a special version of ik_llama.cpp's `llama-quantize` utility which comes with the `--individual-tensors` option. This allows users to only download the required .gguf BF16 shard files that need to be quantized instead of the entire BF16 model.
 
@@ -224,7 +224,9 @@ BF16 model shards can also be individually quantized using a special version of 
 - Builds (macOS, Windows and Ubuntu): https://github.com/Thireus/ik_llama.cpp/releases/tag/th-quantize_individual_tensors-b4210-7a44805
 
 Usage example:
-`./llama-quantize --keep-split --imatrix imatrix_ubergarm.dat --individual-tensors 2,3,1094 Kimi-K2-Thinking-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01097.gguf my_new_shards.gguf iq3_s 12`
+```
+./llama-quantize --keep-split --imatrix imatrix_ubergarm.dat --individual-tensors 2,3,1094 Kimi-K2-Thinking-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01097.gguf my_new_shards.gguf iq3_s 12
+```
 
 For more information about how to use it: https://github.com/Thireus/GGUF-Tool-Suite/issues/45
 

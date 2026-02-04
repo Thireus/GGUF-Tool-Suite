@@ -141,4 +141,18 @@ cd kitchen
 ../quant_downloader.sh bf16.recipe  
 ```
 
+You can also quantize individual BF16 tensors without the need to download every BF16 .gguf shard:
+
+BF16 model shards can also be individually quantized using a special version of ik_llama.cpp's `llama-quantize` utility which comes with the `--individual-tensors` option.
+
+- Source code: https://github.com/Thireus/ik_llama.cpp/tree/th/quantize_individual_tensors
+- Builds (macOS, Windows and Ubuntu): https://github.com/Thireus/ik_llama.cpp/releases/tag/th-quantize_individual_tensors-b4210-7a44805
+
+Usage example:
+```
+./llama-quantize --keep-split --imatrix imatrix_ubergarm.dat --individual-tensors 2,3,1094 Kimi-K2-Thinking-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01097.gguf my_new_shards.gguf iq3_s 12
+```
+
+For more information about how to use it: https://github.com/Thireus/GGUF-Tool-Suite/issues/45
+
 Enjoy optimized quantization! 🎉
