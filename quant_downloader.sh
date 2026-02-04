@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regexe entries.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jan-31-2026 -------------------- **#
+#** --------------- Updated: Feb-04-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -197,6 +197,7 @@ BASE_DIR="."                 # Base directory for model and download dirs
 QTYPE="BF16"                 # Default quantization type used for the first shard and filenames - also used for F32 tensors
 QTYPE_SPECIFIED=false        # Whether the user explicitly passed --qtype (new flag)
 SKIP_GPG=false               # If true, skip the gpg signature verification of the signed files
+SKIP_HASH=false              # If true, skip sha256 hash computations and treat them as valid
 SPECIAL_NODE_ID=""           # Optional: number of nodes (see --special-node-id). If non-empty, only shards assigned to the deterministic node are downloaded.
 TOTAL_NODES=""               # Optional: Total number of nodes (see --total-nodes).
 RM_SKIPPED_SHARDS=false      # Optional: Remove shards that are skipped for this node (not performed in --verify mode).
@@ -209,8 +210,13 @@ ARCHIVE_COMPRESS_OPT=""      # Deprecated single-string fallback; new preferred 
 ARCHIVE_DECOMPRESS_OPT=""    # Deprecated single-string fallback; new preferred format: per-tool options via --z-decompress-opt 'tool:opts'
 ARCHIVE_NOAUTO=false         # --z-noauto: prevent automatic enabling of -z or -zd based on files present
 
-# New flag: if true, enforce that any files produced by the downloader that are .gguf or .gguf.zbst must remain symlinks
+# Enforce that any files produced by the downloader that are .gguf or .gguf.zbst must remain symlinks
 SYMLINK_ONLY=false
+
+# Only process individual tensors list (numbers, comma separated)
+INDIVIDUAL_TENSORS_ENABLED=false
+INDIVIDUAL_TENSORS_RAW=""
+declare -A IND_TENSOR_SET=()   # filled after reading maps, keys are decimal integers (1-based chunk ids)
 
 # Default tools and their magic hex (user can override with --z-custom-tools)
 # Example magic hex values: zstd -> 28B52FFD, lbzip2 -> 425A68
@@ -246,6 +252,7 @@ usage() {
   echo "                                           tensors.map.sig -> tensors.<qtype,,>.map.sig" >&2
   echo "                                         This makes it easier to use quantized model repositories locally." >&2
   echo "       --skip-gpg                        Do not verify the gpg signature of the downloaded files" >&2
+  echo "       --skip-hash                       Do not compute or verify SHA256 hashes; treat all hashes as valid (useful when quantizing BF16 shards with a different imatrix for example)" >&2
   echo "       --special-node-id N               Only process shards assigned to this node for this model." >&2
   echo "       --total-nodes N                   Total number of nodes." >&2
   echo "       --rm-skipped-shards               Remove shards not assigned to this node if present." >&2
@@ -254,6 +261,9 @@ usage() {
   echo "                                         allowed not to have any magic which must be set at the end (tool selected upon first magic match in list order). Defaults to 'zstd:28B52FFD,lbzip2:425A68'" >&2
   echo "       --symlink-only                    When present, newly downloaded .gguf/.gguf.zbst files that are symlinks will remain symlinks; the script will fail," >&2
   echo "                                         instead of replacing or creating regular files." >&2
+  echo "       --individual-tensors LIST         Comma-separated list of tensor numbers to operate on (example: --individual-tensors 1,2,6)." >&2
+  echo "                                         When provided the script will SKIP downloading and verifying any shard not listed." >&2
+  echo "                                         Note: numbers must be positive integers within the model's shard count and unique." >&2
   echo "  -j,  --max-jobs N                      Set maximum concurrent downloads (default: $MAX_JOBS)" >&2
   echo "  -d,  --dest DIR                        Base path for model and download dirs (default: .)" >&2
   echo "  -z,  --z-compress                      Compress verified .gguf files to .gguf.zbst (using the best compression produced by --z-custom-tools tools) before," >&2
@@ -272,6 +282,8 @@ usage() {
   echo "    ./quant_downloader.sh -z --qtype Q8_0_R8 --z-custom-tools 'zstd:28B52FFD,lbzip2:425A68,brotli:' --z-compress-opt 'zstd:-19,lbzip2:-9 -u,brotli:-Z' -j 18 q8_0_r8.recipe" >&2
   echo "  # Automatically decompresses .zbst GGUF shards - must ensure the list of custom tools matches all the tools that may have been used to create the .zbst present on the host repositories" >&2
   echo "    ./quant_downloader.sh -zd --z-custom-tools 'zstd:28B52FFD,lbzip2:425A68,brotli:' my_custom.recipe" >&2
+  echo "  # Verify only individual tensors 2,3,1094:" >&2
+  echo "    ./quant_downloader.sh --individual-tensors 2,3,1094 --verify recipe.recipe" >&2
   exit 1
 }
 
@@ -289,7 +301,7 @@ done
 set -- "${_preprocess_args[@]:-}"
 
 # Parse arguments (supports GNU long options)
-PARSED_OPTS=$(getopt -n "$0" -o j:d:hz -l max-jobs:,no-new-map,force-redownload,verify,verify-readonly,qtype:,skip-gpg,dest:,destination:,special-node-id:,total-nodes:,rm-skipped-shards,help,z-compress,z-decompress,z-noauto,z-compress-opt:,z-decompress-opt:,z-custom-tools:,symlink-only -- "$@") || usage
+PARSED_OPTS=$(getopt -n "$0" -o j:d:hz -l max-jobs:,no-new-map,force-redownload,verify,verify-readonly,qtype:,skip-gpg,skip-hash,dest:,destination:,special-node-id:,total-nodes:,rm-skipped-shards,help,z-compress,z-decompress,z-noauto,z-compress-opt:,z-decompress-opt:,z-custom-tools:,symlink-only,individual-tensors: -- "$@") || usage
 eval set -- "$PARSED_OPTS"
 while true; do
   case "$1" in
@@ -321,6 +333,10 @@ while true; do
       ;;
     --skip-gpg)
       SKIP_GPG=true
+      shift
+      ;;
+    --skip-hash)
+      SKIP_HASH=true
       shift
       ;;
     --special-node-id)
@@ -394,6 +410,11 @@ while true; do
     --symlink-only)
       SYMLINK_ONLY=true
       shift
+      ;;
+    --individual-tensors)
+      INDIVIDUAL_TENSORS_RAW="$2"
+      INDIVIDUAL_TENSORS_ENABLED=true
+      shift 2
       ;;
     --)
       shift
@@ -603,7 +624,7 @@ fi
 echo "[INFO] Using base directory: $BASE_DIR"
 echo "[INFO] Download dir: $LOCAL_DOWNLOAD_DIR"
 echo "[INFO] Model dir: $LOCAL_MODEL_DIR"
-echo "[INFO] Max jobs: $MAX_JOBS, Obtain new map: $NEW_MAP, Force redownload: $FORCE_REDOWNLOAD, Verify only: $VERIFY, Verify-readonly: $VERIFY_READONLY, Skip signature verification: $SKIP_GPG"
+echo "[INFO] Max jobs: $MAX_JOBS, Obtain new map: $NEW_MAP, Force redownload: $FORCE_REDOWNLOAD, Verify only: $VERIFY, Verify-readonly: $VERIFY_READONLY, Skip signature verification: $SKIP_GPG, Skip hash verification: $SKIP_HASH"
 # Automatic selection of z mode based on files present
 #
 # 1) If neither -z nor -zd specified and neither was auto-disabled (--z-noauto),
@@ -752,7 +773,7 @@ fi
 echo "[INFO] Using base directory: $BASE_DIR"
 echo "[INFO] Download dir: $LOCAL_DOWNLOAD_DIR"
 echo "[INFO] Model dir: $LOCAL_MODEL_DIR"
-echo "[INFO] Max jobs: $MAX_JOBS, Obtain new map: $NEW_MAP, Force redownload: $FORCE_REDOWNLOAD, Verify only: $VERIFY, Verify-readonly: $VERIFY_READONLY, Skip signature verification: $SKIP_GPG"
+echo "[INFO] Max jobs: $MAX_JOBS, Obtain new map: $NEW_MAP, Force redownload: $FORCE_REDOWNLOAD, Verify only: $VERIFY, Verify-readonly: $VERIFY_READONLY, Skip signature verification: $SKIP_GPG, Skip hash verification: $SKIP_HASH"
 
 if [[ -n "$SPECIAL_NODE_ID" ]]; then
   if [[ -n "$TOTAL_NODES" ]]; then
@@ -816,38 +837,49 @@ _resolve_symlink_target() {
 timestamp() { date '+%Y-%m-%d %H:%M:%S'; }
 
 # --------------- DETECT & DEFINE SHA256 HELPER ---------------
-if command -v sha256sum >/dev/null 2>&1; then
-  # GNU coreutils on Linux
-  sha256tool=(sha256sum)
-  args=()
-elif command -v gsha256sum >/dev/null 2>&1; then
-  # GNU coreutils on macOS (via Homebrew)
-  sha256tool=(gsha256sum)
-  args=()
-elif command -v shasum >/dev/null 2>&1; then
-  # macOS built-in (Perl script)
-  sha256tool=(shasum)
-  args=(-a 256)
-elif command -v openssl >/dev/null 2>&1; then
-  # OpenSSL fallback
-  sha256tool=(openssl)
-  args=(dgst -sha256)
+# If SKIP_HASH is set, don't require any sha256 utility and provide a harmless stub that
+# returns an empty string (the calling logic will treat skip mode as "passed").
+if [[ "$SKIP_HASH" == true ]]; then
+  # Define a stub _sha256sum that always succeeds but returns empty (caller will substitute expected hash where needed).
+  _sha256sum() {
+    # Do nothing, return success with empty output.
+    printf ''
+    return 0
+  }
 else
-  # fallback stub: always errors out
-  sha256tool=()
-  args=()
-fi
-
-# _sha256sum reads either from file (if you pass an arg) or from stdin
-_sha256sum() {
-  if (( $# > 0 )); then
-    # file-mode: pass filename as $1
-    "${sha256tool[@]}" "${args[@]}" "$1" | awk '{print $1}'
+  if command -v sha256sum >/dev/null 2>&1; then
+    # GNU coreutils on Linux
+    sha256tool=(sha256sum)
+    args=()
+  elif command -v gsha256sum >/dev/null 2>&1; then
+    # GNU coreutils on macOS (via Homebrew)
+    sha256tool=(gsha256sum)
+    args=()
+  elif command -v shasum >/dev/null 2>&1; then
+    # macOS built-in (Perl script)
+    sha256tool=(shasum)
+    args=(-a 256)
+  elif command -v openssl >/dev/null 2>&1; then
+    # OpenSSL fallback
+    sha256tool=(openssl)
+    args=(dgst -sha256)
   else
-    # stdin-mode: read data from pipe
-    "${sha256tool[@]}" "${args[@]}" | awk '{print $1}'
+    # fallback stub: always errors out (we don't have hashing capability)
+    sha256tool=()
+    args=()
   fi
-}
+
+  # _sha256sum reads either from file (if you pass an arg) or from stdin
+  _sha256sum() {
+    if (( $# > 0 )); then
+      # file-mode: pass filename as $1
+      "${sha256tool[@]}" "${args[@]}" "$1" | awk '{print $1}'
+    else
+      # stdin-mode: read data from pipe
+      "${sha256tool[@]}" "${args[@]}" | awk '{print $1}'
+    fi
+  }
+fi
 
 # ----------------------- SYMLINK/RETRY HELPERS (minimal) -----------------------
 # retry_exec: run a command repeatedly (exec mode). Usage: retry_exec cmd arg1 arg2 ...
@@ -922,6 +954,11 @@ safe_file_exists() {
 # safe_sha256sum: ensure path available if symlink, then run _sha256sum (with retries if symlink)
 safe_sha256sum() {
   local path="$1"
+  if [[ "$SKIP_HASH" == true ]]; then
+    # Skip computing hash; caller will treat result as valid (return empty string).
+    printf ''
+    return 0
+  fi
   if is_symlink "$path"; then
     if ! ensure_path_available "$path"; then
       return 1
@@ -936,6 +973,11 @@ safe_sha256sum() {
 # Robustly capture tool exit status even when piping (treat decode errors as failures).
 safe_stream_sha256_from_z() {
   local z="$1"
+  if [[ "$SKIP_HASH" == true ]]; then
+    # Skip computing stream hash; return empty so callers can decide behaviour (we typically set got=exp when skip enabled)
+    printf ''
+    return 0
+  fi
   if is_symlink "$z"; then
     ensure_path_available "$z" || return 1
   fi
@@ -1655,6 +1697,56 @@ if [[ "$QTYPE_SPECIFIED" == true && "$VERIFY_READONLY" != true ]]; then
   fi
 fi
 
+# ------------------ IMPLEMENT INDIVIDUAL TENSORS VALIDATION ----------------
+# If the user specified --individual-tensors, parse and validate the list now that
+# SHARD_FILENAMES (hence shard count) is known.
+if [[ "$INDIVIDUAL_TENSORS_ENABLED" == true ]]; then
+  num_shards=${#SHARD_FILENAMES[@]}
+  num_shards=$((num_shards + 1))
+  if (( num_shards == 1 )); then
+    echo "❌ Error: cannot validate --individual-tensors because no shards were discovered in the maps." >&2
+    exit 1
+  fi
+
+  # Parse comma-separated list into tokens
+  IFS=',' read -r -a __ind_parts <<< "$INDIVIDUAL_TENSORS_RAW"
+
+  if [[ ${#__ind_parts[@]} -eq 0 ]]; then
+    echo "❌ Error: --individual-tensors provided but empty." >&2
+    exit 1
+  fi
+
+  for tok in "${__ind_parts[@]}"; do
+    # trim whitespace
+    tok="${tok#"${tok%%[![:space:]]*}"}"
+    tok="${tok%"${tok##*[![:space:]]}"}"
+    if [[ -z "$tok" ]]; then
+      echo "❌ Error: empty token in --individual-tensors list." >&2
+      exit 1
+    fi
+    if ! [[ "$tok" =~ ^[0-9]+$ ]]; then
+      echo "❌ Error: invalid non-numeric token in --individual-tensors: '$tok'." >&2
+      exit 1
+    fi
+    # convert decimal safely (avoid leading zero octal)
+    val=$((10#$tok))
+    if (( val < 1 || val > num_shards )); then
+      echo "❌ Error: --individual-tensors value $val out of range (must be between 1 and $num_shards)." >&2
+      exit 1
+    fi
+    if [[ -n "${IND_TENSOR_SET[$val]:-}" ]]; then
+      echo "❌ Error: duplicate tensor number in --individual-tensors: $val" >&2
+      exit 1
+    fi
+    IND_TENSOR_SET[$val]=1
+  done
+
+  # For logging, prepare a sorted, comma-separated presentation
+  sorted_list="$(printf "%s\n" "${!IND_TENSOR_SET[@]}" | sort -n | paste -sd, -)"
+  echo "[$(timestamp)] --individual-tensors enabled: will only process tensors: $sorted_list"
+fi
+# --------------------------------------------------------------------------
+
 # ------------------ SPECIAL NODE ASSIGNMENT (if requested) ----------------
 # New approach: compute an xxh3-based digest over MODEL_NAME+chunkid and use that
 # to decide if *this* runner should download that chunk. This avoids a fixed
@@ -1752,6 +1844,14 @@ download_shard() {
   local local_z="${local_gguf}.zbst"
   local dl_z="${dl_gguf}.zbst"
 
+  # If individual-tensors list is enabled, skip shards not in set.
+  if [[ "$INDIVIDUAL_TENSORS_ENABLED" == true ]]; then
+    if [[ -z "${IND_TENSOR_SET[$chunk_id]:-}" ]]; then
+      echo "[$(timestamp)] Skipping tensor='$tensor' chunk_id=$chunk_id because it's not in --individual-tensors list."
+      return 0
+    fi
+  fi
+
   # If special node assignment is enabled, skip shards not assigned to this node
   if [[ -n "$SPECIAL_NODE_ID" ]]; then
     if ! should_process_chunk "$chunk_id"; then
@@ -1814,11 +1914,18 @@ download_shard() {
               _path="$dl_z"
               skip_mv=false
             fi
-            if got="$(safe_stream_sha256_from_z "$_path")"; then
-              got="${got%%[^0-9a-fA-F]*}"
+
+            if [[ "$SKIP_HASH" == true ]]; then
+              # In skip-hash mode, pretend the stream hash matches expected
+              got="$(get_t_hash "$qtype" "$tensor")"
             else
-              got=""
+              if got="$(safe_stream_sha256_from_z "$_path")"; then
+                got="${got%%[^0-9a-fA-F]*}"
+              else
+                got=""
+              fi
             fi
+
             local exp=$(get_t_hash "$qtype" "$tensor")
             if [[ "$got" != "$exp" ]]; then
               if (( failed_hash > 9 )); then
@@ -1876,10 +1983,13 @@ download_shard() {
                   _path=$dl_gguf
                   skip_mv=false
               fi
-              if command -v _sha256sum &>/dev/null; then
+              if command -v _sha256sum &>/dev/null || [[ "$SKIP_HASH" == true ]]; then
                   [ "$failed_hash" -gt 0 ] && sync || true
                   # use safe_sha256sum which will retry if symlink
-                  if got="$(safe_sha256sum "$_path" 2>/dev/null)"; then
+                  if [[ "$SKIP_HASH" == true ]]; then
+                    got=$(get_t_hash "$qtype" "$tensor")
+                    echo "[$(timestamp)] SKIP-HASH: treating ${_path} as valid (skipping sha256 computation)."
+                  elif got="$(safe_sha256sum "$_path" 2>/dev/null)"; then
                     got="${got%%[^0-9a-fA-F]*}"
                   else
                     got=""
@@ -1896,7 +2006,11 @@ download_shard() {
                       sync || true
                       need_download=true
                   else
-                      echo "[$(timestamp)] File id '$shard_id' - tensor '$tensor' of qtype: '$qtype' hash is valid!"
+                      if [[ "$SKIP_HASH" == true ]]; then
+                        echo "[$(timestamp)] File id '$shard_id' - tensor '$tensor' of qtype: '$qtype' processed!"
+                      else
+                        echo "[$(timestamp)] File id '$shard_id' - tensor '$tensor' of qtype: '$qtype' hash is valid!"
+                      fi
                       # If compression mode is active, compress and remove the .gguf (only keep .gguf.zbst)
                       if [[ "$ARCHIVE_COMPRESS" == true ]]; then
                         # compress the validated file in-place (in whichever location it currently resides)
@@ -2011,6 +2125,13 @@ if [[ "$VERIFY" == true ]]; then
         should_verify_first=false
       fi
     fi
+    # If individual-tensors is enabled and chunk 1 is not in the list, skip first-shard verification
+    if [[ "$INDIVIDUAL_TENSORS_ENABLED" == true ]]; then
+      if [[ -z "${IND_TENSOR_SET[1]:-}" ]]; then
+        should_verify_first=false
+      fi
+    fi
+
     if [[ "$should_verify_first" == true ]]; then
       if [[ -n "$first" ]]; then
         gguf_first=$(basename "$(printf '%s\n' "$first" | sed -E "s/-[0-9]{5}-of-$total\.gguf(\.zbst)?$/-00001-of-$total.gguf/")")
@@ -2092,7 +2213,7 @@ if [[ "$VERIFY" == true ]]; then
         touch "$FAIL_MARKER"
       fi
     else
-      echo "[$(timestamp)] Skipping first-shard GPG verification due to special-node-id/xxhsum assignment (not BF16 or assigned node)."
+      echo "[$(timestamp)] Skipping first-shard GPG verification due to special-node-id/xxhsum assignment (not BF16 or assigned node) or --individual-tensors selection."
     fi
   ) &
 
@@ -2105,9 +2226,16 @@ if [[ "$VERIFY" == true ]]; then
 
       chunk_id=$(get_shard_id "$tensor")
 
-      # If special node assignment is enabled, skip shards not assigned to this node
+      # If individual-tensors is enabled, skip shards not listed
       proceed=true
-      if [[ -n "$SPECIAL_NODE_ID" ]]; then
+      if [[ "$INDIVIDUAL_TENSORS_ENABLED" == true ]]; then
+        if [[ -z "${IND_TENSOR_SET[$chunk_id]:-}" ]]; then
+          proceed=false
+        fi
+      fi
+
+      # If special node assignment is enabled, skip shards not assigned to this node
+      if [[ "$proceed" == true && -n "$SPECIAL_NODE_ID" ]]; then
         if ! should_process_chunk "$chunk_id"; then
           #echo "[$(timestamp)] Skipping HASH of tensor='$tensor' chunk_id=$chunk_id not assigned to this node (xxhsum-based selection)."
           proceed=false
@@ -2126,18 +2254,27 @@ if [[ "$VERIFY" == true ]]; then
 
             if [[ "$ARCHIVE_COMPRESS" == true ]]; then
               # In verify-only + -z mode: verify .gguf.zbst only (do not alter .gguf files).
-              if safe_file_exists "$local_z" && command -v _sha256sum &>/dev/null; then
-                got=$(safe_stream_sha256_from_z "$local_z" || true)
-                got="${got%%[^0-9a-fA-F]*}"
-                exp=$(get_t_hash "$qtype" "$tensor")
-                if [[ "$got" != "$exp" ]]; then
-                  echo "[$(timestamp)] WRONG HASH (stream): ${shardfile}.zbst ($got != $exp) - tensor: '$tensor' - qtype: '$qtype'"
-                  touch "$FAIL_MARKER"
+              if safe_file_exists "$local_z" && ([[ "$SKIP_HASH" == true ]] || command -v _sha256sum &>/dev/null); then
+                if [[ "$SKIP_HASH" == true ]]; then
+                  # skip computing hash -> treat as OK
+                  echo "[$(timestamp)] SKIP-HASH: treating ${shardfile}.zbst as valid (skipping stream sha256)."
                 else
-                  echo "[$(timestamp)] HASH OK (stream): ${shardfile}.zbst"
+                  got=$(safe_stream_sha256_from_z "$local_z" || true)
+                  got="${got%%[^0-9a-fA-F]*}"
+                  exp=$(get_t_hash "$qtype" "$tensor")
+                  if [[ "$got" != "$exp" ]]; then
+                    echo "[$(timestamp)] WRONG HASH (stream): ${shardfile}.zbst ($got != $exp) - tensor: '$tensor' - qtype: '$qtype'"
+                    touch "$FAIL_MARKER"
+                  else
+                    echo "[$(timestamp)] HASH OK (stream): ${shardfile}.zbst"
+                  fi
                 fi
-              elif safe_file_exists "$local_gguf" && command -v _sha256sum &>/dev/null; then
+              elif safe_file_exists "$local_gguf" && [[ "$SKIP_HASH" != true ]] && command -v _sha256sum &>/dev/null; then
                 # Found .gguf while user requested -z verify-only: warn & treat as missing .zbst (do NOT compress/modify)
+                echo "[$(timestamp)] WARNING: found ${shardfile} (.gguf) but --verify + -z expects ${shardfile}.zbst; treating as MISSING for verification purposes."
+                touch "$FAIL_MARKER"
+              elif [[ "$SKIP_HASH" == true ]] && safe_file_exists "$local_gguf"; then
+                # If skip-hash and .gguf present but .zbst missing, we treat it as missing .zbst for verification semantics.
                 echo "[$(timestamp)] WARNING: found ${shardfile} (.gguf) but --verify + -z expects ${shardfile}.zbst; treating as MISSING for verification purposes."
                 touch "$FAIL_MARKER"
               else
@@ -2146,18 +2283,26 @@ if [[ "$VERIFY" == true ]]; then
               fi
             else
               # normal verify-only (no -z): verify .gguf only (do not alter .zbst files)
-              if safe_file_exists "$local_gguf" && command -v _sha256sum &>/dev/null; then
-                got=$(safe_sha256sum "$local_gguf" 2>/dev/null || true)
-                got="${got%%[^0-9a-fA-F]*}"
-                exp=$(get_t_hash "$qtype" "$tensor")
-                if [[ "$got" != "$exp" ]]; then
-                  echo "[$(timestamp)] WRONG HASH: $shardfile ($got != $exp) - tensor: '$tensor' - qtype: '$qtype'"
-                  touch "$FAIL_MARKER"
+              if safe_file_exists "$local_gguf" && ([[ "$SKIP_HASH" == true ]] || command -v _sha256sum &>/dev/null); then
+                if [[ "$SKIP_HASH" == true ]]; then
+                  echo "[$(timestamp)] SKIP-HASH: treating ${shardfile} as valid (skipping sha256)."
                 else
-                  echo "[$(timestamp)] HASH OK: $shardfile"
+                  got=$(safe_sha256sum "$local_gguf" 2>/dev/null || true)
+                  got="${got%%[^0-9a-fA-F]*}"
+                  exp=$(get_t_hash "$qtype" "$tensor")
+                  if [[ "$got" != "$exp" ]]; then
+                    echo "[$(timestamp)] WRONG HASH: $shardfile ($got != $exp) - tensor: '$tensor' - qtype: '$qtype'"
+                    touch "$FAIL_MARKER"
+                  else
+                    echo "[$(timestamp)] HASH OK: $shardfile"
+                  fi
                 fi
-              elif safe_file_exists "$local_z" && command -v _sha256sum &>/dev/null; then
+              elif safe_file_exists "$local_z" && [[ "$SKIP_HASH" != true ]] && command -v _sha256sum &>/dev/null; then
                 # Found .gguf.zbst while user requested non -z verify-only: warn & treat as missing .gguf
+                echo "[$(timestamp)] WARNING: found ${shardfile}.zbst but --verify without -z expects ${shardfile} (.gguf); treating as MISSING for verification purposes."
+                touch "$FAIL_MARKER"
+              elif [[ "$SKIP_HASH" == true ]] && safe_file_exists "$local_z"; then
+                # If skip-hash and only .zbst present while non -z verify requested: treat as missing .gguf
                 echo "[$(timestamp)] WARNING: found ${shardfile}.zbst but --verify without -z expects ${shardfile} (.gguf); treating as MISSING for verification purposes."
                 touch "$FAIL_MARKER"
               else
@@ -2188,10 +2333,18 @@ if [[ "$VERIFY" == true ]]; then
 
   # summary
   if [[ -f "$FAIL_MARKER" ]]; then
-    echo "[$(timestamp)] ❌ VERIFY: some files missing or with hash mismatch"
+    if [[ "$SKIP_HASH" == true ]]; then
+      echo "[$(timestamp)] ❌ VERIFY: some files missing"
+    else
+      echo "[$(timestamp)] ❌ VERIFY: some files missing or with hash mismatch"
+    fi
     exit 1
   else
-    echo "[$(timestamp)] ✅ VERIFY: all files present and with valid hashes"
+    if [[ "$SKIP_HASH" == true ]]; then
+      echo "[$(timestamp)] ✅ VERIFY: all files present"
+    else
+      echo "[$(timestamp)] ✅ VERIFY: all files present and with valid hashes"
+    fi
     rm -f "$FAIL_MARKER" 2>/dev/null || true
     exit 0
   fi
@@ -2270,11 +2423,14 @@ shopt -u nullglob 2>/dev/null || true
 IFS= read -r first <<< "$(printf '%s\n' "${files[@]:-}" | head -n1 || true)"
 if [[ -n "$first" && "$first" =~ -([0-9]{5})-of-([0-9]{5})\.gguf(\.zbst)?$ ]]; then
   total="${BASH_REMATCH[2]}"
+  gguf_first=$(basename "$(printf '%s\n' "$first" | sed -E "s/-[0-9]{5}-of-$total\.gguf(\.zbst)?$/-00001-of-$total.gguf/")")
 else
-  total=""
+  # Attempt to build file name from .map file instead
+  num_shards=${#SHARD_FILENAMES[@]}
+  total="+$(printf "%05d" "$((num_shards + 1))")"
+  gguf_first=$(basename "$(printf '%s\n' "${SHARD_FILENAMES[0]}" | sed -E "s/-[0-9]{5}-of-$total\.gguf(\.zbst)?$/-00001-of-$total.gguf/")")
 fi
 
-gguf_first=$(basename "$(printf '%s\n' "$first" | sed -E "s/-[0-9]{5}-of-$total\.gguf(\.zbst)?$/-00001-of-$total.gguf/")")
 # Determine whether we should perform first-shard GPG download/verification under special-node-mode (does it by default for BF16 models)
 should_verify_first=true
 _del=""
@@ -2283,6 +2439,11 @@ if [[ -n "$SPECIAL_NODE_ID" && (! "$first" =~ "-BF16-" && "${QTYPE^^}" != "BF16"
     [[ "$RM_SKIPPED_SHARDS" == true ]] && _del=" and deleting (if present)" && rm -f "$LOCAL_MODEL_DIR/$gguf_first" "$LOCAL_DOWNLOAD_DIR/$gguf_first" "$LOCAL_MODEL_DIR/$gguf_first.sig" "$LOCAL_DOWNLOAD_DIR/$gguf_first.sig" || true
     should_verify_first=false
   fi
+fi
+
+# If individual-tensors is enabled and 1 isn't included, skip verifying/downloading first shard here
+if [[ "$INDIVIDUAL_TENSORS_ENABLED" == true && -z "${IND_TENSOR_SET[1]:-}" ]]; then
+  should_verify_first=false
 fi
 
 # Helper: attempt to redownload the first shard and its signature (unless verify-readonly).
@@ -2522,116 +2683,120 @@ if [[ "$should_verify_first" == true ]]; then
       fi
 
     else
-      echo "❌ Error: unable to find previous shards..." >&2
+      echo "❌ Error: unable to find previous corresponding map or shards..." >&2
       touch "$FAIL_MARKER"
     fi
   fi
 else
-  echo "[$(timestamp)] Skipping$_del first-shard signature download/verification due to special-node-id/xxhsum assignment (not BF16 or assigned node)."
+  echo "[$(timestamp)] Skipping$_del first-shard signature download/verification due to special-node-id/xxhsum assignment (not BF16 or assigned node) or --individual-tensors selection."
 fi
 
 # ------------- FINAL VERIFICATION & SHARD SEQUENCE --------
-echo "[$(timestamp)] Verifying shard sequence completeness"
-
-# Build full_indices from the files list we assembled above (respecting z modes)
-full_indices=()
-if [[ "$ARCHIVE_COMPRESS" == true ]]; then
-  # only consider .gguf.zbst for completeness
-  shopt -s nullglob 2>/dev/null || true
-  files=( "$LOCAL_MODEL_DIR"/*-*-of-*.gguf.zbst )
-  shopt -u nullglob 2>/dev/null || true
-elif [[ "$ARCHIVE_DECOMPRESS" == true ]]; then
-  # if z-decompress, prefer .gguf files (we expect decompressed .gguf). If .gguf absent, consider .gguf.zbst
-  shopt -s nullglob 2>/dev/null || true
-  files=( "$LOCAL_MODEL_DIR"/*-*-of-*.gguf )
-  if [[ ${#files[@]} -eq 0 ]]; then
+# If individual-tensors mode is enabled the user requested skipping full sequence verification.
+if [[ "$INDIVIDUAL_TENSORS_ENABLED" == true ]]; then
+  echo "[$(timestamp)] Skipping full shard sequence verification because --individual-tensors was provided."
+else
+  echo "[$(timestamp)] Verifying shard sequence completeness"
+  # Build full_indices from the files list we assembled above (respecting z modes)
+  full_indices=()
+  if [[ "$ARCHIVE_COMPRESS" == true ]]; then
+    # only consider .gguf.zbst for completeness
+    shopt -s nullglob 2>/dev/null || true
     files=( "$LOCAL_MODEL_DIR"/*-*-of-*.gguf.zbst )
-  fi
-  shopt -u nullglob 2>/dev/null || true
-else
-  shopt -s nullglob 2>/dev/null || true
-  files=( "$LOCAL_MODEL_DIR"/*-*-of-*.gguf )
-  shopt -u nullglob 2>/dev/null || true
-fi
-
-for f in "${files[@]}"; do
-  base=$(basename "$f")
-  if [[ "$base" =~ -([0-9]{5})-of-([0-9]{5})\.gguf(\.zbst)?$ ]]; then
-    full_indices+=( "${BASH_REMATCH[1]}" )
-    # capture total if not already set
-    if [[ -z "${total:-}" ]]; then
-      total="${BASH_REMATCH[2]}"
+    shopt -u nullglob 2>/dev/null || true
+  elif [[ "$ARCHIVE_DECOMPRESS" == true ]]; then
+    # if z-decompress, prefer .gguf files (we expect decompressed .gguf). If .gguf absent, consider .gguf.zbst
+    shopt -s nullglob 2>/dev/null || true
+    files=( "$LOCAL_MODEL_DIR"/*-*-of-*.gguf )
+    if [[ ${#files[@]} -eq 0 ]]; then
+      files=( "$LOCAL_MODEL_DIR"/*-*-of-*.gguf.zbst )
     fi
-  fi
-done
-
-# sort the indices
-if [[ ${#full_indices[@]} -gt 0 ]]; then
-  IFS=$'\n' full_indices=($(printf "%s\n" "${full_indices[@]}" | sort))
-else
-  echo "❌ Error: no shard files found to verify." >&2
-  touch "$FAIL_MARKER"
-  exit 1
-fi
-
-# Convert first/last from the full list (zero-padded strings)
-full_first_z="${full_indices[0]}"
-full_last_z="${full_indices[-1]}"
-full_first=$((10#$full_first_z))
-full_last=$((10#$full_last_z))
-
-if [[ -z "$SPECIAL_NODE_ID" ]]; then
-  # unchanged legacy behavior when not using special-node mode:
-  last_index=${full_last_z}
-  first_index=${full_first_z}
-  count_expected=$((10#$last_index - 10#$first_index + 1))
-
-  if [[ ${#full_indices[@]} -ne $count_expected ]]; then
-    echo "❌ Error - $((count_expected - ${#full_indices[@]})) missing shard(s) between $first_index and $last_index. Verify recipe or rerun." >&2
-    echo "Missing indices:"
-    seq -f "%05g" "$full_first" "$full_last" \
-      | grep -Fvx -f <(printf "%s\n" "${full_indices[@]}")
-    touch "$FAIL_MARKER"
-    exit 1
+    shopt -u nullglob 2>/dev/null || true
+  else
+    shopt -s nullglob 2>/dev/null || true
+    files=( "$LOCAL_MODEL_DIR"/*-*-of-*.gguf )
+    shopt -u nullglob 2>/dev/null || true
   fi
 
-  echo "[$(timestamp)] All shards from ${first_index} to ${last_index} are present."
-else
-  # SPECIAL_NODE_ID mode: compute which indices this node SHOULD process
-  expected_for_node=()
-  # iterate the *full* range and test each index with should_process_chunk
-  while IFS= read -r idx_z; do
-    # convert to integer for should_process_chunk
-    if should_process_chunk "$idx_z"; then
-      expected_for_node+=("$idx_z")
-    fi
-  done < <(seq -f "%05g" "$full_first" "$full_last")
-
-  # Build actual present-for-node list by filtering full_indices with should_process_chunk
-  present_for_node=()
-  for idx_z in "${full_indices[@]}"; do
-    if should_process_chunk "$idx_z"; then
-      present_for_node+=("$idx_z")
+  for f in "${files[@]}"; do
+    base=$(basename "$f")
+    if [[ "$base" =~ -([0-9]{5})-of-([0-9]{5})\.gguf(\.zbst)?$ ]]; then
+      full_indices+=( "${BASH_REMATCH[1]}" )
+      # capture total if not already set
+      if [[ -z "${total:-}" ]]; then
+        total="${BASH_REMATCH[2]}"
+      fi
     fi
   done
 
-  count_expected=${#expected_for_node[@]}
-  count_present=${#present_for_node[@]}
-
-  if (( count_present != count_expected )); then
-    # find missing expected entries (expected - present)
-    echo "❌ Error - $((count_expected - count_present)) missing shard(s) assigned to this node between ${full_first_z} and ${full_last_z}. Verify recipe or rerun." >&2
-    echo "Missing indices (zero-padded):"
-    # print expected list and subtract present list
-    printf "%s\n" "${expected_for_node[@]}" | grep -Fvx -f <(printf "%s\n" "${present_for_node[@]}")
+  # sort the indices
+  if [[ ${#full_indices[@]} -gt 0 ]]; then
+    IFS=$'\n' full_indices=($(printf "%s\n" "${full_indices[@]}" | sort))
+  else
+    echo "❌ Error: no shard files found to verify." >&2
     touch "$FAIL_MARKER"
     exit 1
   fi
 
-  # For logging, show the node-specific first/last
-  first_index="${expected_for_node[0]}"
-  last_index="${expected_for_node[-1]}"
-  echo "[$(timestamp)] All assigned shards for this node present: ${first_index} .. ${last_index} (count=${count_present})"
+  # Convert first/last from the full list (zero-padded strings)
+  full_first_z="${full_indices[0]}"
+  full_last_z="${full_indices[-1]}"
+  full_first=$((10#$full_first_z))
+  full_last=$((10#$full_last_z))
+
+  if [[ -z "$SPECIAL_NODE_ID" ]]; then
+    # unchanged legacy behavior when not using special-node mode:
+    last_index=${full_last_z}
+    first_index=${full_first_z}
+    count_expected=$((10#$last_index - 10#$first_index + 1))
+
+    if [[ ${#full_indices[@]} -ne $count_expected ]]; then
+      echo "❌ Error - $((count_expected - ${#full_indices[@]})) missing shard(s) between $first_index and $last_index. Verify recipe or rerun." >&2
+      echo "Missing indices:"
+      seq -f "%05g" "$full_first" "$full_last" \
+        | grep -Fvx -f <(printf "%s\n" "${full_indices[@]}")
+      touch "$FAIL_MARKER"
+      exit 1
+    fi
+
+    echo "[$(timestamp)] All shards from ${first_index} to ${last_index} are present."
+  else
+    # SPECIAL_NODE_ID mode: compute which indices this node SHOULD process
+    expected_for_node=()
+    # iterate the *full* range and test each index with should_process_chunk
+    while IFS= read -r idx_z; do
+      # convert to integer for should_process_chunk
+      if should_process_chunk "$idx_z"; then
+        expected_for_node+=("$idx_z")
+      fi
+    done < <(seq -f "%05g" "$full_first" "$full_last")
+
+    # Build actual present-for-node list by filtering full_indices with should_process_chunk
+    present_for_node=()
+    for idx_z in "${full_indices[@]}"; do
+      if should_process_chunk "$idx_z"; then
+        present_for_node+=("$idx_z")
+      fi
+    done
+
+    count_expected=${#expected_for_node[@]}
+    count_present=${#present_for_node[@]}
+
+    if (( count_present != count_expected )); then
+      # find missing expected entries (expected - present)
+      echo "❌ Error - $((count_expected - count_present)) missing shard(s) assigned to this node between ${full_first_z} and ${full_last_z}. Verify recipe or rerun." >&2
+      echo "Missing indices (zero-padded):"
+      # print expected list and subtract present list
+      printf "%s\n" "${expected_for_node[@]}" | grep -Fvx -f <(printf "%s\n" "${present_for_node[@]}")
+      touch "$FAIL_MARKER"
+      exit 1
+    fi
+
+    # For logging, show the node-specific first/last
+    first_index="${expected_for_node[0]}"
+    last_index="${expected_for_node[-1]}"
+    echo "[$(timestamp)] All assigned shards for this node present: ${first_index} .. ${last_index} (count=${count_present})"
+  fi
 fi
 
 if [[ "$SKIP_GPG" != true ]]; then
@@ -2641,6 +2806,9 @@ if [[ "$SKIP_GPG" != true ]]; then
     if ! should_process_chunk 1; then
       should_verify_first=false
     fi
+  fi
+  if [[ "$INDIVIDUAL_TENSORS_ENABLED" == true && -z "${IND_TENSOR_SET[1]:-}" ]]; then
+    should_verify_first=false
   fi
   if [[ "$should_verify_first" == true ]]; then
     if command -v gpg >/dev/null 2>&1; then
@@ -2713,7 +2881,7 @@ if [[ "$SKIP_GPG" != true ]]; then
       echo "⚠️ Warning: 'gpg' command not found. Signature verification skipped." >&2
     fi
   else
-    echo "[$(timestamp)] Skipping final first-shard GPG verification due to special-node-id/xxhsum assignment (not BF16 or assigned node)."
+    echo "[$(timestamp)] Skipping final first-shard GPG verification due to special-node-id/xxhsum assignment (not BF16 or assigned node) or --individual-tensors selection."
   fi
   [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
 fi
