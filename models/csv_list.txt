@@ -51,6 +51,9 @@ GLM-4.7-Flash/group0/ppl_results.csv
 GLM-4.7-Flash/group0/regex_results.csv
 GLM-4.7-Flash/group0/kld_results.csv
 DeepSeek-V3.1-Terminus/ppl_results.csv
+DeepSeek-V3.1-Terminus/kld_results.csv
+DeepSeek-V3.1-Terminus/unmerged_results/ppl_results.csv
+DeepSeek-V3.1-Terminus/unmerged_results/kld_results.csv
 DeepSeek-V3.1/ppl_results.csv
 Kimi-K2-Instruct-0905/ppl_results.csv
 Qwen3-Coder-480B-A35B-Instruct/ppl_results.csv
