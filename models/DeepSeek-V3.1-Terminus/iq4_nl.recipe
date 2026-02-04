@@ -1,0 +1,37 @@
+## Model head & embeddings
+token_embd\.weight=iq4_nl
+output\.weight=iq4_nl
+output_norm\.weight=f32
+
+## Special attention kernels — single-quant only (llama-quantize takes care of it)
+blk\.([0-9]|[1-5][0-9]|60)\.attn_k_b\.weight=iq4_nl
+
+## Multi-headed attention parameters
+blk\.([0-9]|[1-5][0-9]|60)\.attn_v_b\.weight=iq4_nl
+blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_norm\.weight=f32
+blk\.([0-9]|[1-5][0-9]|60)\.attn_kv_a_mqa\.weight=iq4_nl
+blk\.([0-9]|[1-5][0-9]|60)\.attn_output\.weight=iq4_nl
+blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a_norm\.weight=f32
+blk\.([0-9]|[1-5][0-9]|60)\.attn_q_b\.weight=iq4_nl
+blk\.([0-9]|[1-5][0-9]|60)\.attn_norm\.weight=f32
+blk\.([0-9]|[1-5][0-9]|60)\.attn_q_a\.weight=iq4_nl
+
+## Core FFN weights
+blk\.[0-2]\.ffn_gate\.weight=iq4_nl
+blk\.([0-9]|[1-5][0-9]|60)\.ffn_norm\.weight=f32
+blk\.[0-2]\.ffn_down\.weight=iq4_nl
+blk\.[0-2]\.ffn_up\.weight=iq4_nl
+blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_inp\.weight=f32
+
+## Other tensors
+blk\.([3-9]|[1-5][0-9]|60)\.exp_probs_b\.bias=f32
+
+## GPU-loaded ffn_*_shexp
+blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_shexp\.weight=iq4_nl
+blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_shexp\.weight=iq4_nl
+blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_shexp\.weight=iq4_nl
+
+## CPU-loaded ffn_*_exps
+blk\.([3-9]|[1-5][0-9]|60)\.ffn_down_exps\.weight=iq4_nl
+blk\.([3-9]|[1-5][0-9]|60)\.ffn_up_exps\.weight=iq4_nl
+blk\.([3-9]|[1-5][0-9]|60)\.ffn_gate_exps\.weight=iq4_nl

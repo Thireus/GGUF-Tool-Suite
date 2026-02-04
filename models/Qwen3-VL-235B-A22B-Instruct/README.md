@@ -33,7 +33,7 @@ cd ~
 # Make sure to install all ik_llama.cpp compilation dependencies...
 apt install python3-dev python3-pip python3-venv python3-wheel python3-setuptools git acl netcat-openbsd cmake # pipx
 
-# Obtain ik_llama's Thireus version - Windows builds available at https://github.com/Thireus/ik_llama.cpp/releases
+# Obtain ik_llama's Thireus version - Windows/macOS/Ubuntu builds available at https://github.com/Thireus/ik_llama.cpp/releases
 git clone https://github.com/Thireus/ik_llama.cpp
 cd ik_llama.cpp
 git pull
