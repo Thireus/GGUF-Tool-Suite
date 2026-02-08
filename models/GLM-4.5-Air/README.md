@@ -22,7 +22,7 @@ cd ~
 # Make sure to install all ik_llama.cpp compilation dependencies...
 apt install python3-dev python3-pip python3-venv python3-wheel python3-setuptools git acl netcat-openbsd cmake # pipx
 
-# Obtain ik_llama's Thireus version - Windows/macOS/Ubuntu builds available at https://github.com/Thireus/ik_llama.cpp/releases
+# Obtain ik_llama's Thireus version - Windows/macOS/Linux builds available at https://github.com/Thireus/ik_llama.cpp/releases
 git clone https://github.com/Thireus/ik_llama.cpp
 cd ik_llama.cpp
 git pull
@@ -134,7 +134,7 @@ You can also quantize individual BF16 tensors without the need to download every
 BF16 model shards can also be individually quantized using a special version of ik_llama.cpp's `llama-quantize` utility which comes with the `--individual-tensors` option.
 
 - Source code: https://github.com/Thireus/ik_llama.cpp/tree/th/quantize_individual_tensors
-- Builds (macOS, Windows and Ubuntu): https://github.com/Thireus/ik_llama.cpp/releases/tag/th-quantize_individual_tensors-b4210-7a44805
+- Builds (macOS, Windows and Linux): https://github.com/Thireus/ik_llama.cpp/releases/tag/th-quantize_individual_tensors-b4210-7a44805
 
 Usage example:
 ```

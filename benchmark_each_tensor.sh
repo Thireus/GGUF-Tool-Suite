@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Dec-27-2025 -------------------- **#
+#** --------------- Updated: Feb-02-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -64,6 +64,37 @@ trap 'echo "[$(date "+%Y-%m-%d %H:%M:%S")] Received termination signal. Exiting 
 # ----------------------------------------------------------------------------
 
 timestamp() { date "+%Y-%m-%d %H:%M:%S"; }
+
+# ---------------- USAGE / HELP ----------------
+usage() {
+  cat <<'USAGE'
+Usage: benchmark_each_tensor.sh [OPTIONS]
+
+This script benchmarks tensors by swapping model shards and running PPL/KLD and/or SWEEP benchmarks.
+You are expected to manually configure USER_REGEX, BASELINE_QTYPE, PPL_COMMAND_TEMPLATE and SWEEP_COMMAND_TEMPLATE before benchmarking!
+
+Options:
+  --benchmark-worst-tensors CSV                Path to CSV to select worst tensors (requires --benchmark-worst-tensors-from-qtype)
+  --benchmark-worst-tensors-from-qtype QTYPE   qtype row to read from CSV when using --benchmark-worst-tensors
+  --qtypes QTYPE [...]                         One or more qtypes to iterate (nargs)
+  --chunks N                                   Number of chunks to use for PPL/KLD benchmarking (default is 250)
+  --skip-gpg                                   Skip GPG signature verification (sets SKIP_GPG=true)
+  --group-tensors REGEX,...                    One or more comma-separated group regex specs (nargs)
+  --benchmark-groups-only                      Only benchmark groups (requires --group-tensors)
+  --mode N                                     Benchmark mode: 0 = PPL+KLD only (default), 1 = SWEEP only, 2 = PPL+KLD then SWEEP
+  --context N                                  Max context for SWEEP (default is 8192)
+  --infinite-loop                              Run continuously (useful when some bench files need to be removed because invalid)
+  --no-kld                                     Do not benchmark KLD
+  --quant-downloader-options OPTS              Options passed to quant_downloader.sh (default: '-zd')
+  -h, --help                                   Show this help and exit
+
+Notes:
+  - The default for --quant-downloader-options is '-zd' which automatically decompresses .zbst files. The provided OPTS
+    string will be word-split and forwarded to the quant_downloader invocation when the script needs to run that downloader.
+  - For detailed configuration, edit the USER CONFIGURATION section inside this script.
+USAGE
+}
+# ---------------- end USAGE / HELP ----------------
 
 # --------------- DETECT & DEFINE SHA256 HELPER ---------------
 if command -v sha256sum >/dev/null 2>&1; then
@@ -149,6 +180,9 @@ INFINITE_LOOP=false
 # Defines if Kullback–Leibler divergence (KLD) must not be computed (defaults to false)
 NO_KLD=false
 
+# Options forwarded to quant_downloader (default '-zd')
+QUANT_DOWNLOADER_OPTIONS='-zd'
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --benchmark-worst-tensors)
@@ -156,7 +190,7 @@ while [[ $# -gt 0 ]]; do
     --benchmark-worst-tensors-from-qtype)
       BENCH_FROM_QTYPE="$2"; shift 2;;
     --qtypes)
-      shift; while [[ $# -gt 0 && ! "$1" =~ ^-- ]]; do
+      shift; while [[ $# -gt 0 && ! "$1" =~ ^-- && ! "$1" == "-" ]]; do
         CUSTOM_QTYPES+=("$1"); shift
       done;;
     --chunks)
@@ -169,7 +203,7 @@ while [[ $# -gt 0 ]]; do
       shift
       GROUP_TENSORS_RAW=()
       # collect one or more group specs (nargs '+')
-      while [[ $# -gt 0 && ! "$1" =~ ^-- ]]; do
+      while [[ $# -gt 0 && ! "$1" =~ ^-- && ! "$1" == "-" ]]; do
         GROUP_TENSORS_RAW+=("$1"); shift
       done
       ;;
@@ -194,6 +228,12 @@ while [[ $# -gt 0 ]]; do
     --no-kld)
       NO_KLD=true
       shift
+      ;;
+    --quant-downloader-options)
+      QUANT_DOWNLOADER_OPTIONS="$2"; shift 2;;
+    -h|--help)
+      usage
+      exit 0
       ;;
     *) echo "Unknown argument: $1" >&2; exit 1;;
   esac
@@ -681,8 +721,12 @@ process_line() {
                 _skip_gpg=""
             fi
 
+            # Prepare quant-downloader options (word-split safely into an array)
+            # If QUANT_DOWNLOADER_OPTIONS is empty this yields an empty array.
+            read -r -a _qdl_opts_arr <<< "${QUANT_DOWNLOADER_OPTIONS:-}"
+
             # Run the downloader safely, capturing its exit status
-            if ! run_quant_downloader "${_skip_gpg}" "$OUTPUT_FILE"; then
+            if ! run_quant_downloader "${_qdl_opts_arr[@]}" "${_skip_gpg}" "$OUTPUT_FILE"; then
                 echo "[$(timestamp)] Error: Failed to download model shards!" >&2
                 rm -f "$RECIPE_LOCK_FILE"   # release lock
                 exit 12
@@ -1100,6 +1144,7 @@ else
   echo "KLD benchmarking: ENABLED"
 fi
 echo "Sweep context (-c): $BENCH_COMMAND_CONTEXT_TO_PROCESS"
+echo "Quant downloader options: ${QUANT_DOWNLOADER_OPTIONS:-'(empty)'}"
 ALL_GROUP_IDS=()
 if [[ "$GROUP_TENSORS_DISABLED" == "true" ]]; then
   echo "Group tensors: DISABLED"

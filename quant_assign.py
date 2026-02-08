@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jan-23-2026 -------------------- **#
+#** --------------- Updated: Feb-07-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -94,9 +94,20 @@ if not os.path.isfile(tensor_downloader) or not os.access(tensor_downloader, os.
 _fetched_maps = set()
 _quant_maps = {}
 
+# Track qtypes whose .map files were produced via convert_map_qtype.py
+COMPUTED_QTYPES = set()
+
 # Verbosity flags
 DEBUG = False
 INFO = False
+
+# Flags for compute-map feature (populated from CLI)
+COMPUTE_MISSING_MAP = False
+COMPUTE_ALL_MAP = False
+CONVERT_IGNORE_IMATRIX_RULES = False
+CONVERT_WITH_IMATRIX = False
+CONVERT_FALLBACK_QUANTS = ""  # comma-separated string or empty
+CONVERT_FALLBACK_QUANTS_FORBIDDEN = ""  # comma-separated string or empty
 
 # Constants
 GIB = 1024**3 # for GiB-to-bytes conversion
@@ -251,6 +262,9 @@ def get_bpw(qtype):
     # infer bits-per-weight from data instead of hardcoding
     if qtype not in QTYPE_BPW_CACHE:
         _, _, _ = get_map_sizes_and_elements(qtype)
+    if qtype not in QTYPE_BPW_CACHE:
+        print(f"Error: No bpw can be found for {qtype} tensors, which may indicate the tensors.{qtype}.map file is missing any tensor of this type, try running the script using the --with-imatrix with or without --ignore-imatrix-rules or remove this quantization type completely.", file=sys.stderr)
+        sys.exit(1)
     return QTYPE_BPW_CACHE[qtype]
 
 @functools.lru_cache(maxsize=None)
@@ -401,11 +415,115 @@ _CANONICAL_K_RE = re.compile(r'^q.*K$')
 _INSPECT_KV_RE = re.compile(r'^q.*kv$', re.IGNORECASE)
 # Canonical form: q…KV with exact case
 _CANONICAL_KV_RE = re.compile(r'^q.*KV$')
+
+def compute_map_for_qtype(qtype: str) -> bool:
+    """
+    Attempt to compute tensors.{qtype}.map from tensors.bf16.map using convert_map_qtype.py.
+    Returns True on success, False otherwise.
+    The produced map is not GPG-checked and will be recorded as computed so the recipe
+    will prefix its qtypes with '!' and treat the file as trusted (no signature).
+    """
+    global COMPUTED_QTYPES, MAP_FILE_INFO, _fetched_maps
+
+    if qtype == 'bf16':
+        # nothing to do
+        return False
+
+    convert_script = os.path.join(script_dir, 'convert_map_qtype.py')
+    if not os.path.isfile(convert_script):
+        if INFO:
+            print(f"[Info] convert_map_qtype.py not found in script directory ({convert_script}); cannot compute map for {qtype}.", file=sys.stderr)
+        return False
+
+    bf16_map_path = os.path.join(TMP_DIR, 'tensors.bf16.map')
+    # ensure bf16 map exists (attempt to fetch it if missing)
+    if not os.path.isfile(bf16_map_path):
+        if INFO:
+            print(f"[Info] bf16 map missing in tmpdir; attempting to fetch bf16 via tensor_downloader.", file=sys.stderr)
+        try:
+            # attempt fetch via existing mechanism (this will call fetch_map_for_qtype('bf16'))
+            if not fetch_map_for_qtype('bf16'):
+                if INFO:
+                    print(f"[Info] Failed to fetch bf16 map; cannot compute map for {qtype}.", file=sys.stderr)
+                return False
+        except Exception as e:
+            if INFO:
+                print(f"[Info] Exception while fetching bf16 map: {e}", file=sys.stderr)
+            return False
+
+    # Build convert command
+    cmd = ['python', convert_script, bf16_map_path, '--qtype', qtype]
+    # append user-provided convert flags
+    if CONVERT_IGNORE_IMATRIX_RULES:
+        cmd.append('--ignore-imatrix-rules')
+    if CONVERT_WITH_IMATRIX:
+        cmd.append('--with-imatrix')
+    if NO_FALLBACK:
+        cmd.append('--no-fallback')
+    if CONVERT_FALLBACK_QUANTS:
+        cmd += ['--fallback-quants', CONVERT_FALLBACK_QUANTS]
+    if CONVERT_FALLBACK_QUANTS_FORBIDDEN:
+        cmd += ['--fallback-quants-forbidden', CONVERT_FALLBACK_QUANTS_FORBIDDEN]
+    if INFO:
+        print(f"[Info] Attempting to compute map for qtype {qtype} using convert_map_qtype.py...", file=sys.stderr)
+        if DEBUG:
+            print(f"[Debug] Running: {' '.join(shlex.quote(c) for c in cmd)}", file=sys.stderr)
+
+    try:
+        # Run convert script; it should write tensors.<qtype>.map into same dir as bf16_map_path
+        if DEBUG or INFO:
+            subprocess.run(cmd, check=True)
+        else:
+            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError as e:
+        if INFO:
+            print(f"[Info] convert_map_qtype.py failed for qtype {qtype}: {e}", file=sys.stderr)
+        return False
+
+    # verify output file exists
+    local_map = os.path.join(TMP_DIR, f"tensors.{qtype}.map")
+    if not os.path.isfile(local_map):
+        if INFO:
+            print(f"[Info] convert_map_qtype.py did not create expected file {local_map}", file=sys.stderr)
+        return False
+
+    # Compute and store sha256 and last_line for the newly created map file
+    try:
+        with open(local_map, 'rb') as f:
+            sha256sum = hashlib.sha256(f.read()).hexdigest()
+    except Exception:
+        sha256sum = "ERROR"
+
+    last_line = ""
+    try:
+        with open(local_map, 'r') as f_text:
+            lines = f_text.readlines()
+            last_line = lines[-1].split(':', 1)[0] if lines else ''
+            last_line = last_line.split('.gguf', 1)[0] if last_line else ''
+    except Exception:
+        last_line = ""
+
+    map_key = f"tensors.{qtype}.map"
+    # annotate model name / last_line to indicate it was computed
+    model_name = f"{last_line} (computed)" if last_line else "(computed)"
+    MAP_FILE_INFO[map_key] = [qtype, sha256sum, model_name]
+
+    # Mark as fetched and computed to avoid gpg checks later
+    _fetched_maps.add(qtype)
+    COMPUTED_QTYPES.add(qtype)
+
+    if INFO:
+        print(f"[Info] Successfully computed map for qtype {qtype} -> {local_map}", file=sys.stderr)
+        print(f"[Info] This computed map will NOT be gpg-checked and its qtype will be annotated in the recipe with a leading '!'.", file=sys.stderr)
+
+    return True
+
+
 def fetch_map_for_qtype(qtype: str):
     """
     Fetch and cache tensors.{qtype}.map via tensor_downloader.sh.
     """
-    global ALL_GPG_SIGS_VALID, MAP_FILE_INFO, SIG_FILE_HASHES
+    global ALL_GPG_SIGS_VALID, MAP_FILE_INFO, SIG_FILE_HASHES, COMPUTED_QTYPES
     if qtype in _fetched_maps:
         return True
     # If it matches q…k (any case) but not exactly q…K, warn
@@ -431,32 +549,45 @@ def fetch_map_for_qtype(qtype: str):
     cmd = ["bash", tensor_downloader, qtype.upper(), "0", TMP_DIR, f"tensors.{qtype}.map"]
     if INFO: print(f"[Info] Fetching map for {qtype}...", file=sys.stderr)
     try:
-        if DEBUG or INFO:
-            subprocess.run(cmd, check=True)
-        else:
-            subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if INFO: print(f"[Info] Saved map to {local_map}", file=sys.stderr)
-        if not SKIP_GPG:
-            cmd_sig = ["bash", tensor_downloader, qtype.upper(), "-1", TMP_DIR, f"tensors.{qtype}.map.sig"]
-            if INFO: print(f"[Info] Fetching map gpg signature for {qtype}...", file=sys.stderr)
+        # If this qtype was computed previously, we consider it computed and skip gpg verification.
+        if qtype in COMPUTED_QTYPES:
+            if INFO:
+                print(f"[Info] Map {local_map} was previously marked as computed; skipping gpg checks.", file=sys.stderr)
+            return True
+        elif COMPUTE_ALL_MAP and not qtype == 'bf16':
             try:
-                if DEBUG or INFO:
-                    subprocess.run(cmd_sig, check=True)
-                else:
-                    subprocess.run(cmd_sig, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-                if DEBUG: print(f"[Debug] Saved map gpg signature to {local_map}.sig", file=sys.stderr)
-                if not verify_detached_signature(local_map):
-                    print(f"[Error] gpg signature verification of tensors.{qtype}.map failed.", file=sys.stderr)
+                compute_map_for_qtype(qtype)
+            except Exception as e:
+                if INFO:
+                    print(f"[Info] Exception while computing {qtype} map: {e}", file=sys.stderr)
+        else:
+            if DEBUG or INFO:
+                subprocess.run(cmd, check=True)
+            else:
+                subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if INFO: print(f"[Info] Saved map to {local_map}", file=sys.stderr)
+
+            if not SKIP_GPG:
+                cmd_sig = ["bash", tensor_downloader, qtype.upper(), "-1", TMP_DIR, f"tensors.{qtype}.map.sig"]
+                if INFO: print(f"[Info] Fetching map gpg signature for {qtype}...", file=sys.stderr)
+                try:
+                    if DEBUG or INFO:
+                        subprocess.run(cmd_sig, check=True)
+                    else:
+                        subprocess.run(cmd_sig, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    if DEBUG: print(f"[Debug] Saved map gpg signature to {local_map}.sig", file=sys.stderr)
+                    if not verify_detached_signature(local_map):
+                        print(f"[Error] gpg signature verification of tensors.{qtype}.map failed.", file=sys.stderr)
+                        ALL_GPG_SIGS_VALID = False
+                        return False
+                    else:
+                        if INFO: print(f"[Info] gpg signature of tensors.{qtype}.map succesful.", file=sys.stderr)
+                except subprocess.CalledProcessError as e:
+                    print(f"[Warning] failed to fetch tensors.map.sig: {e}")
                     ALL_GPG_SIGS_VALID = False
                     return False
-                else:
-                    if INFO: print(f"[Info] gpg signature of tensors.{qtype}.map succesful.", file=sys.stderr)
-            except subprocess.CalledProcessError as e:
-                print(f"[Warning] failed to fetch tensors.map.sig: {e}")
-                ALL_GPG_SIGS_VALID = False
-                return False
-        else:
-            if INFO: print(f"[Warning] gpg signature verification is disabled and won't be checked for {local_map}.sig", file=sys.stderr)
+            else:
+                if INFO: print(f"[Warning] gpg signature verification is disabled and won't be checked for {local_map}.sig", file=sys.stderr)
 
         # Record fetch and compute hashes
         _fetched_maps.add(qtype)
@@ -476,7 +607,7 @@ def fetch_map_for_qtype(qtype: str):
             MAP_FILE_INFO[map_key] = [qtype, sha256sum, last_line]
 
         # Compute and store sha256 for the signature file, if applicable
-        if not SKIP_GPG:
+        if not SKIP_GPG and not qtype in COMPUTED_QTYPES:
             sig_key = f"tensors.{qtype}.map.sig"
             sig_path = f"{local_map}.sig"
             if sig_key not in SIG_FILE_HASHES:
@@ -486,7 +617,39 @@ def fetch_map_for_qtype(qtype: str):
 
         return True
     except subprocess.CalledProcessError as e:
-        print(f"[Warning] failed to fetch tensors.map: {e}")
+        if INFO:
+            print(f"[Warning] failed to fetch tensors.map: {e}", file=sys.stderr)
+        # Attempt to compute map if requested
+        if COMPUTE_MISSING_MAP:
+            if INFO:
+                print(f"[Info] Attempting to compute missing map for qtype {qtype} because --compute-missing-map is set.", file=sys.stderr)
+            try:
+                try:
+                    compute_map_for_qtype(qtype)
+                    # Record fetch and compute hashes
+                    _fetched_maps.add(qtype)
+                    # Compute and store sha256 and last_line for the map file
+                    import hashlib
+                    map_key = f"tensors.{qtype}.map"
+                    if map_key not in MAP_FILE_INFO:
+                        # Compute sha256
+                        with open(local_map, 'rb') as f:
+                            sha256sum = hashlib.sha256(f.read()).hexdigest()
+                        # Get last line before first ':' and '.gguf'
+                        with open(local_map, 'r') as f_text:
+                            lines = f_text.readlines()
+                        last_line = lines[-1].split(':', 1)[0] if lines else ''
+                        last_line = last_line.split('.gguf', 1)[0] if last_line else ''
+                        MAP_FILE_INFO[map_key] = [qtype, sha256sum, last_line]
+                    return True
+                except Exception as e:
+                    if INFO:
+                        print(f"[Info] compute_map_for_qtype failed for {qtype}", file=sys.stderr)
+                    return False
+            except Exception as ex:
+                if INFO:
+                    print(f"[Info] Exception while computing map for {qtype}: {ex}", file=sys.stderr)
+                return False
         return False
 
 
@@ -1658,6 +1821,9 @@ def parse_group_argument(arg_value, arg_name: str, parser, info_flag=False):
 
 def main():
     global DEBUG, INFO, SKIP_GPG, ALL_GPG_SIGS_VALID, NO_FALLBACK
+    global COMPUTE_MISSING_MAP, COMPUTE_ALL_MAP
+    global CONVERT_IGNORE_IMATRIX_RULES, CONVERT_WITH_IMATRIX, CONVERT_FALLBACK_QUANTS, CONVERT_FALLBACK_QUANTS_FORBIDDEN
+
     parser = argparse.ArgumentParser(description="Assign optimal quants per tensor based on the calibration data CSV file.")
     parser.add_argument('--debug', action='store_true', help='Show debug logs')
     parser.add_argument('--info', action='store_true', help='Show info logs')
@@ -1719,8 +1885,29 @@ def main():
     parser.add_argument('--synergy-strength',type=float,default=0.0,help='Strength of synergy-based loss adjustment (0 = disabled, 1 = fully averaged losses). Default: 0')
     parser.add_argument('--no-fallback', action='store_true',
                         help=('Disable automatic fallback checks: do NOT attempt to inspect map files to detect per-tensor dtype mismatches. '
-                              'When set, the script will act as if the quantized tensors of the map files were pure and any tensor mismatching the quant type will have its size "guessed" as if it had been quantized to that qtype.'))
+                              'When set, the script will act as if the quantized tensors of the map files were pure and any tensor mismatching the quant type will have its size "guessed" as if it had been quantized to that qtype. (Also forwarded to convert_map_qtype.py when used)'))
+    parser.add_argument('--compute-missing-map', action='store_true',
+                        help=('When set, if a tensors.<qtype>.map file is missing the script will attempt to compute it from tensors.bf16.map using convert_map_qtype.py. '
+                              'Computed maps are not gpg-checked and their qtypes will be annotated in the produced recipe with a leading "!"'))
+    parser.add_argument('--compute-all-map', action='store_true',
+                        help=('When set instead of --compute-missing-map (mutually exclusive), produce all non-bf16 map files via convert_map_qtype.py. '
+                              'Computed maps are not gpg-checked and their qtypes will be annotated in the produced recipe with a leading "!"'))
+    parser.add_argument('--ignore-imatrix-rules', action='store_true',
+                        help='(forwarded to convert_map_qtype.py) Ignore importance-matrix related checks.')
+    parser.add_argument('--with-imatrix', action='store_true',
+                        help='(forwarded to convert_map_qtype.py) Indicate that an importance matrix is available (satisfies imatrix checks).')
+    parser.add_argument('--fallback-quants', type=str, default='',
+                        help=('(forwarded to convert_map_qtype.py) Comma-separated list of qtypes to whitelist for fallback (case-insensitive). '
+                              'If empty, all are considered. Example: --fallback-quants iq2_xs,IQ3_S,q8_k'))
+    parser.add_argument('--fallback-quants-forbidden', type=str, default='',
+                        help=("(forwarded to convert_map_qtype.py) Comma-separated list of regex patterns (case-insensitive) matching qtypes that must NOT be used as fallbacks. "
+                              "Example: --fallback-quants-forbidden '^(iq1_|Q8_K$)', '.*_bn$'"))
+
     args = parser.parse_args()
+
+    # Validate compute flags mutual exclusion
+    if args.compute_missing_map and args.compute_all_map:
+        parser.error("--compute-missing-map and --compute-all-map are mutually exclusive")
 
     # Enforce: --quant-degradation-csv and --quant-degradation-equation are only valid when using --use-greedy-quant-assign
     if (args.quant_degradation_csv or args.quant_degradation_equation) and not args.use_greedy_quant_assign:
@@ -1766,6 +1953,14 @@ def main():
 
     DEBUG = args.debug
     INFO = args.info or DEBUG
+
+    # Populate compute-map flags
+    COMPUTE_MISSING_MAP = args.compute_missing_map
+    COMPUTE_ALL_MAP = args.compute_all_map
+    CONVERT_IGNORE_IMATRIX_RULES = args.ignore_imatrix_rules
+    CONVERT_WITH_IMATRIX = args.with_imatrix
+    CONVERT_FALLBACK_QUANTS = args.fallback_quants or ""
+    CONVERT_FALLBACK_QUANTS_FORBIDDEN = args.fallback_quants_forbidden or ""
 
     # ---------------------------
     # Quant degradation handling
@@ -2729,6 +2924,7 @@ def main():
 
         # '+' section: show user pre-assigned or f32 grouped by qt
         # '*' section: show user fallback grouped by qt
+        # '!' section: show user qt computed map files
         for qt in sorted_quants:
             # bpw for this qtype (safe fallback 0)
             try:
@@ -2736,6 +2932,9 @@ def main():
             except Exception:
                 bpw_val = 0
             bpw_str = f"{bpw_val:.4f}".rstrip('0').rstrip('.')
+
+            # display version of qt (prefix '!' when computed)
+            display_qt = (f"!{qt}" if qt in COMPUTED_QTYPES else qt)
 
             # all entries in the canonical registry for this class that end up with final_q == qt
             group_entries = [e for e in tensor_index.get(cls, []) if e.get('final_q') == qt]
@@ -2763,14 +2962,14 @@ def main():
             if cnt_f32 > 0:
                 bytes_f32 = sum(e['size'] for e in f32_entries)
                 gib_f32 = bytes_f32 / GIB
-                print(f"# +{qt:<10}\t{cnt_f32:<3}\t{bpw_str:<6}\t{gib_f32:>6.2f} GiB\t-\t\t-")
+                print(f"# +{display_qt:<10}\t{cnt_f32:<3}\t{bpw_str:<6}\t{gib_f32:>6.2f} GiB\t-\t\t-")
 
             # 2) pre-assigned non-fallback (+)
             cnt_pre = len(pre_nfb)
             if cnt_pre > 0:
                 bytes_pre = sum(e['size'] for e in pre_nfb)
                 gib_pre = bytes_pre / GIB
-                print(f"# +{qt:<10}\t{cnt_pre:<3}\t{bpw_str:<6}\t{gib_pre:>6.2f} GiB\t-\t\t-")
+                print(f"# +{display_qt:<10}\t{cnt_pre:<3}\t{bpw_str:<6}\t{gib_pre:>6.2f} GiB\t-\t\t-")
 
             # 3) pre-assigned fallback (*+)
             cnt_pre_fb = len(pre_fb)
@@ -2778,7 +2977,7 @@ def main():
                 bytes_pre_fb = sum(e['size'] for e in pre_fb)
                 gib_pre_fb = bytes_pre_fb / GIB
                 #pct_pre_fb = (bytes_pre_fb / (max_gib * GIB) * 100) if max_gib > 0 else 0
-                print(f"# *+{qt:<8}\t{cnt_pre_fb:<3}\t{bpw_str:<6}\t{gib_pre_fb:>6.2f} GiB\t-\t\t-")
+                print(f"# *+{display_qt:<8}\t{cnt_pre_fb:<3}\t{bpw_str:<6}\t{gib_pre_fb:>6.2f} GiB\t-\t\t-")
 
             # 4) measured fallback (*)
             cnt_meas_fb = len(meas_fb)
@@ -2786,7 +2985,7 @@ def main():
                 bytes_meas_fb = sum(e['size'] for e in meas_fb)
                 gib_meas_fb = bytes_meas_fb / GIB
                 pct_meas_fb = (bytes_meas_fb / (max_gib * GIB) * 100) if max_gib > 0 else 0
-                print(f"# *{qt:<9}\t{cnt_meas_fb:<3}\t{bpw_str:<6}\t{gib_meas_fb:>6.2f} GiB\t{pct_meas_fb:>3.1f}%\t\t{max_gib:.2f}")
+                print(f"# *{display_qt:<9}\t{cnt_meas_fb:<3}\t{bpw_str:<6}\t{gib_meas_fb:>6.2f} GiB\t{pct_meas_fb:>3.1f}%\t\t{max_gib:.2f}")
 
             # 5) measured non-fallback (regular, no prefix). Always emit line (possibly zero).
             cnt_meas = len(meas_nfb)
@@ -2795,7 +2994,7 @@ def main():
                 bytes_meas = sum(e['size'] for e in meas_nfb)
                 gib_meas = bytes_meas / GIB
                 pct_meas = (bytes_meas / (max_gib * GIB) * 100) if max_gib > 0 else 0
-                print(f"# {qt:<10}\t{cnt_meas:<3}\t{bpw_str:<6}\t{gib_meas:>6.2f} GiB\t{pct_meas:>3.1f}%\t\t{max_gib:.2f}")
+                print(f"# {display_qt:<10}\t{cnt_meas:<3}\t{bpw_str:<6}\t{gib_meas:>6.2f} GiB\t{pct_meas:>3.1f}%\t\t{max_gib:.2f}")
 
     _bytes = sum(e.get('size', 0) for lst in tensor_index.values() for e in lst)
     _elements = sum(e.get('elements', 0) for lst in tensor_index.values() for e in lst)
@@ -2811,11 +3010,15 @@ def main():
     if total_fallbacks > 0:
         print("# - '*' means fallback tensors: these tensors were present in the map(s) with a different dtype than the originally-intended qtype;")
         print("#   they have been grouped and displayed as '*<qtype>' above to show the final (map-observed) qtype and sizes separately.")
+    if len(COMPUTED_QTYPES) > 0:
+        print("# - '!' means qtypes for which the tensors map file was computed instead of downloaded;")
+        print("#   This means the tensors assigned to these '!<qtype>' will likely need to be quantized locally as download links may not be available. ")
+        print("#   This also means there is alaways a chance that these tensors can't be quantized to their assigned '!<qtype>'.")
     # Conditionally warn user that automatic fallbacks may have changed assignments
     if fallback_corrections > 0:
-        print(f"# - WARNING: {fallback_corrections} tensor assignments were substituted to the dtype actually present in their tensor map files. "
-              "\n#   This may change the final size relative to the expected thresholds and chosen quants. "
-              "\n#   To disable automatic map-based fallbacks and preserve the script's original assigned qtypes exactly, re-run with --no-fallback.")
+        print(f"# - WARNING: {fallback_corrections} tensor assignments were substituted to the dtype actually present in their tensor map files. ")
+        print("#   This may change the final size relative to the expected thresholds and chosen quants. ")
+        print("#   To disable automatic map-based fallbacks and preserve the script's original assigned qtypes exactly, re-run with --no-fallback.")
 
     now = datetime.now().astimezone()  # Gets local time with tzinfo if available
     current_time = now.strftime("%Y-%m-%d %H:%M:%S %Z%z")
@@ -2887,6 +3090,7 @@ def main():
         for map_filename, (qtype, sha256sum, model_name) in sorted_items:
             bpw = bpw_cache.get(qtype, float("-inf"))
             bpw_str = f"{bpw:.6g}" if math.isfinite(bpw) else "N/A"
+            # If this qtype map was computed, annotate it in output (we already set model_name to include '(computed)')
             print(f"# - {map_filename} SHA-256: {sha256sum}")
             print(f"# - {map_filename} model name: {model_name}")
 
