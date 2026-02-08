@@ -135,7 +135,7 @@ I would strongly encourage users to assess the TG and PP speed of both `ik_llama
 
 1. **Use the Thireus fork of `ik_llama.cpp` (recommended)**  
    - **Linux/macOS**: compile as usual.  
-   - **Windows/macOS/Ubuntu builds also available**. Windows users can also use [WSL2](https://documentation.ubuntu.com/wsl/stable/tutorials/develop-with-ubuntu-wsl/), see compilation instructions below:  
+   - **Windows/macOS/Linux builds also available**. Windows users can also use [WSL2](https://documentation.ubuntu.com/wsl/stable/tutorials/develop-with-ubuntu-wsl/), see compilation instructions below:  
         <details>
 
         ```
@@ -196,7 +196,7 @@ I would strongly encourage users to assess the TG and PP speed of both `ik_llama
 
 3. **Use the Thireus fork of `llama.cpp`**  
    - **Compatibility with GGUF shards produced by Thireus is not guaranteed or always tested**.  
-   - **Windows/macOS/Ubuntu builds available**.  
+   - **Windows/macOS/Linux builds available**.  
    - Source code and builds:  
      👉 https://github.com/Thireus/llama.cpp/releases  
 
@@ -221,7 +221,7 @@ ulimit -n 9999
 BF16 model shards can also be individually quantized using a special version of ik_llama.cpp's `llama-quantize` utility which comes with the `--individual-tensors` option. This allows users to only download the required .gguf BF16 shard files that need to be quantized instead of the entire BF16 model.
 
 - Source code: https://github.com/Thireus/ik_llama.cpp/tree/th/quantize_individual_tensors
-- Builds (macOS, Windows and Ubuntu): https://github.com/Thireus/ik_llama.cpp/releases/tag/th-quantize_individual_tensors-b4210-7a44805
+- Builds (macOS, Windows and Linux): https://github.com/Thireus/ik_llama.cpp/releases/tag/th-quantize_individual_tensors-b4210-7a44805
 
 Usage example:
 ```
