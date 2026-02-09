@@ -324,6 +324,8 @@ python quant_assign.py ppl_results.csv \
 
 > iq1_m iq1_s iq2_m iq2_s iq2_xs iq2_xxs iq3_m iq3_s iq3_xs iq3_xxs iq4_nl iq4_xs mxfp4_moe tq1_0 tq2_0 q2_K q2_k_s q3_K q3_k_l q3_k_m q3_k_s q4_0 q4_1 q4_K q4_k_m q4_k_s q5_0 q5_1 q5_K q5_k_m q5_k_s q6_K q8_0
 
+A more detailed table about the quants available for each framework is available here: https://github.com/Thireus/GGUF-Tool-Suite/discussions/53#discussion-9380533
+
 ---
 
 ## 📊 About `kld_results.csv`

@@ -105,8 +105,7 @@ def main(argv=None):
     p.add_argument('--show-offsets', action='store_true', help='Print 0xstart-0xend alongside each name')
     p.add_argument('-o', '--output', help='Write results to this file instead of stdout')
     p.add_argument('-v', '--verbose', action='store_true', help='Verbose progress info')
-
-    # New map-related arguments
+    
     p.add_argument('--map-file', help='Path to a .map file to enrich with imatrix hashes')
     p.add_argument('--output-map-file', help='Path where the enriched map file will be written (required if --map-file is used)')
 
