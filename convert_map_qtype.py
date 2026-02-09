@@ -5,7 +5,7 @@
 #** different .map file qtype.                                **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Feb-07-2026 -------------------- **#
+#** --------------- Updated: Feb-09-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -489,7 +489,13 @@ def attempt_transform_line(parts: List[str],
     else:
         new_fname = fname
 
-    # Set hash to 64 zeros
+    # Original sha from the parsed parts
+    original_sha = parts[1]
+
+    # Default behavior: set hash to 64 zeros for transformed tensors.
+    # However, certain cases must keep the original shard hash:
+    #  - f32 tensors are not quantized -> keep original sha
+    #  - if original dtype is bf16 and requested qtype is bf16 -> keep original sha
     new_sha = '0' * 64
 
     # Parse elements
@@ -507,9 +513,14 @@ def attempt_transform_line(parts: List[str],
     # Determine dtype replacement:
     orig_dtype = kv_dict.get('dtype', '')
 
-    # NEW: f32 must never be changed — keep the kv_pairs unchanged but still replace filename and sha.
+    # Preserve original shard hash for f32 lines (never quantized)
+    # Also preserve hash when original is bf16 AND the user requested bf16 (no-op transform).
+    if orig_dtype.lower() == 'f32' or (orig_dtype.lower() == 'bf16' and qtype_lower == 'bf16'):
+        new_sha = original_sha
+
+    # NEW: f32 must never be changed — keep the kv_pairs unchanged but still replace filename and sha as above.
     if orig_dtype.lower() == 'f32':
-        # Preserve original dtype and bytes; only update filename and sha.
+        # Preserve original dtype and bytes; only update filename and sha (sha preserved as original_sha).
         # Reconstruct kv string exactly as it was (preserving order)
         new_pairs = list(kv_pairs)
         new_rest_str = reconstruct_kv_string(new_pairs)
