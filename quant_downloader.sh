@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regexe entries.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Feb-04-2026 -------------------- **#
+#** --------------- Updated: Feb-09-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -1412,7 +1412,7 @@ _transform_to_zbst_request() {
 # run_downloader_shard: wrapper for run_downloader that attempts a .gguf request first (normal behavior).
 # If the requested file isn't produced and we are operating in compression/decompression modes,
 # it will automatically attempt the corresponding .gguf.zbst request and, on success, remember that
-# this qtype serves zbst files so future calls for that qtype request zbst directly.
+# this qtype serves zbst files so future downloads for that qtype request zbst directly.
 run_downloader_shard() {
   local qtype="$1"
   local chunk="$2"
@@ -1506,10 +1506,39 @@ fi
 
 # -------------------- HASH & SHARD STORAGE -------------------
 declare -A T_HASHES SHARD_ID
-set_t_hash() { local key="${1,,}::${2,,}"; T_HASHES["$key"]="$3"; DEBUG "set_t_hash T_HASHES["$key"]=${T_HASHES["$key"]}"; }
-get_t_hash() { [[ "${1^^}" == "F32" ]] && local key="${QTYPE,,}::${2,,}" || local key="${1,,}::${2,,}"; echo "${T_HASHES["$key"]}"; DEBUG "get_t_hash T_HASHES["$key"]=${T_HASHES["$key"]}"; }
+# New: per-tensor skip-hash markers (used when the map contains an all-zero hash for a tensor)
+declare -A T_SKIP_HASH=()
+set_t_hash() { local key="${1,,}::${2,,}"; T_HASHES["$key"]="$3"; DEBUG "set_t_hash T_HASHES[${key}]=${T_HASHES["$key"]}"; 
+  # Detect all-zero hash (64 zeros) and mark this tensor to skip hash verification.
+  local _norm="$(printf '%s' "$3" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+  if [[ "$_norm" =~ ^0{64}$ ]]; then
+    T_SKIP_HASH["$key"]=1
+    DEBUG "set_t_hash: detected all-zero hash for $key -> marking to skip per-tensor hash verification"
+  else
+    # ensure unset if previously set
+    unset 'T_SKIP_HASH["$key"]' 2>/dev/null || true
+  fi
+}
+get_t_hash() { [[ "${1^^}" == "F32" ]] && local key="${QTYPE,,}::${2,,}" || local key="${1,,}::${2,,}"; echo "${T_HASHES["$key"]}"; DEBUG "get_t_hash T_HASHES[${key}]=${T_HASHES["$key"]}"; }
 set_shard_id() { SHARD_ID["${1,,}"]="$2"; }
 get_shard_id() { echo "${SHARD_ID["${1,,}"]}"; }
+
+# Helper: determine whether hash verification should be skipped for a specific tensor
+# Returns success (0) if we should skip, non-zero otherwise.
+should_skip_hash_for() {
+  local q="$1"
+  local tensor="$2"
+  local key
+  if [[ "${q^^}" == "F32" ]]; then
+    key="${QTYPE,,}::${tensor,,}"
+  else
+    key="${q,,}::${tensor,,}"
+  fi
+  if [[ "$SKIP_HASH" == true || -n "${T_SKIP_HASH[$key]:-}" ]]; then
+    return 0
+  fi
+  return 1
+}
 
 # -------- PREPARE QTYPES & PATTERNS --------
 declare -a PATTERNS PATTERN_QTYPES
@@ -1915,9 +1944,10 @@ download_shard() {
               skip_mv=false
             fi
 
-            if [[ "$SKIP_HASH" == true ]]; then
-              # In skip-hash mode, pretend the stream hash matches expected
+            if should_skip_hash_for "$qtype" "$tensor"; then
+              # Per-tensor or global skip: treat as valid w/o computing stream hash
               got="$(get_t_hash "$qtype" "$tensor")"
+              echo "[$(timestamp)] SKIP-HASH: treating ${_path} as valid (skipping stream sha256)."
             else
               if got="$(safe_stream_sha256_from_z "$_path")"; then
                 got="${got%%[^0-9a-fA-F]*}"
@@ -1986,7 +2016,7 @@ download_shard() {
               if command -v _sha256sum &>/dev/null || [[ "$SKIP_HASH" == true ]]; then
                   [ "$failed_hash" -gt 0 ] && sync || true
                   # use safe_sha256sum which will retry if symlink
-                  if [[ "$SKIP_HASH" == true ]]; then
+                  if should_skip_hash_for "$qtype" "$tensor"; then
                     got=$(get_t_hash "$qtype" "$tensor")
                     echo "[$(timestamp)] SKIP-HASH: treating ${_path} as valid (skipping sha256 computation)."
                   elif got="$(safe_sha256sum "$_path" 2>/dev/null)"; then
@@ -2006,7 +2036,9 @@ download_shard() {
                       sync || true
                       need_download=true
                   else
-                      if [[ "$SKIP_HASH" == true ]]; then
+                      if should_skip_hash_for "$qtype" "$tensor"; then
+                        echo "[$(timestamp)] File id '$shard_id' - tensor '$tensor' of qtype: '$qtype' processed (skipped hash verification)!"
+                      elif [[ "$SKIP_HASH" == true ]]; then
                         echo "[$(timestamp)] File id '$shard_id' - tensor '$tensor' of qtype: '$qtype' processed!"
                       else
                         echo "[$(timestamp)] File id '$shard_id' - tensor '$tensor' of qtype: '$qtype' hash is valid!"
@@ -2254,8 +2286,8 @@ if [[ "$VERIFY" == true ]]; then
 
             if [[ "$ARCHIVE_COMPRESS" == true ]]; then
               # In verify-only + -z mode: verify .gguf.zbst only (do not alter .gguf files).
-              if safe_file_exists "$local_z" && ([[ "$SKIP_HASH" == true ]] || command -v _sha256sum &>/dev/null); then
-                if [[ "$SKIP_HASH" == true ]]; then
+              if safe_file_exists "$local_z" && ( should_skip_hash_for "$qtype" "$tensor" || command -v _sha256sum &>/dev/null ); then
+                if should_skip_hash_for "$qtype" "$tensor"; then
                   # skip computing hash -> treat as OK
                   echo "[$(timestamp)] SKIP-HASH: treating ${shardfile}.zbst as valid (skipping stream sha256)."
                 else
@@ -2269,12 +2301,12 @@ if [[ "$VERIFY" == true ]]; then
                     echo "[$(timestamp)] HASH OK (stream): ${shardfile}.zbst"
                   fi
                 fi
-              elif safe_file_exists "$local_gguf" && [[ "$SKIP_HASH" != true ]] && command -v _sha256sum &>/dev/null; then
+              elif safe_file_exists "$local_gguf" && [[ ! $(should_skip_hash_for "$qtype" "$tensor"; echo $?) -eq 0 ]] && command -v _sha256sum &>/dev/null; then
                 # Found .gguf while user requested -z verify-only: warn & treat as missing .zbst (do NOT compress/modify)
                 echo "[$(timestamp)] WARNING: found ${shardfile} (.gguf) but --verify + -z expects ${shardfile}.zbst; treating as MISSING for verification purposes."
                 touch "$FAIL_MARKER"
-              elif [[ "$SKIP_HASH" == true ]] && safe_file_exists "$local_gguf"; then
-                # If skip-hash and .gguf present but .zbst missing, we treat it as missing .zbst for verification semantics.
+              elif should_skip_hash_for "$qtype" "$tensor" && safe_file_exists "$local_gguf"; then
+                # If per-tensor skip-hash and .gguf present but .zbst missing, we treat it as missing .zbst for verification semantics unless we explicitly decide otherwise.
                 echo "[$(timestamp)] WARNING: found ${shardfile} (.gguf) but --verify + -z expects ${shardfile}.zbst; treating as MISSING for verification purposes."
                 touch "$FAIL_MARKER"
               else
@@ -2283,8 +2315,8 @@ if [[ "$VERIFY" == true ]]; then
               fi
             else
               # normal verify-only (no -z): verify .gguf only (do not alter .zbst files)
-              if safe_file_exists "$local_gguf" && ([[ "$SKIP_HASH" == true ]] || command -v _sha256sum &>/dev/null); then
-                if [[ "$SKIP_HASH" == true ]]; then
+              if safe_file_exists "$local_gguf" && ( should_skip_hash_for "$qtype" "$tensor" || command -v _sha256sum &>/dev/null ); then
+                if should_skip_hash_for "$qtype" "$tensor"; then
                   echo "[$(timestamp)] SKIP-HASH: treating ${shardfile} as valid (skipping sha256)."
                 else
                   got=$(safe_sha256sum "$local_gguf" 2>/dev/null || true)
@@ -2297,12 +2329,12 @@ if [[ "$VERIFY" == true ]]; then
                     echo "[$(timestamp)] HASH OK: $shardfile"
                   fi
                 fi
-              elif safe_file_exists "$local_z" && [[ "$SKIP_HASH" != true ]] && command -v _sha256sum &>/dev/null; then
+              elif safe_file_exists "$local_z" && [[ ! $(should_skip_hash_for "$qtype" "$tensor"; echo $?) -eq 0 ]] && command -v _sha256sum &>/dev/null; then
                 # Found .gguf.zbst while user requested non -z verify-only: warn & treat as missing .gguf
                 echo "[$(timestamp)] WARNING: found ${shardfile}.zbst but --verify without -z expects ${shardfile} (.gguf); treating as MISSING for verification purposes."
                 touch "$FAIL_MARKER"
-              elif [[ "$SKIP_HASH" == true ]] && safe_file_exists "$local_z"; then
-                # If skip-hash and only .zbst present while non -z verify requested: treat as missing .gguf
+              elif should_skip_hash_for "$qtype" "$tensor" && safe_file_exists "$local_z"; then
+                # If per-tensor skip-hash and only .zbst present while non -z verify requested: treat as MISSING .gguf
                 echo "[$(timestamp)] WARNING: found ${shardfile}.zbst but --verify without -z expects ${shardfile} (.gguf); treating as MISSING for verification purposes."
                 touch "$FAIL_MARKER"
               else
