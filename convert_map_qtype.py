@@ -5,7 +5,7 @@
 #** different .map file qtype.                                **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Feb-09-2026 -------------------- **#
+#** --------------- Updated: Feb-11-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -31,29 +31,10 @@ Usage:
     python convert_map_qtype.py path/to/input.map --qtype iq1_s_r4
     python convert_map_qtype.py path/to/input.map --qtype iq1_s_r4 --no-map   # prints to stdout instead of writing file
 
-Notes / rules implemented:
- - No longer requires the input map to reference 'bf16' in shard filenames or in dtypes.
- - Replaces any occurrence of "bf16" (case-insensitive) in every shard filename with "<QTYPE_LOWERR>".
- - Sets the sha256 hash field to 64 zeros for every tensor line.
- - If dtype is "f32" (case-insensitive), the dtype and bytes are preserved exactly (only filename and sha may be updated).
-   Other dtypes (e.g. f32, q8_0, bf16, etc.) are accepted as input and will be converted to the requested qtype.
- - Computes new bytes using tensor_size(elements, qtype):
-        new_bytes = elements * type_size // block_size
-   where block_size and type_size are looked up from GGML_QUANT_SIZES using the QTYPE uppercased.
- - Writes the resulting .map file to the same directory as the input file, named tensors.<qtype_lower>.map.
-   If --no-map is used, prints to stdout instead.
- - Overwrites existing target .map file if present.
- - New features:
-     * failed_to_transform prints a helpful message and triggers a controlled exception.
-     * --ignore-imatrix-rules and --with-imatrix flags control imatrix-related checks.
-     * Fallback mechanism (enabled by default) will try safer/higher-bpw quants when a tensor
-       cannot be transformed; can be disabled with --no-fallback.
-     * --fallback-quants to whitelist fallback candidates; --fallback-quants-forbidden to blacklist
-       (supports regex).
-     * f32 dtype is never modified — such lines keep their dtype/bytes untouched.
-
-Useful tip: Run the following command to capture the asserts of each quantization function
-cat ./ik_llama.cpp/ggml/src/iqk/iqk_quantize.cpp ./ik_llama.cpp/ggml/src/ggml-quants.c | egrep 'size_t quantize_|GGML_ASSERT|^\}' | sed -n -e '/^size_t/,/^\}/ p' | grep -v ' *//'
+Useful tip: Run the following commands to capture the asserts of each quantization function
+cat ./ik_llama.cpp/ggml/src/iqk/iqk_quantize.cpp ./ik_llama.cpp/ggml/src/ggml-quants.c | egrep 'void quantize_row_|size_t quantize_|GGML_ASSERT|assert|^\}' | sed -n -e '/^[size_t|void]/,/^\}/ p' | grep -v ' *//'
+# Direct way to extract all asserts:
+for q in $(cat ./ik_llama.cpp/ggml/src/iqk/iqk_quantize.cpp ./ik_llama.cpp/ggml/src/ggml-quants.c | egrep -i 'void quantize_row_|size_t quantize_|assert|^\}' | sed -n -e '/^[size_t|void]/,/^\}/ p' | grep -v ' *//' | grep -v '^            ' | grep ' quantize_' | cut -d'_' -f 3-6 | cut -d'(' -f 1 | sed 's/_ref//g' | sed 's/_impl//g' | egrep -v 'bs128|bs16|_K128|_K16|_K32|_K64|_KR8|_T' | sed 's/ //g' | sort -u); do echo $q:; cat ./ik_llama.cpp/ggml/src/iqk/iqk_quantize.cpp ./ik_llama.cpp/ggml/src/ggml-quants.c | egrep -v 'bs128|bs16|_K128|_K16|_K32|_K64|_KR8|_T' | egrep -v -i "$(exclude="" && for r in _r4 _r8 _r16; do if ! [[ "${q,,}" =~ "$r" ]]; then exclude="$exclude""$r "; fi done && echo $exclude | tr ' ' '|')" | egrep -i "void quantize_row_$q|size_t quantize_$q|assert|kBlockSize = |^\}" | sed -n -e '/^[size_t|void]/,/^\}/ p' | grep -v ' *//' | egrep -v '^            |^        |ggml_quantize_init()|missing quantization weights|must be|max_scale|static_assert|assert\(Q|GGML_ASSERT\(quant_weights\)' | egrep -i 'assert|kBlockSize = ' | sed 's/assert(k /GGML_ASSERT(n_per_row /g' | sed 's/ % /%/g' | sed 's/%/ % /g' | sed 's/GGML_ASSERT(n %/GGML_ASSERT(n_per_row %/g' | sed 's/    assert(/    GGML_ASSERT(/g' | sed 's/GGML_ASSERT(k /GGML_ASSERT(n_per_row /g' | sort -ur; done
 """
 
 import argparse
@@ -322,12 +303,23 @@ def non_row_variant(qtype_upper: str) -> str:
 # constants used in asserts
 QK_K = 256
 QK_IQ1BN = 64
+QK_IQ2BN = 64
 KBLOCKSIZE_32 = 32
 QK_MXFP4 = 32  # corresponds to QK_MXFP4 used in mxfp4 assert
 QK4_NL = 32
 
+# Additional QK constants derived from the GGML_ASSERT defines referenced
+# in the C asserts (all set to 32 as per the defines provided).
+QK4_0 = 32
+QK4_1 = 32
+QK5_0 = 32
+QK5_1 = 32
+QK6_0 = 32
+QK8_0 = 32
+QK8_1 = 32
+
 # Explicit list of quant types (non-row variants) that required `n_per_row % QK_K == 0` in the asserts
-# This list was built to reflect the functions you captured from ik_llama.cpp.
+# This list was built to reflect the functions captured from ik_llama.cpp.
 # It includes both GGML-style names and the non-row variant names that earlier asserts used QK_K for.
 PER_ROW_QK_K_TYPES = {
     # K-block types
@@ -335,10 +327,10 @@ PER_ROW_QK_K_TYPES = {
     # IQ K variants
     "IQ2_S", "IQ2_K", "IQ2_KS", "IQ2_KL", "IQ3_K", "IQ3_KS", "IQ4_K", "IQ5_K", "IQ6_K",
     "IQ4_KS", "IQ5_KS", "IQ4_KSS",
-    # token/KT/KS families referenced in asserts
+    # Trellis families referenced in asserts
     "IQ1_KT", "IQ2_KT", "IQ3_KT", "IQ4_KT",
     # small/xxs/xs families (these were validated in some asserts to require QK_K)
-    "IQ2_XXS", "IQ2_XS", "IQ3_XXS", "IQ3_XS", "IQ3_S", "IQ4_XS",
+    "IQ2_XXS", "IQ2_XS", "IQ3_XXS", "IQ3_XS", "IQ3_S", "IQ4_XS", # Note: IQ3_XS doesn't exist
     # IQ1 family (some asserts used QK_K for iq1_s/iq1_m without R4)
     "IQ1_S", "IQ1_M",
     # Q8-related that also had QK assertions in row variants
@@ -351,7 +343,7 @@ def check_shape_constraints(qtype_upper: str, qtype_lower: str, nrows: int or No
     Enforce the blocking/shape constraints observed in ik_llama.cpp asserts.
     If a constraint fails, call failed_to_transform(...) to raise TransformFailure.
 
-    Rules implemented (based on the asserts you provided):
+    Rules implemented (based on the asserts provided):
      - row-suffix rules: r4 -> nrows % 4 == 0; r8 -> nrows % 8 == 0; r16 -> nrows % 16 == 0
      - many "K" types require n_per_row % QK_K == 0 (we check non-row variant against PER_ROW_QK_K_TYPES)
      - _BN types (importance-batch normalization) require n_per_row % QK_IQ1BN == 0
@@ -361,40 +353,11 @@ def check_shape_constraints(qtype_upper: str, qtype_lower: str, nrows: int or No
      - special Q8_K_R8 / Q8_K_R16 require nrows%8/16 and n_per_row%QK_K
      - NOTE: shape dimension interpretation: for shapes like (A, B) in the .map file we treat the
              FIRST numeric value as n_per_row and the SECOND as nrows. This matches the ordering
-             observed in your examples (e.g. token_embd.weight:shape=(2560, 151936) where the
-             per-row/blocking requirement of 256 applies to 2560).
+             observed in the examples token_embd.weight:shape=(2560, 151936) where the
+             per-row/blocking requirement of 256 applies to 2560.
     """
     # nothing to check if no shape info
     if nrows is None and n_per_row is None:
-        return
-
-    # Specific Q8_KV_R8: requires nrows%8==0 and n_per_row%16==0
-    if qtype_upper == "Q8_KV_R8":
-        if nrows is None or (nrows % 8) != 0:
-            reason = f"'{qtype_upper}' requires nrows % 8 == 0, got nrows={nrows!r}"
-            failed_to_transform(tensor_name, qtype_upper, reason)
-        if n_per_row is None or (n_per_row % 16) != 0:
-            reason = f"'{qtype_upper}' requires n_per_row % 16 == 0, got n_per_row={n_per_row!r}"
-            failed_to_transform(tensor_name, qtype_upper, reason)
-        return
-
-    # Q8_K row variants
-    if qtype_upper == "Q8_K_R8":
-        if nrows is None or (nrows % 8) != 0:
-            reason = f"'{qtype_upper}' requires nrows % 8 == 0, got nrows={nrows!r}"
-            failed_to_transform(tensor_name, qtype_upper, reason)
-        if n_per_row is None or (n_per_row % QK_K) != 0:
-            reason = f"'{qtype_upper}' requires n_per_row % {QK_K} == 0, got n_per_row={n_per_row!r}"
-            failed_to_transform(tensor_name, qtype_upper, reason)
-        return
-
-    if qtype_upper == "Q8_K_R16":
-        if nrows is None or (nrows % 16) != 0:
-            reason = f"'{qtype_upper}' requires nrows % 16 == 0, got nrows={nrows!r}"
-            failed_to_transform(tensor_name, qtype_upper, reason)
-        if n_per_row is None or (n_per_row % QK_K) != 0:
-            reason = f"'{qtype_upper}' requires n_per_row % {QK_K} == 0, got n_per_row={n_per_row!r}"
-            failed_to_transform(tensor_name, qtype_upper, reason)
         return
 
     # Row-suffix / interleaved requirements: r4/r8/r16 (these operate on nrows)
@@ -411,9 +374,15 @@ def check_shape_constraints(qtype_upper: str, qtype_lower: str, nrows: int or No
             reason = f"Quant '{qtype_lower}' requires nrows % 16 == 0, got nrows={nrows!r}"
             failed_to_transform(tensor_name, qtype_upper, reason)
 
+    # Specific Q8_KV_R8: requires nrows%8==0 and n_per_row%16==0
+    if qtype_upper == "Q8_KV_R8":
+        if n_per_row is None or (n_per_row % 16) != 0:
+            reason = f"'{qtype_upper}' requires n_per_row % 16 == 0, got n_per_row={n_per_row!r}"
+            failed_to_transform(tensor_name, qtype_upper, reason)
+
     # BN / per-channel BN types require particular per-row block size
     if '_BN' in qtype_upper:
-        # IQ1_BN and IQ2_BN style types use QK_IQ1BN = 64 in asserts
+        # IQ1_BN and IQ2_BN style types use QK_IQ1BN = 64 and QK_IQ2BN = 64 in asserts
         if n_per_row is None or (n_per_row % QK_IQ1BN) != 0:
             reason = f"Quant '{qtype_upper}' requires n_per_row % {QK_IQ1BN} == 0, got n_per_row={n_per_row!r}"
             failed_to_transform(tensor_name, qtype_upper, reason)
@@ -446,20 +415,50 @@ def check_shape_constraints(qtype_upper: str, qtype_lower: str, nrows: int or No
             reason = f"Quant '{qtype_upper}' (base '{base}') requires n_per_row % {QK4_NL} == 0, got n_per_row={n_per_row!r}"
             failed_to_transform(tensor_name, qtype_upper, reason)
 
-    # Additional catch-all: some asserts in the code require n_per_row % QK_K == 0
-    # for many 'iq*/q*_k' style names even if not enumerated above; conservatively if the qtype name contains
-    # '_K' (but not 'KV'), and block size from GGML_QUANT_SIZES is 256, check n_per_row divisibility.
-    if '_K' in qtype_upper and 'KV' not in qtype_upper:
-        # check GGML_QUANT_SIZES block size when available
-        try:
-            block_size, _ = GGML_QUANT_SIZES[qtype_upper]
-            if block_size == QK_K:
-                if n_per_row is None or (n_per_row % QK_K) != 0:
-                    reason = f"Quant '{qtype_upper}' requires n_per_row % {QK_K} == 0 (block size {block_size}), got n_per_row={n_per_row!r}"
-                    failed_to_transform(tensor_name, qtype_upper, reason)
-        except KeyError:
-            # unknown qtype in table -> no further block-based check here
-            pass
+    # Additional per-base checks derived from these GGML_ASSERT defines:
+    #   #define QK4_0 32
+    #   #define QK4_1 32
+    #   #define QK5_0 32
+    #   #define QK5_1 32
+    #   #define QK6_0 32
+    #   #define QK8_0 32
+    #   #define QK8_1 32
+    # When the non-row base matches the corresponding q4_0/q4_1/... variants, enforce n_per_row % <const> == 0.
+    # Also enforce q8_kv (non-row base 'Q8_KV') to require n_per_row % 32 == 0 (per captured assert).
+    base = non_row_variant(qtype_upper)
+    if base == "Q4_0":
+        if n_per_row is None or (n_per_row % QK4_0) != 0:
+            reason = f"Quant '{qtype_upper}' (base '{base}') requires n_per_row % {QK4_0} == 0, got n_per_row={n_per_row!r}"
+            failed_to_transform(tensor_name, qtype_upper, reason)
+    elif base == "Q4_1":
+        if n_per_row is None or (n_per_row % QK4_1) != 0:
+            reason = f"Quant '{qtype_upper}' (base '{base}') requires n_per_row % {QK4_1} == 0, got n_per_row={n_per_row!r}"
+            failed_to_transform(tensor_name, qtype_upper, reason)
+    elif base == "Q5_0":
+        if n_per_row is None or (n_per_row % QK5_0) != 0:
+            reason = f"Quant '{qtype_upper}' (base '{base}') requires n_per_row % {QK5_0} == 0, got n_per_row={n_per_row!r}"
+            failed_to_transform(tensor_name, qtype_upper, reason)
+    elif base == "Q5_1":
+        if n_per_row is None or (n_per_row % QK5_1) != 0:
+            reason = f"Quant '{qtype_upper}' (base '{base}') requires n_per_row % {QK5_1} == 0, got n_per_row={n_per_row!r}"
+            failed_to_transform(tensor_name, qtype_upper, reason)
+    elif base == "Q6_0":
+        if n_per_row is None or (n_per_row % QK6_0) != 0:
+            reason = f"Quant '{qtype_upper}' (base '{base}') requires n_per_row % {QK6_0} == 0, got n_per_row={n_per_row!r}"
+            failed_to_transform(tensor_name, qtype_upper, reason)
+    elif base == "Q8_0":
+        if n_per_row is None or (n_per_row % QK8_0) != 0:
+            reason = f"Quant '{qtype_upper}' (base '{base}') requires n_per_row % {QK8_0} == 0, got n_per_row={n_per_row!r}"
+            failed_to_transform(tensor_name, qtype_upper, reason)
+    elif base == "Q8_1":
+        if n_per_row is None or (n_per_row % QK8_1) != 0:
+            reason = f"Quant '{qtype_upper}' (base '{base}') requires n_per_row % {QK8_1} == 0, got n_per_row={n_per_row!r}"
+            failed_to_transform(tensor_name, qtype_upper, reason)
+    elif base == "Q8_KV":
+        # Non-row (base) Q8_KV asserts require n_per_row % 32 == 0 (note: the R8 row-variant Q8_KV_R8 is handled above).
+        if n_per_row is None or (n_per_row % 32) != 0:
+            reason = f"Quant '{qtype_upper}' (base '{base}') requires n_per_row % 32 == 0, got n_per_row={n_per_row!r}"
+            failed_to_transform(tensor_name, qtype_upper, reason)
 
     # If there's anything else to check in the future, add here.
 # -------------------------
@@ -547,30 +546,23 @@ def attempt_transform_line(parts: List[str],
     # Rule 2: adapted imatrix rules
     problematic_qtypes = {
         "IQ2_XXS", "IQ2_XXS_R4", "IQ2_XS", "IQ2_XS_R4",
-        "IQ2_S", "IQ2_S_R4", "IQ1_S", "IQ1_S_R4", "IQ1_M_R4"
+        "IQ2_S", "IQ2_S_R4", "IQ1_S", "IQ1_S_R4", "IQ1_M_R4", "IQ1_M"
     }
 
     if (not ignore_imatrix_rules) and (not imatrix):
-        if qtype_upper in problematic_qtypes:
+        if qtype_upper in problematic_qtypes and tensor_name in ("token_embd.weight", "output.weight"):
             reason = (
                 "Missing importance matrix for tensor in a very low-bit quantization "
                 f"('{qtype_upper}'). The result would be garbage without an importance matrix."
             )
             failed_to_transform(tensor_name, qtype_upper, reason)
 
-        if qtype_upper == "IQ1_M" and tensor_name not in ("token_embd.weight", "output.weight"):
-            reason = (
-                "IQ1_M quantization requires an importance matrix for tensors other than "
-                "'token_embd.weight' and 'output.weight'. Missing importance matrix."
-            )
-            failed_to_transform(tensor_name, qtype_upper, reason)
-
-        if qtype_upper == "Q2_K" and tensor_name != "token_embd.weight":
-            reason = (
-                "Q2_K quantization (without an importance matrix) is unsafe for this tensor. "
-                "Missing importance matrix for tensor in a very low-bit quantization."
-            )
-            failed_to_transform(tensor_name, qtype_upper, reason)
+        # if qtype_upper == "Q2_K" and tensor_name != "token_embd.weight":
+        #     reason = (
+        #         "Q2_K quantization (without an importance matrix) is unsafe for this tensor. "
+        #         "Missing importance matrix for tensor in a very low-bit quantization."
+        #     )
+        #     failed_to_transform(tensor_name, qtype_upper, reason)
 
     # ---------------------------
     # End of checks
@@ -858,13 +850,35 @@ def process_map_lines(lines,
 
 def main():
     p = argparse.ArgumentParser(
-        description="Convert .map file for a target quantization type (--qtype). "
-                    "Replaces occurrences of 'bf16' in filenames with the provided qtype lowercased, sets hashes to zeros, "
-                    "updates dtype to the qtype (lowercased) except for f32 lines which are preserved, and computes new bytes using the provided table."
+        description=(
+            "Convert a .map file to a target quantization type (--qtype).\n"
+            "Preserves f32 tensors (their dtype/bytes/hash remain unchanged), sets shard hashes to zeros for\n"
+            "quantized tensors, updates dtype to the requested quant (lowercased), and recomputes bytes using\n"
+            "a built-in quant size table.\n\n"
+            "Importance-matrix (imatrix) rules:\n"
+            "  - Use --with-imatrix to tell the script that an importance matrix is available. When set,\n"
+            "    each tensor must include a non-empty 'imatrix=' attribute in the .map file for that tensor\n"
+            "    to be treated as having an importance matrix; missing per-line imatrix attributes will cause\n"
+            "    the script to treat that tensor as if no importance matrix is present (a warning is printed).\n"
+            "  - By default (no --with-imatrix), any imatrix= attributes in the file are ignored for safety checks.\n"
+            "  - If you really know what you're doing, --ignore-imatrix-rules disables these imatrix-related\n"
+            "    safety checks (dangerous and may produce unusable quantizations).\n\n"
+            "Other features: supports per-tensor fallback quant selection, --no-map to print to stdout instead of\n"
+            "writing a file, and --output to specify an alternate output directory or filename. Case-insensitive\n"
+            "qtype names are accepted."
+        )
     )
     p.add_argument("input_map", help="Path to the input .map file to convert")
     p.add_argument("--qtype", required=True, help="Target quantization type (e.g. iq1_s_r4). Case-insensitive.")
     p.add_argument("--no-map", action="store_true", help="Do not write a .map file. Print the resulting map contents to stdout instead.")
+
+    # New: allow user to specify output path (either a directory or a full filename).
+    # If not provided, behavior remains unchanged: output created in same directory as input_map
+    # with the name tensors.<qtype_lower>.map
+    p.add_argument("--output", "--out", dest="output_map", type=str, default="",
+                   help=("Optional output path. Can be either a directory or a full filename (including .map). "
+                         "If a directory is provided, the output filename will be tensors.<qtype_lower>.map inside that directory. "
+                         "If omitted the output will be written next to the input map."))
 
     # Flags controlling importance-matrix rules and whether an importance matrix is present
     p.add_argument("--ignore-imatrix-rules", action="store_true",
@@ -933,9 +947,44 @@ def main():
             print(l)
         return
 
-    # Determine output map path: always name tensors.<qtype_lower>.map in same directory as input
-    output_name = f"tensors.{qtype_lower}.map"
-    output_path = input_path.with_name(output_name)
+    # Determine output map path.
+    # Default behavior: write to same directory as input with name tensors.<qtype_lower>.map
+    # If user provided --output, it may be a directory or a full filename. Support both.
+    output_path = None
+    if args.output_map:
+        provided = Path(args.output_map)
+        if provided.exists():
+            if provided.is_dir():
+                # Provided path is an existing directory -> write tensors.<qtype_lower>.map inside it
+                output_path = provided / f"tensors.{qtype_lower}.map"
+            else:
+                # Provided path is an existing file -> write to that file (overwrite)
+                output_path = provided
+        else:
+            # Provided path does not exist. Decide based on suffix: if it looks like a filename (ends with .map) treat as file,
+            # otherwise treat as directory and create it.
+            if provided.suffix.lower() == '.map':
+                # Treat as file path. Ensure parent exists (create if necessary).
+                parent = provided.parent
+                if not parent.exists():
+                    try:
+                        parent.mkdir(parents=True, exist_ok=True)
+                    except Exception as e:
+                        print(f"Error: could not create parent directory '{parent}' for output file: {e}", file=sys.stderr)
+                        sys.exit(5)
+                output_path = provided
+            else:
+                # Treat as directory path; create it (and parents) and then put tensors.<qtype_lower>.map inside it.
+                try:
+                    provided.mkdir(parents=True, exist_ok=True)
+                except Exception as e:
+                    print(f"Error: could not create output directory '{provided}': {e}", file=sys.stderr)
+                    sys.exit(5)
+                output_path = provided / f"tensors.{qtype_lower}.map"
+    else:
+        # No user-provided output: use same directory as input (original behavior)
+        output_name = f"tensors.{qtype_lower}.map"
+        output_path = input_path.with_name(output_name)
 
     # Write output (overwrite if exists)
     try:
