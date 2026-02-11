@@ -5,7 +5,7 @@
 #** tensors are the heaviest, thus to be benchmarked.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Oct-23-2025 -------------------- **#
+#** --------------- Updated: Feb-11-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -24,10 +24,10 @@
 #***************************************************************#
 
 """
-sum_recipe_sizes.py — compute total tensor sizes per regex from a recipe and map file.
+model_tensor_sizes.py — compute total tensor sizes per regex from a recipe and map file.
 
 Usage:
-  ./sum_recipe_sizes.py [--bytes] [--sort] RECIPE_FILE MAP_FILE
+  ./model_tensor_sizes.py [--bytes] [--sort] RECIPE_FILE MAP_FILE
 
 Options:
   --bytes       Show raw byte counts instead of human-readable units.
@@ -35,9 +35,9 @@ Options:
   -h, --help    Show this help and exit.
 
 Example:
-  chmod +x sum_recipe_sizes.py
-  ./sum_recipe_sizes.py my.recipe my.map > my.recipe.sized
-  ./sum_recipe_sizes.py --bytes --sort my.recipe my.map > my.recipe.sorted.sized
+  chmod +x model_tensor_sizes.py
+  ./model_tensor_sizes.py my.recipe my.map > my.recipe.sized
+  ./model_tensor_sizes.py --bytes --sort my.recipe my.map > my.recipe.sorted.sized
 """
 from __future__ import annotations
 import sys

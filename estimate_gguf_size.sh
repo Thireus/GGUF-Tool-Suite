@@ -5,7 +5,7 @@
 #** tensor sizes for matched regex tensors.                   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Dec-27-2025 -------------------- **#
+#** --------------- Updated: Feb-11-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -193,7 +193,7 @@ for regex in "${!USER_MAP[@]}"; do
                     ' <(printf '%s\n' $(cat "$TMPDIR/tensors.${_tag}.map" | cut -d: -f 3 | grep -E "$regex" -n | cut -d: -f 1)) "$TMPDIR/tensors.${_tag}.map" 2>/dev/null || true)
 
   # get number of matching lines
-  matched_lines_num=$(echo "$matched_lines"| grep "^.*$" -c)
+  [[ "$matched_lines" != "" ]] && matched_lines_num=$(echo "$matched_lines" | grep "^.*$" -c) || matched_lines_num=0
 
   # now filter & sum: catch any pipeline errors and default to 0
   sum_bytes=$(
