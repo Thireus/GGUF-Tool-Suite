@@ -5,7 +5,7 @@
 #** different .map file qtype.                                **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Feb-11-2026 -------------------- **#
+#** --------------- Updated: Feb-21-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -30,12 +30,12 @@ Convert a .map file's shard names, hashes and tensor bytes according to a target
 Usage:
     python convert_map_qtype.py path/to/input.map --qtype iq1_s_r4
     python convert_map_qtype.py path/to/input.map --qtype iq1_s_r4 --no-map   # prints to stdout instead of writing file
-
-Useful tip: Run the following commands to capture the asserts of each quantization function
-cat ./ik_llama.cpp/ggml/src/iqk/iqk_quantize.cpp ./ik_llama.cpp/ggml/src/ggml-quants.c | egrep 'void quantize_row_|size_t quantize_|GGML_ASSERT|assert|^\}' | sed -n -e '/^[size_t|void]/,/^\}/ p' | grep -v ' *//'
-# Direct way to extract all asserts:
-for q in $(cat ./ik_llama.cpp/ggml/src/iqk/iqk_quantize.cpp ./ik_llama.cpp/ggml/src/ggml-quants.c | egrep -i 'void quantize_row_|size_t quantize_|assert|^\}' | sed -n -e '/^[size_t|void]/,/^\}/ p' | grep -v ' *//' | grep -v '^            ' | grep ' quantize_' | cut -d'_' -f 3-6 | cut -d'(' -f 1 | sed 's/_ref//g' | sed 's/_impl//g' | egrep -v 'bs128|bs16|_K128|_K16|_K32|_K64|_KR8|_T' | sed 's/ //g' | sort -u); do echo $q:; cat ./ik_llama.cpp/ggml/src/iqk/iqk_quantize.cpp ./ik_llama.cpp/ggml/src/ggml-quants.c | egrep -v 'bs128|bs16|_K128|_K16|_K32|_K64|_KR8|_T' | egrep -v -i "$(exclude="" && for r in _r4 _r8 _r16; do if ! [[ "${q,,}" =~ "$r" ]]; then exclude="$exclude""$r "; fi done && echo $exclude | tr ' ' '|')" | egrep -i "void quantize_row_$q|size_t quantize_$q|assert|kBlockSize = |^\}" | sed -n -e '/^[size_t|void]/,/^\}/ p' | grep -v ' *//' | egrep -v '^            |^        |ggml_quantize_init()|missing quantization weights|must be|max_scale|static_assert|assert\(Q|GGML_ASSERT\(quant_weights\)' | egrep -i 'assert|kBlockSize = ' | sed 's/assert(k /GGML_ASSERT(n_per_row /g' | sed 's/ % /%/g' | sed 's/%/ % /g' | sed 's/GGML_ASSERT(n %/GGML_ASSERT(n_per_row %/g' | sed 's/    assert(/    GGML_ASSERT(/g' | sed 's/GGML_ASSERT(k /GGML_ASSERT(n_per_row /g' | sort -ur; done
 """
+
+## Useful tip: Run the following commands to capture the asserts of each quantization function
+# cat ./ik_llama.cpp/ggml/src/iqk/iqk_quantize.cpp ./ik_llama.cpp/ggml/src/ggml-quants.c | egrep 'void quantize_row_|size_t quantize_|GGML_ASSERT|assert|^\}' | sed -n -e '/^[size_t|void]/,/^\}/ p' | grep -v ' *//'
+## Direct way to extract all asserts:
+# for q in $(cat ./ik_llama.cpp/ggml/src/iqk/iqk_quantize.cpp ./ik_llama.cpp/ggml/src/ggml-quants.c | egrep -i 'void quantize_row_|size_t quantize_|assert|^\}' | sed -n -e '/^[size_t|void]/,/^\}/ p' | grep -v ' *//' | grep -v '^            ' | grep ' quantize_' | cut -d'_' -f 3-6 | cut -d'(' -f 1 | sed 's/_ref//g' | sed 's/_impl//g' | egrep -v 'bs128|bs16|_K128|_K16|_K32|_K64|_KR8|_T' | sed 's/ //g' | sort -u); do echo $q:; cat ./ik_llama.cpp/ggml/src/iqk/iqk_quantize.cpp ./ik_llama.cpp/ggml/src/ggml-quants.c | egrep -v 'bs128|bs16|_K128|_K16|_K32|_K64|_KR8|_T' | egrep -v -i "$(exclude="" && for r in _r4 _r8 _r16; do if ! [[ "${q,,}" =~ "$r" ]]; then exclude="$exclude""$r "; fi done && echo $exclude | tr ' ' '|')" | egrep -i "void quantize_row_$q|size_t quantize_$q|assert|kBlockSize = |^\}" | sed -n -e '/^[size_t|void]/,/^\}/ p' | grep -v ' *//' | egrep -v '^            |^        |ggml_quantize_init()|missing quantization weights|must be|max_scale|static_assert|assert\(Q|GGML_ASSERT\(quant_weights\)' | egrep -i 'assert|kBlockSize = ' | sed 's/assert(k /GGML_ASSERT(n_per_row /g' | sed 's/ % /%/g' | sed 's/%/ % /g' | sed 's/GGML_ASSERT(n %/GGML_ASSERT(n_per_row %/g' | sed 's/    assert(/    GGML_ASSERT(/g' | sed 's/GGML_ASSERT(k /GGML_ASSERT(n_per_row /g' | sort -ur; done
 
 import argparse
 import sys
