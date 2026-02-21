@@ -546,14 +546,17 @@ def attempt_transform_line(parts: List[str],
     # Rule 2: adapted imatrix rules
     problematic_qtypes = {
         "IQ2_XXS", "IQ2_XXS_R4", "IQ2_XS", "IQ2_XS_R4",
-        "IQ2_S", "IQ2_S_R4", "IQ1_S", "IQ1_S_R4", "IQ1_M_R4", "IQ1_M"
+        "IQ2_S", "IQ2_S_R4", "IQ1_S", "IQ1_S_R4", "IQ1_M_R4",
+        "IQ1_M", # See https://github.com/ikawrakow/ik_llama.cpp/pull/1284,
+        "IQ1_KT", "IQ2_KT", # See https://github.com/ikawrakow/ik_llama.cpp/pull/1284
+        "IQ2_KS", "IQ2_K", # See https://github.com/ikawrakow/ik_llama.cpp/pull/1284#issuecomment-3928080930
     }
 
     if (not ignore_imatrix_rules) and (not imatrix):
         if qtype_upper in problematic_qtypes and tensor_name in ("token_embd.weight", "output.weight"):
             reason = (
                 "Missing importance matrix for tensor in a very low-bit quantization "
-                f"('{qtype_upper}'). The result would be garbage without an importance matrix."
+                f"('{qtype_upper}'). The result will be garbage without an importance matrix."
             )
             failed_to_transform(tensor_name, qtype_upper, reason)
 
