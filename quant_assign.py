@@ -474,9 +474,13 @@ def compute_map_for_qtype(qtype: str) -> bool:
     if NO_FALLBACK:
         cmd.append('--no-fallback')
     if CONVERT_FALLBACK_QUANTS:
-        cmd += ['--fallback-quants', CONVERT_FALLBACK_QUANTS]
+        cmd += ['--fallback-quants']
+        for fallback_quant in CONVERT_FALLBACK_QUANTS:
+            cmd += [fallback_quant]
     if CONVERT_FALLBACK_QUANTS_FORBIDDEN:
-        cmd += ['--fallback-quants-forbidden', CONVERT_FALLBACK_QUANTS_FORBIDDEN]
+        cmd += ['--fallback-quants-forbidden']
+        for fallback_quant_forbidden in CONVERT_FALLBACK_QUANTS_FORBIDDEN:
+            cmd += [fallback_quant_forbidden]
     if INFO:
         print(f"[Info] Attempting to compute map for qtype {qtype} using convert_map_qtype.py...", file=sys.stderr)
         if DEBUG:
@@ -1972,10 +1976,8 @@ def main():
     COMPUTE_ALL_MAP = args.compute_all_map
     CONVERT_IGNORE_IMATRIX_RULES = args.ignore_imatrix_rules
     CONVERT_WITH_IMATRIX = args.with_imatrix
-    if isinstance(args.fallback_quants, list):
-        CONVERT_FALLBACK_QUANTS = ' '.join(args.fallback_quants) if args.fallback_quants else ""
-    if isinstance(args.fallback_quants_forbidden, list):
-        CONVERT_FALLBACK_QUANTS_FORBIDDEN = ' '.join(args.fallback_quants_forbidden) if args.fallback_quants_forbidden else ""
+    CONVERT_FALLBACK_QUANTS = args.fallback_quants or ""
+    CONVERT_FALLBACK_QUANTS_FORBIDDEN = args.fallback_quants_forbidden or ""
 
     # ---------------------------
     # Quant degradation handling
