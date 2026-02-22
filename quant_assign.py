@@ -119,8 +119,8 @@ COMPUTE_MISSING_MAP = False
 COMPUTE_ALL_MAP = False
 CONVERT_IGNORE_IMATRIX_RULES = False
 CONVERT_WITH_IMATRIX = False
-CONVERT_FALLBACK_QUANTS = ""  # comma-separated string or empty
-CONVERT_FALLBACK_QUANTS_FORBIDDEN = ""  # comma-separated string or empty
+CONVERT_FALLBACK_QUANTS = ""
+CONVERT_FALLBACK_QUANTS_FORBIDDEN = ""
 
 # Constants
 GIB = 1024**3 # for GiB-to-bytes conversion
@@ -1972,8 +1972,10 @@ def main():
     COMPUTE_ALL_MAP = args.compute_all_map
     CONVERT_IGNORE_IMATRIX_RULES = args.ignore_imatrix_rules
     CONVERT_WITH_IMATRIX = args.with_imatrix
-    CONVERT_FALLBACK_QUANTS = args.fallback_quants or ""
-    CONVERT_FALLBACK_QUANTS_FORBIDDEN = args.fallback_quants_forbidden or ""
+    if isinstance(args.fallback_quants, list):
+        CONVERT_FALLBACK_QUANTS = ' '.join(args.fallback_quants) if args.fallback_quants else ""
+    if isinstance(args.fallback_quants_forbidden, list):
+        CONVERT_FALLBACK_QUANTS_FORBIDDEN = ' '.join(args.fallback_quants_forbidden) if args.fallback_quants_forbidden else ""
 
     # ---------------------------
     # Quant degradation handling
