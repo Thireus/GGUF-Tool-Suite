@@ -18,7 +18,7 @@
 #**    /    o―ヽニニフ))             · · ɪǫ3_xxs      ~·°        **#
 #**    し―-J                                                   **#
 #**                                                           **#
-#** Copyright © 2025 - Thireus.          Zₑᵣₒ₋ₛₕₒₜ, 𝒻ᵤₗₗ ₙₒₙₛₑₙₛₑ **#
+#** Copyright © 2026 - Thireus.          Zₑᵣₒ₋ₛₕₒₜ, 𝒻ᵤₗₗ ₙₒₙₛₑₙₛₑ **#
 #***************************************************************#
 #**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
 #***************************************************************#
@@ -1909,12 +1909,12 @@ def main():
                         help='(forwarded to convert_map_qtype.py) Ignore importance-matrix related checks.')
     parser.add_argument('--with-imatrix', action='store_true',
                         help='(forwarded to convert_map_qtype.py) Indicate that an importance matrix is available (satisfies imatrix checks).')
-    parser.add_argument('--fallback-quants', type=str, default='',
-                        help=('(forwarded to convert_map_qtype.py) Comma-separated list of qtypes to whitelist for fallback (case-insensitive). '
-                              'If empty, all are considered. Example: --fallback-quants iq2_xs,IQ3_S,q8_k'))
-    parser.add_argument('--fallback-quants-forbidden', type=str, default='',
-                        help=("(forwarded to convert_map_qtype.py) Comma-separated list of regex patterns (case-insensitive) matching qtypes that must NOT be used as fallbacks. "
-                              "Example: --fallback-quants-forbidden '^(iq1_|Q8_K$)', '.*_bn$'"))
+    parser.add_argument('--fallback-quants', nargs='+', default=[],
+                        help=('(forwarded to convert_map_qtype.py) List of qtypes (space-separated) to whitelist for fallback (case-insensitive). '
+                              'Example: --fallback-quants iq2_xs IQ3_S q8_k.'))
+    parser.add_argument('--fallback-quants-forbidden', nargs='+', default=[],
+                        help=("(forwarded to convert_map_qtype.py) List of regex patterns (space-separated) matching qtypes that must NOT be used as fallbacks. "
+                              "Example: --fallback-quants-forbidden '^(iq1_|Q8_K$)' '.*_bn$'."))
 
     args = parser.parse_args()
 

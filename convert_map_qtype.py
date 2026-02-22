@@ -892,12 +892,13 @@ def main():
     # Fallback related flags
     p.add_argument("--no-fallback", action="store_true",
                    help="Do not attempt fallback quants on failure; abort on first failed_to_transform.")
-    p.add_argument("--fallback-quants", type=str, default="",
-                   help="Comma-separated list of qtypes to whitelist for fallback (case-insensitive). If empty, all are considered. "
-                        "Example: --fallback-quants iq2_xs,IQ3_S,q8_k")
-    p.add_argument("--fallback-quants-forbidden", type=str, default="",
-                   help="Comma-separated list of regex patterns (case-insensitive) matching qtypes that must NOT be used as fallbacks. "
-                        "Example: --fallback-quants-forbidden '^(iq1_|Q8_K$)', '.*_bn$'")
+    # Modified: accept multiple space-separated items rather than a single comma-separated string.
+    p.add_argument("--fallback-quants", nargs='*', default=None,
+                   help=("Space-separated list of qtypes to whitelist for fallback (case-insensitive). "
+                         "If omitted, all are considered. Example: --fallback-quants iq2_xs IQ3_S q8_k"))
+    p.add_argument("--fallback-quants-forbidden", nargs='*', default=None,
+                   help=("Space-separated list of regex patterns (case-insensitive) matching qtypes that must NOT be used as fallbacks. "
+                         "Example: --fallback-quants-forbidden '^(iq1_|Q8_K$)' '.*_bn$'"))
 
     args = p.parse_args()
 
@@ -921,12 +922,10 @@ def main():
     # Parse fallback whitelist and forbidden patterns
     fallback_whitelist = []
     if args.fallback_quants:
-        # Accept case-insensitive qtype names from the user; normalize to uppercase for internal comparisons.
-        fallback_whitelist = [q.strip().upper() for q in args.fallback_quants.split(',') if q.strip()]
+        fallback_whitelist = [q.strip().upper() for q in args.fallback_quants if q.strip()]
     fallback_forbidden_patterns = []
     if args.fallback_quants_forbidden:
-        # split by commas, allow regex patterns; patterns will be compiled case-insensitively later.
-        fallback_forbidden_patterns = [p.strip() for p in args.fallback_quants_forbidden.split(',') if p.strip()]
+        fallback_forbidden_patterns = [p.strip() for p in args.fallback_quants_forbidden if p.strip()]
 
     allow_fallback = not args.no_fallback
 
