@@ -18,7 +18,7 @@
 #**    /    o―ヽニニフ))             · · ɪǫ3_xxs      ~·°        **#
 #**    し―-J                                                   **#
 #**                                                           **#
-#** Copyright © 2025 - Thireus.       ₗₑₐₜₕₑᵣ₋ₚₒ𝓌ₑᵣₑ𝒹 𝒸ₒₘₚᵤₜᵢₙ𝓰 **#
+#** Copyright © 2026 - Thireus.       ₗₑₐₜₕₑᵣ₋ₚₒ𝓌ₑᵣₑ𝒹 𝒸ₒₘₚᵤₜᵢₙ𝓰 **#
 #***************************************************************#
 #**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
 #***************************************************************#
@@ -78,8 +78,8 @@ DEFAULTS: Dict[str, Any] = {
     "compute_all_map": False,
     "ignore_imatrix_rules": False,
     "with_imatrix": False,
-    "fallback_quants": "",
-    "fallback_quants_forbidden": ""
+    "fallback_quants": [],
+    "fallback_quants_forbidden": []
 }
 
 
@@ -294,8 +294,8 @@ def emit_parameters(params: Dict[str, Any]) -> str:
     lines.append(f'compute_all_map = {params["compute_all_map"]}    #@param {{type:"boolean"}}')
     lines.append(f'ignore_imatrix_rules = {params["ignore_imatrix_rules"]}    #@param {{type:"boolean"}}')
     lines.append(f'with_imatrix = {params["with_imatrix"]}    #@param {{type:"boolean"}}')
-    lines.append(f'fallback_quants = "{params["fallback_quants"]}"    #@param {{type:"string"}}')
-    lines.append(f'fallback_quants_forbidden = "{params["fallback_quants_forbidden"]}"    #@param {{type:"string"}}')
+    lines.append(f'fallback_quants = {pretty_py_list(params["fallback_quants"])}    #@param {{type:"raw"}}')
+    lines.append(f'fallback_quants_forbidden = {pretty_py_list(params["fallback_quants_forbidden"])}    #@param {{type:"raw"}}')
     lines.append("")
     lines.append("# other pipeline parameters (optional)")
     lines.append(f'display_graphs = {params["display_graphs"]}       #@param {{type:"boolean"}}')
@@ -373,11 +373,13 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
             '--gpu-quants': 'gpu_quants',
             '--cpu-assign-tensors': 'cpu_assign_tensors',
             '--gpu-assign-tensors': 'gpu_assign_tensors',
+            '--fallback-quants': 'fallback_quants',
+            '--fallback-quants-forbidden': 'fallback_quants_forbidden',
         }
         for flag, outname in multi_flags.items():
             vals = collect_flag_values(tokens, flag)
             if vals:
-                if outname in ('cpu_quants', 'gpu_quants'):
+                if outname in ('cpu_quants', 'gpu_quants', 'fallback_quants'):
                     items = []
                     for v in vals:
                         for part in re.split(r"[,\s]+", v.strip()):
@@ -387,7 +389,7 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
                 else:
                     items: List[str] = []
                     for v in vals:
-                        # keep tokens like 'blk\...=q8_0' intact; if comma-separated, split
+                        # keep tokens like 'blk\...=q8_0' intact; if comma-separated, split (unless it's a special blk\... token)
                         if "," in v and not v.startswith(("^blk\\.", "blk\\.")):
                             for part in v.split(","):
                                 part = part.strip()
@@ -411,8 +413,6 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
             '--quant-degradation-csv': 'quant_degradation_csv',
             '--quant-degradation-equation': 'quant_degradation_equation',
             '--synergy-strength': 'synergy_strength',
-            '--fallback-quants': 'fallback_quants',
-            '--fallback-quants-forbidden': 'fallback_quants_forbidden',
         }
         i = 0
         while i < len(tokens):
@@ -532,6 +532,19 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
             params['gpu_irq_k'] = float(params['gpu_irq_k'])
         except Exception:
             pass
+
+    # Ensure fallback lists are lists (in case a string was parsed earlier)
+    if 'fallback_quants' in params and isinstance(params['fallback_quants'], str):
+        # split on commas/spaces similar to cpu_quants behavior
+        parts = [p for p in re.split(r"[,\s]+", params['fallback_quants']) if p]
+        params['fallback_quants'] = parts
+    if 'fallback_quants_forbidden' in params and isinstance(params['fallback_quants_forbidden'], str):
+        # preserve tokens, but if comma-separated split (like assign tensors)
+        items: List[str] = []
+        for v in re.split(r"[,\s]+", params['fallback_quants_forbidden']):
+            if v:
+                items.append(v)
+        params['fallback_quants_forbidden'] = items
 
     # -----------------------------
     # Apply complete set of defaults for any missing keys (preserve any discovered values)
