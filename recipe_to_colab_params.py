@@ -5,7 +5,7 @@
 #** Colab pipeline parameters for quant_recipe_pipeline.ipynb **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jan-10-2026 -------------------- **#
+#** --------------- Updated: Feb-22-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -73,7 +73,13 @@ DEFAULTS: Dict[str, Any] = {
     "cpu_irq_k": None,
     "gpu_irq_k": None,
     "skip_gpg": False,
-    "display_graphs": True
+    "display_graphs": True,
+    "compute_missing_map": False,
+    "compute_all_map": False,
+    "ignore_imatrix_rules": False,
+    "with_imatrix": False,
+    "fallback_quants": "",
+    "fallback_quants_forbidden": ""
 }
 
 
@@ -284,6 +290,12 @@ def emit_parameters(params: Dict[str, Any]) -> str:
     lines.append(f'cpu_irq_k = {params["cpu_irq_k"]}             #@param {{type:"number"}}')
     lines.append(f'gpu_irq_k = {params["gpu_irq_k"]}             #@param {{type:"number"}}')
     lines.append(f'skip_gpg = {params["skip_gpg"]}            #@param {{type:"boolean"}}')
+    lines.append(f'compute_missing_map = {params["compute_missing_map"]}    #@param {{type:"boolean"}}')
+    lines.append(f'compute_all_map = {params["compute_all_map"]}    #@param {{type:"boolean"}}')
+    lines.append(f'ignore_imatrix_rules = {params["ignore_imatrix_rules"]}    #@param {{type:"boolean"}}')
+    lines.append(f'with_imatrix = {params["with_imatrix"]}    #@param {{type:"boolean"}}')
+    lines.append(f'fallback_quants = "{params["fallback_quants"]}"    #@param {{type:"string"}}')
+    lines.append(f'fallback_quants_forbidden = "{params["fallback_quants_forbidden"]}"    #@param {{type:"string"}}')
     lines.append("")
     lines.append("# other pipeline parameters (optional)")
     lines.append(f'display_graphs = {params["display_graphs"]}       #@param {{type:"boolean"}}')
@@ -399,6 +411,8 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
             '--quant-degradation-csv': 'quant_degradation_csv',
             '--quant-degradation-equation': 'quant_degradation_equation',
             '--synergy-strength': 'synergy_strength',
+            '--fallback-quants': 'fallback_quants',
+            '--fallback-quants-forbidden': 'fallback_quants_forbidden',
         }
         i = 0
         while i < len(tokens):
@@ -430,8 +444,11 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
             '--tensors-from-csv': 'tensors_from_csv',
             '--skip-gpg': 'skip_gpg',
             '--no-fallback': 'no_fallback',
-            # NEW greedy lonely flag
             '--use-greedy-quant-assign': 'use_greedy_quant_assign',
+            '--compute-missing-map': 'compute_missing_map',
+            '--compute-all-map': 'compute_all_map',
+            '--ignore-imatrix-rules': 'ignore_imatrix_rules',
+            '--with-imatrix': 'with_imatrix',
         }
         i = 0
         while i < len(tokens):
@@ -502,6 +519,17 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
     if 'synergy_strength' in params:
         try:
             params['synergy_strength'] = float(params['synergy_strength'])
+        except Exception:
+            pass
+    # Ensure cpu_irq_k/gpu_irq_k are numeric if present
+    if 'cpu_irq_k' in params:
+        try:
+            params['cpu_irq_k'] = float(params['cpu_irq_k'])
+        except Exception:
+            pass
+    if 'gpu_irq_k' in params:
+        try:
+            params['gpu_irq_k'] = float(params['gpu_irq_k'])
         except Exception:
             pass
 
