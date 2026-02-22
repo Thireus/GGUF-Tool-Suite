@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Feb-07-2026 -------------------- **#
+#** --------------- Updated: Feb-22-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -48,6 +48,19 @@ from collections import Counter
 import textwrap
 from typing import Any, cast, Dict, List, Iterable, Tuple, Optional
 import heapq
+
+_cached_functions = []
+
+def tracked_lru_cache(*args, **kwargs):
+    def decorator(func):
+        cached_func = functools.lru_cache(*args, **kwargs)(func)
+        _cached_functions.append(cached_func)
+        return cached_func
+    return decorator
+
+def clear_all_caches():
+    for func in _cached_functions:
+        func.cache_clear()
 
 # Global default quants list
 DEFAULT_QUANTS = ['q8_0', 'q4_0']
@@ -254,7 +267,7 @@ def _call_normalised_ppl(keys):
     return results
 
 
-@functools.lru_cache(maxsize=None)
+@tracked_lru_cache(maxsize=None)
 def get_bpw(qtype):
     """
     Return the bpw for a given qtype.
@@ -267,7 +280,7 @@ def get_bpw(qtype):
         sys.exit(1)
     return QTYPE_BPW_CACHE[qtype]
 
-@functools.lru_cache(maxsize=None)
+@tracked_lru_cache(maxsize=None)
 def get_default_factor(qtype):
     """
     Return reducing factor based on bit-width.
@@ -653,7 +666,7 @@ def fetch_map_for_qtype(qtype: str):
         return False
 
 
-@functools.lru_cache(maxsize=None)
+@tracked_lru_cache(maxsize=None)
 def get_map_sizes_and_elements(qtype, collect_raw = False):
     """
     Return parsed map sizes and elements for given qtype, caching results.
@@ -2048,7 +2061,7 @@ def main():
 
     # helper lookup that greedy_quant_assign will use (returns float or None)
     warned_missing_qtypes = set()
-    @functools.lru_cache(maxsize=None)
+    @tracked_lru_cache(maxsize=None)
     def quant_deg_lookup(qtype: str):
         # Prefer CSV value
 
