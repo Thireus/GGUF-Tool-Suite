@@ -5,7 +5,7 @@
 #** different .map file qtype.                                **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Feb-21-2026 -------------------- **#
+#** --------------- Updated: Feb-22-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -28,8 +28,8 @@ convert_map_qtype.py
 Convert a .map file's shard names, hashes and tensor bytes according to a target quantization type (--qtype).
 
 Usage:
-    python convert_map_qtype.py path/to/input.map --qtype iq1_s_r4
-    python convert_map_qtype.py path/to/input.map --qtype iq1_s_r4 --no-map   # prints to stdout instead of writing file
+    python convert_map_qtype.py path/to/input.map --qtype q2_K
+    python convert_map_qtype.py path/to/input.map --qtype q2_K --no-map   # prints to stdout instead of writing file
 """
 
 ## Useful tip: Run the following commands to capture the asserts of each quantization function
@@ -867,20 +867,20 @@ def main():
             "  - If you really know what you're doing, --ignore-imatrix-rules disables these imatrix-related\n"
             "    safety checks (dangerous and may produce unusable quantizations).\n\n"
             "Other features: supports per-tensor fallback quant selection, --no-map to print to stdout instead of\n"
-            "writing a file, and --output to specify an alternate output directory or filename. Case-insensitive\n"
+            "writing a file, and --output to specify an alternate output directory or filename. Case-sensitive\n"
             "qtype names are accepted."
         )
     )
     p.add_argument("input_map", help="Path to the input .map file to convert")
-    p.add_argument("--qtype", required=True, help="Target quantization type (e.g. iq1_s_r4). Case-insensitive.")
+    p.add_argument("--qtype", required=True, help="Target quantization type (e.g. q2_K). Case-sensitive.")
     p.add_argument("--no-map", action="store_true", help="Do not write a .map file. Print the resulting map contents to stdout instead.")
 
     # New: allow user to specify output path (either a directory or a full filename).
     # If not provided, behavior remains unchanged: output created in same directory as input_map
-    # with the name tensors.<qtype_lower>.map
+    # with the name tensors.<qtype>.map
     p.add_argument("--output", "--out", dest="output_map", type=str, default="",
                    help=("Optional output path. Can be either a directory or a full filename (including .map). "
-                         "If a directory is provided, the output filename will be tensors.<qtype_lower>.map inside that directory. "
+                         "If a directory is provided, the output filename will be tensors.<qtype>.map inside that directory. "
                          "If omitted the output will be written next to the input map."))
 
     # Flags controlling importance-matrix rules and whether an importance matrix is present
@@ -906,6 +906,7 @@ def main():
         print(f"Error: input file '{input_path}' does not exist or is not a file.", file=sys.stderr)
         sys.exit(2)
 
+    qtype = args.qtype
     qtype_lower = args.qtype.lower()
     qtype_upper = args.qtype.upper()
 
@@ -951,15 +952,15 @@ def main():
         return
 
     # Determine output map path.
-    # Default behavior: write to same directory as input with name tensors.<qtype_lower>.map
+    # Default behavior: write to same directory as input with name tensors.<qtype>.map
     # If user provided --output, it may be a directory or a full filename. Support both.
     output_path = None
     if args.output_map:
         provided = Path(args.output_map)
         if provided.exists():
             if provided.is_dir():
-                # Provided path is an existing directory -> write tensors.<qtype_lower>.map inside it
-                output_path = provided / f"tensors.{qtype_lower}.map"
+                # Provided path is an existing directory -> write tensors.<qtype>.map inside it
+                output_path = provided / f"tensors.{qtype}.map"
             else:
                 # Provided path is an existing file -> write to that file (overwrite)
                 output_path = provided
@@ -977,16 +978,16 @@ def main():
                         sys.exit(5)
                 output_path = provided
             else:
-                # Treat as directory path; create it (and parents) and then put tensors.<qtype_lower>.map inside it.
+                # Treat as directory path; create it (and parents) and then put tensors.<qtype>.map inside it.
                 try:
                     provided.mkdir(parents=True, exist_ok=True)
                 except Exception as e:
                     print(f"Error: could not create output directory '{provided}': {e}", file=sys.stderr)
                     sys.exit(5)
-                output_path = provided / f"tensors.{qtype_lower}.map"
+                output_path = provided / f"tensors.{qtype}.map"
     else:
         # No user-provided output: use same directory as input (original behavior)
-        output_name = f"tensors.{qtype_lower}.map"
+        output_name = f"tensors.{qtype}.map"
         output_path = input_path.with_name(output_name)
 
     # Write output (overwrite if exists)
