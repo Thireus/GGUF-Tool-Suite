@@ -278,7 +278,7 @@ ulimit -n 9999 # Required on Linux - Also make sure you have compiled ik_llama.c
 
 ## 🛠️ Generate a Custom Recipe for Your Config
 
-> 🎉 A web-based port of quant_assign.sh is available at https://gguf.thireus.com/quant_assign.html
+> 🎉 A web-based port of quant_assign.py is available at https://gguf.thireus.com/quant_assign.html
 
 > Recipe files can also be turned back into Google Colab pipeline parameters - [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/Thireus/GGUF-Tool-Suite/blob/main/recipe_to_colab_params.ipynb) or locally with `recipe_to_colab_params.py`.
 
