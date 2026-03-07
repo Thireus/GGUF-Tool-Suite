@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #***************************************************************#
 #** This script is part of Thireus' GGUF Tool Suite.          **#
-#** quant_downloader.sh is a tool that downloads GGUF shards  **#
-#** from a recipe file containing tensor regexe entries.      **#
+#** quant_downloader.sh is a tool that obtains GGUF shards    **#
+#** from a recipe file containing tensor regex entries.       **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Feb-09-2026 -------------------- **#
+#** --------------- Updated: Mar-07-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -18,14 +18,13 @@
 #**    /    o―ヽニニフ))             · · ɪǫ3_xxs      ~·°        **#
 #**    し―-J                                                   **#
 #**                                                           **#
-#** Copyright © 2025 - Thireus.        𝒻ₐᵢₗₑ𝒹 ₜₒ ₐₗₗₒ𝒸ₐₜₑ ᵦᵤ𝒻𝒻ₑᵣ **#
+#** Copyright © 2026 - Thireus.        𝒻ₐᵢₗₑ𝒹 ₜₒ ₐₗₗₒ𝒸ₐₜₑ ᵦᵤ𝒻𝒻ₑᵣ **#
 #***************************************************************#
 #**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
 #***************************************************************#
 
 # Exit on error, undefined variable, or pipe failure
 set -euo pipefail
-
 # ----- Debugging: verbose ERR trap -----
 # Capture the exact command line used to start the script (script name + all args).
 # We build this safely so it works on Bash 3.2 and preserves arguments with spaces.
@@ -191,7 +190,7 @@ exit_from_subprocess() {
 MAX_JOBS=8                   # Default concurrency level
 NEW_MAP=true                 # Whether to try obtain the latest map files
 FORCE_REDOWNLOAD=false       # Whether to redownload all files (maps, shards, first shard)
-VERIFY=false                 # If true, only verify hashes and report errors
+VERIFY=false                 # If true, only verify hashes and report errors; skip downloads
 VERIFY_READONLY=false        # If true, verify in read-only mode: do not create files in the target dir; use temporary workspace
 BASE_DIR="."                 # Base directory for model and download dirs
 QTYPE="BF16"                 # Default quantization type used for the first shard and filenames - also used for F32 tensors
@@ -209,6 +208,7 @@ ARCHIVE_DECOMPRESS=false     # --z-decompress (aka -zd) : accept .gguf.zbst file
 ARCHIVE_COMPRESS_OPT=""      # Deprecated single-string fallback; new preferred format: per-tool options via --z-compress-opt 'tool:opts'
 ARCHIVE_DECOMPRESS_OPT=""    # Deprecated single-string fallback; new preferred format: per-tool options via --z-decompress-opt 'tool:opts'
 ARCHIVE_NOAUTO=false         # --z-noauto: prevent automatic enabling of -z or -zd based on files present
+SKIP_FINAL_MESSAGE=false     # If true, skip the final message
 
 # Enforce that any files produced by the downloader that are .gguf or .gguf.zbst must remain symlinks
 SYMLINK_ONLY=false
@@ -217,6 +217,34 @@ SYMLINK_ONLY=false
 INDIVIDUAL_TENSORS_ENABLED=false
 INDIVIDUAL_TENSORS_RAW=""
 declare -A IND_TENSOR_SET=()   # filled after reading maps, keys are decimal integers (1-based chunk ids)
+
+QUANTIZE_NTHREADS=0          # --quantize-nthreads : number of threads passed to llama-quantize (0 == auto / number of CPU threads)
+QUANTIZE_ALL_SHARDS=false    # --quantize-all-shards : move all fetch items to quantize queue
+MAX_QUANTIZE_JOBS=1          # --max-quantize-jobs (-k) : concurrency for quantization (must be >0 and <= MAX_JOBS)
+QUANTIZE_JOBS_SPECIFIED=false
+
+# Keep bf16 shards used for quantization (do not delete after quantize)
+QUANTIZE_KEEP_BF16=false
+# Allow user to specify BF16 download workspace directory
+QUANTIZE_BF16_DIR=""
+
+# Flags for gguf file verification behaviour
+SKIP_GGUF_VERIFICATION=false   # --skip-gguf-verification : when true, skip additional gguf_info file verification
+STRICT_GGUF_VERIFICATION=false # --strict-gguf-verification : when true, treat warnings as fatal (function returns non-zero)
+QUANTIZE_F32_WARN_VERIFICATION=false # When set, will warn about quantized tensors when f32 doesn't match the expected qtype
+
+# Options to auto-select tensors/qtypes for quantization and map computation via regex lists
+QUANTIZE_TENSORS_REGEX_ENABLED=false
+QUANTIZE_TENSORS_REGEX_RAW=""
+declare -a QUANTIZE_TENSORS_REGEX=()
+
+QUANTIZE_QTYPES_REGEX_ENABLED=false
+QUANTIZE_QTYPES_REGEX_RAW=""
+declare -a QUANTIZE_QTYPES_REGEX=()
+
+COMPUTE_QTYPES_REGEX_MAP_ENABLED=false
+COMPUTE_QTYPES_REGEX_MAP_RAW=""
+declare -a COMPUTE_QTYPES_REGEX_MAP=()
 
 # Default tools and their magic hex (user can override with --z-custom-tools)
 # Example magic hex values: zstd -> 28B52FFD, lbzip2 -> 425A68
@@ -230,21 +258,65 @@ CUSTOM_TOOL_MAGICS=()
 COMPRESS_OPTS_RAW=()     # holds 'tool:opts' strings from --z-compress-opt (or defaults)
 DECOMPRESS_OPTS_RAW=()   # holds 'tool:opts' strings from --z-decompress-opt (default empty unless user supplies)
 
-# parsed per-tool opts: COMP_OP_TOOL_NAMES[], COMP_OP_TOOL_VALUES[], same for DECOMP
+# parsed per-tool opts: COMP_OP_TOOL_NAMES/VALUES, DECOMP_OP_TOOL_NAMES/VALUES
 COMP_OP_TOOL_NAMES=()
 COMP_OP_TOOL_VALUES=()
 DECOMP_OP_TOOL_NAMES=()
 DECOMP_OP_TOOL_VALUES=()
 # -------------------------------------------------------------------------
 
+# --------------------- COMPUTE MAPS OPTIONS -------------------
+COMPUTE_MISSING_MAP=false
+COMPUTE_ALL_MAP=false
+CONVERT_IGNORE_IMATRIX_RULES=false
+CONVERT_WITH_IMATRIX_FILE=""      # user must pass a file to --with-imatrix; only the flag (no file) will be passed to convert_map_qtype.py
+CONVERT_NO_FALLBACK=false
+declare -a CONVERT_FALLBACK_QUANTS=()
+declare -a CONVERT_FALLBACK_QUANTS_FORBIDDEN=()
+# -------------------------------------------------------------------------
+
+# --------------------- REQUANTIZE & LLAMA-QUANTIZE ----------------------
+REQUANTIZE_QUANTIZEONLY_SHARDS=false
+LLAMA_QUANTIZE_BIN=""   # path to llama-quantize binary, required when we need to quantize from bf16
+# When quantizing from bf16, we will create a temporary bf16 download workspace under $LOCAL_DOWNLOAD_DIR/bf16
+BF16_FIRST_OBTAINED=false    # set to true after first-shard retrieval for quantization is done once
+# ------------------------------------------------------------------------
+
+# --------------------- QUANTIZE FAILED DOWNLOAD --------------------------
+# If non-empty, numeric N: after N failed download attempts for a given tensor, fallback to quantize-from-bf16 for that tensor only.
+QUANTIZE_FAILED_DOWNLOAD=""
+# -------------------------------------------------------------------------
+
+# --------------------- VERIFICATION RETRIES -----------------------------
+# Maximum number of verification attempts for downloaded shards (will retry download until reached)
+MAX_FAILED_VERIFICATION=5     # --max-failed-verification : default attempts
+# -------------------------------------------------------------------------
+
 # --------------------- USAGE & ARG PARSING -------------------
 usage() {
+  # Convert boolean defaults into human-friendly ON/OFF strings for usage output
+  local _bool_to_onoff
+  _bool_to_onoff() {
+    if [[ "$1" == "true" ]]; then
+      printf "ON"
+    else
+      printf "OFF"
+    fi
+  }
+
+  local SKIP_GGUF_DEF
+  SKIP_GGUF_DEF="$(_bool_to_onoff "$SKIP_GGUF_VERIFICATION")"
+  local STRICT_GGUF_DEF
+  STRICT_GGUF_DEF="$(_bool_to_onoff "$STRICT_GGUF_VERIFICATION")"
+  local QUANTIZE_F32_WARN_DEF
+  QUANTIZE_F32_WARN_DEF="$(_bool_to_onoff "$QUANTIZE_F32_WARN_VERIFICATION")"
+
   echo "Usage: $0 [options] <recipe-file>" >&2
-  echo "       --no-new-map                      Prevent the script from downloading new map files" >&2
+  echo "       --no-new-map                      Prevent the script from replacing existing map files" >&2
   echo "       --force-redownload                Force redownload of all shards and maps, ignoring existing files" >&2
   echo "       --verify                          Only verify existing shard hashes; report mismatches; skip downloads" >&2
   echo "       --verify-readonly                 Same as --verify but do not create files in the target directory (use a temporary workspace)." >&2
-  echo "       --qtype QUANT                     Set quantization type for the first shard and filenames (default: BF16); use highest qtype of the model!" >&2
+  echo "       --qtype QUANT                     Set quantization type for the first shard and filenames (default: $QTYPE); use highest qtype of the model!" >&2
   echo "                                         NOTE: When --qtype is explicitly provided and the corresponding" >&2
   echo "                                         tensors.<qtype,,>.map and tensors.<qtype,,>.map.sig files are present (<qtype,,> is automatically lowercased)," >&2
   echo "                                         the script will create these helpful symlinks in the model dir:" >&2
@@ -253,6 +325,12 @@ usage() {
   echo "                                         This makes it easier to use quantized model repositories locally." >&2
   echo "       --skip-gpg                        Do not verify the gpg signature of the downloaded files" >&2
   echo "       --skip-hash                       Do not compute or verify SHA256 hashes; treat all hashes as valid (useful when quantizing BF16 shards with a different imatrix for example)" >&2
+  echo "       --skip-gguf-verification          Skip additional gguf_info.py GGUF (important to verify shards locally quantized) checks (default: $SKIP_GGUF_DEF)" >&2
+  echo "       --gguf-info-novenv                Do NOT add the '--venv' argument when invoking gguf_info.py (used for gguf-verification). Use this only if you are sure" >&2
+  echo "                                         the gguf_info.py script runs correctly on your current Python environment without the virtual-venv helper." >&2
+  echo "                                         If you need to install gguf/requirements, recommended commands:" >&2
+  echo "                                           pip install \"gguf @ git+https://github.com/ikawrakow/ik_llama.cpp.git@main#subdirectory=gguf-py\" --force; pip install sentencepiece numpy==1.26.4" >&2
+  echo "       --strict-gguf-verification        Treat any mismatches/warnings from gguf file verification as fatal (return non-zero) (default: $STRICT_GGUF_DEF)" >&2
   echo "       --special-node-id N               Only process shards assigned to this node for this model." >&2
   echo "       --total-nodes N                   Total number of nodes." >&2
   echo "       --rm-skipped-shards               Remove shards not assigned to this node if present." >&2
@@ -264,8 +342,10 @@ usage() {
   echo "       --individual-tensors LIST         Comma-separated list of tensor numbers to operate on (example: --individual-tensors 1,2,6)." >&2
   echo "                                         When provided the script will SKIP downloading and verifying any shard not listed." >&2
   echo "                                         Note: numbers must be positive integers within the model's shard count and unique." >&2
+  echo "       --no-final-message                Do not print the final 'Download and verification complete' message (useful when running nested instances)." >&2
+  echo "       --max-failed-verification N       Set the maximum number of verification attempts for downloaded shards (default: $MAX_FAILED_VERIFICATION)." >&2
   echo "  -j,  --max-jobs N                      Set maximum concurrent downloads (default: $MAX_JOBS)" >&2
-  echo "  -d,  --dest DIR                        Base path for model and download dirs (default: .)" >&2
+  echo "  -d,  --dest DIR                        Base path for model and download dirs (default: $BASE_DIR)" >&2
   echo "  -z,  --z-compress                      Compress verified .gguf files to .gguf.zbst (using the best compression produced by --z-custom-tools tools) before," >&2
   echo "                                         moving out of the download dir" >&2
   echo "       --z-compress-opt OPTS             Single comma-separated string of per-tool compress opts: 'zstd:-19,lbzip2:-9 -u,brotli:-Z -n'. Defaults to ," >&2
@@ -275,6 +355,33 @@ usage() {
   echo "  -h,  --help                            Show this help and exit" >&2
   echo "  <recipe-file>: path to recipe containing USER_REGEX lines (one per tensor; must have .recipe extension)" >&2
   echo "" >&2
+  echo "Compute-map options:" >&2
+  echo "       --compute-missing-map             When set, if a tensors.<qtype>.map file is missing the script will attempt to compute it from tensors.bf16.map using convert_map_qtype.py." >&2
+  echo "                                         Computed maps are not gpg-checked and their qtypes will be annotated in the produced recipe with a leading '!'." >&2
+  echo "       --compute-all-map                 When set instead of --compute-missing-map, produce all non-bf16 map files via convert_map_qtype.py (mutually exclusive)." >&2
+  echo "       --compute-qtypes-regex-map REG1,REG2,...   Instead of downloading map files for matching qtypes, compute them locally via convert_map_qtype.py." >&2
+  echo "       --ignore-imatrix-rules            (forwarded to convert_map_qtype.py) Ignore importance-matrix related checks." >&2
+  echo "       --with-imatrix IMATRIX_FILE       (forwarded to convert_map_qtype.py) Indicate that an importance matrix file exists. The file must exist on disk." >&2
+  echo "       --fallback-quants Q1,Q2,...       (forwarded to convert_map_qtype.py) Comma or space-separated list of qtypes to whitelist for fallback." >&2
+  echo "       --fallback-quants-forbidden REGEX1,REGEX2,...  (forwarded to convert_map_qtype.py) Comma or space-separated list of regex patterns matching forbidden fallback qtypes." >&2
+  echo "       --no-fallback                     (forwarded to convert_map_qtype.py) Disable fallback behaviour." >&2
+  echo "" >&2
+  echo "Quantization-from-bf16 options:" >&2
+  echo "       --requantize-quantizeonly-shards  Re-quantize computed-map shards or shards marked to be quantized even if they already exist locally (default: do not replace existing files)." >&2
+  echo "       --llama-quantize /path/to/bin     Required when the script needs to quantize missing computed-map shards from bf16. The binary must support --individual-tensors." >&2
+  echo "                                         Obtain it at https://github.com/Thireus/ik_llama.cpp/tree/th/quantize_individual_tensors" >&2
+  echo "                                         Pre-built releases are at: https://github.com/Thireus/ik_llama.cpp/releases (look for th-quantize_individual_tensors*)." >&2
+  echo "       --quantize-failed-download N      Fallback: after N failed download attempts for a given tensor, try to quantize that tensor from bf16 instead (requires --llama-quantize)." >&2
+  echo "                                         If not provided the script will retry downloads indefinitely (legacy behaviour)." >&2
+  echo "       --quantize-nthreads N             Number of threads to pass to llama-quantize (integer >=0). Default $QUANTIZE_NTHREADS (0 == use all CPU threads)." >&2
+  echo "       --quantize-all-shards             Quantize all discovered shards from bf16 instead of downloading them." >&2
+  echo "       -k, --max-quantize-jobs N         Maximum concurrent quantize jobs (must be >0 and <= -j / --max-jobs)." >&2
+  echo "       --quantize-keep-bf16              When used, do NOT delete bf16 shards after quantization (keeps bf16 workspace files)." >&2
+  echo "       --quantize-bf16-directory DIR     Specify custom bf16 workspace directory (default: <dest>/downloaded_shards/bf16)." >&2
+  echo "       --quantize-f32-warn-verification  Warn about f32 quantized tensors not matching the expected quantization type set at quantization (default: $QUANTIZE_F32_WARN_DEF)" >&2
+  echo "       --quantize-tensors-regex REG1,REG2,...     Move tensors whose tensor-names match any provided regex into the quantize queue." >&2
+  echo "       --quantize-qtypes-regex REG1,REG2,...      Move tensors whose target qtype (as determined by the recipe patterns) match any provided regex into the quantize." >&2
+  echo "" >&2
   echo "Examples:" >&2
   echo "  # Download all model GGUF shards for this DeepSeek-R1-0528 recipe:" >&2
   echo "    ./quant_downloader.sh DeepSeek-R1-0528.THIREUS-1.9413bpw-4.3624ppl.151GB-GGUF_11GB-GPU_140GB-CPU.569b7f6_bb4f3c8.recipe" >&2
@@ -283,7 +390,9 @@ usage() {
   echo "  # Automatically decompresses .zbst GGUF shards - must ensure the list of custom tools matches all the tools that may have been used to create the .zbst present on the host repositories" >&2
   echo "    ./quant_downloader.sh -zd --z-custom-tools 'zstd:28B52FFD,lbzip2:425A68,brotli:' my_custom.recipe" >&2
   echo "  # Verify only individual tensors 2,3,1094:" >&2
-  echo "    ./quant_downloader.sh --individual-tensors 2,3,1094 --verify recipe.recipe" >&2
+  echo "    ./quant_downloader.sh --individual-tensors 2,3,1094 --verify my_custom.recipe" >&2
+  echo "  # Compute maps of quants that aren't available for download and locally quantize token_embd.weight to q8_0 using Thireus's special llama-quantize:" >&2
+  echo "    ./quant_downloader.sh my_custom.recipe --compute-missing-map --llama-quantize ~/thireus_fork/build/bin/llama-quantize --ignore-imatrix-rules -k 4 --with-imatrix /IMATRIX/imatrix-GLM-4.5-Air-BF16.dat --quantize-tensors-regex \"^token_embd.weight\\\$\" --qtype q8_0" >&2
   exit 1
 }
 
@@ -301,7 +410,7 @@ done
 set -- "${_preprocess_args[@]:-}"
 
 # Parse arguments (supports GNU long options)
-PARSED_OPTS=$(getopt -n "$0" -o j:d:hz -l max-jobs:,no-new-map,force-redownload,verify,verify-readonly,qtype:,skip-gpg,skip-hash,dest:,destination:,special-node-id:,total-nodes:,rm-skipped-shards,help,z-compress,z-decompress,z-noauto,z-compress-opt:,z-decompress-opt:,z-custom-tools:,symlink-only,individual-tensors: -- "$@") || usage
+PARSED_OPTS=$(getopt -n "$0" -o j:d:hk:z -l max-jobs:,no-new-map,force-redownload,verify,verify-readonly,qtype:,skip-gpg,skip-hash,dest:,destination:,special-node-id:,total-nodes:,rm-skipped-shards,help,z-compress,z-decompress,z-noauto,z-compress-opt:,z-decompress-opt:,z-custom-tools:,symlink-only,individual-tensors:,compute-missing-map,compute-all-map,ignore-imatrix-rules,with-imatrix:,fallback-quants:,fallback-quants-forbidden:,no-fallback,requantize-quantizeonly-shards,llama-quantize:,quantize-failed-download:,quantize-nthreads:,quantize-all-shards,max-quantize-jobs:,no-final-message,quantize-keep-bf16,quantize-bf16-directory:,skip-gguf-verification,strict-gguf-verification,quantize-f32-warn-verification,quantize-tensors-regex:,quantize-qtypes-regex:,compute-qtypes-regex-map:,max-failed-verification:,gguf-info-novenv -- "$@") || usage
 eval set -- "$PARSED_OPTS"
 while true; do
   case "$1" in
@@ -416,6 +525,134 @@ while true; do
       INDIVIDUAL_TENSORS_ENABLED=true
       shift 2
       ;;
+    --compute-missing-map)
+      COMPUTE_MISSING_MAP=true
+      shift
+      ;;
+    --compute-all-map)
+      COMPUTE_ALL_MAP=true
+      shift
+      ;;
+    --ignore-imatrix-rules)
+      CONVERT_IGNORE_IMATRIX_RULES=true
+      shift
+      ;;
+    --with-imatrix)
+      CONVERT_WITH_IMATRIX_FILE="$2"
+      shift 2
+      ;;
+    --fallback-quants)
+      # Accept either comma-separated or space-separated string; split into array
+      IFS=$' \t,' read -r -a __fbparts <<< "$2"
+      for __p in "${__fbparts[@]}"; do
+        [[ -n "$__p" ]] && CONVERT_FALLBACK_QUANTS+=("$__p")
+      done
+      shift 2
+      ;;
+    --fallback-quants-forbidden)
+      IFS=$' \t,' read -r -a __fbfparts <<< "$2"
+      for __p in "${__fbfparts[@]}"; do
+        [[ -n "$__p" ]] && CONVERT_FALLBACK_QUANTS_FORBIDDEN+=("$__p")
+      done
+      shift 2
+      ;;
+    --no-fallback)
+      CONVERT_NO_FALLBACK=true
+      shift
+      ;;
+    --requantize-quantizeonly-shards)
+      REQUANTIZE_QUANTIZEONLY_SHARDS=true
+      shift
+      ;;
+    --llama-quantize)
+      LLAMA_QUANTIZE_BIN="$2"
+      shift 2
+      ;;
+    --quantize-failed-download)
+      QUANTIZE_FAILED_DOWNLOAD="$2"
+      shift 2
+      ;;
+    --quantize-nthreads)
+      QUANTIZE_NTHREADS="$2"
+      shift 2
+      ;;
+    --quantize-all-shards)
+      QUANTIZE_ALL_SHARDS=true
+      shift
+      ;;
+    -k|--max-quantize-jobs)
+      MAX_QUANTIZE_JOBS="$2"
+      QUANTIZE_JOBS_SPECIFIED=true
+      shift 2
+      ;;
+    --no-final-message)
+      SKIP_FINAL_MESSAGE=true
+      shift
+      ;;
+    --quantize-keep-bf16)
+      QUANTIZE_KEEP_BF16=true
+      shift
+      ;;
+    --quantize-bf16-directory)
+      QUANTIZE_BF16_DIR="$2"
+      shift 2
+      ;;
+    --skip-gguf-verification)
+      SKIP_GGUF_VERIFICATION=true
+      shift
+      ;;
+    --strict-gguf-verification)
+      STRICT_GGUF_VERIFICATION=true
+      shift
+      ;;
+    --quantize-f32-warn-verification)
+      QUANTIZE_F32_WARN_VERIFICATION=true
+      shift
+      ;;
+    --quantize-tensors-regex)
+      QUANTIZE_TENSORS_REGEX_RAW="$2"
+      QUANTIZE_TENSORS_REGEX_ENABLED=true
+      # parse comma-separated regex list
+      IFS=',' read -r -a __qtparts <<< "$2"
+      for __r in "${__qtparts[@]}"; do
+        __r="${__r#"${__r%%[![:space:]]*}"}"
+        __r="${__r%"${__r##*[![:space:]]}"}"
+        [[ -n "$__r" ]] && QUANTIZE_TENSORS_REGEX+=("$__r")
+      done
+      shift 2
+      ;;
+    --quantize-qtypes-regex)
+      QUANTIZE_QTYPES_REGEX_RAW="$2"
+      QUANTIZE_QTYPES_REGEX_ENABLED=true
+      # parse comma-separated regex list
+      IFS=',' read -r -a __qqparts <<< "$2"
+      for __r in "${__qqparts[@]}"; do
+        __r="${__r#"${__r%%[![:space:]]*}"}"
+        __r="${__r%"${__r##*[![:space:]]}"}"
+        [[ -n "$__r" ]] && QUANTIZE_QTYPES_REGEX+=("$__r")
+      done
+      shift 2
+      ;;
+    --compute-qtypes-regex-map)
+      COMPUTE_QTYPES_REGEX_MAP_RAW="$2"
+      COMPUTE_QTYPES_REGEX_MAP_ENABLED=true
+      # parse comma-separated regex list
+      IFS=',' read -r -a __cmpparts <<< "$2"
+      for __r in "${__cmpparts[@]}"; do
+        __r="${__r#"${__r%%[![:space:]]*}"}"
+        __r="${__r%"${__r##*[![:space:]]}"}"
+        [[ -n "$__r" ]] && COMPUTE_QTYPES_REGEX_MAP+=("$__r")
+      done
+      shift 2
+      ;;
+    --max-failed-verification)
+      MAX_FAILED_VERIFICATION="$2"
+      shift 2
+      ;;
+    --gguf-info-novenv)
+      GGUF_INFO_NOVENV=true
+      shift
+      ;;
     --)
       shift
       break
@@ -426,9 +663,71 @@ while true; do
   esac
 done
 
+# Validate compute flags mutual exclusion
+if [[ "$COMPUTE_MISSING_MAP" == true && "$COMPUTE_ALL_MAP" == true ]]; then
+  echo "❌ Error: --compute-missing-map and --compute-all-map are mutually exclusive" >&2
+  exit 1
+fi
+
+# New mutual exclusion: compute-qtypes-regex-map cannot be used with compute-all-map
+if [[ "$COMPUTE_QTYPES_REGEX_MAP_ENABLED" == true && "$COMPUTE_ALL_MAP" == true ]]; then
+  echo "❌ Error: --compute-qtypes-regex-map is mutually exclusive with --compute-all-map" >&2
+  exit 1
+fi
+
+# Validate --with-imatrix file if provided
+if [[ -n "$CONVERT_WITH_IMATRIX_FILE" ]]; then
+  if [[ ! -f "$CONVERT_WITH_IMATRIX_FILE" ]]; then
+    echo "❌ Error: --with-imatrix specified but the file '$CONVERT_WITH_IMATRIX_FILE' does not exist." >&2
+    exit 1
+  fi
+fi
+
 if [[ "$ARCHIVE_COMPRESS" == true && "$ARCHIVE_DECOMPRESS" == true ]]; then
   echo "❌ Error: --z-compress and --z-decompress cannot bed used at the same time." >&2
   exit 3
+fi
+
+# Validate QUANTIZE_FAILED_DOWNLOAD param (if provided)
+if [[ -n "$QUANTIZE_FAILED_DOWNLOAD" ]]; then
+  if ! [[ "$QUANTIZE_FAILED_DOWNLOAD" =~ ^[0-9]+$ && "$QUANTIZE_FAILED_DOWNLOAD" -ge 1 ]]; then
+    echo "❌ Error: --quantize-failed-download requires a positive integer argument." >&2
+    exit 1
+  fi
+  # Option can only be used with --llama-quantize option
+  if [[ -z "$LLAMA_QUANTIZE_BIN" ]]; then
+    echo "❌ Error: --quantize-failed-download can only be used when --llama-quantize is provided." >&2
+    exit 1
+  fi
+fi
+
+# Validate MAX_FAILED_VERIFICATION param (if provided)
+if ! [[ "$MAX_FAILED_VERIFICATION" =~ ^[0-9]+$ && "$MAX_FAILED_VERIFICATION" -ge 1 ]]; then
+  echo "❌ Error: --max-failed-verification requires a positive integer argument." >&2
+  exit 1
+fi
+
+# Validate QUANTIZE_NTHREADS if provided (must be integer >= 0)
+if ! [[ "$QUANTIZE_NTHREADS" =~ ^[0-9]+$ ]]; then
+  echo "❌ Error: --quantize-nthreads requires a non-negative integer argument." >&2
+  exit 1
+fi
+
+# Validate MAX_QUANTIZE_JOBS if provided (integer >0 and <= MAX_JOBS)
+if [[ "$QUANTIZE_JOBS_SPECIFIED" == true ]]; then
+  if ! [[ "$MAX_QUANTIZE_JOBS" =~ ^[0-9]+$ && "$MAX_QUANTIZE_JOBS" -ge 1 ]]; then
+    echo "❌ Error: --max-quantize-jobs requires a positive integer argument." >&2
+    exit 1
+  fi
+  # Ensure MAX_JOBS is numeric and >=1 for comparison
+  if ! [[ "$MAX_JOBS" =~ ^[0-9]+$ && "$MAX_JOBS" -ge 1 ]]; then
+    echo "❌ Error: invalid -j/--max-jobs value ($MAX_JOBS) when validating --max-quantize-jobs." >&2
+    exit 1
+  fi
+  if (( MAX_QUANTIZE_JOBS > MAX_JOBS )); then
+    echo "❌ Error: --max-quantize-jobs ($MAX_QUANTIZE_JOBS) must be less than or equal to --max-jobs ($MAX_JOBS)." >&2
+    exit 1
+  fi
 fi
 
 # ------------------------------------------------------------------------
@@ -605,7 +904,7 @@ done
 VERIFY_TMPDIR=""
 MAP_DIR="."   # default map location is current working directory
 if [[ "$VERIFY_READONLY" == true ]]; then
-  VERIFY_TMPDIR=$(mktemp -d) || { echo "❌ Error: failed to create temporary workspace for --verify-readonly"; exit 8; }
+  VERIFY_TMPDIR=$(mktemp -d) || { echo "❌ Error: failed to create temporary workspace for --verify-readonly" >&2; exit 8; }
   MAP_DIR="$VERIFY_TMPDIR"
   FAIL_MARKER="$VERIFY_TMPDIR/.verify_failed"
 else
@@ -621,10 +920,24 @@ if [[ "$VERIFY_READONLY" != true ]]; then
   mkdir -p "$LOCAL_DOWNLOAD_DIR"
 fi
 
-echo "[INFO] Using base directory: $BASE_DIR"
-echo "[INFO] Download dir: $LOCAL_DOWNLOAD_DIR"
-echo "[INFO] Model dir: $LOCAL_MODEL_DIR"
-echo "[INFO] Max jobs: $MAX_JOBS, Obtain new map: $NEW_MAP, Force redownload: $FORCE_REDOWNLOAD, Verify only: $VERIFY, Verify-readonly: $VERIFY_READONLY, Skip signature verification: $SKIP_GPG, Skip hash verification: $SKIP_HASH"
+echo "[Info] Using base directory: $BASE_DIR"
+echo "[Info] Download dir: $LOCAL_DOWNLOAD_DIR"
+echo "[Info] Model dir: $LOCAL_MODEL_DIR"
+echo "[Info] Max jobs: $MAX_JOBS, Max quantize jobs: $MAX_QUANTIZE_JOBS, Obtain new map: $NEW_MAP, Force redownload: $FORCE_REDOWNLOAD, Verify only: $VERIFY, Verify-readonly: $VERIFY_READONLY, Skip signature verification: $SKIP_GPG, Skip hash verification: $SKIP_HASH, nthreads: $QUANTIZE_NTHREADS, quantize-all-shards: $QUANTIZE_ALL_SHARDS"
+
+# Prepare gguf_info invocation preference: by default we add "--venv" to gguf_info.py calls.
+# The new option --gguf-info-novenv (if set by the user) disables adding the "--venv" argument.
+# Default: not set (add --venv).
+GGUF_INFO_NOVENV="${GGUF_INFO_NOVENV:-false}"
+# GGUF_INFO_EXTRA will be used when calling _python "$gguf_info_script" with extra args.
+if [[ "$GGUF_INFO_NOVENV" == true ]]; then
+  GGUF_INFO_EXTRA=()
+  echo "⚠️ Warning: --gguf-info-novenv selected: the script will NOT pass '--venv' to gguf_info.py. Ensure gguf_info.py runs correctly on your current Python environment." >&2
+  echo "   Recommended (if needed): pip install \"gguf @ git+https://github.com/ikawrakow/ik_llama.cpp.git@main#subdirectory=gguf-py\" --force; pip install sentencepiece numpy==1.26.4" >&2
+else
+  GGUF_INFO_EXTRA=(--venv)
+fi
+
 # Automatic selection of z mode based on files present
 #
 # 1) If neither -z nor -zd specified and neither was auto-disabled (--z-noauto),
@@ -667,29 +980,29 @@ if [[ "$ARCHIVE_COMPRESS" != true && "$ARCHIVE_DECOMPRESS" != true && "$ARCHIVE_
 fi
 
 if [[ "$ARCHIVE_COMPRESS" == true ]]; then
-  echo "[INFO] compression enabled: verified .gguf files will be (or will remain) compressed to .gguf.zbst"
+  echo "[Info] compression enabled: verified .gguf files will be (or will remain) compressed to .gguf.zbst"
   # print per-tool compress opts for visibility
   for t in "${CUSTOM_TOOL_NAMES[@]}"; do
     opts="$(get_compress_opts_for_tool "$t")"
     if [[ -n "$opts" ]]; then
-      echo "[INFO] compress opts for $t: ${opts}"
+      echo "[Info] compress opts for $t: ${opts}"
     fi
   done
 elif [[ "$ARCHIVE_DECOMPRESS" == true ]]; then
-  echo "[INFO] z-decompress mode enabled: will accept .gguf.zbst files and decompress them into .gguf (removing .zbst)"
+  echo "[Info] z-decompress mode enabled: will accept .gguf.zbst files and decompress them into .gguf (removing .zbst)"
 fi
 if [[ "$ARCHIVE_COMPRESS" == true ]] || [[ "$ARCHIVE_DECOMPRESS" == true ]]; then
   # Echo tools on a single line (comma-separated). Use a subshell so we don't change the caller's IFS.
   if [[ ${#CUSTOM_TOOL_NAMES[@]} -gt 0 ]]; then
-    ( IFS=','; printf '[INFO] compression tools: %s\n' "${CUSTOM_TOOL_NAMES[*]}" )
+    ( IFS=','; printf '[Info] compression tools: %s\n' "${CUSTOM_TOOL_NAMES[*]}" )
   else
-    echo "[INFO] compression tools: (none)"
+    echo "[Info] compression tools: (none)"
   fi
   # Show per-tool decompress opts (if any)
   for t in "${CUSTOM_TOOL_NAMES[@]}"; do
     opts="$(get_decompress_opts_for_tool "$t")"
     if [[ -n "$opts" ]]; then
-      echo "[INFO] decompress opts for $t: ${opts}"
+      echo "[Info] decompress opts for $t: ${opts}"
     fi
   done
 fi
@@ -748,36 +1061,9 @@ if [[ ! -f "$RECIPE_FILE" ]]; then
   exit 1
 fi
 
-# ----------------------- DIRECTORIES -------------------------
-# If verify-readonly mode is requested, we must not create files in BASE_DIR.
-# Prepare a temporary workspace for maps/signatures and fail marker.
-VERIFY_TMPDIR=""
-MAP_DIR="."   # default map location is current working directory
-if [[ "$VERIFY_READONLY" == true ]]; then
-  VERIFY_TMPDIR=$(mktemp -d) || { echo "❌ Error: failed to create temporary workspace for --verify-readonly"; exit 8; }
-  MAP_DIR="$VERIFY_TMPDIR"
-  FAIL_MARKER="$VERIFY_TMPDIR/.verify_failed"
-else
-  # Ensure base directory exists (only when not verify-readonly)
-  mkdir -p "$BASE_DIR"
-  FAIL_MARKER="$BASE_DIR/.verify_failed"
-fi
-
-LOCAL_DOWNLOAD_DIR="$BASE_DIR/downloaded_shards"
-LOCAL_MODEL_DIR="$BASE_DIR"
-# Only create the download dir when not in verify-readonly mode (avoid creating dirs in read-only target)
-if [[ "$VERIFY_READONLY" != true ]]; then
-  mkdir -p "$LOCAL_DOWNLOAD_DIR"
-fi
-
-echo "[INFO] Using base directory: $BASE_DIR"
-echo "[INFO] Download dir: $LOCAL_DOWNLOAD_DIR"
-echo "[INFO] Model dir: $LOCAL_MODEL_DIR"
-echo "[INFO] Max jobs: $MAX_JOBS, Obtain new map: $NEW_MAP, Force redownload: $FORCE_REDOWNLOAD, Verify only: $VERIFY, Verify-readonly: $VERIFY_READONLY, Skip signature verification: $SKIP_GPG, Skip hash verification: $SKIP_HASH"
-
 if [[ -n "$SPECIAL_NODE_ID" ]]; then
   if [[ -n "$TOTAL_NODES" ]]; then
-    echo "[INFO] special-node-id/(total-nodes - 1) set to: $SPECIAL_NODE_ID/$((TOTAL_NODES-1)) (only shards assigned to this model/node pair will be downloaded)"
+    echo "[Info] special-node-id/(total-nodes - 1) set to: $SPECIAL_NODE_ID/$((TOTAL_NODES-1)) (only shards assigned to this model/node pair will be downloaded)"
   else
     echo "❌ Error: --total-nodes N must be specified when using the --special-node-id option!" >&2
     exit 1
@@ -880,6 +1166,104 @@ else
     fi
   }
 fi
+
+command -v _sha256sum &>/dev/null || echo "⚠️ Warning: _sha256sum command missing - hash cannot be verified!" >&2
+
+# --------------- DETECT & DEFINE PYTHON HELPER ---------------
+# Provide a helper that detects a usable python3 binary and exposes a small wrapper _python()
+# similar in spirit to _sha256sum above. This tries:
+#  1) python3
+#  2) python3.N for common N values
+#  3) python (and checks version)
+# If no compatible python3 is available, behavior depends on whether the user requested
+# compute-map options: if any compute-map option was used, the script exits with an error.
+# Otherwise, we automatically enable SKIP_GGUF_VERIFICATION and warn the user that
+# gguf verification is disabled because python3 is not available.
+PYTHON_BIN=""
+PYTHON_MAJOR=0
+PYTHON_MINOR=0
+
+_detect_python_binary() {
+  # Try common candidates in order of preference.
+  local candidates
+  # try a few likely python3.x executables (search descending common versions)
+  candidates=(python3.16 python3.15 python3.14 python3.13 python3.12 python3.11 python3.10 python3.9 python3.8 python3 python)
+  local cand
+  for cand in "${candidates[@]}"; do
+    if command -v "$cand" >/dev/null 2>&1; then
+      # Verify version is Python 3.x
+      local ver
+      ver="$("$cand" -c 'import sys; v=sys.version_info; print(f"{v[0]}.{v[1]}")' 2>/dev/null || true)"
+      if [[ -n "$ver" ]]; then
+        PYTHON_MAJOR="${ver%%.*}"
+        PYTHON_MINOR="${ver#*.}"
+        PYTHON_BIN="$cand"
+        return 0
+      fi
+    fi
+  done
+
+  # No python3.* found. Try 'python' and inspect its version.
+  if command -v python >/dev/null 2>&1; then
+    local verpy
+    verpy="$(python -c 'import sys; v=sys.version_info; print(f"{v[0]}.{v[1]}")' 2>/dev/null || true)"
+    if [[ -n "$verpy" ]]; then
+      PYTHON_MAJOR="${verpy%%.*}"
+      PYTHON_MINOR="${verpy#*.}"
+      PYTHON_BIN="python"
+      return 0
+    fi
+  fi
+
+  # No usable python found
+  PYTHON_BIN=""
+  PYTHON_MAJOR=0
+  PYTHON_MINOR=0
+  return 1
+}
+
+# wrapper function to execute the detected python binary (if set)
+_python() {
+  if [[ -z "${PYTHON_BIN:-}" ]]; then
+    return 1
+  fi
+  "$PYTHON_BIN" "$@"
+}
+
+# Run detection now and react according to user options (compute-map and gguf verification)
+if _detect_python_binary >/dev/null 2>&1; then
+  # If we found some python, ensure it is 3.x
+  if [[ "$PYTHON_MAJOR" -lt 3 ]] || ([[ "$PYTHON_MAJOR" -eq 3 ]] && [[ "$PYTHON_MINOR" -lt 8 ]]); then
+    # Found python but it's Python 2.x (or weird). This is unacceptable for compute-map / gguf verification.
+    echo "⚠️ Warning: Detected Python interpreter '$PYTHON_BIN' with version ${PYTHON_MAJOR}.${PYTHON_MINOR}. A compatible Python 3.8+ is required for compute-map operations and gguf verification." >&2
+    if [[ "$COMPUTE_MISSING_MAP" == true || "$COMPUTE_ALL_MAP" == true || "$COMPUTE_QTYPES_REGEX_MAP_ENABLED" == true ]]; then
+      echo "❌ Error: Compute-map options were requested but a Python 3.8+ interpreter could not be found. Please install Python 3 higher than 3.8 and re-run the script." >&2
+      exit 1
+    else
+      # Non compute-map usage: fall back to skipping gguf verification
+      if [[ "$SKIP_GGUF_VERIFICATION" != true ]]; then
+        echo "⚠️ Note: No compatible Python 3.8+ interpreter available — automatically enabling --skip-gguf-verification." >&2
+        SKIP_GGUF_VERIFICATION=true
+      fi
+    fi
+  else
+    # Found Python 3.x - good to go.
+    echo "[Info] Detected python binary (required for GGUF verification and compute-map operations): ${PYTHON_BIN} (version ${PYTHON_MAJOR}.${PYTHON_MINOR})" >&2
+  fi
+else
+  # No python binary detected at all.
+  echo "⚠️ Warning: No compatible Python 3.8+ interpreter found on PATH. A compatible Python 3 interpreter is required for compute-map operations and for gguf verification." >&2
+  if [[ "$COMPUTE_MISSING_MAP" == true || "$COMPUTE_ALL_MAP" == true || "$COMPUTE_QTYPES_REGEX_MAP_ENABLED" == true ]]; then
+    echo "❌ Error: Compute-map options were requested but no Python 3.8+ interpreter is available. Please install Python 3 higher than 3.8 and re-run the script." >&2
+    exit 1
+  else
+    if [[ "$SKIP_GGUF_VERIFICATION" != true ]]; then
+      echo "⚠️ Warning: No Python 3.8+ found — automatically enabling --skip-gguf-verification." >&2
+      SKIP_GGUF_VERIFICATION=true
+    fi
+  fi
+fi
+# -----------------------------------------------------------------
 
 # ----------------------- SYMLINK/RETRY HELPERS (minimal) -----------------------
 # retry_exec: run a command repeatedly (exec mode). Usage: retry_exec cmd arg1 arg2 ...
@@ -1040,6 +1424,395 @@ safe_stream_sha256_from_z() {
   printf '%s' "$out"
   return 0
 }
+
+# ------------------ IMPLEMENT CHECKS FOR QUANTIZED GGUF FILES ----------------
+# These functions validate that a quantized .gguf (or a streamed decompressed .zbst) actually
+# contains tensors whose dtype/shape/elements/bytes match the map expectations. They rely on
+# gguf_info.py being present in the script directory. The functions return non-zero on any
+# fatal error (missing gguf_info.py, subprocess failure, or when strict verification is enabled
+# and warnings were observed). By default strict verification is OFF (see --strict-gguf-verification).
+
+# check_quantized_gguf: run gguf_info.py on a local .gguf file and validate one tensor entry.
+# Args:
+#   $1 -> shard_file (path to .gguf)
+#   $2 -> shard_id  (zero-padded or numeric chunk id)
+#   $3 -> qtype     (target qtype; compared against dtype from gguf_info)
+check_quantized_gguf() {
+  local shard_file="$1"
+  local shard_id_raw="$2"
+  local qtype="$3"
+
+  local gguf_info_script="$SCRIPT_DIR/gguf_info.py"
+  if [[ ! -f "$gguf_info_script" ]]; then
+    echo "[Info] gguf_info.py not found in script directory (${gguf_info_script}); cannot verify quantized shard for ${qtype}." >&2
+    return 1
+  fi
+
+  if is_symlink "$shard_file"; then
+    ensure_path_available "$shard_file" || return 1
+  fi
+  if [[ ! -f "$shard_file" ]]; then
+    echo "❌ Error: quantized shard file not found: $shard_file" >&2
+    return 1
+  fi
+
+  # run gguf_info.py and capture output
+  local info_out
+  #echo "$(_python "$gguf_info_script" "-v" "--venv" "$shard_file")" >&2
+  if ! info_out="$(_python "$gguf_info_script" "${GGUF_INFO_EXTRA[@]}" "$shard_file" 2>/dev/null)"; then
+    echo "❌ Error: gguf_info.py failed for '$shard_file'." >&2
+    return 1
+  fi
+
+  # normalize shard id to decimal (strip leading zeros)
+  local shard_id_dec=$((10#${shard_id_raw})) 2>/dev/null || shard_id_dec="$shard_id_raw"
+
+  # find expected tensor name by reverse lookup in SHARD_ID
+  local expected_tensor=""
+  for key in "${!SHARD_ID[@]}"; do
+    if [[ "${SHARD_ID[$key]}" -eq "$shard_id_dec" ]]; then
+      expected_tensor="$key"
+      break
+    fi
+  done
+
+  if [[ -z "$expected_tensor" ]]; then
+    echo "⚠️ Warning: could not determine expected tensor name for shard id ${shard_id_raw}; skipping detailed tensor-name check." >&2
+    # still proceed to dtype check if possible
+  fi
+
+  # Now parse gguf_info output to locate the line for expected tensor (case-insensitive)
+  local match_line=""
+  if [[ -n "$expected_tensor" ]]; then
+    # try to match by exact token at line start (case-insensitive)
+    match_line="$(printf '%s\n' "$info_out" | awk -v t="$expected_tensor" 'BEGIN{IGNORECASE=1} { if(tolower($1)==tolower(t)) { print; exit } }')"
+    if [[ -z "$match_line" ]]; then
+      # fallback: try to find any line containing the tensor name substring
+      match_line="$(printf '%s\n' "$info_out" | grep -iF "$expected_tensor" | head -n1 || true)"
+    fi
+  else
+    # no expected tensor known: pick the first data line (skip header)
+    match_line="$(printf '%s\n' "$info_out" | sed -n '1!p' | head -n1 || true)"
+  fi
+
+  if [[ -z "$match_line" ]]; then
+    echo "⚠️ Warning: gguf_info.py output did not contain a matching tensor line for shard id ${shard_id_raw}." >&2
+    if [[ "$STRICT_GGUF_VERIFICATION" == true ]]; then
+      return 1
+    else
+      return 0
+    fi
+  fi
+
+  # now split key=val pairs
+  local gguf_name
+  gguf_name="$(printf '%s' "$match_line" | awk '{print $1}')"
+  local gguf_dtype gguf_elements gguf_bytes gguf_shape
+  # simple extraction for dtype (case-sensitive, no normalization)
+  gguf_dtype="$(printf '%s\n' "$match_line" | grep -oE 'dtype=[A-Za-z0-9_-]+' | head -n1 | cut -d= -f2 || true)"
+  gguf_elements="$(printf '%s\n' "$match_line" | grep -oE 'elements=[0-9]+' | head -n1 | cut -d= -f2 || true)"
+  gguf_bytes="$(printf '%s\n' "$match_line" | grep -oE 'bytes=[0-9]+' | head -n1 | cut -d= -f2 || true)"
+  gguf_shape="$(printf '%s\n' "$match_line" | grep -oE 'shape=\([^)]*\)' | head -n1 | sed -E 's/^shape=//' || true)"
+
+  local warnings=0
+
+  # dtype comparison
+  if [[ -n "$gguf_dtype" ]]; then
+    if [[ "${gguf_dtype,,}" != "${qtype,,}" ]] && ([[ "$QUANTIZE_F32_WARN_VERIFICATION" == true ]] || [[ "${gguf_dtype,,}" != "f32" ]]); then
+      echo "⚠️ Warning: dtype mismatch from gguf_info for shard ${shard_file} (got='${gguf_dtype,,}' expected='${qtype,,}')." >&2
+      warnings=$((warnings + 1))
+    fi
+  else
+    echo "⚠️ Warning: could not determine dtype from gguf_info output for shard ${shard_file}." >&2
+    warnings=$((warnings + 1))
+  fi
+
+  # tensor name comparison
+  if [[ -n "$expected_tensor" ]]; then
+    if [[ "${gguf_name,,}" != "${expected_tensor,,}" ]]; then
+      echo "⚠️ Warning: tensor name mismatch for shard ${shard_file} (gguf_info: '${gguf_name}' expected: '${expected_tensor}')." >&2
+      warnings=$((warnings + 1))
+    fi
+  else
+    echo "⚠️ Warning: tensor name is missing for ${shard_file}!"
+  fi
+
+  # compare elements/bytes/shape with map if available
+  local map_shape map_elements map_bytes map_dtype
+  map_shape="$(get_t_shape "$qtype" "${expected_tensor:-}")"
+  map_elements="$(get_t_elements "$qtype" "${expected_tensor:-}")"
+  map_bytes="$(get_t_bytes "$qtype" "${expected_tensor:-}")"
+  map_dtype="$(get_t_dtype "$qtype" "${expected_tensor:-}")"
+
+  if [[ -n "$map_dtype" && -n "$gguf_dtype" ]]; then
+    if [[ "$map_dtype" != "$gguf_dtype" ]] && ([[ "$QUANTIZE_F32_WARN_VERIFICATION" == true ]] || [[ "$gguf_dtype" != "f32" ]]); then
+      echo "⚠️ Warning: dtype (map vs gguf) mismatch for ${shard_file}: map='${map_dtype}' gguf='${gguf_dtype}'" >&2
+      warnings=$((warnings + 1))
+    fi
+  else
+    echo "⚠️ Warning: dtype (map or gguf) is missing for ${shard_file}!" >&2
+  fi
+
+  if [[ -n "$map_elements" && -n "$gguf_elements" ]]; then
+    if [[ "$map_elements" != "$gguf_elements" ]]; then
+      echo "⚠️ Warning: elements mismatch for ${shard_file}: map='${map_elements}' gguf='${gguf_elements}'" >&2
+      warnings=$((warnings + 1))
+    fi
+  else
+    echo "⚠️ Warning: elements (map or gguf) is missing for ${shard_file}!" >&2
+  fi
+
+  if [[ -n "$map_bytes" && -n "$gguf_bytes" ]]; then
+    if [[ "$map_bytes" != "$gguf_bytes" ]]; then
+      echo "⚠️ Warning: bytes mismatch for ${shard_file}: map='${map_bytes}' gguf='${gguf_bytes}'" >&2
+      warnings=$((warnings + 1))
+    fi
+  else
+    echo "⚠️ Warning: bytes (map or gguf) is missing for ${shard_file}!" >&2
+  fi
+
+  if [[ -n "$map_shape" && -n "$gguf_shape" ]]; then
+    if [[ "$map_shape" != "$gguf_shape" ]]; then
+      echo "⚠️ Warning: shape mismatch for ${shard_file}: map='${map_shape}' gguf='${gguf_shape}'" >&2
+      warnings=$((warnings + 1))
+    fi
+  else
+    echo "⚠️ Warning: shape (map or gguf) is missing for ${shard_file}!" >&2
+  fi
+
+  if (( warnings > 0 )); then
+    if [[ "$STRICT_GGUF_VERIFICATION" == true ]]; then
+      echo "❌ Strict quantized file verification enabled: failing due to ${warnings} warning(s) for ${shard_file}." >&2
+      return 1
+    else
+      echo "⚠️ ${warnings} warning(s) observed during quantized file verification for ${shard_file}; continuing (non-strict mode)." >&2
+      return 0
+    fi
+  else
+    echo "[$(timestamp)] Quantized file verification enabled: no warnings for ${shard_file} - verification successful." >&2
+  fi
+
+  return 0
+}
+
+# safe_stream_check_quantized_gguf_from_z: stream-decompress a .gguf.zbst and pipe into gguf_info.py (no persistent decompressed file)
+# Args:
+#   $1 -> z (path to .gguf.zbst)
+#   $2 -> shard_id  (zero-padded or numeric)
+#   $3 -> qtype
+safe_stream_check_quantized_gguf_from_z() {
+  local z="$1"
+  local shard_id_raw="$2"
+  local qtype="$3"
+
+  local gguf_info_script="$SCRIPT_DIR/gguf_info.py"
+  if [[ ! -f "$gguf_info_script" ]]; then
+    echo "[Info] gguf_info.py not found in script directory (${gguf_info_script}); cannot verify quantized shard for ${qtype}." >&2
+    return 1
+  fi
+
+  if is_symlink "$z"; then
+    ensure_path_available "$z" || return 1
+  fi
+  if [[ ! -f "$z" ]]; then
+    echo "❌ Error: compressed shard file not found: $z" >&2
+    return 1
+  fi
+
+  local out
+  local rc=404
+  set +e
+
+  # Calculate maximum header bytes
+  local max_magic_bytes=0
+  for magic in "${CUSTOM_TOOL_MAGICS[@]}"; do
+    local magic_byte_count=$(( ${#magic} / 2 ))
+    if [ "$magic_byte_count" -gt "$max_magic_bytes" ]; then
+      max_magic_bytes="$magic_byte_count"
+    fi
+  done
+
+  local file_header=""
+  if [ "$max_magic_bytes" -gt 0 ]; then
+    file_header=$(xxd -p -l "$max_magic_bytes" "$z" | tr '[:upper:]' '[:lower:]')
+  fi
+
+  # Find matching tool & stream-decompress into gguf_info.py reading from stdin (use '-' as filename if supported)
+  for i in "${!CUSTOM_TOOL_NAMES[@]}"; do
+    local magic="${CUSTOM_TOOL_MAGICS[$i]}"
+    local magic_byte_count=$(( ${#magic} / 2 ))
+    if [ "$magic_byte_count" -le "$max_magic_bytes" ] && [ "${file_header:0:${#magic}}" = "$(echo "$magic" | tr '[:upper:]' '[:lower:]')" ]; then
+      local tool="${CUSTOM_TOOL_NAMES[$i]}"
+      local opts
+      opts="$(get_decompress_opts_for_tool "$tool")"
+
+      # The pipeline: tool -d -c "$z" 2>/dev/null | python3 gguf_info.py -
+      echo "[$(timestamp)] z-decompress (stream->gguf_info): ${tool} ${opts} -k -d -c -- \"$z\" | python3 \"$gguf_info_script\" -" >&2
+      out=$(
+        (
+          set -o pipefail
+          ${tool} ${opts} -k -d -c -- "$z" 2>/dev/null | _python "$gguf_info_script" "${GGUF_INFO_EXTRA[@]}" - 2>/dev/null
+        )
+      )
+      rc=$?
+      # Special condition for lbzip2 exit code 4
+      [[ "${tool}" == "lbzip2" && $rc -eq 4 ]] && rc=0
+      break
+    fi
+  done
+
+  set -e
+
+  if [[ $rc -ne 0 ]]; then
+    # If streaming to gguf_info failed, try fallback: decompress to a temp file and run gguf_info.py on that file.
+    echo "⚠️ Warning: streaming decompression to gguf_info.py failed (rc=${rc}). Trying fallback via temporary file..." >&2
+    tmpf="$(mktemp "${TMPDIR:-/tmp}/ggufinfo.XXXXXX.gguf")"
+    if ! decompress_archive_to_file "$z" "$tmpf"; then
+      rm -f "$tmpf" || true
+      echo "❌ Error: fallback decompression failed for $z" >&2
+      return 1
+    fi
+    if ! out="$(_python "$gguf_info_script" "${GGUF_INFO_EXTRA[@]}" "$tmpf" 2>/dev/null)"; then
+      rm -f "$tmpf" || true
+      echo "❌ Error: gguf_info.py failed on decompressed temp file for $z" >&2
+      return 1
+    fi
+    rm -f "$tmpf" || true
+  fi
+
+  # Now reuse check_quantized_gguf logic but using the captured info_out instead of running gguf_info again.
+  # For convenience, write out to a temp file and call check_quantized_gguf by creating a small temp file that contains the gguf content:
+  # However the check_quantized_gguf expects a filename; we can emulate by creating a temporary file that stores the captured gguf_info output
+  # and then implement an inline validation re-using the same logic as check_quantized_gguf.
+  # To avoid code duplication, we will create a temporary file containing the gguf_info output and run a minimal parser similar to check_quantized_gguf.
+
+  # reuse logic: we will parse $out similarly to check_quantized_gguf
+  local info_out="$out"
+
+  # normalize shard id to decimal
+  local shard_id_dec=$((10#${shard_id_raw})) 2>/dev/null || shard_id_dec="$shard_id_raw"
+
+  # find expected tensor name by reverse lookup in SHARD_ID
+  local expected_tensor=""
+  for key in "${!SHARD_ID[@]}"; do
+    if [[ "${SHARD_ID[$key]}" -eq "$shard_id_dec" ]]; then
+      expected_tensor="$key"
+      break
+    fi
+  done
+
+  if [[ -z "$expected_tensor" ]]; then
+    echo "⚠️ Warning: could not determine expected tensor name for shard id ${shard_id_raw}; skipping detailed tensor-name check." >&2
+  fi
+
+  # find matching line
+  local match_line=""
+  if [[ -n "$expected_tensor" ]]; then
+    match_line="$(printf '%s\n' "$info_out" | awk -v t="$expected_tensor" 'BEGIN{IGNORECASE=1} { if(tolower($1)==tolower(t)) { print; exit } }')"
+    if [[ -z "$match_line" ]]; then
+      match_line="$(printf '%s\n' "$info_out" | grep -iF "$expected_tensor" | head -n1 || true)"
+    fi
+  else
+    match_line="$(printf '%s\n' "$info_out" | sed -n '1!p' | head -n1 || true)"
+  fi
+
+  if [[ -z "$match_line" ]]; then
+    echo "⚠️ Warning: gguf_info.py (stream) output did not contain a matching tensor line for shard id ${shard_id_raw}." >&2
+    if [[ "$STRICT_GGUF_VERIFICATION" == true ]]; then
+      return 1
+    else
+      return 0
+    fi
+  fi
+
+  # now split key=val pairs
+  local gguf_name
+  gguf_name="$(printf '%s' "$match_line" | awk '{print $1}')"
+  local gguf_dtype gguf_elements gguf_bytes gguf_shape
+  # simple extraction for dtype (case-sensitive, no normalization)
+  gguf_dtype="$(printf '%s\n' "$match_line" | grep -oE 'dtype=[A-Za-z0-9_-]+' | head -n1 | cut -d= -f2 || true)"
+  gguf_elements="$(printf '%s\n' "$match_line" | grep -oE 'elements=[0-9]+' | head -n1 | cut -d= -f2 || true)"
+  gguf_bytes="$(printf '%s\n' "$match_line" | grep -oE 'bytes=[0-9]+' | head -n1 | cut -d= -f2 || true)"
+  gguf_shape="$(printf '%s\n' "$match_line" | grep -oE 'shape=\([^)]*\)' | head -n1 | sed -E 's/^shape=//' || true)"
+
+  local warnings=0
+
+  # dtype comparison
+  if [[ -n "$gguf_dtype" ]]; then
+    if [[ "${gguf_dtype,,}" != "${qtype,,}" ]] && ([[ "$QUANTIZE_F32_WARN_VERIFICATION" == true ]] || [[ "${gguf_dtype,,}" != "f32" ]]); then
+      echo "⚠️ Warning: dtype mismatch from gguf_info for compressed shard ${z} (got='${gguf_dtype,,}' expected='${qtype,,}')." >&2
+      warnings=$((warnings + 1))
+    fi
+  else
+    echo "⚠️ Warning: could not determine dtype from gguf_info (stream) for shard ${z}." >&2
+    warnings=$((warnings + 1))
+  fi
+
+  # tensor name comparison
+  if [[ -n "$expected_tensor" ]]; then
+    if [[ "${gguf_name,,}" != "${expected_tensor,,}" ]]; then
+      echo "⚠️ Warning: tensor name mismatch for compressed shard ${z} (gguf_info: '${gguf_name}' expected: '${expected_tensor}')." >&2
+      warnings=$((warnings + 1))
+    fi
+  else
+    echo "⚠️ Warning: tensor name is missing for ${z}!" >&2
+  fi
+
+  # compare to map
+  local map_shape map_elements map_bytes map_dtype
+  map_shape="$(get_t_shape "$qtype" "${expected_tensor:-}")"
+  map_elements="$(get_t_elements "$qtype" "${expected_tensor:-}")"
+  map_bytes="$(get_t_bytes "$qtype" "${expected_tensor:-}")"
+  map_dtype="$(get_t_dtype "$qtype" "${expected_tensor:-}")"
+  
+  if [[ -n "$map_dtype" && -n "$gguf_dtype" ]]; then
+    if [[ "$map_dtype" != "$gguf_dtype" ]] && ([[ "$QUANTIZE_F32_WARN_VERIFICATION" == true ]] || [[ "$gguf_dtype" != "f32" ]]); then
+      echo "⚠️ Warning: dtype (map vs gguf) mismatch for ${z}: map='${map_dtype}' gguf='${gguf_dtype}'" >&2
+      warnings=$((warnings + 1))
+    fi
+  else
+    echo "⚠️ Warning: dtype (map or gguf) is missing for ${z}!" >&2
+  fi
+  if [[ -n "$map_elements" && -n "$gguf_elements" ]]; then
+    if [[ "$map_elements" != "$gguf_elements" ]]; then
+      echo "⚠️ Warning: elements mismatch for ${z}: map='${map_elements}' gguf='${gguf_elements}'" >&2
+      warnings=$((warnings + 1))
+    fi
+  else
+    echo "⚠️ Warning: elements (map or gguf) is missing for ${z}!" >&2
+  fi
+  if [[ -n "$map_bytes" && -n "$gguf_bytes" ]]; then
+    if [[ "$map_bytes" != "$gguf_bytes" ]]; then
+      echo "⚠️ Warning: bytes mismatch for ${z}: map='${map_bytes}' gguf='${gguf_bytes}'" >&2
+      warnings=$((warnings + 1))
+    fi
+  else
+    echo "⚠️ Warning: bytes (map or gguf) is missing for ${z}!" >&2
+  fi
+  if [[ -n "$map_shape" && -n "$gguf_shape" ]]; then
+    if [[ "$(printf '%s' "$map_shape" | tr -d '[:space:]')" != "$(printf '%s' "$gguf_shape" | tr -d '[:space:]')" ]]; then
+      echo "⚠️ Warning: shape mismatch for ${z}: map='${map_shape}' gguf='${gguf_shape}'" >&2
+      warnings=$((warnings + 1))
+    fi
+  else
+    echo "⚠️ Warning: shape (map or gguf) is missing for ${z}!" >&2
+  fi
+
+  if (( warnings > 0 )); then
+    if [[ "$STRICT_GGUF_VERIFICATION" == true ]]; then
+      echo "❌ Strict quantized file verification enabled: failing due to ${warnings} warning(s) for ${z}." >&2
+      return 1
+    else
+      echo "⚠️ ${warnings} warning(s) observed during quantized file verification for ${z}; continuing (non-strict mode)." >&2
+      return 0
+    fi
+  else
+    echo "[$(timestamp)] Quantized file verification enabled: no warnings for ${z} - verification successful." >&2
+  fi
+
+  return 0
+}
+# --------------------------------------------------------------------------
 
 # decompress_archive_to_file: write decompressed .gguf from a .gguf.zbst to a target file
 # Now checks tool exit code and removes partial output on failure.
@@ -1233,7 +2006,7 @@ compress_gguf_to_archive() {
   fi
 
   mv "$final_z_tool" "$z"
-  rm -f "$gguf"
+  rm -f "$gguf" || true
   return 0
 }
 
@@ -1270,7 +2043,7 @@ if [[ ${#USER_REGEX[@]} -eq 0 ]]; then
 fi
 
 # ------------------ LOCATE DOWNLOADER ------------------------
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(dirname "${BASH_SOURCE[0]}")"
 TENSOR_DOWNLOADER="$SCRIPT_DIR/tensor_downloader.sh"
 if [[ ! -x "$TENSOR_DOWNLOADER" ]]; then
   echo "❌ Error: tensor_downloader.sh not found or not executable at $TENSOR_DOWNLOADER" >&2
@@ -1481,8 +2254,8 @@ run_downloader_shard() {
 
 if [[ "$SKIP_GPG" != true ]]; then
   if [ ! -f "$SCRIPT_DIR/trusted-keys.asc" ]; then
-    echo "❌ Error: trusted-keys.asc not found in the script directory."
-    echo "Hint: Provide trusted-keys.asc in the same directory as this script or use the --skip-gpg option to disable gpg signature verification."
+    echo "❌ Error: trusted-keys.asc not found in the script directory." >&2
+    echo "Hint: Provide trusted-keys.asc in the same directory as this script or use the --skip-gpg option to disable gpg signature verification." >&2
     exit 6
   fi
   if command -v gpg >/dev/null 2>&1; then
@@ -1494,8 +2267,8 @@ if [[ "$SKIP_GPG" != true ]]; then
     fi
     # Try importing the keys (silently) to check validity
     if ! gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --import "$SCRIPT_DIR/trusted-keys.asc" > /dev/null 2>&1; then
-      echo "❌ Error: trusted-keys.asc contains missing or invalid GPG public keys."
-      echo "Hint: Add valid public keys to this file or re-run with the --skip-gpg option to bypass signature verification."
+      echo "❌ Error: trusted-keys.asc contains missing or invalid GPG public keys." >&2
+      echo "Hint: Add valid public keys to this file or re-run with the --skip-gpg option to bypass signature verification." >&2
       [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
       exit 7
     fi
@@ -1523,9 +2296,26 @@ get_t_hash() { [[ "${1^^}" == "F32" ]] && local key="${QTYPE,,}::${2,,}" || loca
 set_shard_id() { SHARD_ID["${1,,}"]="$2"; }
 get_shard_id() { echo "${SHARD_ID["${1,,}"]}"; }
 
+# New associative arrays to store map-provided metadata for each tensor (shape/elements/bytes/dtype/imatrix)
+declare -A T_SHAPE T_ELEMENTS T_BYTES T_DTYPE T_IMATRIX
+set_t_shape() { local key="${1,,}::${2,,}"; T_SHAPE["$key"]="$3"; DEBUG "set_t_shape T_SHAPE[${key}]=${T_SHAPE["$key"]}"; }
+set_t_elements() { local key="${1,,}::${2,,}"; T_ELEMENTS["$key"]="$3"; DEBUG "set_t_elements T_ELEMENTS[${key}]=${T_ELEMENTS["$key"]}"; }
+set_t_bytes() { local key="${1,,}::${2,,}"; T_BYTES["$key"]="$3"; DEBUG "set_t_bytes T_BYTES[${key}]=${T_BYTES["$key"]}"; }
+set_t_dtype() { local key="${1,,}::${2,,}"; T_DTYPE["$key"]="$3"; DEBUG "set_t_dtype T_DTYPE[${key}]=${T_DTYPE["$key"]}"; }
+set_t_imatrix() { local key="${1,,}::${2,,}"; T_IMATRIX["$key"]="$3"; DEBUG "set_t_imatrix T_IMATRIX[${key}]=${T_IMATRIX["$key"]}"; }
+
+get_t_shape() { [[ "${1^^}" == "F32" ]] && local key="${QTYPE,,}::${2,,}" || local key="${1,,}::${2,,}"; echo "${T_SHAPE["$key"]}"; DEBUG "get_t_shape T_SHAPE[${key}]=${T_SHAPE["$key"]}"; }
+get_t_elements() { [[ "${1^^}" == "F32" ]] && local key="${QTYPE,,}::${2,,}" || local key="${1,,}::${2,,}"; echo "${T_ELEMENTS["$key"]}"; DEBUG "get_t_elements T_ELEMENTS[${key}]=${T_ELEMENTS["$key"]}"; }
+get_t_bytes() { [[ "${1^^}" == "F32" ]] && local key="${QTYPE,,}::${2,,}" || local key="${1,,}::${2,,}"; echo "${T_BYTES["$key"]}"; DEBUG "get_t_bytes T_BYTES[${key}]=${T_BYTES["$key"]}"; }
+get_t_dtype() { [[ "${1^^}" == "F32" ]] && local key="${QTYPE,,}::${2,,}" || local key="${1,,}::${2,,}"; echo "${T_DTYPE["$key"]}"; DEBUG "get_t_dtype T_DTYPE[${key}]=${T_DTYPE["$key"]}"; }
+get_t_imatrix() { [[ "${1^^}" == "F32" ]] && local key="${QTYPE,,}::${2,,}" || local key="${1,,}::${2,,}"; echo "${T_IMATRIX["$key"]}"; DEBUG "get_t_imatrix T_IMATRIX[${key}]=${T_IMATRIX["$key"]}"; }
+
 # Helper: determine whether hash verification should be skipped for a specific tensor
 # Returns success (0) if we should skip, non-zero otherwise.
 should_skip_hash_for() {
+  if [[ "$SKIP_HASH" == true ]] || ! command -v _sha256sum &>/dev/null; then
+    return 0
+  fi
   local q="$1"
   local tensor="$2"
   local key
@@ -1534,7 +2324,7 @@ should_skip_hash_for() {
   else
     key="${q,,}::${tensor,,}"
   fi
-  if [[ "$SKIP_HASH" == true || -n "${T_SKIP_HASH[$key]:-}" ]]; then
+  if [[ -n "${T_SKIP_HASH[$key]:-}" ]]; then
     return 0
   fi
   return 1
@@ -1567,8 +2357,178 @@ else
   done
 fi
 
-# --------------- FETCH MAPS & COLLECT ----------------
-declare -a TENSORS_TO_FETCH SHARD_FILENAMES
+# ------------------ IMPLEMENT COMPUTE_MAP_FOR_QTYPE FUNCTION ----------------
+# This function will attempt to compute tensors.<qtype>.map from tensors.bf16.map using convert_map_qtype.py
+# Return: 0 on success, non-zero on failure.
+declare -A COMPUTED_QTYPES=()
+declare -A MAP_FILE_INFO=()
+declare -A FETCHED_MAPS=()
+
+compute_map_for_qtype() {
+  local qtype_raw="$1"
+  # normalize to lowercase qtype token (map files use lowercase qtype in filenames)
+  local qtype="${qtype_raw,,}"
+
+  # nothing to do for bf16
+  if [[ "$qtype" == "bf16" ]]; then
+    return 1
+  fi
+
+  local convert_script="$SCRIPT_DIR/convert_map_qtype.py"
+  if [[ ! -f "$convert_script" ]]; then
+    echo "[Info] convert_map_qtype.py not found in script directory (${convert_script}); cannot compute map for ${qtype}." >&2
+    return 1
+  fi
+
+  local bf16_map_path="$MAP_DIR/tensors.bf16.map"
+  # ensure bf16 map exists (attempt to fetch it if missing)
+  if [[ ! -f "$bf16_map_path" ]]; then
+    echo "[Info] bf16 map missing in map dir (${MAP_DIR}); attempting to fetch bf16 via tensor_downloader." >&2
+    # Attempt to fetch bf16 map using existing downloader mechanism
+    # We use "BF16" as qtype for the downloader (the surrounding code uses similar pattern)
+    if ! run_downloader "BF16" 0 "$MAP_DIR" "tensors.bf16.map"; then
+      echo "[Info] Failed to fetch bf16 map; cannot compute map for ${qtype}." >&2
+      return 1
+    else
+      # Download the signature
+      if [[ "$SKIP_GPG" != true ]]; then
+        # Do NOT remove existing signatures in the target model dir when in verify-readonly mode.
+        if [[ "$VERIFY_READONLY" != true ]]; then
+          rm -f "$LOCAL_MODEL_DIR/tensors.bf16.map.sig" || true
+          sync || true
+        else
+          DEBUG "verify-readonly: skipping removal of existing signature in LOCAL_MODEL_DIR for $bf16_map_path.sig"
+        fi
+        if ! run_downloader "BF16" -1 "$MAP_DIR" "tensors.bf16.map.sig"; then
+            echo "❌ Error: failed to fetch map gpg signature for BF16" >&2
+            [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+            exit 3
+        fi
+      fi
+    fi
+    # ensure file present now
+    if [[ ! -f "$bf16_map_path" ]]; then
+      echo "[Info] bf16 map still missing after fetch attempt; cannot compute map for ${qtype}." >&2
+      return 1
+    fi
+    # verify gpg signature of the bf16 map
+    if [[ "$SKIP_GPG" != true ]]; then
+      if command -v gpg >/dev/null 2>&1; then
+        if [ ! -f "$bf16_map_path.sig" ]; then
+            echo "❌ Error: Signature file '$bf16_map_path.sig' is missing." >&2
+            echo "Hint: To skip GPG verification, re-run this script with the --skip-gpg option." >&2
+            [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+            exit 5
+        fi
+        if safe_gpg_verify "$bf16_map_path.sig" "$bf16_map_path" > /dev/null 2>&1; then
+            echo "[$(timestamp)] GPG signature verification successful for '$bf16_map_path'."
+        else
+            echo "❌ Error: GPG signature verification failed for '$bf16_map_path.sig'." >&2
+            [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+            exit 4
+        fi
+      else
+        echo "⚠️ Warning: 'gpg' command not found. Signature verification skipped." >&2
+      fi
+    fi
+  fi
+
+  # Build convert command
+  local cmd=(_python "$convert_script" "$bf16_map_path" --qtype "$qtype")
+  # append user-provided convert flags
+  if [[ "$CONVERT_IGNORE_IMATRIX_RULES" == true ]]; then
+    cmd+=(--ignore-imatrix-rules)
+  fi
+  if [[ -n "$CONVERT_WITH_IMATRIX_FILE" ]]; then
+    # user provided a path; per requirement only pass "--with-imatrix" flag (without the file) to the convert script
+    cmd+=(--with-imatrix)
+  fi
+  if [[ "$CONVERT_NO_FALLBACK" == true ]]; then
+    cmd+=(--no-fallback)
+  fi
+  if [[ ${#CONVERT_FALLBACK_QUANTS[@]} -gt 0 ]]; then
+    cmd+=(--fallback-quants)
+    for fq in "${CONVERT_FALLBACK_QUANTS[@]}"; do
+      cmd+=("$fq")
+    done
+  fi
+  if [[ ${#CONVERT_FALLBACK_QUANTS_FORBIDDEN[@]} -gt 0 ]]; then
+    cmd+=(--fallback-quants-forbidden)
+    for fqf in "${CONVERT_FALLBACK_QUANTS_FORBIDDEN[@]}"; do
+      cmd+=("$fqf")
+    done
+  fi
+
+  echo "[Info] Attempting to compute map for qtype ${qtype} using convert_map_qtype.py..." >&2
+  
+  local local_map="$MAP_DIR/tensors.${qtype}.map"
+  safe_file_exists "$local_map" && rm -f "$local_map" || true
+
+  # Print debug command quoting elements safely
+  echo "[Info] Running: ${cmd[@]}" >&2
+
+  # Run convert script; it should write tensors.<qtype>.map into same dir as bf16_map_path (i.e. $MAP_DIR)
+  if [[ -n "${DEBUG:-}" ]]; then
+    if ! "${cmd[@]}"; then
+      echo "[Info] convert_map_qtype.py failed for qtype ${qtype}" >&2
+      return 1
+    fi
+  else
+    if ! "${cmd[@]}" >/dev/null 2>&1; then
+      echo "[Info] convert_map_qtype.py failed for qtype ${qtype}" >&2
+      return 1
+    fi
+  fi
+
+  # verify output file exists
+  if [[ ! -f "$local_map" ]]; then
+    echo "[Info] convert_map_qtype.py did not create expected file ${local_map}" >&2
+    return 1
+  fi
+
+  # Compute and store sha256 and last_line for the newly created map file
+  local sha256sum
+  if sha256sum="$(_sha256sum "$local_map" 2>/dev/null)"; then
+    sha256sum="${sha256sum%%[^0-9a-fA-F]*}"
+  else
+    sha256sum="ERROR"
+  fi
+
+  local last_line=""
+  if last_line="$(tail -n1 "$local_map" 2>/dev/null || true)"; then
+    if [[ -n "$last_line" ]]; then
+      # extract filename part before first ':' and strip .gguf suffix if present
+      last_line="$(printf '%s' "$last_line" | awk -F: '{print $1}' | sed -E 's/\.gguf.*$//')"
+    else
+      last_line=""
+    fi
+  else
+    last_line=""
+  fi
+
+  local map_key="tensors.${qtype}.map"
+  local model_name=""
+  if [[ -n "$last_line" ]]; then
+    model_name="${last_line} (computed)"
+  else
+    model_name="(computed)"
+  fi
+  # Store as a string triple (qtype::sha256::modelname) for debugging/inspection later
+  MAP_FILE_INFO["$map_key"]="${qtype}::${sha256sum}::${model_name}"
+
+  # Mark as fetched and computed to avoid gpg checks later
+  FETCHED_MAPS["$qtype"]=1
+  COMPUTED_QTYPES["$qtype"]=1
+
+  echo "[Info] Successfully computed map for qtype ${qtype} -> ${local_map}" >&2
+  echo "[Info] This computed map will NOT be gpg-checked." >&2
+
+  return 0
+}
+# --------------------------------------------------------------------------
+
+# ------------------ FETCH MAPS & COLLECT ----------------
+declare -a TENSORS_TO_FETCH SHARD_FILENAMES TENSORS_TO_FETCH_FULL SHARD_FILENAMES_FULL
 # Keep track of which mapfiles we've already processed (case-insensitive)
 declare -A PROCESSED_MAPFILES=()
 for _q in "${UNIQUE_QTYPES[@]}"; do
@@ -1591,116 +2551,321 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
 
   # Mark it as being processed now (prevents re-entrance if UNIQUE_QTYPES had duplicates)
   PROCESSED_MAPFILES["$mapkey"]=1
-
-  if [[ "$FORCE_REDOWNLOAD" == true ]]; then
-    echo "[$(timestamp)] Force redownload: removing existing map $mapfile and $mapfile.sig"
-    rm -f "$mappath"
-    rm -f "$mapsigpath"
-    sync || true
-  fi
-  if [[ "$NEW_MAP" == true ]]; then
-      if [[ -f "$mappath" ]]; then
-          mv -f "$mappath" "$MAP_DIR/${mapfile}.bak"
-          if [[ -f "$mapsigpath" ]]; then
-            mv -f "$mapsigpath" "$MAP_DIR/${mapfile}.sig.bak"
-          else
-            rm -f "$MAP_DIR/${mapfile}.sig.bak" # Delete the backup because now the backup may not correspond to the $mapfile.bak
-          fi
-          if ! run_downloader "$_qtype" 0 "$MAP_DIR" "$mapfile"; then
-              echo "⚠️ Warning: failed to fetch map for $_qtype. Using existing map file." >&2
-              mv -f "$MAP_DIR/${mapfile}.bak" "$mappath"
-              if [[ -f "$MAP_DIR/${mapfile}.sig.bak" ]]; then
-                mv -f "$MAP_DIR/${mapfile}.sig.bak" "$mapsigpath"
-              fi
-          else
-              # Success: optionally remove backup or keep it
-              rm -f "$MAP_DIR/${mapfile}.bak"
-              # Download the signature
-              if [[ "$SKIP_GPG" != true ]]; then
-                if ! run_downloader "$_qtype" -1 "$MAP_DIR" "$mapfile.sig"; then
-                    if [[ -f "$MAP_DIR/${mapfile}.sig.bak" ]]; then
-                        echo "⚠️ Warning: failed to fetch map gpg signature for $_qtype. Using existing map gpg signature file." >&2
-                        mv -f "$MAP_DIR/${mapfile}.sig.bak" "$mapsigpath"
-                    else
-                        echo "❌ Error: failed to fetch map gpg signature for $_qtype and no existing map gpg signature file present!" >&2
-                        [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
-                        exit 3
-                    fi
-                else
-                    # Success: optionally remove backup or keep it
-                    rm -f "$MAP_DIR/${mapfile}.sig.bak"
-                fi
-              fi
-          fi
-      else
-          # $mapfile does not exist; just try downloading
-          if ! run_downloader "$_qtype" 0 "$MAP_DIR" "$mapfile"; then
-              echo "❌ Error: failed to fetch map for $_qtype" >&2
-              exit 1
-          else
-              # Download the signature
-              if [[ "$SKIP_GPG" != true ]]; then
-                # Do NOT remove existing signatures in the target model dir when in verify-readonly mode.
-                if [[ "$VERIFY_READONLY" != true ]]; then
-                  rm -f "$LOCAL_MODEL_DIR/$mapfile.sig"
-                  sync || true
-                else
-                  DEBUG "verify-readonly: skipping removal of existing signature in LOCAL_MODEL_DIR for $mapfile.sig"
-                fi
-                if ! run_downloader "$_qtype" -1 "$MAP_DIR" "$mapfile.sig"; then
-                    echo "❌ Error: failed to fetch map gpg signature for $_qtype" >&2
-                    [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
-                    exit 3
-                fi
-              fi
-          fi
+  # If compute-all-map is requested, attempt to compute (only for non-bf16) and skip downloading
+  if [[ "$COMPUTE_ALL_MAP" == true ]] && [[ "${_qtype,,}" != "bf16" ]]; then
+    echo "[$(timestamp)] compute-all-map requested: attempting to compute map for ${_qtype,,} (skip download)"
+    if ! compute_map_for_qtype "${_qtype,,}"; then
+      echo "❌ Error: failed to compute map for ${_qtype,,} while --compute-all-map was requested." >&2
+      exit 1
+    fi
+  elif [[ "$COMPUTE_QTYPES_REGEX_MAP_ENABLED" == true && "${_qtype,,}" != "bf16" ]]; then
+    matched=false
+    for __pat in "${COMPUTE_QTYPES_REGEX_MAP[@]}"; do
+      # match against lowercase qtype for robustness (user patterns should take this into account)
+      if [[ "${_qtype,,}" =~ ${__pat} ]]; then
+        matched=true
+        break
       fi
+    done
+    if [[ "$matched" == true ]]; then
+      echo "[$(timestamp)] compute-qtypes-regex-map: qtype '${_qtype,,}' matches provided regex -> attempting to compute map (skip download)"
+      if ! compute_map_for_qtype "${_qtype,,}"; then
+        echo "❌ Error: failed to compute map for ${_qtype,,} using --compute-qtypes-regex-map." >&2
+        exit 1
+      fi
+    fi
   else
-      # NEW_MAP is false; just download normally (which will only happen if the file doesn't already exist)
-      if ! run_downloader "$_qtype" 0 "$MAP_DIR" "$mapfile"; then
-          echo "❌ Error: failed to fetch map for $_qtype" >&2
-          exit 1
-      fi
-      # Download the signature
-      if [[ "$SKIP_GPG" != true ]]; then
-        if ! run_downloader "$_qtype" -1 "$MAP_DIR" "$mapfile.sig"; then
-            echo "❌ Error: failed to fetch map gpg signature for $_qtype" >&2
-            [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
-            exit 3
+    if [[ "$FORCE_REDOWNLOAD" == true ]]; then
+      echo "[$(timestamp)] Force redownload: removing existing map $mapfile and $mapfile.sig"
+      rm -f "$mappath" || true
+      rm -f "$mapsigpath" || true
+      sync || true
+    fi
+    if [[ "$NEW_MAP" == true ]]; then
+        if [[ -f "$mappath" ]]; then
+            mv -f "$mappath" "$MAP_DIR/${mapfile}.bak"
+            if [[ -f "$mapsigpath" ]]; then
+              mv -f "$mapsigpath" "$MAP_DIR/${mapfile}.sig.bak"
+            else
+              rm -f "$MAP_DIR/${mapfile}.sig.bak" || true # Delete the backup because now the backup may not correspond to the $mapfile.bak
+            fi
+            if ! run_downloader "$_qtype" 0 "$MAP_DIR" "$mapfile"; then
+                echo "⚠️ Warning: failed to fetch map for $_qtype. Using existing map file." >&2
+                mv -f "$MAP_DIR/${mapfile}.bak" "$mappath"
+                if [[ -f "$MAP_DIR/${mapfile}.sig.bak" ]]; then
+                  mv -f "$MAP_DIR/${mapfile}.sig.bak" "$mapsigpath"
+                fi
+            else
+                # Success: optionally remove backup or keep it
+                rm -f "$MAP_DIR/${mapfile}.bak" || true
+                # Download the signature
+                if [[ "$SKIP_GPG" != true ]]; then
+                  if ! run_downloader "$_qtype" -1 "$MAP_DIR" "$mapfile.sig"; then
+                      if [[ -f "$MAP_DIR/${mapfile}.sig.bak" ]]; then
+                          echo "⚠️ Warning: failed to fetch map gpg signature for $_qtype. Using existing map gpg signature file." >&2
+                          mv -f "$MAP_DIR/${mapfile}.sig.bak" "$mapsigpath"
+                      else
+                          # If map download succeeded but signature download failed and this qtype was computed, we may skip signature below.
+                          echo "❌ Error: failed to fetch map gpg signature for $_qtype and no existing map gpg signature file present!" >&2
+                          [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+                          # If this qtype was computed, skip; otherwise exit
+                          if [[ -n "${COMPUTED_QTYPES[${_qtype,,}]:-}" ]]; then
+                            echo "[$(timestamp)] Note: map for ${_qtype,,} was computed locally; skipping signature requirement."
+                          else
+                            exit 3
+                          fi
+                      fi
+                  else
+                      # Success: optionally remove backup or keep it
+                      rm -f "$MAP_DIR/${mapfile}.sig.bak" || true
+                  fi
+                fi
+            fi
+        else
+            # $mapfile does not exist; just try downloading
+            if ! run_downloader "$_qtype" 0 "$MAP_DIR" "$mapfile"; then
+                echo "❌ Error: failed to fetch map for $_qtype" >&2
+                # If this qtype is non-bf16 and compute_missing_map is enabled, attempt compute
+                if [[ "${_qtype,,}" != "bf16" && "$COMPUTE_MISSING_MAP" == true ]]; then
+                  echo "[$(timestamp)] Attempting to compute map for ${_qtype,,} because download failed and --compute-missing-map is set."
+                  if ! compute_map_for_qtype "${_qtype,,}"; then
+                    echo "❌ Error: failed to compute map for ${_qtype,,}." >&2
+                    exit 1
+                  fi
+                else
+                  # If compute flags not provided, instruct user
+                  if [[ "${_qtype,,}" != "bf16" ]]; then
+                    echo "❌ Error: failed to fetch map for non-bf16 qtype '${_qtype,,}'. To auto-generate non-bf16 maps from tensors.bf16.map run with --compute-missing-map or --compute-all-map." >&2
+                    exit 1
+                  else
+                    exit 1
+                  fi
+                fi
+            else
+                # Download the signature
+                if [[ "$SKIP_GPG" != true ]]; then
+                  # Do NOT remove existing signatures in the target model dir when in verify-readonly mode.
+                  if [[ "$VERIFY_READONLY" != true ]]; then
+                    rm -f "$LOCAL_MODEL_DIR/$mapfile.sig" || true
+                    sync || true
+                  else
+                    DEBUG "verify-readonly: skipping removal of existing signature in LOCAL_MODEL_DIR for $mapfile.sig"
+                  fi
+                  if ! run_downloader "$_qtype" -1 "$MAP_DIR" "$mapfile.sig"; then
+                      echo "❌ Error: failed to fetch map gpg signature for $_qtype" >&2
+                      [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+                      exit 3
+                  fi
+                fi
+            fi
         fi
-      fi
-  fi
-
-  if [[ "$SKIP_GPG" != true ]]; then
-    if command -v gpg >/dev/null 2>&1; then
-      if [ ! -f "$mappath" ]; then
-          echo "❌ Error: Map file '$mapfile' not found."
-          [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
-          exit 5
-      fi
-      if [ ! -f "$mapsigpath" ]; then
-          echo "❌ Error: Signature file '$mapfile.sig' is missing."
-          echo "Hint: To skip GPG verification, re-run this script with the --skip-gpg option."
-          [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
-          exit 5
-      fi
-      if safe_gpg_verify "$mapsigpath" "$mappath" > /dev/null 2>&1; then
-          echo "[$(timestamp)] GPG signature verification successful."
-      else
-          echo "❌ Error: GPG signature verification failed for '$mapfile.sig'."
-          [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
-          exit 4
-      fi
     else
-      echo "⚠️ Warning: 'gpg' command not found. Signature verification skipped." >&2
+        # NEW_MAP is false; just download normally (which will only happen if the file doesn't already exist)
+        if ! run_downloader "$_qtype" 0 "$MAP_DIR" "$mapfile"; then
+            echo "❌ Error: failed to fetch map for $_qtype" >&2
+            # Attempt compute if allowed
+            if [[ "${_qtype,,}" != "bf16" && "$COMPUTE_MISSING_MAP" == true ]]; then
+              echo "[$(timestamp)] Attempting to compute map for ${_qtype,,} because download failed and --compute-missing-map is set."
+              if ! compute_map_for_qtype "${_qtype,,}"; then
+                echo "❌ Error: failed to compute map for ${_qtype,,}." >&2
+                exit 1
+              fi
+            else
+              if [[ "${_qtype,,}" != "bf16" ]]; then
+                echo "❌ Error: failed to fetch map for non-bf16 qtype '${_qtype,,}'. To auto-generate non-bf16 maps from tensors.bf16.map run with --compute-missing-map or --compute-all-map." >&2
+                exit 1
+              else
+                exit 1
+              fi
+            fi
+        fi
+        # Download the signature
+        if [[ "$SKIP_GPG" != true ]]; then
+          if ! run_downloader "$_qtype" -1 "$MAP_DIR" "$mapfile.sig"; then
+              echo "❌ Error: failed to fetch map gpg signature for $_qtype" >&2
+              [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+              exit 3
+          fi
+        fi
     fi
   fi
 
-  while IFS=: read -r fname hash tname _; do
+  # At this point: either map exists in $mappath (downloaded, restored from bak, or computed by compute_map_for_qtype),
+  # or we have earlier exited on error. We now decide whether to GPG-verify it or skip if computed.
+  if [[ ! -f "$mappath" ]]; then
+    # If somehow still missing, error out
+    echo "❌ Error: Map file '$mapfile' not found after download/compute attempts." >&2
+    exit 1
+  fi
+
+  # -------------------------------
+  # Detect placeholder/computed map files and re-compute/check them.
+  # Rule: if qtype is NOT bf16 and the FIRST LINE of the map file contains the literal 64-zero string
+  # '000000...000' (64 zeros), we treat the map as a previously computed placeholder. In that case:
+  #  - We will recompute the map using compute_map_for_qtype().
+  #  - If VERIFY_READONLY==true OR NEW_MAP==false:
+  #     * compute the new map into a temporary workspace (VERIFY_TMPDIR when available, otherwise mktemp)
+  #     * compare with the existing map using cmp -s; if they differ -> fail (exit like a gpg failure)
+  #     * if they are identical -> continue (do not replace when verify-readonly; may replace when NEW_MAP==false for idempotency)
+  #  - Else (normal mode & NEW_MAP==true): compute_map_for_qtype will write directly into MAP_DIR and the newly
+  #    produced map will replace the old one automatically.
+  # This preserves existing script comments and behaviour while ensuring computed maps are fresh and validated.
+  # -------------------------------
+  # Only perform detection for non-bf16 maps
+  if [[ -z "${COMPUTED_QTYPES[${_qtype,,}]:-}" ]] && [[ "${_qtype,,}" != "bf16" ]]; then
+    # read first line safely
+    first_line="$(head -n1 "$mappath" 2>/dev/null || true)"
+    if [[ -n "$first_line" ]] && [[ "$first_line" == *"0000000000000000000000000000000000000000000000000000000000000000"* ]]; then
+      echo "[$(timestamp)] Detected placeholder/all-zero first-line in map '${mapfile}' -> treating as previously computed map; will recompute to validate/refresh."
+      # Decide compute destination
+      tmp_compute_dir_created=false
+      if [[ "$VERIFY_READONLY" == true ]]; then
+        compute_dir="$VERIFY_TMPDIR"
+      elif [[ "$NEW_MAP" == false ]]; then
+        # Per requirement: --no-new-map should verify existing computed map by recomputing into a temp dir and cmp -s
+        compute_dir="$(mktemp -d)" || { echo "❌ Error: failed to create temporary directory for recomputing map." >&2; exit 1; }
+        tmp_compute_dir_created=true
+      else
+        # normal flow: recompute directly in MAP_DIR (will replace existing)
+        compute_dir="$MAP_DIR"
+      fi
+
+      # Temporarily switch MAP_DIR for compute_map_for_qtype so it writes to desired compute_dir.
+      old_map_dir="$MAP_DIR"
+      MAP_DIR="$compute_dir"
+      if compute_map_for_qtype "${_qtype,,}"; then
+        new_map="${MAP_DIR}/tensors.${_qtype,,}.map"
+        if [[ ! -f "$new_map" ]]; then
+          echo "❌ Error: recompute produced no map file for qtype ${_qtype,,}." >&2
+          MAP_DIR="$old_map_dir"
+          [[ "$tmp_compute_dir_created" == true ]] && rm -rf "$compute_dir"
+          [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+          exit 1
+        fi
+
+        if [[ "$VERIFY_READONLY" == true || "$NEW_MAP" == false ]]; then
+          # Compare newly computed map with existing mappath using cmp -s
+          if ! cmp -s "$new_map" "$mappath"; then
+            echo "❌ Error: recomputed map for '${mapfile}' differs from existing file. Treating as verification failure." >&2
+            MAP_DIR="$old_map_dir"
+            [[ "$tmp_compute_dir_created" == true ]] && rm -rf "$compute_dir"
+            [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+            # Fail like a GPG signature failure (exit code 4 is used elsewhere for gpg failures)
+            exit 4
+          else
+            echo "[$(timestamp)] Recomputed map for '${mapfile}' matches existing file."
+            # If NEW_MAP==false but not verify-readonly, we can optionally replace (identical) the existing file for idempotency.
+            if [[ "$NEW_MAP" == false && "$VERIFY_READONLY" != true ]]; then
+              # Move (replace) the existing file with the newly computed identical file to maintain freshness.
+              mv -f "$new_map" "$mappath"
+              echo "[$(timestamp)] Replaced computed map '${mapfile}' with freshly computed identical copy (no-new-map path)."
+            fi
+          fi
+        else
+          # Normal non-readonly mode and NEW_MAP==true: the compute_map_for_qtype wrote into MAP_DIR (which we set to compute_dir==MAP_DIR),
+          # thus the newly computed map is already in-place. Nothing further required.
+          echo "[$(timestamp)] Recomputed map for '${mapfile}' and replaced the previous computed map."
+        fi
+      else
+        echo "❌ Error: failed to recompute map for '${_qtype,,}'." >&2
+        MAP_DIR="$old_map_dir"
+        [[ "$tmp_compute_dir_created" == true ]] && rm -rf "$compute_dir"
+        exit 1
+      fi
+      # Restore MAP_DIR
+      MAP_DIR="$old_map_dir"
+      # Cleanup temporary compute dir if we created it
+      if [[ "$tmp_compute_dir_created" == true ]]; then
+        rm -rf "$compute_dir" || true
+      fi
+    fi
+  fi
+  # ------------------------------- end computed-map detection -------------------------------
+
+  # If map was computed, skip gpg verification for this map.
+  if [[ "$SKIP_GPG" != true ]]; then
+    # Determine canonical qtype key for lookup in COMPUTED_QTYPES
+    # _qtype is already set; use lowercase form
+    map_qtype_key="${_qtype,,}"
+    if [[ -n "${COMPUTED_QTYPES[$map_qtype_key]:-}" ]]; then
+      echo "[$(timestamp)] Note: map '${mapfile}' was computed locally; skipping GPG signature verification for it."
+    else
+      if command -v gpg >/dev/null 2>&1; then
+        if [ ! -f "$mapsigpath" ]; then
+            echo "❌ Error: Signature file '$mapfile.sig' is missing." >&2
+            echo "Hint: To skip GPG verification, re-run this script with the --skip-gpg option." >&2
+            [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+            exit 5
+        fi
+        if safe_gpg_verify "$mapsigpath" "$mappath" > /dev/null 2>&1; then
+            echo "[$(timestamp)] GPG signature verification successful for '$mapfile'."
+        else
+            echo "❌ Error: GPG signature verification failed for '$mapfile.sig'." >&2
+            [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+            exit 4
+        fi
+      else
+        echo "⚠️ Warning: 'gpg' command not found. Signature verification skipped." >&2
+      fi
+    fi
+  fi
+
+  # If we reach here, parse the map file lines to populate shard lists and hashes
+  while IFS=: read -r fname hash tname shape dtype elements bytes imatrix || [[ -n "$fname" ]]; do
     if [[ $fname =~ -([0-9]{5})-of-[0-9]{5}\.gguf$ ]]; then
       shard_id=$((10#${BASH_REMATCH[1]}))
       set_shard_id "$tname" "$shard_id"
       set_t_hash "$qtype" "$tname" "$hash"
+
+      # Attempt to extract additional metadata from the explicit map fields (if present).
+      # Map files typically provide shape=...,dtype=...,elements=NNN,bytes=NNN,imatrix=SHA256
+      # The read above assigns those colon-separated tokens into variables; we now sanitize them.
+
+      # Normalize/strip leading keys if present (e.g. 'shape=(...)', 'dtype=q8_0', 'elements=123', 'bytes=456', 'imatrix=abc').
+      local_dtype="${dtype:-}"
+      local_shape="${shape:-}"
+      local_elements="${elements:-}"
+      local_bytes="${bytes:-}"
+      local_imatrix="${imatrix:-}"
+
+      # strip prefix 'dtype=' if present
+      if [[ "${local_dtype}" == dtype=* ]]; then
+        local_dtype="${local_dtype#dtype=}"
+      fi
+      # strip prefix 'shape=' if present
+      if [[ "${local_shape}" == shape=* ]]; then
+        local_shape="${local_shape#shape=}"
+      fi
+      # strip prefix 'elements=' if present
+      if [[ "${local_elements}" == elements=* ]]; then
+        local_elements="${local_elements#elements=}"
+      fi
+      # strip prefix 'bytes=' if present
+      if [[ "${local_bytes}" == bytes=* ]]; then
+        local_bytes="${local_bytes#bytes=}"
+      fi
+      # strip prefix 'imatrix=' if present
+      if [[ "${local_imatrix}" == imatrix=* ]]; then
+        local_imatrix="${local_imatrix#imatrix=}"
+      fi
+
+      # store metadata only if non-empty
+      if [[ -n "${local_dtype}" ]]; then
+        set_t_dtype "$qtype" "$tname" "$local_dtype"
+      fi
+      if [[ -n "${local_shape}" ]]; then
+        set_t_shape "$qtype" "$tname" "$local_shape"
+      fi
+      if [[ -n "${local_elements}" ]]; then
+        set_t_elements "$qtype" "$tname" "$local_elements"
+      fi
+      if [[ -n "${local_bytes}" ]]; then
+        set_t_bytes "$qtype" "$tname" "$local_bytes"
+      fi
+      if [[ -n "${local_imatrix}" ]]; then
+        set_t_imatrix "$qtype" "$tname" "$local_imatrix"
+      fi
+
       # Filling these lists should only happen once now
       if [[ "$qtype" == "${QTYPE}" ]]; then
         SHARD_FILENAMES+=("$fname")
@@ -1712,17 +2877,29 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
   done < "$mappath"
 done
 
+# Save original SHARD_FILENAMES and TENSORS_TO_FETCH before any form of filtering (used to construct shard filename with TENSORS_TO_FETCH_FULL[0])
+SHARD_FILENAMES_FULL=("${SHARD_FILENAMES[@]}")
+TENSORS_TO_FETCH_FULL=("${TENSORS_TO_FETCH[@]}")
+
 # If the user explicitly requested a --qtype, create helpful symlinks in the model dir
 # so callers that expect tensors.map / tensors.map.sig (generic names) can work.
 # Only create these symlinks when not in --verify-readonly mode (we shouldn't write into
 # the model dir when the user asked for readonly verification).
 if [[ "$QTYPE_SPECIFIED" == true && "$VERIFY_READONLY" != true ]]; then
-  src_map="$MAP_DIR/tensors.${QTYPE,,}.map"
-  src_sig="$MAP_DIR/tensors.${QTYPE,,}.map.sig"
-  if [[ -f "$src_map" && -f "$src_sig" ]]; then
-    echo "[$(timestamp)] Ensure tensors.map and tensors.map.sig symlinks in model dir pointing to tensors.${QTYPE,,}.map and tensors.${QTYPE,,}.map.sig respectively"
+  _qtype=${QTYPE,,}
+  src_map="$MAP_DIR/tensors.$_qtype.map"
+  if safe_file_exists "$src_map"; then
+    safe_file_exists "$LOCAL_MODEL_DIR/tensors.$_qtype.map" || cp -p "$src_map" "$LOCAL_MODEL_DIR/tensors.$_qtype.map"
+    echo "[$(timestamp)] Ensure tensors.map symlink in model dir pointing to tensors.$_qtype.map"
+    rm -f "$LOCAL_MODEL_DIR/tensors.map" || true
     ln -sfn "$src_map" "$LOCAL_MODEL_DIR/tensors.map" || true
-    ln -sfn "$src_sig" "$LOCAL_MODEL_DIR/tensors.map.sig" || true
+    src_sig="$MAP_DIR/tensors.$_qtype.map.sig"
+    if safe_file_exists "$src_sig"; then
+      safe_file_exists "$LOCAL_MODEL_DIR/tensors.$_qtype.map.sig" || cp -p "$src_sig" "$LOCAL_MODEL_DIR/tensors.$_qtype.map.sig"
+      echo "[$(timestamp)] Ensure tensors.map.sig symlink in model dir pointing to tensors.$_qtype.map.sig"
+      rm -f "$LOCAL_MODEL_DIR/tensors.map.sig" || true
+      ln -sfn "$src_sig" "$LOCAL_MODEL_DIR/tensors.map.sig" || true
+    fi
   fi
 fi
 
@@ -1775,6 +2952,284 @@ if [[ "$INDIVIDUAL_TENSORS_ENABLED" == true ]]; then
   echo "[$(timestamp)] --individual-tensors enabled: will only process tensors: $sorted_list"
 fi
 # --------------------------------------------------------------------------
+
+# -------------------------
+# Apply --individual-tensors filter to the arrays we just populated.
+# Reasoning:
+#  - The map files contain shards for chunk ids starting at 00002 (the special first shard 00001 is not present in maps).
+#  - The user supplies tensor numbers like "2,5,..." (these are absolute chunk ids in the model numbering).
+#  - We must keep only those map entries whose recorded shard_id (set earlier via set_shard_id)
+#    matches one of the user-provided token numbers.
+#  - Do NOT error out if the user only requested "1" (the special first shard) because that shard is not part of the map arrays;
+#    in that case the arrays will become empty and first-shard logic elsewhere will handle it.
+# -------------------------
+if [[ "$INDIVIDUAL_TENSORS_ENABLED" == true ]]; then
+  DEBUG "Applying --individual-tensors filter to SHARD_FILENAMES / TENSORS_TO_FETCH (keeping only user-selected chunk ids)"
+
+  # Temporary arrays to hold the filtered results
+  declare -a __NEW_SHARD_FILENAMES=()
+  declare -a __NEW_TENSORS_TO_FETCH=()
+
+  # Iterate over existing arrays and keep only entries whose shard id is present in IND_TENSOR_SET
+  for __i in "${!SHARD_FILENAMES[@]}"; do
+    __tensor="${TENSORS_TO_FETCH[$__i]:-}"
+    # get_shard_id returns the numeric chunk id (1-based as parsed from filename)
+    __chunk_id="$(get_shard_id "$__tensor")"
+
+    # If shard_id couldn't be determined, warn and skip
+    if [[ -z "$__chunk_id" ]]; then
+      #echo "⚠️ Warning: could not determine shard id for tensor='$__tensor' at index $__i; skipping from filtered lists." >&2
+      continue
+    fi
+
+    # Keep entry if user explicitly requested this chunk id
+    if [[ -n "${IND_TENSOR_SET[$__chunk_id]:-}" ]]; then
+      __NEW_SHARD_FILENAMES+=("${SHARD_FILENAMES[$__i]}")
+      __NEW_TENSORS_TO_FETCH+=("$__tensor")
+      DEBUG "Keeping shard index $__i (chunk $__chunk_id) -> ${SHARD_FILENAMES[$__i]}"
+    else
+      DEBUG "Dropping shard index $__i (chunk $__chunk_id) -> ${SHARD_FILENAMES[$__i]}"
+    fi
+  done
+
+  # Replace original arrays with filtered ones
+  SHARD_FILENAMES=("${__NEW_SHARD_FILENAMES[@]}")
+  TENSORS_TO_FETCH=("${__NEW_TENSORS_TO_FETCH[@]}")
+
+  # Logging: if the filter removed everything, that may be because user requested only the special first shard (1).
+  if [[ "${#SHARD_FILENAMES[@]}" -eq 0 ]]; then
+    echo "[$(timestamp)] Note: --individual-tensors was provided but no matching shards were found in the map entries."
+    echo "         This can happen if you requested the special first shard (1), which is not present in the map files."
+    echo "         First-shard handling (download/verification/quantize) will be performed separately later if required."
+  else
+    # For traceability show which zero-based map indexes remain (useful debug output)
+    kept_idxs="$(printf "%s\n" "${!SHARD_FILENAMES[@]}" | paste -sd, -)"
+    echo "[$(timestamp)] --individual-tensors filter applied: keeping ${#SHARD_FILENAMES[@]} shard(s) from map (map-array indexes: ${kept_idxs})."
+  fi
+fi
+
+# Prepare dynamic copies
+TENSORS_TO_FETCH_DYNAMIC=( "${TENSORS_TO_FETCH[@]}" )
+SHARD_FILENAMES_DYNAMIC=( "${SHARD_FILENAMES[@]}" )
+
+# Quantize dynamic lists (initially empty, we'll move computed-qtype shards into them)
+TENSORS_TO_QUANTIZE_DYNAMIC=()
+SHARD_QUANTIZE_FILENAMES_DYNAMIC=()
+
+# Step 2: Scan original arrays and move computed qtype shards from dynamic fetch lists
+# into the quantize dynamic lists (keep indices in sync)
+# We iterate original arrays by index to detect computed qtypes, then find the same item
+# in the dynamic lists to remove/move it.
+for idx in "${!TENSORS_TO_FETCH[@]}"; do
+  tensor="${TENSORS_TO_FETCH[$idx]:-}"
+  [[ -z "$tensor" ]] && continue
+  chunk_id="$(get_shard_id "$tensor")"
+  shard_file="${SHARD_FILENAMES[$idx]:-}"
+
+  # Determine target qtype for this tensor
+  target_q=""
+  for i in "${!PATTERNS[@]}"; do
+    if [[ "$tensor" =~ ${PATTERNS[$i]} ]]; then
+      target_q="${PATTERN_QTYPES[$i]}"
+      break
+    fi
+  done
+  if [[ -z "$target_q" ]]; then
+    continue
+  fi
+
+  # If computed qtype, move this entry from *_DYNAMIC to *_QUANTIZE_DYNAMIC
+  if [[ -n "${COMPUTED_QTYPES[${target_q,,}]:-}" ]]; then
+    # Find the index of the matching tensor in TENSORS_TO_FETCH_DYNAMIC
+    for d_idx in "${!TENSORS_TO_FETCH_DYNAMIC[@]}"; do
+      if [[ "${TENSORS_TO_FETCH_DYNAMIC[$d_idx]}" == "$tensor" ]]; then
+        # Append into quantize dynamic arrays
+        TENSORS_TO_QUANTIZE_DYNAMIC+=( "$tensor" )
+        SHARD_QUANTIZE_FILENAMES_DYNAMIC+=( "$shard_file" )
+
+        # Remove from fetch dynamic arrays while preserving order
+        unset 'TENSORS_TO_FETCH_DYNAMIC[d_idx]'
+        unset 'SHARD_FILENAMES_DYNAMIC[d_idx]'
+        # Re-index arrays
+        TENSORS_TO_FETCH_DYNAMIC=( "${TENSORS_TO_FETCH_DYNAMIC[@]}" )
+        SHARD_FILENAMES_DYNAMIC=( "${SHARD_FILENAMES_DYNAMIC[@]}" )
+        DEBUG "moved computed qtype tensor to quantize queue: tensor='$tensor' chunk_id='$chunk_id' shard_file='$shard_file'"
+        break
+      fi
+    done
+  fi
+done
+
+# If user requested --quantize-all-shards, move all remaining fetch items into quantize queue.
+if [[ "$QUANTIZE_ALL_SHARDS" == true ]]; then
+  if ((${#TENSORS_TO_FETCH_DYNAMIC[@]} > 0)); then
+    for i in "${!TENSORS_TO_FETCH_DYNAMIC[@]}"; do
+      TENSORS_TO_QUANTIZE_DYNAMIC+=( "${TENSORS_TO_FETCH_DYNAMIC[$i]}" )
+      SHARD_QUANTIZE_FILENAMES_DYNAMIC+=( "${SHARD_FILENAMES_DYNAMIC[$i]}" )
+    done
+    TENSORS_TO_FETCH_DYNAMIC=()
+    SHARD_FILENAMES_DYNAMIC=()
+    echo "[$(timestamp)] --quantize-all-shards: moved all fetch-list tensors into quantize queue (count=${#TENSORS_TO_QUANTIZE_DYNAMIC[@]})"
+  else
+    echo "[$(timestamp)] --quantize-all-shards: fetch queue empty; nothing to move."
+  fi
+fi
+
+# ---------------------------
+# Apply regex-driven selection to move specific fetch-dynamic items into the quantize queue.
+# - If --quantize-tensors-regex is set, any tensor whose name matches any of the provided regexes
+#   will be moved to the quantize queue (performed BEFORE MAIN dynamic loop).
+# - If --quantize-qtypes-regex is set, any tensor whose target qtype (determined by PATTERNS) matches
+#   any of the provided regexes will be moved to the quantize queue.
+# Implementation detail: iterate from highest index to lowest to avoid index-shifting bugs when removing items.
+# ---------------------------
+
+# Helper: copy an item (by index) from fetch-dynamic -> quantize-dynamic
+# Append the moved item so it becomes the last element of the target lists
+copy_fetch_index_to_quantize() {
+  local idx="$1"
+  local tensor="${TENSORS_TO_FETCH_DYNAMIC[$idx]:-}"
+  local shard_file="${SHARD_FILENAMES_DYNAMIC[$idx]:-}"
+  if [[ -z "$tensor" ]]; then
+    return 1
+  fi
+  # Append to quantize arrays
+  TENSORS_TO_QUANTIZE_DYNAMIC=( "${TENSORS_TO_QUANTIZE_DYNAMIC[@]}" "$tensor" )
+  SHARD_QUANTIZE_FILENAMES_DYNAMIC=( "${SHARD_QUANTIZE_FILENAMES_DYNAMIC[@]}" "$shard_file" )
+  return 0
+}
+
+# Helper: move an item (by index) from fetch-dynamic -> quantize-dynamic
+# Prepend the moved item so it becomes the first element of the target lists
+move_fetch_index_to_quantize() {
+  local idx="$1"
+  local tensor="${TENSORS_TO_FETCH_DYNAMIC[$idx]:-}"
+  local shard_file="${SHARD_FILENAMES_DYNAMIC[$idx]:-}"
+  if [[ -z "$tensor" ]]; then
+    return 1
+  fi
+  # Prepend to quantize arrays
+  TENSORS_TO_QUANTIZE_DYNAMIC=( "$tensor" "${TENSORS_TO_QUANTIZE_DYNAMIC[@]}" )
+  SHARD_QUANTIZE_FILENAMES_DYNAMIC=( "$shard_file" "${SHARD_QUANTIZE_FILENAMES_DYNAMIC[@]}" )
+  # Remove from fetch arrays and re-pack to shift indices
+  unset 'TENSORS_TO_FETCH_DYNAMIC[idx]'
+  unset 'SHARD_FILENAMES_DYNAMIC[idx]'
+  TENSORS_TO_FETCH_DYNAMIC=( "${TENSORS_TO_FETCH_DYNAMIC[@]}" )
+  SHARD_FILENAMES_DYNAMIC=( "${SHARD_FILENAMES_DYNAMIC[@]}" )
+  return 0
+}
+
+# Helper: find index in fetch-dynamic by chunk_id and move to quantize dynamic
+move_fetch_by_chunk_to_quantize() {
+  local chunkid="$1"
+  local found_idx=""
+  for i in "${!TENSORS_TO_FETCH_DYNAMIC[@]}"; do
+    local t="${TENSORS_TO_FETCH_DYNAMIC[$i]}"
+    local c
+    c="$(get_shard_id "$t")"
+    if [[ "$c" == "$chunkid" ]]; then
+      found_idx="$i"
+      break
+    fi
+  done
+  if [[ -n "$found_idx" ]]; then
+    move_fetch_index_to_quantize "$found_idx"
+    return 0
+  fi
+  return 1
+}
+
+# Helper: check for any .failed_download.* marker files, move corresponding items
+process_failed_download_markers() {
+  shopt -s nullglob
+  local markers=( "$LOCAL_DOWNLOAD_DIR"/.failed_download.* )
+  shopt -u nullglob
+  local any_moved=0
+  for f in "${markers[@]}"; do
+    # filename: $LOCAL_DOWNLOAD_DIR/.failed_download.<chunkid>
+    chunk_marker="${f##*.}"   # obtains chunkid (works because marker format is .failed_download.<chunkid>)
+    # move matching fetch entry to quantize dynamic list
+    if move_fetch_by_chunk_to_quantize "$chunk_marker"; then
+      DEBUG "moved failed-download chunk '$chunk_marker' into quantize queue (and removed from fetch-dynamic)"
+      any_moved=1
+    else
+      DEBUG "no matching fetch-dynamic entry found for failed-download chunk '$chunk_marker' (maybe already moved)"
+    fi
+    # remove the marker
+    rm -f -- "$f" 2>/dev/null || true
+  done
+  return $any_moved
+}
+
+# Helper: detect whether a quantize slot is available
+quantize_slot_available() {
+  shopt -s nullglob
+  local q=( "$LOCAL_DOWNLOAD_DIR"/.quantize.* )
+  shopt -u nullglob
+  local count=${#q[@]}
+  if (( count >= MAX_QUANTIZE_JOBS )); then
+    return 1
+  fi
+  return 0
+}
+
+# Helper: detect failed quantize markers
+failed_quantize_detected() {
+  shopt -s nullglob
+  local fq=( "$LOCAL_DOWNLOAD_DIR"/.failed_quantize.* )
+  shopt -u nullglob
+  [[ ${#fq[@]} -gt 0 ]]
+}
+
+# Helper to test if a string matches any regex in a given array
+_matches_any_regex_in_array() {
+  local subject="$1"
+  shift
+  local -a arr=("$@")
+  for pat in "${arr[@]}"; do
+    if [[ "$subject" =~ $pat ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Apply quantize-tensors-regex to TENSORS_TO_FETCH_DYNAMIC
+if [[ "$QUANTIZE_TENSORS_REGEX_ENABLED" == true && ${#QUANTIZE_TENSORS_REGEX[@]} -gt 0 && ${#TENSORS_TO_FETCH_DYNAMIC[@]} -gt 0 ]]; then
+  DEBUG "--quantize-tensors-regex enabled: applying regexes to tensor names"
+  # iterate high -> low to avoid skipping after removals
+  for (( i=${#TENSORS_TO_FETCH_DYNAMIC[@]}-1; i>=0; i-- )); do
+    tname="${TENSORS_TO_FETCH_DYNAMIC[$i]}"
+    if _matches_any_regex_in_array "$tname" "${QUANTIZE_TENSORS_REGEX[@]}"; then
+      DEBUG "quantize-tensors-regex: moving tensor '$tname' at index $i to quantize queue"
+      move_fetch_index_to_quantize "$i"
+    fi
+  done
+fi
+
+# Apply quantize-qtypes-regex to TENSORS_TO_FETCH_DYNAMIC
+if [[ "$QUANTIZE_QTYPES_REGEX_ENABLED" == true && ${#QUANTIZE_QTYPES_REGEX[@]} -gt 0 && ${#TENSORS_TO_FETCH_DYNAMIC[@]} -gt 0 ]]; then
+  DEBUG "--quantize-qtypes-regex enabled: applying regexes to target qtypes"
+  # iterate high -> low to avoid skipping after removals
+  for (( i=${#TENSORS_TO_FETCH_DYNAMIC[@]}-1; i>=0; i-- )); do
+    tname="${TENSORS_TO_FETCH_DYNAMIC[$i]}"
+    # determine target qtype for this tensor by scanning PATTERNS
+    found_target_q=""
+    for pidx in "${!PATTERNS[@]}"; do
+      if [[ "$tname" =~ ${PATTERNS[$pidx]} ]]; then
+        found_target_q="${PATTERN_QTYPES[$pidx]}"
+        break
+      fi
+    done
+    if [[ -n "$found_target_q" ]]; then
+      # match against lowercase form for robustness
+      if _matches_any_regex_in_array "${found_target_q,,}" "${QUANTIZE_QTYPES_REGEX[@]}"; then
+        DEBUG "quantize-qtypes-regex: moving tensor '$tname' (target qtype='$found_target_q') at index $i to quantize queue"
+        move_fetch_index_to_quantize "$i"
+      fi
+    fi
+  done
+fi
 
 # ------------------ SPECIAL NODE ASSIGNMENT (if requested) ----------------
 # New approach: compute an xxh3-based digest over MODEL_NAME+chunkid and use that
@@ -1855,19 +3310,303 @@ if [[ -n "$SPECIAL_NODE_ID" ]]; then
   echo "[$(timestamp)] SPECIAL NODE MODE: MODEL_NAME='$MODEL_NAME' using xxhsum. Only chunks where xxhsum(MODEL_NAME+chunkid) % $TOTAL_NODES == $SPECIAL_NODE_ID will be downloaded/verified by this runner."
 fi
 
+# Helper: attempt to redownload the first shard and its signature (unless verify-readonly).
+# Returns 0 on success (downloaded & moved into LOCAL_MODEL_DIR), non-zero otherwise.
+attempt_redownload_first() {
+  if [[ "$VERIFY_READONLY" == true ]]; then
+    return 1
+  fi
+
+  echo "[$(timestamp)] First shard appears corrupted or invalid — attempting to redownload first shard (and signature if GPG verification enabled)."
+
+  # remove any possibly-broken files (both model dir and download dir)
+  rm -f "$LOCAL_MODEL_DIR/$gguf_first" "$LOCAL_MODEL_DIR/$gguf_first.zbst" "$LOCAL_MODEL_DIR/$gguf_first.sig \
+        "$LOCAL_DOWNLOAD_DIR/$gguf_first" "$LOCAL_DOWNLOAD_DIR/$gguf_first.zbst" "$LOCAL_DOWNLOAD_DIR/$gguf_first.sig || true
+
+  # Ensure download dir exists for redownload attempts
+  mkdir -p "$LOCAL_DOWNLOAD_DIR" 2>/dev/null || true
+
+  # download shard (keep retrying until success)
+  until run_downloader_shard "${QTYPE}" 1 "$LOCAL_DOWNLOAD_DIR" "$(basename "$gguf_first")"; do
+    echo "[$(timestamp)] First shard download failed; retrying in 10s..." >&2
+    sleep 10
+  done
+
+  # Move whichever artifact was produced (.gguf OR .gguf.zbst)
+  if safe_file_exists "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first")"; then
+    mv -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first")" "$LOCAL_MODEL_DIR/" || true
+  elif safe_file_exists "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first").zbst"; then
+    mv -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first").zbst" "$LOCAL_MODEL_DIR/" || true
+  else
+    echo "[$(timestamp)] ❌ Error: expected first shard in download dir after redownload but none found." >&2
+    return 1
+  fi
+
+  # download signature if required
+  if [[ "$SKIP_GPG" != true ]]; then
+    until run_downloader_shard "${QTYPE}" -2 "$LOCAL_DOWNLOAD_DIR" "$(basename "$gguf_first.sig")"; do
+      echo "[$(timestamp)] First shard signature download failed; retrying in 10s..." >&2
+      sleep 10
+    done
+
+    # Move signature artifact that was procured (.gguf.sig)
+    if [[ -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first.sig")" ]]; then
+      mv -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first.sig")" "$LOCAL_MODEL_DIR/" || true
+    else
+      echo "[$(timestamp)] ❌ Error: expected first shard signature in download dir after redownload but none found." >&2
+      return 1
+    fi
+  else
+    echo "[$(timestamp)] Redownload of first shard completed."
+  fi
+
+  return 0
+}
+
 # --------------- CONCURRENCY HELPERS ----------------
 wait_for_slot() {
   while (( $(jobs -rp | wc -l) >= MAX_JOBS )); do sleep 0.5; done
 }
+wait_for_slot_quantize() {
+  while (( $(jobs -rp | wc -l) >= MAX_QUANTIZE_JOBS )); do sleep 0.5; done
+}
 
-# ------------- SHARD DOWNLOAD/VERIFY LOGIC --------------
+# ------------------ LLAMA-QUANTIZE SUPPORT CHECK ------------------
+# Validate that the provided llama-quantize binary supports --individual-tensors.
+require_llama_quantize_support() {
+  if [[ -z "$LLAMA_QUANTIZE_BIN" ]]; then
+    echo "❌ Error: --llama-quantize must be provided when quantization from bf16 is required." >&2
+    echo "Please obtain a build that includes --individual-tensors support from:" >&2
+    echo "  https://github.com/Thireus/ik_llama.cpp/tree/th/quantize_individual_tensors" >&2
+    echo "Pre-built releases are at: https://github.com/Thireus/ik_llama.cpp/releases (look for th-quantize_individual_tensors*)." >&2
+    exit 21
+  fi
+
+  if [[ ! -x "$LLAMA_QUANTIZE_BIN" ]]; then
+    echo "❌ Error: Provided --llama-quantize binary '$LLAMA_QUANTIZE_BIN' is not executable or not found." >&2
+    exit 22
+  fi
+
+  # Check help text for --individual-tensors
+  local matching_help_line=$("$LLAMA_QUANTIZE_BIN" --help 2>&1 | grep -- '--individual-tensors' | head -n1 || true)
+  if [[ -z "$matching_help_line" ]]; then
+    echo "❌ Error: The provided llama-quantize binary '$LLAMA_QUANTIZE_BIN' does not advertise the --individual-tensors option." >&2
+    echo "Please obtain a build with individual-tensors support from:" >&2
+    echo "  https://github.com/Thireus/ik_llama.cpp/tree/th/quantize_individual_tensors" >&2
+    echo "Pre-built releases are at: https://github.com/Thireus/ik_llama.cpp/releases (look for th-quantize_individual_tensors*)." >&2
+    exit 23
+  fi
+}
+# ------------------------------------------------------------------------
+
+# ------------------ Quantize-from-bf16 helpers -----------------------
+# BF16 workspace (subdir of LOCAL_DOWNLOAD_DIR)
+# Allow override from --quantize-bf16-directory; if not provided, default to LOCAL_DOWNLOAD_DIR/bf16
+BF16_DOWNLOAD_DIR="${QUANTIZE_BF16_DIR:-$LOCAL_DOWNLOAD_DIR/bf16}"
+ensure_bf16_workspace() {
+  if [[ "$VERIFY_READONLY" == true ]]; then
+    echo "❌ Error: cannot create bf16 workspace in --verify-readonly mode." >&2
+    exit 24
+  fi
+  mkdir -p "$BF16_DOWNLOAD_DIR" || { echo "❌ Error: failed to create bf16 workspace at $BF16_DOWNLOAD_DIR" >&2; exit 25; }
+}
+
+# Build the nested invocation args that must be passed to the nested quant_downloader instance.
+_build_bf16_nested_args() {
+  local args=( "$SCRIPT_DIR/quant_downloader.sh" "-d" "$BF16_DOWNLOAD_DIR" "-j" "1" "--no-final-message" "--qtype" "bf16" )
+  # Additional base parameters
+  args+=( --no-new-map )
+  # Propagate common parameters (if provided)
+  if [[ "$FORCE_REDOWNLOAD" == true ]]; then
+    args+=( --force-redownload )
+  fi
+  if [[ "$SKIP_GPG" == true ]]; then
+    args+=( --skip-gpg )
+  fi
+  if [[ "$SKIP_HASH" == true ]]; then
+    args+=( --skip-hash )
+  fi
+  # Propagate user-specified compression-tool config (if provided)
+  if [[ "$ARCHIVE_NOAUTO" == true ]]; then
+    args+=( --z-noauto )
+  fi
+  # We must forward --z-custom-tools and --z-decompress / --z-decompress-opt and --symlink-only if the current invocation included them.
+  # Check current flags inferred from variables and append accordingly.
+  if [[ ${#CUSTOM_TOOLS[@]} -gt 0 ]]; then
+    # Reconstruct the original custom-tools string (first set was default + any additions)
+    # Keep it simple: join CUSTOM_TOOL_NAMES with their magics in the same order as CUSTOM_TOOL_NAMES/CUSTOM_TOOL_MAGICS.
+    local ct=""
+    for i in "${!CUSTOM_TOOL_NAMES[@]}"; do
+      local n="${CUSTOM_TOOL_NAMES[$i]}"
+      local m="${CUSTOM_TOOL_MAGICS[$i]}"
+      if [[ -n "$ct" ]]; then ct="$ct,"; fi
+      ct="${ct}${n}:${m}"
+    done
+    args+=( --z-custom-tools "$ct" )
+  fi
+  # Forward --z-decompress flags if present
+  if [[ "$ARCHIVE_DECOMPRESS" == true ]]; then
+    args+=( --z-decompress )
+  fi
+  # Forward any provided decompress opts
+  if [[ ${#DECOMP_OP_TOOL_NAMES[@]} -gt 0 ]]; then
+    # reconstruct decomp opts string like 'zstd:-X,lbzip2:-Y'
+    local dstr=""
+    for i in "${!DECOMP_OP_TOOL_NAMES[@]}"; do
+      if [[ -n "$dstr" ]]; then dstr="${dstr},"; fi
+      dstr="${dstr}${DECOMP_OP_TOOL_NAMES[$i]}:${DECOMP_OP_TOOL_VALUES[$i]}"
+    done
+    args+=( --z-decompress-opt "$dstr" )
+  fi
+
+  # Forward --symlink-only if set
+  if [[ "$SYMLINK_ONLY" == true ]]; then
+    args+=( --symlink-only )
+  fi
+
+  echo "${args[@]}"
+}
+
+# Download a single bf16 tensor into BF16_DOWNLOAD_DIR by invoking this script as a nested process.
+download_bf16_tensor_via_nested() {
+  local tensor_idx="$1"   # numeric chunk id
+
+  # Create a minimal bf16 recipe if not present
+  local bf16_recipe="$BF16_DOWNLOAD_DIR/bf16.recipe"
+  if [[ ! -f "$bf16_recipe" ]]; then
+    printf '.*=bf16\n' > "$bf16_recipe"
+  fi
+
+  # Build args
+  IFS=' ' read -r -a BF16_ARGS <<< "$(_build_bf16_nested_args)"
+
+  # Append individual-tensors argument and recipe
+  BF16_ARGS+=( -j "${MAX_QUANTIZE_JOBS}" --individual-tensors "${tensor_idx}" "$bf16_recipe" ) # -j MAX_QUANTIZE_JOBS is intentional
+
+  echo "[$(timestamp)] Invoking nested quant_downloader to fetch bf16 tensor ${tensor_idx} into ${BF16_DOWNLOAD_DIR}..."
+  if ! "${BF16_ARGS[@]}"; then
+    echo "❌ Error: nested quant_downloader failed to fetch bf16 tensor ${tensor_idx}." >&2
+    return 1
+  fi
+  return 0
+}
+
+# Ensure first shard available for quantization: attempt_redownload_first once (idempotent).
+ensure_first_shard_for_quantize() {
+  if [[ "$BF16_FIRST_OBTAINED" == true ]]; then
+    return 0
+  fi
+
+  # Compute gguf_first name based on SHARD_FILENAMES if possible
+  num_shards=${#SHARD_FILENAMES_FULL[@]}
+  if (( num_shards == 0 )); then
+    echo "❌ Error: no shards discovered; cannot determine first-shard name for quantization." >&2
+    exit 1
+  fi
+  # Build total (num_shards + 1) zero-padded
+  total=$(printf "%05d" "$((num_shards + 1))")
+  # Derive gguf_first by replacing the chunk part in first shard filename
+  gguf_first="$(printf '%s' "${SHARD_FILENAMES_FULL[0]}" | sed -E "s/-[0-9]{5}-of-[0-9]{5}\.gguf$/-00001-of-${total}.gguf/")"
+
+  # If the bf16 workspace already contains the first shard, we're good
+  if isafe_file_exists "$BF16_DOWNLOAD_DIR/$gguf_first"; then
+    BF16_FIRST_OBTAINED=true
+    return 0
+  fi
+
+  # Attempt to fetch the first shard into LOCAL_MODEL_DIR (one-time operation).
+  # This uses existing attempt_redownload_first() helper which downloads into LOCAL_DOWNLOAD_DIR then moves into LOCAL_MODEL_DIR.
+  echo "[$(timestamp)] Ensuring first-shard ($gguf_first) is available for quantization (one-time operation)."
+  if ! attempt_redownload_first; then
+    echo "❌ Error: failed to obtain first shard via attempt_redownload_first()" >&2
+    return 1
+  fi
+
+  # Now copy or symlink the first shard into BF16_DOWNLOAD_DIR so llama-quantize can run inside that workspace.
+  ensure_bf16_workspace
+  if isafe_file_exists "$LOCAL_MODEL_DIR/$gguf_first"; then
+    cp -f "$LOCAL_MODEL_DIR/$gguf_first" "$BF16_DOWNLOAD_DIR/$gguf_first" || { echo "❌ Error: failed to copy first shard into bf16 workspace" >&2; return 1; }
+    chmod 444 "$BF16_DOWNLOAD_DIR/$gguf_first" || true
+  elif isafe_file_exists "$LOCAL_MODEL_DIR/$gguf_first.zbst"; then
+    # If only compressed exists, decompress to bf16 workspace
+    if ! decompress_archive_to_file "$LOCAL_MODEL_DIR/$gguf_first.zbst" "$BF16_DOWNLOAD_DIR/$gguf_first"; then
+      echo "❌ Error: failed to decompress first shard into bf16 workspace." >&2
+      return 1
+    fi
+  else
+    # If not present in LOCAL_MODEL_DIR (unexpected), attempt to copy from LOCAL_DOWNLOAD_DIR
+    if isafe_file_exists "$LOCAL_DOWNLOAD_DIR/$gguf_first"; then
+      cp -f "$LOCAL_DOWNLOAD_DIR/$gguf_first" "$BF16_DOWNLOAD_DIR/$gguf_first" || { echo "❌ Error: failed to copy first shard from download dir into bf16 workspace" >&2; return 1; }
+      chmod 444 "$BF16_DOWNLOAD_DIR/$gguf_first" || true
+    fi
+  fi
+
+  BF16_FIRST_OBTAINED=true
+  echo "[$(timestamp)] First-shard is present in bf16 workspace: $BF16_DOWNLOAD_DIR/$gguf_first"
+  return 0
+}
+
+# Run llama-quantize for a given tensor: assumes bf16 input(s) exist in BF16_DOWNLOAD_DIR and first-shard copied there.
+quantize_tensor_from_bf16() {
+  local chunk_id="$1"         # numeric chunk id
+  local output_filename="$2"  # expected output filename (basename)
+  local tensor_qtype="$3"     # target qtype
+  local first_shard_name="$4" # gguf_first name basename
+
+  require_llama_quantize_support
+
+  # Ensure bf16 workspace and first shard
+  # ensure_bf16_workspace
+  # if ! ensure_first_shard_for_quantize; then
+  #   echo "❌ Error: cannot ensure first shard for quantization" >&2
+  #   return 1
+  # fi
+
+  # Ensure the specific bf16 tensor file exists (download it if missing)
+  # The nested downloader will fetch this chunk into BF16_DOWNLOAD_DIR
+  # Note: some repos may serve compressed .zbst; nested invocation propagates z-decompress flags as requested by the user.
+  echo "[$(timestamp)] Ensuring bf16 chunk ${chunk_id} is present in $BF16_DOWNLOAD_DIR ..."
+  if ! download_bf16_tensor_via_nested "$chunk_id"; then
+    echo "❌ Error: Failed to download bf16 chunk ${chunk_id} into ${BF16_DOWNLOAD_DIR}." >&2
+    return 1
+  fi
+
+  # Build llama-quantize invocation
+  local llama_args=()
+  llama_args+=( "$LLAMA_QUANTIZE_BIN" --individual-tensors "${chunk_id}" --keep-split --skip-first-shard )
+  # forward imatrix-related flags if set
+  if [[ "$CONVERT_IGNORE_IMATRIX_RULES" == true ]]; then
+    llama_args+=( --ignore-imatrix-rules )
+  fi
+  if [[ -n "$CONVERT_WITH_IMATRIX_FILE" ]]; then
+    llama_args+=( --imatrix "$CONVERT_WITH_IMATRIX_FILE" )
+  fi
+
+  # Input and output: "<first_gguf_shard>.gguf <output>.gguf bf16 1"
+  # first_shard_name should be basename e.g. "model-00001-of-XXXXX.gguf"
+  # Use configured QUANTIZE_NTHREADS instead of hard-coded value (default 0 means auto)
+  output_file="$LOCAL_DOWNLOAD_DIR/$(echo "$output_filename" | sed -E 's/-[0-9]{5}-of-[0-9]{5}\.gguf$/.gguf/')"
+  llama_args+=( "${first_shard_name}" "${output_file}" "${tensor_qtype}" "${QUANTIZE_NTHREADS}" )
+
+  echo "[$(timestamp)] Running llama-quantize: ${llama_args[*]} from $(pwd)"
+  rm -f "${output_file}" || true # Make sure the output_file doesn't already exist
+  if ! "${llama_args[@]}"; then
+    echo "❌ Error: llama-quantize failed for tensor ${chunk_id} -> ${output_filename}" >&2
+    return 1
+  fi
+
+  chmod 444 "$LOCAL_DOWNLOAD_DIR/${output_filename}" || true
+
+  return 0
+}
+# ------------------------------------------------------------------------
+
+# ----------------- SHARD DOWNLOAD/VERIFY LOGIC --------------
 download_shard() {
-  local idx="$1"
-  local tensor="${TENSORS_TO_FETCH[$idx]}"
+  local tensor="$1"
+  local shard_file="$2"
+  local chunk_id="$(get_shard_id "$tensor")"
 
-  local chunk_id=$(get_shard_id "$tensor")
-
-  local shard_file="${SHARD_FILENAMES[$idx]}"
   local local_gguf="$LOCAL_MODEL_DIR/$shard_file"
   local dl_gguf="$LOCAL_DOWNLOAD_DIR/$shard_file"
   local local_z="${local_gguf}.zbst"
@@ -1906,7 +3645,7 @@ download_shard() {
 
       local got=""
       local need_download=false
-      local failed_hash=0
+      local failed_verification_count=0
       local skip_mv=true
       if [[ "$FORCE_REDOWNLOAD" == true ]]; then
           echo "[$(timestamp)] Force redownload: removing existing shard $shard_file"
@@ -1945,9 +3684,21 @@ download_shard() {
             fi
 
             if should_skip_hash_for "$qtype" "$tensor"; then
-              # Per-tensor or global skip: treat as valid w/o computing stream hash
-              got="$(get_t_hash "$qtype" "$tensor")"
-              echo "[$(timestamp)] SKIP-HASH: treating ${_path} as valid (skipping stream sha256)."
+              if [[ "$SKIP_GGUF_VERIFICATION" == false ]]; then
+                echo "[$(timestamp)] SKIP-HASH: ${_path} (skipping stream sha256). GGUF verification will be conducted instead."
+                if ! check_quantized_gguf "$_path" "$shard_id" "$qtype"; then
+                  echo "❌ INVALID GGUF SHARD: ${shard_file} - tensor: '$tensor' - qtype: '$qtype'"
+                  got=""
+                else
+                  echo "[$(timestamp)] GGUF-VERIFICATION OK: ${_path}"
+                  # Per-tensor or global skip: treat as valid w/o computing stream hash
+                  got="$(get_t_hash "$qtype" "$tensor")"
+                fi
+              else
+                echo "[$(timestamp)] SKIP-VERIFICATION: treating ${_path} as valid (skipping stream sha256). No GGUF verification will be conducted (--skip-gguf-verification is enabled)."
+                # Per-tensor or global skip: treat as valid w/o computing stream hash
+                got="$(get_t_hash "$qtype" "$tensor")"
+              fi
             else
               if got="$(safe_stream_sha256_from_z "$_path")"; then
                 got="${got%%[^0-9a-fA-F]*}"
@@ -1956,26 +3707,26 @@ download_shard() {
               fi
             fi
 
-            local exp=$(get_t_hash "$qtype" "$tensor")
+            local exp="$(get_t_hash "$qtype" "$tensor")"
             if [[ "$got" != "$exp" ]]; then
-              if (( failed_hash > 9 )); then
-                echo "[$(timestamp)] ❌ Too many hash verification attempt failures (count: $failed_hash) for '${_path}' (stream) - tensor '$tensor' of qtype: '$qtype' ($got != $exp)"
+              if (( failed_verification_count >= MAX_FAILED_VERIFICATION )); then
+                echo "[$(timestamp)] ❌ Too many hash/GGUF verification attempt failures (count: $failed_verification_count) for '${_path}' (stream) - tensor '$tensor' of qtype: '$qtype' ($got != $exp)"
                 exit_from_subprocess 16
               fi
-              failed_hash=$((failed_hash + 1))
-              echo "[$(timestamp)] Will redownload due to hash mismatch (count: $failed_hash) for '${_path}' (stream) - tensor '$tensor' of qtype: '$qtype' ($got != $exp)"
+              failed_verification_count=$((failed_verification_count + 1))
+              echo "[$(timestamp)] Will redownload due to hash/GGUF mismatch (count: $failed_verification_count) for '${_path}' (stream) - tensor '$tensor' of qtype: '$qtype' ($got != $exp)"
               rm -f "$dl_z" "$local_z" || true
               sync || true
               need_download=true
             else
-              echo "[$(timestamp)] Stream-hash OK for '${_path}' - tensor '$tensor' of qtype: '$qtype'"
+              echo "[$(timestamp)] Stream-hash/GGUF OK for '${_path}' - tensor '$tensor' of qtype: '$qtype'"
               # If the valid zbst was in download dir, move to model dir
               if [[ "$skip_mv" == false ]]; then
                 mv -f "$dl_z" "$LOCAL_MODEL_DIR/"
                 echo "[$(timestamp)] Saved file id '$shard_id' (zbst) - tensor '$tensor' of qtype: '$qtype'"
               fi
               # Ensure we remove any corresponding .gguf if it exists (we keep only .gguf.zbst in compress mode)
-              if [[ -f "$LOCAL_MODEL_DIR/$shard_file" ]]; then
+              if safe_file_exists "$LOCAL_MODEL_DIR/$shard_file"; then
                 rm -f "$LOCAL_MODEL_DIR/$shard_file" || true
                 echo "[$(timestamp)] Removed corresponding .gguf for '${shard_file}' because .gguf.zbst is present and valid"
               fi
@@ -1998,92 +3749,102 @@ download_shard() {
             # Proceed with .gguf present in $local_gguf, assuming decompression was successful
             skip_mv=true
             got=""
-          else
-            # No zbst found; fallthrough to check .gguf
-            :
           fi
         fi
 
         # If we didn't find a valid zbst (or compress mode not enabled) or if decompress mode was enabled, check .gguf files
         if [[ -z "$got" ]]; then
           if safe_file_exists "$local_gguf" || safe_file_exists "$dl_gguf"; then
-              if safe_file_exists "$local_gguf"; then
-                  _path=$local_gguf
+            if safe_file_exists "$local_gguf"; then
+              _path=$local_gguf
+            else
+              _path=$dl_gguf
+              skip_mv=false
+            fi
+            [ "$failed_verification_count" -gt 0 ] && sync || true
+            # use safe_sha256sum which will retry if symlink
+            if should_skip_hash_for "$qtype" "$tensor"; then
+              if [[ "$SKIP_GGUF_VERIFICATION" == false ]]; then
+                echo "[$(timestamp)] SKIP-HASH: ${_path} (skipping sha256). GGUF verification will be conducted instead."
+                if ! check_quantized_gguf "$_path" "$shard_id" "$qtype"; then
+                  echo "❌ INVALID GGUF SHARD: ${shard_file} - tensor: '$tensor' - qtype: '$qtype'"
+                  got=""
+                else
+                  echo "[$(timestamp)] GGUF-VERIFICATION OK: ${_path}"
+                  # Per-tensor or global skip: treat as valid w/o computing stream hash
+                  got="$(get_t_hash "$qtype" "$tensor")"
+                fi
               else
-                  _path=$dl_gguf
-                  skip_mv=false
+                echo "[$(timestamp)] SKIP-VERIFICATION: treating ${_path} as valid (skipping sha256). No GGUF verification will be conducted (--skip-gguf-verification is enabled)."
+                # Per-tensor or global skip: treat as valid w/o computing stream hash
+                got="$(get_t_hash "$qtype" "$tensor")"
               fi
-              if command -v _sha256sum &>/dev/null || [[ "$SKIP_HASH" == true ]]; then
-                  [ "$failed_hash" -gt 0 ] && sync || true
-                  # use safe_sha256sum which will retry if symlink
-                  if should_skip_hash_for "$qtype" "$tensor"; then
-                    got=$(get_t_hash "$qtype" "$tensor")
-                    echo "[$(timestamp)] SKIP-HASH: treating ${_path} as valid (skipping sha256 computation)."
-                  elif got="$(safe_sha256sum "$_path" 2>/dev/null)"; then
-                    got="${got%%[^0-9a-fA-F]*}"
-                  else
-                    got=""
-                  fi
-                  local exp=$(get_t_hash "$qtype" "$tensor")
-                  if [[ "$got" != "$exp" ]]; then
-                      if (( failed_hash > 9 )); then
-                        echo "[$(timestamp)] ❌ Too many hash verification attempt failures (count: $failed_hash) for '$shard_file' - tensor '$tensor' of qtype: '$qtype' ($got != $exp)"
-                        exit_from_subprocess 17
-                      fi
-                      failed_hash=$((failed_hash + 1))
-                      echo "[$(timestamp)] Will redownload due to hash mismatch (count: $failed_hash) for '$shard_file' - tensor '$tensor' of qtype: '$qtype' ($got != $exp)"
-                      rm -f "$dl_gguf" "$local_gguf" || true
-                      sync || true
-                      need_download=true
-                  else
-                      if should_skip_hash_for "$qtype" "$tensor"; then
-                        echo "[$(timestamp)] File id '$shard_id' - tensor '$tensor' of qtype: '$qtype' processed (skipped hash verification)!"
-                      elif [[ "$SKIP_HASH" == true ]]; then
-                        echo "[$(timestamp)] File id '$shard_id' - tensor '$tensor' of qtype: '$qtype' processed!"
-                      else
-                        echo "[$(timestamp)] File id '$shard_id' - tensor '$tensor' of qtype: '$qtype' hash is valid!"
-                      fi
-                      # If compression mode is active, compress and remove the .gguf (only keep .gguf.zbst)
-                      if [[ "$ARCHIVE_COMPRESS" == true ]]; then
-                        # compress the validated file in-place (in whichever location it currently resides)
-                        if [[ "$skip_mv" == true ]]; then
-                          echo "[$(timestamp)] z-compress validated ${_path} -> ${_path}.zbst"
-                          compress_gguf_to_archive "$_path"
-                          # After compressing, ensure any lingering .gguf (could be symlinked elsewhere) is removed
-                          rm -f "$LOCAL_MODEL_DIR/$shard_file" || true
-                        else
-                          # file is in download dir; compress there and move .zbst to model dir
-                          echo "[$(timestamp)] z-compress validated ${_path} in download dir"
-                          compress_gguf_to_archive "$_path"
-                          mv -f "${_path}.zbst" "$LOCAL_MODEL_DIR/"
-                          echo "[$(timestamp)] Saved file id '$shard_id' (zbst) - tensor '$tensor' of qtype: '$qtype'"
-                          # remove any .gguf counterpart in model dir (just in case)
-                          rm -f "$LOCAL_MODEL_DIR/$shard_file" || true
-                        fi
-                      else
-                        if [[ "$skip_mv" == false ]]; then
-                          mv -f "$dl_gguf" "$LOCAL_MODEL_DIR/"
-                          echo "[$(timestamp)] Saved file id '$shard_id' - tensor '$tensor' of qtype: '$qtype'"
-                        fi
-                      fi
-                  fi
-              else
-                  echo "⚠️ Warning: _sha256sum command missing - hash cannot be verified!"
+            elif got="$(safe_sha256sum "$_path" 2>/dev/null)"; then
+              got="${got%%[^0-9a-fA-F]*}"
+            else
+              got=""
+            fi
+            local exp="$(get_t_hash "$qtype" "$tensor")"
+            if [[ "$got" != "$exp" ]]; then
+              if (( failed_verification_count >= MAX_FAILED_VERIFICATION )); then
+                echo "[$(timestamp)] ❌ Too many hash/GGUF verification attempt failures (count: $failed_verification_count) for '$shard_file' - tensor '$tensor' of qtype: '$qtype' ($got != $exp)"
+                exit_from_subprocess 17
               fi
-          else
+              failed_verification_count=$((failed_verification_count + 1))
+              echo "[$(timestamp)] Will redownload due to hash/GGUF mismatch (count: $failed_verification_count) for '$shard_file' - tensor '$tensor' of qtype: '$qtype' ($got != $exp)"
+              rm -f "$dl_gguf" "$local_gguf" || true
+              sync || true
               need_download=true
+            else
+              if should_skip_hash_for "$qtype" "$tensor"; then
+                if [[ "$SKIP_GGUF_VERIFICATION" == true ]]; then
+                  echo "[$(timestamp)] File id '$shard_id' - tensor '$tensor' of qtype: '$qtype' processed (skipped hash and GGUF verification)!"
+                else
+                  echo "[$(timestamp)] File id '$shard_id' - tensor '$tensor' of qtype: '$qtype' processed (skipped hash verification)!"
+                fi
+              else
+                echo "[$(timestamp)] File id '$shard_id' - tensor '$tensor' of qtype: '$qtype' hash is valid!"
+              fi
+              # If compression mode is active, compress and remove the .gguf (only keep .gguf.zbst)
+              if [[ "$ARCHIVE_COMPRESS" == true ]]; then
+                # compress the validated file in-place (in whichever location it currently resides)
+                if [[ "$skip_mv" == true ]]; then
+                  echo "[$(timestamp)] z-compress validated ${_path} -> ${_path}.zbst"
+                  compress_gguf_to_archive "$_path"
+                  # After compressing, ensure any lingering .gguf (could be symlinked elsewhere) is removed
+                  rm -f "$LOCAL_MODEL_DIR/$shard_file" || true
+                else
+                  # file is in download dir; compress there and move .zbst to model dir
+                  echo "[$(timestamp)] z-compress validated ${_path} in download dir"
+                  compress_gguf_to_archive "$_path"
+                  mv -f "${_path}.zbst" "$LOCAL_MODEL_DIR/"
+                  echo "[$(timestamp)] Saved file id '$shard_id' (zbst) - tensor '$tensor' of qtype: '$qtype'"
+                  # remove any .gguf counterpart in model dir (just in case)
+                  rm -f "$LOCAL_MODEL_DIR/$shard_file" || true
+                fi
+              else
+                if [[ "$skip_mv" == false ]]; then
+                  mv -f "$dl_gguf" "$LOCAL_MODEL_DIR/"
+                  echo "[$(timestamp)] Saved file id '$shard_id' - tensor '$tensor' of qtype: '$qtype'"
+                else
+                  echo "[$(timestamp)] File id '$shard_id' - tensor '$tensor' of qtype: '$qtype' already present in working directory (nothing to do)."
+                fi
+              fi
+            fi
+          else
+            need_download=true
           fi
         fi
 
         if [[ "$need_download" == true ]]; then
-            echo "[$(timestamp)] Downloading file id '$shard_id' - tensor '$tensor' of qtype: '$qtype' (chunk_id=$chunk_id)"
-            until run_downloader_shard "$dl_type" "$chunk_id" "$LOCAL_DOWNLOAD_DIR" "$shard_file"; do
-                echo "[$(timestamp)] Download failed; retrying in 10s..."
-                sleep 10
-            done
-            need_download=false
-            skip_mv=false
-            got=""
+          echo "[$(timestamp)] Downloading file id '$shard_id' - tensor '$tensor' of qtype: '$qtype' (chunk_id=$chunk_id)"
+          until run_downloader_shard "$dl_type" "$chunk_id" "$LOCAL_DOWNLOAD_DIR" "$shard_file"; do
+            echo "[$(timestamp)] Download failed; retrying in 10s..."
+            sleep 10
+          done
+          need_download=false
+          skip_mv=false
+          got=""
         else
           # If no download was needed and we have already handled saving/compressing above, nothing to do.
           :
@@ -2143,7 +3904,7 @@ if [[ "$VERIFY" == true ]]; then
     shopt -u nullglob 2>/dev/null || true
 
     IFS= read -r first <<< "$(printf '%s\n' "${files[@]:-}" | head -n1 || true)"
-    if [[ -n "$first" && "$first" =~ -([0-9]{5})-of-([0-9]{5})\.gguf(\.zbst)?$ ]]; then
+    if [[ -n "$first" && "$first" =~ -${QTYPE^^}-SPECIAL_TENSOR-([0-9]{5})-of-([0-9]{5})\.gguf(\.zbst)?$ ]]; then
       total="${BASH_REMATCH[2]}"
     else
       total=""
@@ -2175,7 +3936,7 @@ if [[ "$VERIFY" == true ]]; then
           if [[ ! -f "$LOCAL_MODEL_DIR/$gguf_first.zbst" && ! -L "$LOCAL_MODEL_DIR/$gguf_first.zbst" ]]; then
             echo "[$(timestamp)] ❌ VERIFY: Expected first shard '${gguf_first}.zbst' not found; when using --verify with -z the first shard must be .gguf.zbst." >&2
             kill -s TERM "$SCRIPT_PID"  # Kill parent
-            exit 5
+            exit_from_subprocess 5
           fi
           # Verify signature using a temporary decompressed file (gpg requires a file)
           if [[ "$SKIP_GPG" != true ]]; then
@@ -2191,13 +3952,13 @@ if [[ "$VERIFY" == true ]]; then
                 rm -f "$tmpf"
                 kill -s TERM "$SCRIPT_PID"
                 touch "$FAIL_MARKER"
-                exit 1
+                exit_from_subprocess 1
               fi
               if [ ! -f "$LOCAL_MODEL_DIR/$gguf_first.sig" ]; then
                 echo "[$(timestamp)] ❌ VERIFY: Error - Signature file '$gguf_first.sig' is missing." >&2
                 kill -s TERM "$SCRIPT_PID"
                 rm -f "$tmpf"
-                exit 5
+                exit_from_subprocess 5
               fi
               if safe_gpg_verify "$LOCAL_MODEL_DIR/$gguf_first.sig" "$tmpf" > /dev/null 2>&1; then
                 echo "[$(timestamp)] GPG signature verification for '$gguf_first.sig' successful (via temp decompressed file)."
@@ -2205,7 +3966,7 @@ if [[ "$VERIFY" == true ]]; then
                 echo "[$(timestamp)] ❌ VERIFY: Error - GPG signature verification failed for '$gguf_first.sig'." >&2
                 rm -f "$tmpf"
                 kill -s TERM "$SCRIPT_PID"
-                exit 4
+                exit_from_subprocess 4
               fi
               rm -f "$tmpf"
             else
@@ -2216,23 +3977,23 @@ if [[ "$VERIFY" == true ]]; then
         else
           # --verify without -z: expect .gguf present
           if [[ ! -f "$LOCAL_MODEL_DIR/$gguf_first" && ! -L "$LOCAL_MODEL_DIR/$gguf_first" ]]; then
-            echo "[$(timestamp)] ❌ VERIFY: Expected first shard '$gguf_first' not found; when using --verify without -z the first shard must be .gguf." >&2
+            echo "[$(timestamp)] ❌ VERIFY: Expected first shard '$gguf_first' not found; Additional note: when using --verify without -z the first shard must be .gguf." >&2
             kill -s TERM "$SCRIPT_PID"  # Kill parent
-            exit 5
+            exit_from_subprocess 5
           fi
           if [[ "$SKIP_GPG" != true ]]; then
             if command -v gpg >/dev/null 2>&1; then
               if [ ! -f "$LOCAL_MODEL_DIR/$gguf_first.sig" ]; then
                 echo "[$(timestamp)] ❌ VERIFY: Error - Signature file '$gguf_first.sig' is missing." >&2
                 kill -s TERM "$SCRIPT_PID"
-                exit 5
+                exit_from_subprocess 5
               fi
               if safe_gpg_verify "$LOCAL_MODEL_DIR/$gguf_first.sig" "$LOCAL_MODEL_DIR/$gguf_first" > /dev/null 2>&1; then
                 echo "[$(timestamp)] GPG signature verification for '$gguf_first.sig' successful."
               else
                 echo "[$(timestamp)] ❌ VERIFY: Error - GPG signature verification failed for '$gguf_first.sig'." >&2
                 kill -s TERM "$SCRIPT_PID"
-                exit 4
+                exit_from_subprocess 4
               fi
             else
               echo "⚠️ Warning: 'gpg' command not found. Signature verification skipped." >&2
@@ -2241,7 +4002,7 @@ if [[ "$VERIFY" == true ]]; then
           echo "[$(timestamp)] OK: $gguf_first"
         fi
       else
-        echo "[$(timestamp)] MISSING: $gguf_first"
+        echo "[$(timestamp)] ❌ MISSING: $gguf_first"
         touch "$FAIL_MARKER"
       fi
     else
@@ -2249,104 +4010,239 @@ if [[ "$VERIFY" == true ]]; then
     fi
   ) &
 
-  # 2) check each remaining shard, in parallel
-  for idx in "${!TENSORS_TO_FETCH[@]}"; do
-    wait_for_slot
-    (
-      tensor="${TENSORS_TO_FETCH[$idx]}"
-      #echo "[$(timestamp)] Checking HASH for tensor='$tensor'"
-
-      chunk_id=$(get_shard_id "$tensor")
-
-      # If individual-tensors is enabled, skip shards not listed
-      proceed=true
-      if [[ "$INDIVIDUAL_TENSORS_ENABLED" == true ]]; then
-        if [[ -z "${IND_TENSOR_SET[$chunk_id]:-}" ]]; then
-          proceed=false
-        fi
-      fi
-
-      # If special node assignment is enabled, skip shards not assigned to this node
-      if [[ "$proceed" == true && -n "$SPECIAL_NODE_ID" ]]; then
-        if ! should_process_chunk "$chunk_id"; then
-          #echo "[$(timestamp)] Skipping HASH of tensor='$tensor' chunk_id=$chunk_id not assigned to this node (xxhsum-based selection)."
-          proceed=false
+  i=0
+  j=0
+  lenf=${#TENSORS_TO_FETCH_DYNAMIC[@]}
+  lenq=${#TENSORS_TO_QUANTIZE_DYNAMIC[@]}
+  if [ "$lenf" -gt 0 ] && [[ "$SKIP_HASH" == true ]] || ! command -v _sha256sum &>/dev/null; then
+    if [[ "$SKIP_GGUF_VERIFICATION" == true ]]; then
+      [[ "$SKIP_HASH" == true ]] && echo "[$(timestamp)] --skip-hash is enabled. Hash verifications will be skipped." >&2 || echo "⚠️ Warning: _sha256sum command missing. Hash verifications will be skipped! GGUF verification will happen instead." >&2
+    else
+      lenq=$((lenq + lenf))
+      for (( k=${#TENSORS_TO_FETCH_DYNAMIC[@]}-1; k>=0; k-- )); do
+        tname="${TENSORS_TO_FETCH_DYNAMIC[$i]}"
+        DEBUG "verify with --skip-hash: moving tensor '$tname' at index $k to quantize queue"
+        move_fetch_index_to_quantize "$k"
+      done
+      lenf=0
+      [[ "$SKIP_HASH" == true ]] && echo "[$(timestamp)] --skip-hash is enabled. Hash verifications will be skipped. GGUF verification will happen instead." >&2 || echo "⚠️ Warning: _sha256sum command missing. Hash verifications will be skipped!" >&2
+    fi
+    turn="quantize"
+    quantize_verification_only=1
+  elif [ "$lenf" -gt 0 ]; then
+    turn="fetch"
+    quantize_verification_only=0
+  else
+    turn="quantize"
+    quantize_verification_only=1
+  fi
+  if [ "$lenq" -gt 0 ] && [[ "$SKIP_GGUF_VERIFICATION" == true ]]; then
+    echo "[$(timestamp)] --skip-gguf-verification is enabled. GGUF verification will be skipped." >&2
+    turn="fetch"
+    fetch_verification_only=1
+  elif [ "$lenq" -gt 0 ]; then
+    fetch_verification_only=0
+  else
+    fetch_verification_only=1
+  fi
+  while (( (!quantize_verification_only && i < lenf) || (!fetch_verification_only && j < lenq) )); do
+    if ((!quantize_verification_only && !fetch_verification_only)); then
+      # If chosen turn has no items left, switch to the other kind (or break if both empty)
+      if [[ $turn == "fetch" && i -ge lenf ]]; then
+        if (( j < lenq )); then
+          turn="quantize"
         else
-          echo "[$(timestamp)] Tensor='$tensor' chunk_id=$chunk_id assigned to this node (xxhsum-based selection) — proceeding to HASH"
+          break
+        fi
+      elif [[ $turn == "quantize" && j -ge lenq ]]; then
+        if (( i < lenf )); then
+          turn="fetch"
+        else
+          break
         fi
       fi
-      if [[ "$proceed" == true ]]; then
-        for i in "${!PATTERNS[@]}"; do
-          pat="${PATTERNS[$i]}"
-          if [[ "$tensor" =~ $pat ]]; then
-            qtype="${PATTERN_QTYPES[$i]^^]}"
-            shardfile="${SHARD_FILENAMES[$idx]}"
-            local_gguf="$LOCAL_MODEL_DIR/$shardfile"
-            local_z="${local_gguf}.zbst"
+    fi
 
-            if [[ "$ARCHIVE_COMPRESS" == true ]]; then
-              # In verify-only + -z mode: verify .gguf.zbst only (do not alter .gguf files).
-              if safe_file_exists "$local_z" && ( should_skip_hash_for "$qtype" "$tensor" || command -v _sha256sum &>/dev/null ); then
-                if should_skip_hash_for "$qtype" "$tensor"; then
-                  # skip computing hash -> treat as OK
-                  echo "[$(timestamp)] SKIP-HASH: treating ${shardfile}.zbst as valid (skipping stream sha256)."
-                else
-                  got=$(safe_stream_sha256_from_z "$local_z" || true)
-                  got="${got%%[^0-9a-fA-F]*}"
-                  exp=$(get_t_hash "$qtype" "$tensor")
-                  if [[ "$got" != "$exp" ]]; then
-                    echo "[$(timestamp)] WRONG HASH (stream): ${shardfile}.zbst ($got != $exp) - tensor: '$tensor' - qtype: '$qtype'"
-                    touch "$FAIL_MARKER"
-                  else
-                    echo "[$(timestamp)] HASH OK (stream): ${shardfile}.zbst"
-                  fi
-                fi
-              elif safe_file_exists "$local_gguf" && [[ ! $(should_skip_hash_for "$qtype" "$tensor"; echo $?) -eq 0 ]] && command -v _sha256sum &>/dev/null; then
-                # Found .gguf while user requested -z verify-only: warn & treat as missing .zbst (do NOT compress/modify)
-                echo "[$(timestamp)] WARNING: found ${shardfile} (.gguf) but --verify + -z expects ${shardfile}.zbst; treating as MISSING for verification purposes."
-                touch "$FAIL_MARKER"
-              elif should_skip_hash_for "$qtype" "$tensor" && safe_file_exists "$local_gguf"; then
-                # If per-tensor skip-hash and .gguf present but .zbst missing, we treat it as missing .zbst for verification semantics unless we explicitly decide otherwise.
-                echo "[$(timestamp)] WARNING: found ${shardfile} (.gguf) but --verify + -z expects ${shardfile}.zbst; treating as MISSING for verification purposes."
-                touch "$FAIL_MARKER"
-              else
-                echo "[$(timestamp)] MISSING: ${shardfile}.zbst"
-                touch "$FAIL_MARKER"
-              fi
-            else
-              # normal verify-only (no -z): verify .gguf only (do not alter .zbst files)
-              if safe_file_exists "$local_gguf" && ( should_skip_hash_for "$qtype" "$tensor" || command -v _sha256sum &>/dev/null ); then
-                if should_skip_hash_for "$qtype" "$tensor"; then
-                  echo "[$(timestamp)] SKIP-HASH: treating ${shardfile} as valid (skipping sha256)."
-                else
-                  got=$(safe_sha256sum "$local_gguf" 2>/dev/null || true)
-                  got="${got%%[^0-9a-fA-F]*}"
-                  exp=$(get_t_hash "$qtype" "$tensor")
-                  if [[ "$got" != "$exp" ]]; then
-                    echo "[$(timestamp)] WRONG HASH: $shardfile ($got != $exp) - tensor: '$tensor' - qtype: '$qtype'"
-                    touch "$FAIL_MARKER"
-                  else
-                    echo "[$(timestamp)] HASH OK: $shardfile"
-                  fi
-                fi
-              elif safe_file_exists "$local_z" && [[ ! $(should_skip_hash_for "$qtype" "$tensor"; echo $?) -eq 0 ]] && command -v _sha256sum &>/dev/null; then
-                # Found .gguf.zbst while user requested non -z verify-only: warn & treat as missing .gguf
-                echo "[$(timestamp)] WARNING: found ${shardfile}.zbst but --verify without -z expects ${shardfile} (.gguf); treating as MISSING for verification purposes."
-                touch "$FAIL_MARKER"
-              elif should_skip_hash_for "$qtype" "$tensor" && safe_file_exists "$local_z"; then
-                # If per-tensor skip-hash and only .zbst present while non -z verify requested: treat as MISSING .gguf
-                echo "[$(timestamp)] WARNING: found ${shardfile}.zbst but --verify without -z expects ${shardfile} (.gguf); treating as MISSING for verification purposes."
-                touch "$FAIL_MARKER"
-              else
-                echo "[$(timestamp)] MISSING: $shardfile"
-                touch "$FAIL_MARKER"
-              fi
-            fi
-            break
+    if [[ $turn == "fetch" ]]; then
+      # ---- TENSORS_TO_FETCH_DYNAMIC verify block ----
+      wait_for_slot
+      (
+        tensor="${TENSORS_TO_FETCH_DYNAMIC[$i]}"
+        #echo "[$(timestamp)] Checking HASH for tensor='$tensor'"
+        chunk_id="$(get_shard_id "$tensor")"
+
+        # If individual-tensors is enabled, skip shards not listed
+        proceed=true
+        if [[ "$INDIVIDUAL_TENSORS_ENABLED" == true ]]; then
+          if [[ -z "${IND_TENSOR_SET[$chunk_id]:-}" ]]; then
+            proceed=false
           fi
-        done
-      fi
-    ) &
+        fi
+
+        # If special node assignment is enabled, skip shards not assigned to this node
+        if [[ "$proceed" == true && -n "$SPECIAL_NODE_ID" ]]; then
+          if ! should_process_chunk "$chunk_id"; then
+            #echo "[$(timestamp)] Skipping HASH of tensor='$tensor' chunk_id=$chunk_id not assigned to this node (xxhsum-based selection)."
+            proceed=false
+          else
+            echo "[$(timestamp)] Tensor='$tensor' chunk_id=$chunk_id assigned to this node (xxhsum-based selection) — proceeding to HASH"
+          fi
+        fi
+        if [[ "$proceed" == true ]]; then
+          for l in "${!PATTERNS[@]}"; do
+            pat="${PATTERNS[$l]}"
+            if [[ "$tensor" =~ $pat ]]; then
+              qtype="${PATTERN_QTYPES[$l]^^]}"
+              shardfile="${SHARD_FILENAMES_DYNAMIC[$i]}"
+              local_gguf="$LOCAL_MODEL_DIR/$shardfile"
+              local_z="${local_gguf}.zbst"
+
+              if [[ "$ARCHIVE_COMPRESS" == true ]]; then
+                # In verify-only + -z mode: verify .gguf.zbst only (do not alter .gguf files).
+                if safe_file_exists "$local_z"; then
+                  if should_skip_hash_for "$qtype" "$tensor"; then
+                    if [[ "$SKIP_GGUF_VERIFICATION" == false ]]; then
+                      DEBUG "verify with should_skip_hash_for: copying tensor '$tname' at index $i to quantize queue"
+                      copy_fetch_index_to_quantize "$i" && lenq=$((lenq + 1)) && fetch_verification_only=0
+                      echo "[$(timestamp)] SKIP-HASH: ${shardfile}.zbst (skipping stream sha256). GGUF verification will be conducted instead."
+                    else
+                      echo "[$(timestamp)] SKIP-VERIFICATION: treating ${shardfile}.zbst as valid (skipping stream sha256). No GGUF verification will be conducted (--skip-gguf-verification is enabled)."
+                    fi
+                  else
+                    got=$(safe_stream_sha256_from_z "$local_z" || true)
+                    got="${got%%[^0-9a-fA-F]*}"
+                    exp="$(get_t_hash "$qtype" "$tensor")"
+                    if [[ "$got" != "$exp" ]]; then
+                      echo "[$(timestamp)] ❌ WRONG HASH (stream): ${shardfile}.zbst ($got != $exp) - tensor: '$tensor' - qtype: '$qtype'"
+                      touch "$FAIL_MARKER"
+                    else
+                      echo "[$(timestamp)] HASH OK (stream): ${shardfile}.zbst"
+                    fi
+                  fi
+                elif safe_file_exists "$local_gguf"; then
+                  # Found .gguf while user requested -z verify-only: warn & treat as missing .zbst (do NOT compress/modify)
+                  echo "[$(timestamp)] ⚠️ WARNING: found ${shardfile} (.gguf) but --verify + -z expects ${shardfile}.zbst; treating as MISSING for verification purposes."
+                  touch "$FAIL_MARKER"
+                else
+                  echo "[$(timestamp)] ❌ MISSING: ${shardfile}.zbst"
+                  touch "$FAIL_MARKER"
+                fi
+              else
+                # normal verify-only (no -z): verify .gguf only (do not alter .zbst files)
+                if safe_file_exists "$local_gguf"; then
+                  if should_skip_hash_for "$qtype" "$tensor"; then
+                    if [[ "$SKIP_GGUF_VERIFICATION" == false ]]; then
+                      DEBUG "verify with should_skip_hash_for: copying tensor '$tname' at index $i to quantize queue"
+                      copy_fetch_index_to_quantize "$i" && lenq=$((lenq + 1)) && fetch_verification_only=0
+                      echo "[$(timestamp)] SKIP-HASH: ${shardfile} (skipping sha256). GGUF verification will be conducted instead."
+                    else
+                      echo "[$(timestamp)] SKIP-VERIFICATION: treating ${shardfile} as valid (skipping sha256). No GGUF verification will be conducted (--skip-gguf-verification is enabled)."
+                    fi
+                  else
+                    got=$(safe_sha256sum "$local_gguf" 2>/dev/null || true)
+                    got="${got%%[^0-9a-fA-F]*}"
+                    exp="$(get_t_hash "$qtype" "$tensor")"
+                    if [[ "$got" != "$exp" ]]; then
+                      echo "[$(timestamp)] ❌ WRONG HASH: $shardfile ($got != $exp) - tensor: '$tensor' - qtype: '$qtype'"
+                      touch "$FAIL_MARKER"
+                    else
+                      echo "[$(timestamp)] HASH OK: $shardfile"
+                    fi
+                  fi
+                elif safe_file_exists "$local_z"; then
+                  # Found .gguf.zbst while user requested non -z verify-only: warn & treat as missing .gguf
+                  echo "[$(timestamp)] ⚠️ WARNING: found ${shardfile}.zbst but --verify without -z expects ${shardfile} (.gguf); treating as MISSING for verification purposes."
+                  touch "$FAIL_MARKER"
+                else
+                  echo "[$(timestamp)] ❌ MISSING: $shardfile"
+                  touch "$FAIL_MARKER"
+                fi
+              fi
+              break
+            fi
+          done
+        fi
+      ) &
+
+      i=$((i+1))
+      ((!fetch_verification_only)) && turn="quantize"
+    else
+      # ---- TENSORS_TO_QUANTIZE_DYNAMIC verify block ----
+      wait_for_slot
+      (
+        tensor="${TENSORS_TO_QUANTIZE_DYNAMIC[$j]}"
+        chunk_id="$(get_shard_id "$tensor")"
+
+        # If individual-tensors is enabled, skip shards not listed
+        proceed=true
+        if [[ "$INDIVIDUAL_TENSORS_ENABLED" == true ]]; then
+          if [[ -z "${IND_TENSOR_SET[$chunk_id]:-}" ]]; then
+            proceed=false
+          fi
+        fi
+
+        # If special node assignment is enabled, skip shards not assigned to this node
+        if [[ "$proceed" == true && -n "$SPECIAL_NODE_ID" ]]; then
+          if ! should_process_chunk "$chunk_id"; then
+            #echo "[$(timestamp)] Skipping gguf verification of tensor='$tensor' chunk_id=$chunk_id not assigned to this node (xxhsum-based selection)."
+            proceed=false
+          else
+            echo "[$(timestamp)] Tensor='$tensor' chunk_id=$chunk_id assigned to this node (xxhsum-based selection) — proceeding to gguf verification"
+          fi
+        fi
+        if [[ "$proceed" == true ]]; then
+          for l in "${!PATTERNS[@]}"; do
+            pat="${PATTERNS[$l]}"
+            if [[ "$tensor" =~ $pat ]]; then
+              qtype="${PATTERN_QTYPES[$l]^^]}"
+              shardfile="${SHARD_QUANTIZE_FILENAMES_DYNAMIC[$j]}"
+              local_gguf="$LOCAL_MODEL_DIR/$shardfile"
+              local_z="${local_gguf}.zbst"
+
+              if [[ "$ARCHIVE_COMPRESS" == true ]]; then
+                # In verify-only + -z mode: verify .gguf.zbst only (do not alter .gguf files).
+                if safe_file_exists "$local_z"; then
+                  if ! safe_stream_check_quantized_gguf_from_z "$local_z" "$chunk_id" "$qtype"; then
+                    echo "⚠️ INVALID GGUF SHARD (stream): ${shardfile}.zbst - tensor: '$tensor' - qtype: '$qtype'"
+                    touch "$FAIL_MARKER"
+                  else
+                    echo "[$(timestamp)] GGUF-VERIFICATION OK (stream): ${shardfile}.zbst"
+                  fi
+                elif safe_file_exists "$local_gguf"; then
+                  # Found .gguf while user requested -z verify-only: warn & treat as missing .zbst (do NOT compress/modify)
+                  echo "[$(timestamp)] ⚠️ WARNING: found ${shardfile} (.gguf) but --verify + -z expects ${shardfile}.zbst; treating as MISSING for verification purposes."
+                  touch "$FAIL_MARKER"
+                else
+                  echo "[$(timestamp)] ❌ MISSING: ${shardfile}.zbst"
+                  touch "$FAIL_MARKER"
+                fi
+              else
+                # normal verify-only (no -z): verify .gguf only (do not alter .zbst files)
+                if safe_file_exists "$local_gguf"; then
+                  if ! check_quantized_gguf "$local_gguf" "$chunk_id" "$qtype"; then
+                    echo "⚠️ INVALID GGUF SHARD: ${shardfile} - tensor: '$tensor' - qtype: '$qtype'"
+                    touch "$FAIL_MARKER"
+                  else
+                    echo "[$(timestamp)] GGUF-VERIFICATION OK: ${shardfile}"
+                  fi
+                elif safe_file_exists "$local_z"; then
+                  # Found .gguf.zbst while user requested non -z verify-only: warn & treat as missing .gguf
+                  echo "[$(timestamp)] ⚠️ WARNING: found ${shardfile}.zbst but --verify without -z expects ${shardfile} (.gguf); treating as MISSING for verification purposes."
+                  touch "$FAIL_MARKER"
+                else
+                  echo "[$(timestamp)] ❌ MISSING: $shardfile"
+                  touch "$FAIL_MARKER"
+                fi
+              fi
+              break
+            fi
+          done
+        fi
+      ) &
+
+      j=$((j+1))
+      ((!$quantize_verification_only)) && turn="fetch"
+    fi
   done
 
   # wait for all verifications to finish
@@ -2368,75 +4264,541 @@ if [[ "$VERIFY" == true ]]; then
     if [[ "$SKIP_HASH" == true ]]; then
       echo "[$(timestamp)] ❌ VERIFY: some files missing"
     else
-      echo "[$(timestamp)] ❌ VERIFY: some files missing or with hash mismatch"
+      echo "[$(timestamp)] ❌ VERIFY: some files missing or with hash mismatch or invalid gguf"
     fi
     exit 1
   else
     if [[ "$SKIP_HASH" == true ]]; then
       echo "[$(timestamp)] ✅ VERIFY: all files present"
     else
-      echo "[$(timestamp)] ✅ VERIFY: all files present and with valid hashes"
+      echo "[$(timestamp)] ✅ VERIFY: all files present and with valid hashes/gguf"
     fi
     rm -f "$FAIL_MARKER" 2>/dev/null || true
     exit 0
   fi
 fi
 
-# ------------------ MAIN DOWNLOAD LOOP (retry-until-success wrappers, no PID bookkeeping) -------------------
+# ----------- Handle computed-map quantization-from-bf16 before starting downloads ----------
+# Initialize the quantization-from-bf16 workflow when --llama-quantize is specified 
+# For each computed qtype in COMPUTED_QTYPES, check the target shards (all SHARD_FILENAMES/TENSORS_TO_FETCH
+# that match the qtype). For any shard that does not exist locally, create it by quantizing from bf16.
+# If the shard already exists, skip unless REQUANTIZE_QUANTIZEONLY_SHARDS==true.
+if [[ -n "$LLAMA_QUANTIZE_BIN" ]]; then
+  echo "[$(timestamp)] Note: detected --llama-quantize. Preparing quantize-from-bf16 workflow."
 
-for idx in "${!TENSORS_TO_FETCH[@]}"; do
-  wait_for_slot
+  # Pre-check: if any missing shard exists and we need to quantize, ensure llama-quantize is usable
+  needs_llama=false
+  for idx in "${!TENSORS_TO_FETCH[@]}"; do
+    tensor="${TENSORS_TO_FETCH[$idx]}"
+    chunk_id="$(get_shard_id "$tensor")"
+    shard_file="${SHARD_FILENAMES[$idx]}"
 
-  # compute tensor & chunk_id in parent so we can record them for the subshell
-  tensor="${TENSORS_TO_FETCH[$idx]:-}"
-  chunk_id="$(get_shard_id "$tensor")"
-
-  # capture loop variables for the subshell to avoid race / duplication
-  current_idx="$idx"
-  current_tensor="$tensor"
-  current_chunk="$chunk_id"
-
-  (
-    attempts=0
-    # Each wrapper will keep trying until download_shard returns success (0)
-    while true; do
-      attempts=$((attempts + 1))
-      if download_shard "$current_idx"; then
-        # succeeded
-        DEBUG "child idx=$current_idx download_shard succeeded (attempt $attempts)"
+    # Determine which pattern matched to get the qtype for this tensor
+    matched_q=""
+    for i in "${!PATTERNS[@]}"; do
+      if [[ "$tensor" =~ ${PATTERNS[$i]} ]]; then
+        matched_q="${PATTERN_QTYPES[$i],,}"
         break
-      else
-        rc=$?
-        # use the parent-computed tensor/chunk_id (visible inside subshell)
-        echo "[$(timestamp)] ⚠️ Warning: Tensor='${current_tensor}' chunk_id=${current_chunk} download failed with exit $rc (attempt $attempts). Retrying in 10s..." >&2
-        sleep 10
       fi
     done
-  ) &
+    if [[ -z "$matched_q" ]]; then
+      continue
+    fi
 
-  # Optionally show the child's PID in debug, but we do NOT save it anywhere.
-  pid=$!
-  DEBUG "spawned wrapper idx=$idx pid=$pid"
+    if [[ -n "${COMPUTED_QTYPES[${matched_q,,}]:-}" ]]; then
+      # This qtype was computed. Check if local/download files exist
+      if safe_file_exists "$LOCAL_MODEL_DIR/$shard_file" || safe_file_exists "$LOCAL_DOWNLOAD_DIR/$shard_file" || safe_file_exists "$LOCAL_MODEL_DIR/$shard_file.zbst" || safe_file_exists "$LOCAL_DOWNLOAD_DIR/$shard_file.zbst"; then
+        if [[ "$REQUANTIZE_QUANTIZEONLY_SHARDS" == true ]]; then
+          needs_llama=true
+        else
+          # file exists and we're not requantizing -> skip
+          :
+        fi
+      else
+        # missing file -> we will need to create via quantization
+        needs_llama=true
+      fi
+    fi
+  done
+
+  if [[ "$needs_llama" == true ]]; then
+    # Validate llama-quantize presence/support
+    require_llama_quantize_support
+    echo "[$(timestamp)] llama-quantize binary validated: $LLAMA_QUANTIZE_BIN"
+  fi
+  
+  # Ensure BF16_DOWNLOAD_DIR exists
+  ensure_bf16_workspace
+
+  # Ensure bf16 first chunk exists (nested downloader will produce it)
+  if ! download_bf16_tensor_via_nested 1; then
+    echo "❌ Error: failed to obtain bf16 first chunk required to quantize from bf16" >&2
+    exit 1
+  fi
+fi
+# ----------- END quantize-from-bf16 pre-processing ----------
+
+# ------------------ MAIN LOOP (dynamic queues: retry-until-success wrappers, quantize-on-failure) -------------------
+
+# Cleanup any leftover marker files from previous runs
+# Use nullglob so that globs that find nothing don't expand into literal patterns.
+shopt -s nullglob
+rm -f -- "$LOCAL_DOWNLOAD_DIR"/.failed_download.* 2>/dev/null || true
+rm -f -- "$LOCAL_DOWNLOAD_DIR"/.quantize.* 2>/dev/null || true
+rm -f -- "$LOCAL_DOWNLOAD_DIR"/.failed_quantize.* 2>/dev/null || true
+shopt -u nullglob
+
+# Alternation toggle: when both queues non-empty we alternate one fetch, one quantize
+alternate_fetch_first=true  # start with fetch (you can change if desired)
+toggle="$alternate_fetch_first"
+
+# The loop runs while there are items in either dynamic queue
+while ( ((${#TENSORS_TO_FETCH_DYNAMIC[@]} > 0)) || ( ((${#TENSORS_TO_QUANTIZE_DYNAMIC[@]} > 0)) ) ); do
+
+  # First, process any failed-download markers that child download wrappers may have created.
+  # This moves their corresponding tensors into the quantize queue.
+  process_failed_download_markers || true
+
+  # If any failed quantization markers are present, bail out
+  if failed_quantize_detected; then
+    echo "❌ Error: one or more quantizations failed (detected $LOCAL_DOWNLOAD_DIR/.failed_quantize.*). Aborting." >&2
+    # Show which failed quantize markers exist
+    shopt -s nullglob
+    for f in "$LOCAL_DOWNLOAD_DIR"/.failed_quantize.*; do
+      echo "  failed quantize marker: $f" >&2
+    done
+    shopt -u nullglob
+    exit 1
+  fi
+
+  # Decide whether to progress a fetch item or a quantize item:
+  # - If quantize queue is non-empty and there's no quantize lock AND either toggle says quantize next or fetch queue is empty,
+  #   then attempt to start one quantize.
+  # - Otherwise attempt to start a fetch wrapper (download).
+  start_quantize_this_round=false
+  if ((${#TENSORS_TO_QUANTIZE_DYNAMIC[@]} > 0)); then
+    if quantize_slot_available; then
+      # If fetch list is empty, always allow quantize processing (but in that case we must use wait_for_slot_quantize())
+      if ((${#TENSORS_TO_FETCH_DYNAMIC[@]} == 0)); then
+        start_quantize_this_round=true
+      else
+        # both non-empty: alternate behavior
+        if [[ "$toggle" == false ]]; then
+          start_quantize_this_round=true
+        fi
+      fi
+    fi
+  fi
+
+  if $start_quantize_this_round; then
+    # Starting a quantization thread for the first item in the quantize-dynamic list.
+    # Use wait_for_slot or wait_for_slot_quantize depending on whether there are other fetch items remaining.
+    if ((${#TENSORS_TO_FETCH_DYNAMIC[@]} == 0)); then
+      # Only quantize items remain; use mutex waiter to avoid busy-loop.
+      wait_for_slot_quantize
+    else
+      # We still have fetch items and quantization must be exclusive (but quantize thread will touch .quantize.*),
+      # still ensure we don't spawn an absurd number of background jobs (use wait_for_slot).
+      wait_for_slot
+    fi
+
+    # Pop first item from TENSORS_TO_QUANTIZE_DYNAMIC
+    qidx=0
+    tensor_to_quantize="${TENSORS_TO_QUANTIZE_DYNAMIC[$qidx]}"
+    shard_file_to_quantize="${SHARD_QUANTIZE_FILENAMES_DYNAMIC[$qidx]}"
+    # remove from the quantize-dynamic arrays (shift)
+    unset 'TENSORS_TO_QUANTIZE_DYNAMIC[qidx]'
+    unset 'SHARD_QUANTIZE_FILENAMES_DYNAMIC[qidx]'
+    TENSORS_TO_QUANTIZE_DYNAMIC=( "${TENSORS_TO_QUANTIZE_DYNAMIC[@]}" )
+    SHARD_QUANTIZE_FILENAMES_DYNAMIC=( "${SHARD_QUANTIZE_FILENAMES_DYNAMIC[@]}" )
+
+    # Compute chunk id for markers and logging
+    quant_chunk_id="$(get_shard_id "$tensor_to_quantize")"
+
+    local_gguf="$LOCAL_MODEL_DIR/$shard_file_to_quantize"
+    dl_gguf="$LOCAL_DOWNLOAD_DIR/$shard_file_to_quantize"
+    local_z="${local_gguf}.zbst"
+    dl_z="${dl_gguf}.zbst"
+
+    # If individual-tensors list is enabled, skip shards not in set.
+    if [[ "$INDIVIDUAL_TENSORS_ENABLED" == true ]]; then
+      if [[ -z "${IND_TENSOR_SET[$quant_chunk_id]:-}" ]]; then
+        echo "[$(timestamp)] Skipping tensor='$tensor_to_quantize' chunk_id=$quant_chunk_id because it's not in --individual-tensors list."
+        continue
+      fi
+    fi
+
+    # If special node assignment is enabled, skip shards not assigned to this node
+    if [[ -n "$SPECIAL_NODE_ID" ]]; then
+      if ! should_process_chunk "$quant_chunk_id"; then
+        _del=""
+        [[ "$RM_SKIPPED_SHARDS" == true ]] && _del=" and deleting (if present)" && rm -f "$dl_gguf" "$local_gguf" "$dl_z" "$local_z" || true
+        echo "[$(timestamp)] Skipping$_del tensor='$tensor_to_quantize' chunk_id=$quant_chunk_id not assigned to this node (xxhsum-based selection)."
+        continue
+      else
+        echo "[$(timestamp)] Tensor='$tensor_to_quantize' chunk_id=$quant_chunk_id assigned to this node (xxhsum-based selection) — proceeding to quantization"
+      fi
+    else
+      echo "[$(timestamp)] Tensor='$tensor_to_quantize' chunk_id=$quant_chunk_id quantization — proceeding"
+    fi
+
+    # Create quantize lock marker
+    touch "$LOCAL_DOWNLOAD_DIR/.quantize.${quant_chunk_id}" || { echo "❌ Error: could not create quantize marker for $quant_chunk_id" >&2; exit 1; }
+
+    DEBUG "starting quantize thread for chunk=${quant_chunk_id} shard_file=${shard_file_to_quantize}"
+
+    (
+      # This subshell performs quantization for the given chunk. If it fails, it must create a .failed_quantize.<chunkid> marker.
+      set -e
+      # Determine target qtype for this tensor
+      target_q=""
+      for i in "${!PATTERNS[@]}"; do
+        if [[ "$tensor_to_quantize" =~ ${PATTERNS[$i]} ]]; then
+          target_q="${PATTERN_QTYPES[$i]}"
+          break
+        fi
+      done
+      if [[ -z "$target_q" ]]; then
+        echo "❌ Error: quantize thread saw tensor with no matching target_q; skipping: $tensor_to_quantize" >&2
+        touch "$LOCAL_DOWNLOAD_DIR/.failed_quantize.${quant_chunk_id}" 2>/dev/null || true
+        rm -f -- "$LOCAL_DOWNLOAD_DIR/.quantize.${quant_chunk_id}" 2>/dev/null || true
+        exit 0
+      fi
+
+      skip_mv=true
+      if [[ "$REQUANTIZE_QUANTIZEONLY_SHARDS" == true ]]; then
+        rm -f "$dl_gguf" "$local_gguf" "$dl_z" "$local_z" || true
+        sync || true
+        skip_mv=false
+        echo "[$(timestamp)] Re-quantizing existing \"$target_q\" quantized-shard (user requested --requantize-quantizeonly-shards): $shard_file_to_quantize"
+        # Ensure LLAMA_QUANTIZE_BIN set and usable (already validated above if needs_llama true)
+      fi
+
+      _path=""
+      # If ARCHIVE_DECOMPRESS true: if a .zbst exists, decompress to .gguf (overwrite) so script works on .gguf
+      if [[ "$ARCHIVE_DECOMPRESS" == true ]]; then
+        if safe_file_exists "$local_z"; then
+          echo "[$(timestamp)] z-decompress: found $local_z -> decompressing to $local_gguf (overwrite)"
+          if ! decompress_archive_to_file "$local_z" "$local_gguf"; then
+            echo "[$(timestamp)] ⚠️ decompression failed for $local_z — treating as corrupted and will redownload." >&2
+          fi
+          rm -f "$local_z" || true
+        elif safe_file_exists "$dl_z"; then
+          echo "[$(timestamp)] z-decompress: found $dl_z in download dir -> decompressing to $local_gguf (overwrite)"
+          if ! decompress_archive_to_file "$dl_z" "$local_gguf"; then
+            echo "[$(timestamp)] ⚠️ decompression failed for $dl_z in download dir — treating as corrupted and will redownload." >&2
+          fi
+          rm -f "$dl_z" || true
+        fi
+      fi
+
+      shard_id=$(echo "$shard_file_to_quantize" | sed -E 's/.*-([0-9]{5})-of-[0-9]{5}\.gguf/\1/')
+
+      # If ARCHIVE_COMPRESS or ARCHIVE_DECOMPRESS is enabled, prefer .gguf.zbst when present and validate from stream
+      if safe_file_exists "$local_z" || safe_file_exists "$dl_z"; then
+        if [[ "$ARCHIVE_COMPRESS" == true ]]; then
+          if safe_file_exists "$local_z"; then
+            _path="$local_z"
+            skip_mv=true
+          else
+            _path="$dl_z"
+            skip_mv=false
+          fi
+
+          if [[ "$SKIP_GGUF_VERIFICATION" == false ]] && ! safe_stream_check_quantized_gguf_from_z "$_path" "$shard_id" "$target_q"; then
+            echo "⚠️ Warning: Compressed quantized file id '$shard_id' is already present but appears different than expected. Re-quantization is necessary!" >&2
+            rm -f "$dl_z" "$local_z" || true
+            sync || true
+          else
+            # If the valid zbst was in download dir, move to model dir
+            if [[ "$skip_mv" == false ]]; then
+              mv -f "$dl_z" "$LOCAL_MODEL_DIR/"
+              echo "[$(timestamp)] Saved quantized file id '$shard_id' (zbst) - tensor '$tensor_to_quantize' of qtype: '$target_q'"
+            else
+              echo "[$(timestamp)] Quantized file id '$shard_id' (zbst) - tensor '$tensor_to_quantize' of qtype: '$target_q' already present in working directory (nothing to do)."
+            fi
+            # Ensure we remove any corresponding .gguf if it exists (we keep only .gguf.zbst in compress mode)
+            if safe_file_exists "$LOCAL_MODEL_DIR/$shard_file_to_quantize"; then
+              rm -f "$LOCAL_MODEL_DIR/$shard_file_to_quantize" || true
+              echo "[$(timestamp)] Removed corresponding .gguf for '${shard_file_to_quantize}' because quantized .gguf.zbst is present and valid"
+            fi
+            # Quantize succeeded: remove lock marker and exit
+            rm -f -- "$LOCAL_DOWNLOAD_DIR/.quantize.${quant_chunk_id}" 2>/dev/null || true
+            exit 0
+          fi
+
+        elif [[ "$ARCHIVE_DECOMPRESS" == true ]]; then
+          if safe_file_exists "$local_z"; then
+            echo "[$(timestamp)] z-decompress: found quantized $local_z -> decompressing to $local_gguf (overwrite)"
+            if ! decompress_archive_to_file "$local_z" "$local_gguf"; then
+              echo "[$(timestamp)] ⚠️ decompression failed for quantized $local_z — treating as corrupted and will re-quantize." >&2
+            fi
+            rm -f "$local_z" || true
+          elif safe_file_exists "$dl_z"; then
+            echo "[$(timestamp)] z-decompress: found quantized $dl_z in download dir -> decompressing to $local_gguf (overwrite)"
+            if ! decompress_archive_to_file "$dl_z" "$local_gguf"; then
+              echo "[$(timestamp)] ⚠️ decompression failed for quantized $dl_z in download dir — treating as corrupted and will re-quantize." >&2
+            fi
+            rm -f "$dl_z" || true
+          fi
+          # Proceed with .gguf present in $local_gguf, assuming decompression was successful
+        fi
+      fi
+
+      # If we didn't find a valid zbst (or compress mode not enabled) or if decompress mode was enabled, check .gguf files
+      if safe_file_exists "$local_gguf" || safe_file_exists "$dl_gguf"; then
+        if safe_file_exists "$local_gguf"; then
+          _path=$local_gguf
+        else
+          _path=$dl_gguf
+          skip_mv=false
+        fi
+        if [[ "$SKIP_GGUF_VERIFICATION" == false ]] && ! check_quantized_gguf "$_path" "$shard_id" "$target_q"; then
+          echo "⚠️ Warning: Quantized file id '$shard_id' is already present but appears different than expected. Re-quantization is necessary!" >&2
+            rm -f "$dl_gguf" "$local_gguf" || true
+            sync || true
+        else
+          if [[ "$ARCHIVE_COMPRESS" == true ]]; then
+            # compress the validated file in-place (in whichever location it currently resides)
+            if [[ "$skip_mv" == true ]]; then
+              echo "[$(timestamp)] z-compress validated quantized file ${_path} -> ${_path}.zbst"
+              compress_gguf_to_archive "$_path"
+              # After compressing, ensure any lingering .gguf (could be symlinked elsewhere) is removed
+              rm -f "$local_gguf" || true
+            else
+              # file is in download dir; compress there and move .zbst to model dir
+              echo "[$(timestamp)] z-compress validated quantized file ${_path} in download dir"
+              compress_gguf_to_archive "$_path"
+              mv -f "${_path}.zbst" "$LOCAL_MODEL_DIR/"
+              echo "[$(timestamp)] Saved quantized file id '$shard_id' (zbst) - tensor '$tensor_to_quantize' of qtype: '$target_q'"
+              # remove any .gguf counterpart in model dir (just in case)
+              rm -f "$local_gguf" || true
+            fi
+          elif [[ "$skip_mv" == false ]]; then
+            mv -f "$dl_gguf" "$LOCAL_MODEL_DIR/"
+            echo "[$(timestamp)] Saved quantized file id '$shard_id' - tensor '$tensor_to_quantize' of qtype: '$target_q'"
+          else
+            echo "[$(timestamp)] Quantized file id '$shard_id' - tensor '$tensor_to_quantize' of qtype: '$target_q' already present in working directory (nothing to do)."
+          fi
+          # Quantize succeeded: remove lock marker and exit
+          rm -f -- "$LOCAL_DOWNLOAD_DIR/.quantize.${quant_chunk_id}" 2>/dev/null || true
+          exit 0
+        fi
+      fi
+
+      echo "[$(timestamp)] Quantized shard missing (or corrupted) -> will quantize to \"$target_q\" from bf16: $shard_file_to_quantize"
+
+      # Perform quantization for this chunk_id into expected filename.
+      # Determine gguf_first filename needed by quantize routine
+      num_shards=${#SHARD_FILENAMES_FULL[@]}
+      total=$(printf "%05d" "$((num_shards + 1))")
+      gguf_first="$(printf '%s' "${SHARD_FILENAMES_FULL[0]}" | sed -E "s/-[^-]+-SPECIAL_TENSOR-[0-9]{5}-of-[0-9]{5}\.gguf$/-BF16-SPECIAL_TENSOR-00001-of-${total}.gguf/")"
+
+      # Ensure bf16 chunk exists (nested downloader will produce it)
+      if ! download_bf16_tensor_via_nested "$quant_chunk_id"; then
+        echo "❌ Error: failed to obtain bf16 chunk ${quant_chunk_id} required to quantize ${shard_file_to_quantize}" >&2
+        # Mark failed quantize and exit subshell
+        touch "$LOCAL_DOWNLOAD_DIR/.failed_quantize.${quant_chunk_id}" 2>/dev/null || true
+        rm -f -- "$LOCAL_DOWNLOAD_DIR/.quantize.${quant_chunk_id}" 2>/dev/null || true
+        exit_from_subprocess 30
+      fi
+
+      # Run quantize: generate output filename as basename matching expected shard_file
+      if ! quantize_tensor_from_bf16 "$quant_chunk_id" "$shard_file_to_quantize" "$target_q" "$BF16_DOWNLOAD_DIR/$gguf_first"; then
+        echo "❌ Error: quantization failed for chunk ${quant_chunk_id} -> ${shard_file_to_quantize}" >&2
+        touch "$LOCAL_DOWNLOAD_DIR/.failed_quantize.${quant_chunk_id}" 2>/dev/null || true
+        rm -f -- "$LOCAL_DOWNLOAD_DIR/.quantize.${quant_chunk_id}" 2>/dev/null || true
+        exit_from_subprocess 31
+      else
+        if safe_file_exists "$LOCAL_DOWNLOAD_DIR/$shard_file_to_quantize"; then
+          if [[ "$SKIP_GGUF_VERIFICATION" == false ]]; then
+            if ! check_quantized_gguf "$LOCAL_DOWNLOAD_DIR/$shard_file_to_quantize" "$quant_chunk_id" "$target_q"; then
+              echo "❌ INVALID GGUF SHARD: ${shard_file_to_quantize} - tensor: '$tensor_to_quantize' - qtype: '$target_q'" >&2
+              # Mark failed quantize and exit subshell
+              touch "$LOCAL_DOWNLOAD_DIR/.failed_quantize.${quant_chunk_id}" 2>/dev/null || true
+              rm -f -- "$LOCAL_DOWNLOAD_DIR/.quantize.${quant_chunk_id}" 2>/dev/null || true
+              exit_from_subprocess 32
+            else
+              echo "[$(timestamp)] GGUF-VERIFICATION OK: ${shard_file_to_quantize}"
+            fi
+          else
+            echo "[$(timestamp)] SKIP-VERIFICATION: treating ${shard_file_to_quantize} as valid. No GGUF verification will be conducted (--skip-gguf-verification is enabled)."
+          fi
+        else
+          echo "❌ Error: quantization didn't produce a file for chunk ${quant_chunk_id} -> ${shard_file_to_quantize}" >&2
+          touch "$LOCAL_DOWNLOAD_DIR/.failed_quantize.${quant_chunk_id}" 2>/dev/null || true
+          rm -f -- "$LOCAL_DOWNLOAD_DIR/.quantize.${quant_chunk_id}" 2>/dev/null || true
+          exit_from_subprocess 38
+        fi
+      fi
+
+      # Removing the bf16 version of the shard (unless user requested to keep bf16)
+      # Extract shard suffix strictly (must match at end)
+      shard_suffix="$(printf '%s\n' "$shard_file_to_quantize" | grep -oE -- '-[0-9]{5}-of-[0-9]{5}\.gguf$')" || shard_suffix=""
+      if [[ -n "$shard_suffix" ]]; then
+          shopt -s nullglob 2>/dev/null || true
+          matches=( "$BF16_DOWNLOAD_DIR"/*"$shard_suffix" )
+          shopt -u nullglob 2>/dev/null || true
+          if [[ ${#matches[@]} -eq 1 ]]; then
+              if [[ "$QUANTIZE_KEEP_BF16" == true ]]; then
+                  echo "[$(timestamp)] Keeping bf16 version of ${shard_file_to_quantize} due to --quantize-keep-bf16"
+              else
+                  echo "[$(timestamp)] Cleanup: removing bf16 version of ${shard_file_to_quantize}"
+                  rm -f -- "${matches[0]}"
+              fi
+          else
+              echo "[$(timestamp)] Cleanup skipped: expected 1 match, found ${#matches[@]}"
+          fi
+      else
+          echo "[$(timestamp)] Cleanup skipped: invalid shard suffix"
+      fi
+
+      # After successful quantization, move output to LOCAL_MODEL_DIR root
+      if safe_file_exists "$LOCAL_DOWNLOAD_DIR/$shard_file_to_quantize"; then
+        # If user requested archive compression (-z), compress the quantized .gguf into .gguf.zbst
+        if [[ "$ARCHIVE_COMPRESS" == true ]]; then
+          echo "[$(timestamp)] z-compress: compressing quantized output $LOCAL_DOWNLOAD_DIR/$shard_file_to_quantize"
+          if ! compress_gguf_to_archive "$LOCAL_DOWNLOAD_DIR/$shard_file_to_quantize"; then
+            echo "❌ Error: compression of quantized output failed for '$shard_file_to_quantize'." >&2
+            touch "$LOCAL_DOWNLOAD_DIR/.failed_quantize.${quant_chunk_id}" 2>/dev/null || true
+            rm -f -- "$LOCAL_DOWNLOAD_DIR/.quantize.${quant_chunk_id}" 2>/dev/null || true
+            exit_from_subprocess 33
+          fi
+          # Move the produced .zbst to model dir
+          if safe_file_exists "$LOCAL_DOWNLOAD_DIR/${shard_file_to_quantize}.zbst"; then
+            mv -f "$LOCAL_DOWNLOAD_DIR/${shard_file_to_quantize}.zbst" "$LOCAL_MODEL_DIR/" || { echo "❌ Error: failed to move compressed quantized output to $LOCAL_MODEL_DIR" >&2; touch "$LOCAL_DOWNLOAD_DIR/.failed_quantize.${quant_chunk_id}" 2>/dev/null || true; rm -f -- "$LOCAL_DOWNLOAD_DIR/.quantize.${quant_chunk_id}" 2>/dev/null || true; exit_from_subprocess 34; }
+            echo "[$(timestamp)] Quantized tensor ${quant_chunk_id} saved to $LOCAL_MODEL_DIR/${shard_file_to_quantize}.zbst"
+          else
+            echo "❌ Error: expected compressed quantized output '$LOCAL_DOWNLOAD_DIR/${shard_file_to_quantize}.zbst' not found after compression." >&2
+            touch "$LOCAL_DOWNLOAD_DIR/.failed_quantize.${quant_chunk_id}" 2>/dev/null || true
+            rm -f -- "$LOCAL_DOWNLOAD_DIR/.quantize.${quant_chunk_id}" 2>/dev/null || true
+            exit_from_subprocess 35
+          fi
+        else
+          # No compression requested -> move .gguf directly
+          mv -f "$LOCAL_DOWNLOAD_DIR/$shard_file_to_quantize" "$LOCAL_MODEL_DIR/$shard_file_to_quantize" || { echo "❌ Error: failed to move quantized output to $LOCAL_MODEL_DIR" >&2; touch "$LOCAL_DOWNLOAD_DIR/.failed_quantize.${quant_chunk_id}" 2>/dev/null || true; rm -f -- "$LOCAL_DOWNLOAD_DIR/.quantize.${quant_chunk_id}" 2>/dev/null || true; exit_from_subprocess 36; }
+          echo "[$(timestamp)] Quantized tensor ${quant_chunk_id} saved to $LOCAL_MODEL_DIR/${shard_file_to_quantize}"
+        fi
+      else
+        echo "❌ Error: expected quantized output '$LOCAL_DOWNLOAD_DIR/${shard_file_to_quantize}' not found after quantize." >&2
+        touch "$LOCAL_DOWNLOAD_DIR/.failed_quantize.${quant_chunk_id}" 2>/dev/null || true
+        rm -f -- "$LOCAL_DOWNLOAD_DIR/.quantize.${quant_chunk_id}" 2>/dev/null || true
+        exit_from_subprocess 37
+      fi
+
+      echo "[$(timestamp)] Quantized ${shard_file_to_quantize} produced and stored in $LOCAL_DOWNLOAD_DIR."
+
+      # Quantize succeeded: remove lock marker and exit
+      rm -f -- "$LOCAL_DOWNLOAD_DIR/.quantize.${quant_chunk_id}" 2>/dev/null || true
+      exit 0
+    ) &
+    # record pid optionally for debug (no persistent bookkeeping)
+    qpid=$!
+    DEBUG "spawned quantize pid=$qpid for chunk=${quant_chunk_id}"
+
+    # Flip the alternation toggle when both lists are non-empty
+    if ((${#TENSORS_TO_FETCH_DYNAMIC[@]} > 0)) && ((${#TENSORS_TO_QUANTIZE_DYNAMIC[@]} > 0)); then
+      # flip toggle so next iteration picks the other queue
+      if [[ "$toggle" == true ]]; then toggle=false; else toggle=true; fi
+    fi
+
+    # Immediately continue main loop (we will process fetch items in next iteration)
+    continue
+  fi
+
+  # Otherwise, attempt to start a fetch wrapper (download) for the first fetch-dynamic item
+  if ((${#TENSORS_TO_FETCH_DYNAMIC[@]} > 0)); then
+    wait_for_slot
+
+    # Pop first item from fetch-dynamic (FIFO)
+    idx=0
+    current_tensor="${TENSORS_TO_FETCH_DYNAMIC[$idx]}"
+    current_shard="${SHARD_FILENAMES_DYNAMIC[$idx]}"
+    # Keep values for this subshell and compute chunk
+    current_chunk="$(get_shard_id "$current_tensor")"
+
+    # Start the download wrapper as background job
+    (
+      attempts=0
+
+      # Each wrapper will keep trying until download_shard returns success (0) OR until QUANTIZE_FAILED_DOWNLOAD limit is reached (if set)
+      while true; do
+        attempts=$((attempts + 1))
+
+        if download_shard "$current_tensor" "$current_shard"; then
+          DEBUG "child tensor='${current_tensor}' chunk='${current_chunk}' download_shard succeeded (attempt $attempts)"
+          break
+        else
+          rc=$?
+        fi
+
+        # if QUANTIZE_FAILED_DOWNLOAD is set, enforce attempt limit
+        if [[ "${QUANTIZE_FAILED_DOWNLOAD}" != "" ]] && (( attempts >= QUANTIZE_FAILED_DOWNLOAD )); then
+          echo "[$(timestamp)] ⚠️ Warning: Tensor='${current_tensor}' chunk_id=${current_chunk} download failed with exit $rc (attempt $attempts, reached QUANTIZE_FAILED_DOWNLOAD=${QUANTIZE_FAILED_DOWNLOAD}). Marking for quantization." >&2
+          # create failed marker so parent main loop will move this item into quantize queue
+          touch "$LOCAL_DOWNLOAD_DIR/.failed_download.${current_chunk}" 2>/dev/null || true
+          break
+        fi
+
+        # otherwise keep retrying
+        echo "[$(timestamp)] ⚠️ Warning: Tensor='${current_tensor}' chunk_id=${current_chunk} download failed with exit $rc (attempt $attempts). Retrying in 10s..." >&2
+        sleep 10
+      done
+    ) &
+
+    # Record child's pid for debug
+    pid=$!
+    DEBUG "spawned download wrapper for tensor='${current_tensor}' chunk='${current_chunk}' pid=$pid"
+
+    # After spawning a download wrapper, remove that item from the fetch-dynamic arrays
+    # because its retrieval is now in-flight (we don't want to spawn duplicate retrievals).
+    unset 'TENSORS_TO_FETCH_DYNAMIC[idx]'
+    unset 'SHARD_FILENAMES_DYNAMIC[idx]'
+    TENSORS_TO_FETCH_DYNAMIC=( "${TENSORS_TO_FETCH_DYNAMIC[@]}" )
+    SHARD_FILENAMES_DYNAMIC=( "${SHARD_FILENAMES_DYNAMIC[@]}" )
+
+    # Flip alternation toggle if both queues are non-empty
+    if ((${#TENSORS_TO_FETCH_DYNAMIC[@]} > 0)) && ((${#TENSORS_TO_QUANTIZE_DYNAMIC[@]} > 0)); then
+      if [[ "$toggle" == true ]]; then toggle=false; else toggle=true; fi
+    fi
+
+    # Small pause to let children potentially create .failed_download.* markers quickly (helps prompt movement)
+    sleep 0.01
+
+    # Immediately after spawning children, process any failed-download markers created by quick-failing wrappers
+    process_failed_download_markers || true
+
+    # Loop continues
+    continue
+  fi
+
+  # If we reached here, no fetch items were started and no quantize started; sleep briefly to avoid busy-loop
+  sleep 0.1
 done
 
-# Wait for all background wrapper jobs to finish
+# Wait for all background wrapper & quantize jobs to finish
 rc=0
 set +e
-# Single wait with no args waits for all child processes started in this shell.
-# Its exit status is that of the last process waited for; treat any non-zero as error.
 if ! wait; then
   status=$?
-  echo "❌ Error: one or more download wrapper children exited with non-zero status (wait returned $status). Check child stderr logs for details (each child prints its tensor and chunk on retry/error)." >&2
+  echo "❌ Error: one or more background children exited with non-zero status (wait returned $status). Check child stderr logs for details." >&2
   rc=1
 fi
 set -e
 
 if (( rc != 0 )); then
-  echo "❌ Error: one or more download wrappers exited abnormally." >&2
+  echo "❌ Error: one or more background children exited abnormally." >&2
   exit $rc
 fi
 
-# ------------------ END MAIN DOWNLOAD LOOP (retry-until-success wrappers, no PID bookkeeping) -------------------
+# Final cleanup: remove any stray .quantize.* / .failed_download.* / .failed_quantize.* if present
+shopt -s nullglob
+rm -f -- "$LOCAL_DOWNLOAD_DIR"/.failed_download.* 2>/dev/null || true
+rm -f -- "$LOCAL_DOWNLOAD_DIR"/.quantize.* 2>/dev/null || true
+rm -f -- "$LOCAL_DOWNLOAD_DIR"/.failed_quantize.* 2>/dev/null || true
+shopt -u nullglob
+
+# ------------------ END MAIN LOOP (dynamic queues implemented) -------------------
 
 # ------------- FINAL FIRST-SHARD FETCH (non-verify) -----
 # Decide which files to consider for first-shard detection depending on z mode
@@ -2453,14 +4815,14 @@ fi
 shopt -u nullglob 2>/dev/null || true
 
 IFS= read -r first <<< "$(printf '%s\n' "${files[@]:-}" | head -n1 || true)"
-if [[ -n "$first" && "$first" =~ -([0-9]{5})-of-([0-9]{5})\.gguf(\.zbst)?$ ]]; then
+if [[ -n "$first" && "$first" =~ -${QTYPE^^}-SPECIAL_TENSOR-([0-9]{5})-of-([0-9]{5})\.gguf(\.zbst)?$ ]]; then
   total="${BASH_REMATCH[2]}"
   gguf_first=$(basename "$(printf '%s\n' "$first" | sed -E "s/-[0-9]{5}-of-$total\.gguf(\.zbst)?$/-00001-of-$total.gguf/")")
 else
   # Attempt to build file name from .map file instead
-  num_shards=${#SHARD_FILENAMES[@]}
-  total="+$(printf "%05d" "$((num_shards + 1))")"
-  gguf_first=$(basename "$(printf '%s\n' "${SHARD_FILENAMES[0]}" | sed -E "s/-[0-9]{5}-of-$total\.gguf(\.zbst)?$/-00001-of-$total.gguf/")")
+  num_shards=${#SHARD_FILENAMES_FULL[@]}
+  total="$(printf "%05d" "$((num_shards + 1))")"
+  gguf_first=$(basename "$(printf '%s\n' "${SHARD_FILENAMES_FULL[0]}" | sed -E "s/-[0-9]{5}-of-$total\.gguf(\.zbst)?$/-00001-of-$total.gguf/")")
 fi
 
 # Determine whether we should perform first-shard GPG download/verification under special-node-mode (does it by default for BF16 models)
@@ -2477,59 +4839,6 @@ fi
 if [[ "$INDIVIDUAL_TENSORS_ENABLED" == true && -z "${IND_TENSOR_SET[1]:-}" ]]; then
   should_verify_first=false
 fi
-
-# Helper: attempt to redownload the first shard and its signature (unless verify-readonly).
-# Returns 0 on success (downloaded & moved into LOCAL_MODEL_DIR), non-zero otherwise.
-attempt_redownload_first() {
-  if [[ "$VERIFY_READONLY" == true ]]; then
-    return 1
-  fi
-
-  echo "[$(timestamp)] First shard appears corrupted or invalid — attempting to redownload first shard (and signature if GPG verification enabled)."
-
-  # remove any possibly-broken files (both model dir and download dir)
-  rm -f "$LOCAL_MODEL_DIR/$gguf_first" "$LOCAL_MODEL_DIR/$gguf_first.zbst" "$LOCAL_MODEL_DIR/$gguf_first.sig \
-        "$LOCAL_DOWNLOAD_DIR/$gguf_first" "$LOCAL_DOWNLOAD_DIR/$gguf_first.zbst" "$LOCAL_DOWNLOAD_DIR/$gguf_first.sig || true
-
-  # Ensure download dir exists for redownload attempts
-  mkdir -p "$LOCAL_DOWNLOAD_DIR" 2>/dev/null || true
-
-  # download shard (keep retrying until success)
-  until run_downloader_shard "${QTYPE}" 1 "$LOCAL_DOWNLOAD_DIR" "$(basename "$gguf_first")"; do
-    echo "[$(timestamp)] First shard download failed; retrying in 10s..." >&2
-    sleep 10
-  done
-
-  # Move whichever artifact was produced (.gguf OR .gguf.zbst)
-  if [[ -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first")" ]]; then
-    mv -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first")" "$LOCAL_MODEL_DIR/" || true
-  elif [[ -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first").zbst" ]]; then
-    mv -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first").zbst" "$LOCAL_MODEL_DIR/" || true
-  else
-    echo "[$(timestamp)] ❌ Error: expected first shard in download dir after redownload but none found." >&2
-    return 1
-  fi
-
-  # download signature if required
-  if [[ "$SKIP_GPG" != true ]]; then
-    until run_downloader_shard "${QTYPE}" -2 "$LOCAL_DOWNLOAD_DIR" "$(basename "$gguf_first.sig")"; do
-      echo "[$(timestamp)] First shard signature download failed; retrying in 10s..." >&2
-      sleep 10
-    done
-
-    # Move signature artifact that was procured (.gguf.sig)
-    if [[ -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first.sig")" ]]; then
-      mv -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first.sig")" "$LOCAL_MODEL_DIR/" || true
-    else
-      echo "[$(timestamp)] ❌ Error: expected first shard signature in download dir after redownload but none found." >&2
-      return 1
-    fi
-  else
-    echo "[$(timestamp)] Redownload of first shard completed."
-  fi
-
-  return 0
-}
 
 if [[ "$should_verify_first" == true ]]; then
   if [[ "$VERIFY" != true ]]; then
@@ -2549,9 +4858,9 @@ if [[ "$should_verify_first" == true ]]; then
         done
 
         # Move whichever file was produced (.gguf or .gguf.zbst)
-        if [[ -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first")" ]]; then
+        if safe_file_exists "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first")"; then
           mv -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first")" "$LOCAL_MODEL_DIR/"
-        elif [[ -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first").zbst" ]]; then
+        elif safe_file_exists "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first").zbst"; then
           mv -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first").zbst" "$LOCAL_MODEL_DIR/"
         else
           echo "[$(timestamp)] ❌ Error: expected first shard in download dir but none found after download." >&2
@@ -2567,7 +4876,7 @@ if [[ "$should_verify_first" == true ]]; then
           done
 
           # Move file that was procurred .gguf.sig
-          if [[ -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first.sig")" ]]; then
+          if safe_file_exists "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first.sig")"; then
             mv -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first.sig")" "$LOCAL_MODEL_DIR/"
           else
             echo "[$(timestamp)] ❌ Error: expected first shard signature in download dir but none found after download." >&2
@@ -2598,7 +4907,7 @@ if [[ "$should_verify_first" == true ]]; then
         if command -v gpg >/dev/null 2>&1; then
           # We'll attempt verification and on corruption/verify failure (when not verify-readonly) we will redownload and retry.
           # Prefer verifying the actual .gguf file if present (this avoids trying to decompress a missing/non-updated .gguf.zbst).
-          if [[ -f "$LOCAL_MODEL_DIR/$gguf_first" ]]; then
+          if safe_file_exists "$LOCAL_MODEL_DIR/$gguf_first"; then
             # verify using the .gguf that we just ensured is present
             while :; do
               if [ ! -f "$LOCAL_MODEL_DIR/$gguf_first.sig" ]; then
@@ -2627,7 +4936,7 @@ if [[ "$should_verify_first" == true ]]; then
                 fi
               fi
             done
-          elif [[ -f "$LOCAL_MODEL_DIR/$gguf_first.zbst" ]]; then
+          elif safe_file_exists "$LOCAL_MODEL_DIR/$gguf_first.zbst"; then
             # If only a .zbst exists, decompress to temp (or to local model directory if -zd) and verify.
             while :; do
               if [[ "$VERIFY_READONLY" == true ]]; then
@@ -2638,7 +4947,7 @@ if [[ "$should_verify_first" == true ]]; then
                 tmpf="$(mktemp "$GNUPG_TMPDIR/first.XXXXXX.gguf")"
               fi
 
-              if [[ -f "$LOCAL_MODEL_DIR/$gguf_first.zbst" ]] && ! decompress_archive_to_file "$LOCAL_MODEL_DIR/$gguf_first.zbst" "$tmpf" skip_symlink_force; then
+              if safe_file_exists "$LOCAL_MODEL_DIR/$gguf_first.zbst" && ! decompress_archive_to_file "$LOCAL_MODEL_DIR/$gguf_first.zbst" "$tmpf" skip_symlink_force; then
                 echo "[$(timestamp)] ⚠️ decompression failed for '$LOCAL_MODEL_DIR/$gguf_first.zbst' (data corruption) — treating as corrupted and will redownload." >&2
                 rm -f "$tmpf"
                 if attempt_redownload_first; then
@@ -2708,15 +5017,14 @@ if [[ "$should_verify_first" == true ]]; then
 
       # After verification, if compression is enabled, ensure only .zbst remains (compress if necessary)
       if [[ "$ARCHIVE_COMPRESS" == true ]]; then
-        if [[ -f "$LOCAL_MODEL_DIR/$gguf_first" ]]; then
+        if safe_file_exists "$LOCAL_MODEL_DIR/$gguf_first"; then
           echo "[$(timestamp)] z-compress verified first shard to .zbst"
           compress_gguf_to_archive "$LOCAL_MODEL_DIR/$gguf_first"
         fi
       fi
 
     else
-      echo "❌ Error: unable to find previous corresponding map or shards..." >&2
-      touch "$FAIL_MARKER"
+      echo "[$(timestamp)] Skipping$_del first-shard signature download/verification due to special-node-id/xxhsum assignment (not BF16 or assigned node) or --individual-tensors selection."
     fi
   fi
 else
@@ -2752,7 +5060,7 @@ else
 
   for f in "${files[@]}"; do
     base=$(basename "$f")
-    if [[ "$base" =~ -([0-9]{5})-of-([0-9]{5})\.gguf(\.zbst)?$ ]]; then
+    if [[ "$base" =~ -${QTYPE^^}-SPECIAL_TENSOR-([0-9]{5})-of-([0-9]{5})\.gguf(\.zbst)?$ ]]; then
       full_indices+=( "${BASH_REMATCH[1]}" )
       # capture total if not already set
       if [[ -z "${total:-}" ]]; then
@@ -2845,21 +5153,21 @@ if [[ "$SKIP_GPG" != true ]]; then
   if [[ "$should_verify_first" == true ]]; then
     if command -v gpg >/dev/null 2>&1; then
       if ([[ "$ARCHIVE_COMPRESS" == false ]] && [ ! -f "$LOCAL_MODEL_DIR/$gguf_first" ]) || ([[ "$ARCHIVE_COMPRESS" == true ]] && [ ! -f "$LOCAL_MODEL_DIR/$gguf_first.zbst" ]); then
-          echo "❌ Error: Shard file '$gguf_first' not found."
+          echo "❌ Error: Shard file '$gguf_first' not found." >&2
           [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
           touch "$FAIL_MARKER"
           exit 5
       fi
       if [ ! -f "$LOCAL_MODEL_DIR/$gguf_first.sig" ]; then
-          echo "❌ Error: Signature file '$gguf_first.sig' is missing."
-          echo "Hint: To skip GPG verification, re-run this script with the --skip-gpg option."
+          echo "❌ Error: Signature file '$gguf_first.sig' is missing." >&2
+          echo "Hint: To skip GPG verification, re-run this script with the --skip-gpg option." >&2
           [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
           touch "$FAIL_MARKER"
           exit 5
       fi
 
       # If .zbst exists and we're in compress mode, decompress to a temp file for gpg verify
-      if [[ -f "$LOCAL_MODEL_DIR/$gguf_first.zbst" ]]; then
+      if safe_file_exists "$LOCAL_MODEL_DIR/$gguf_first.zbst"; then
         # create temp file in writable temp workspace (respect verify-readonly)
         if [[ "$VERIFY_READONLY" == true ]]; then
           tmpf="$(mktemp "$VERIFY_TMPDIR/first.XXXXXX.gguf")"
@@ -2881,7 +5189,7 @@ if [[ "$SKIP_GPG" != true ]]; then
               echo "[$(timestamp)] Removed corresponding .gguf for '$gguf_first' because .gguf.zbst is present and valid"
             fi
         else
-            echo "❌ Error: GPG signature verification failed for '$gguf_first.sig'."
+            echo "❌ Error: GPG signature verification failed for '$gguf_first.sig'." >&2
             rm -f "$tmpf"
             [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
             touch "$FAIL_MARKER"
@@ -2896,14 +5204,14 @@ if [[ "$SKIP_GPG" != true ]]; then
             touch "$FAIL_MARKER"
             exit 1
           fi
-          rm -f "$LOCAL_MODEL_DIR/$gguf_first.zbst"
+          rm -f "$LOCAL_MODEL_DIR/$gguf_first.zbst" || true
           echo "[$(timestamp)] z-decompress: converted first shard .zbst -> .gguf"
         fi
       else
         if safe_gpg_verify "$LOCAL_MODEL_DIR/$gguf_first.sig" "$LOCAL_MODEL_DIR/$gguf_first" > /dev/null 2>&1; then
             echo "[$(timestamp)] GPG signature verification for '$gguf_first.sig' successful."
         else
-            echo "❌ Error: GPG signature verification failed for '$gguf_first.sig'."
+            echo "❌ Error: GPG signature verification failed for '$gguf_first.sig'." >&2
             [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
             touch "$FAIL_MARKER"
             exit 4
@@ -2919,8 +5227,19 @@ if [[ "$SKIP_GPG" != true ]]; then
 fi
 
 # Remove qtype marker files
-rm -f "$LOCAL_DOWNLOAD_DIR"/.qtype_zbst_* 2>/dev/null || True
+rm -f "$LOCAL_DOWNLOAD_DIR"/.qtype_zbst_* 2>/dev/null || true
+
+# Remove bf16 directory unless keeping it was requested and only if it is $LOCAL_DOWNLOAD_DIR/bf16
+if [[ "$QUANTIZE_KEEP_BF16" == false ]]; then
+  if [[ "$BF16_DOWNLOAD_DIR" == "$LOCAL_DOWNLOAD_DIR/bf16" ]]; then
+    rm -rf "$BF16_DOWNLOAD_DIR" 2>/dev/null || true
+  else
+    echo "⚠️ Custom BF16 directory used for quantization not removed for safety reasons. Please consider removing it manually if needed." >&2
+  fi
+fi
 
 echo
 rm -f "$FAIL_MARKER" 2>/dev/null || true
-echo "✅ Download and verification complete. Enjoy!"
+if [[ "${SKIP_FINAL_MESSAGE:-false}" != true ]]; then
+  echo "✅ Download and verification complete. Enjoy!"
+fi

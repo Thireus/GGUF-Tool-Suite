@@ -5,7 +5,7 @@
 #** downloads pre-quantised tensors/shards to cook recipes.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jan-31-2026 -------------------- **#
+#** --------------- Updated: Mar-05-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -371,8 +371,7 @@ do_rsync() {
     else
       RSYNC_OPTS="-q"
     fi
-    rsync ${RSYNC_OPTS} --inplace -t -c -e "ssh -p ${RPORT}" \
-      "${SRC}" "${DST}"
+    rsync ${RSYNC_OPTS} --inplace -t -c -e "ssh -p ${RPORT}" "${SRC}" "${DST}"
     status=$?
     if mark_if_killed_by_signal "$status" "$DST" "rsync"; then
       # mark_if_killed_by_signal already cleaned partial DST and set KILLED_BY_SIGNAL
@@ -421,8 +420,7 @@ do_huggingface() {
     else
       CURL_OPTS="--silent"
     fi
-    curl --fail -L --retry 5 --retry-connrefused --retry-all-errors --retry-delay 5 --retry-max-time 600 --connect-timeout 15  -C - ${CURL_OPTS} -R \
-      "${URL}" -o "${DST}"
+    curl --fail -L --retry 5 --retry-connrefused --retry-all-errors --retry-delay 5 --retry-max-time 600 --connect-timeout 15  -C - ${CURL_OPTS} -R "${URL}" -o "${DST}"
     status=$?
     if mark_if_killed_by_signal "$status" "$DST" "curl (huggingface)"; then
       return 1
@@ -511,7 +509,7 @@ do_curl() {
     _URL=""
     if [[ -n "$TOTAL_NODES" ]]; then
       nid=$(node_id "${REPOSITORY_NAME}" "${FileID}" ${TOTAL_NODES})
-      [[ "${QUANT_U}" == "BF16" ]] || nid=$((nid * N / TOTAL_NODES))
+      [[ "${QUANT_U}" == "BF16" ]] && [ $FileID -le 1 ] && nid=$((RANDOM % TOTAL_NODES)) || ([ $FileID -eq 0 ] || [ $FileID -eq -1 ]) && nid=$((RANDOM % N)) || nid=$((nid * N / TOTAL_NODES))
       _URL="$(echo "$crl" | sed "s|$placeholder|$nid|g")"
     else
       _URL="$crl"
@@ -538,8 +536,7 @@ do_curl() {
     else
       CURL_OPTS="--silent"
     fi
-    curl --fail -L --retry 5 --retry-connrefused --retry-all-errors --retry-delay 5 --retry-max-time 600 --connect-timeout 15 -C - ${CURL_OPTS} -R \
-      "${URL}" -o "${DST}"
+    curl --fail -L --retry 5 --retry-connrefused --retry-all-errors --retry-delay 5 --retry-max-time 600 --connect-timeout 15 -C - ${CURL_OPTS} -R "${URL}" -o "${DST}"
     status=$?
     if mark_if_killed_by_signal "$status" "$DST" "curl"; then
       return 1
