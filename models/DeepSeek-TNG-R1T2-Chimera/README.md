@@ -125,7 +125,7 @@ You can download the BF16 model version to quantize your own shards:
 mkdir kitchen  
 echo '.*=bf16' > kitchen/bf16.recipe  
 cd kitchen
-../quant_downloader.sh bf16.recipe  
+../quant_downloader.sh bf16.recipe --qtype BF16 
 ```
 
 You can also quantize individual BF16 tensors without the need to download every BF16 .gguf shard:

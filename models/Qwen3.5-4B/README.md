@@ -1,11 +1,11 @@
 ---
 license: mit
 ---
-# Kimi-K2-Instruct
+# Qwen3.5-4B
 
-## 🤔 What is this [HuggingFace repository](https://huggingface.co/Thireus/Kimi-K2-Instruct-THIREUS-BF16-SPECIAL_SPLIT/) about?
+## 🤔 What is this [HuggingFace repository](https://huggingface.co/Thireus/Qwen3.5-4B-THIREUS-BF16-SPECIAL_SPLIT/) about?
 
-This repository provides **GGUF-quantized tensors** for the Kimi-K2-Instruct model (official repo: https://huggingface.co/moonshotai/Kimi-K2-Instruct). These GGUF shards are designed to be used with **Thireus’ GGUF Tool Suite** (https://gguf.thireus.com), a collection of tools that automatically finds the perplexity-optimal mix of quantizations for any given VRAM and RAM target. With this GGUF Tool Suite, you can produce your own Dynamic 3.0 Quants recipes and achieve optimum accuracy & SOTA quantization performance.
+This repository provides **GGUF-quantized tensors** for the Qwen3.5-4B model (official repo: https://huggingface.co/Qwen/Qwen3.5-4B). These GGUF shards are designed to be used with **Thireus’ GGUF Tool Suite** (https://gguf.thireus.com), a collection of tools that automatically finds the perplexity-optimal mix of quantizations for any given VRAM and RAM target. With this GGUF Tool Suite, you can produce your own Dynamic 3.0 Quants recipes and achieve optimum accuracy & SOTA quantization performance.
 
 - 📖 Read more: https://github.com/Thireus/GGUF-Tool-Suite  
 - 🔍 Example of GGUF recipes: https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples  
@@ -37,22 +37,19 @@ GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/Thireus/GGUF-Tool-Suite
 # Download model quant mix from recipe file - you can also try the web version: https://gguf.thireus.com/quant_downloader.html
 cd GGUF-Tool-Suite
 rm -f download.conf # Make sure to copy the relevant download.conf for the model before running quant_assign.py
-cp -f models/Kimi-K2-Instruct/download.conf . # Use the download.conf of the chosen model
+cp -f models/Qwen3.5-4B/download.conf . # Use the download.conf of the chosen model
 mkdir -p kitchen && cd kitchen
-../quant_downloader.sh ../recipe_examples/ik_harmonized_recipes/Kimi-K2-Instruct.ROOT-1.9968bpw-3.8128ppl.238GB-GGUF_10GB-GPU_228GB-CPU.90e3c2f_4766d51.recipe
+../quant_downloader.sh ../recipe_examples/ik_llama.cpp_recipes/Qwen3.5-4B.ROOT-3.5993bpw-11.3565ppl.1GB-GGUF_0GB-GPU_0GB-CPU.9888e4b_831ff04.recipe
 
 # Other recipe examples can be found at https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples
 
 # Launch ik_llama's llama-cli:
 ulimit -n 9999 # Lifts "too many open files" limitation on Linux
-~/ik_llama.cpp/build/bin/llama-cli \
-  -m Kimi-K2-Instruct-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
-  -mla 3 -fa auto -amb 512 -ctk f16 -c 4096 -ngl 99 \
-  -ot "blk\.(3|4|5|6)\.ffn_.*=CUDA0" \
-  -ot "blk\.(7|8|9|10)\.ffn_.*=CUDA1" \
-  -ot exps=CPU -b 2048 -ub 1024 --warmup-batch --no-mmap --threads 36 \
-  --main-gpu 0 \
-  -p '<｜begin▁of▁sentence｜><｜User｜>What is the solution of x+5=-2?<｜Assistant｜><think>\n'
+~/ik_llama.cpp/build/bin/llama-server \
+  -m Qwen3.5-4B-THIREUS-BF16-SPECIAL_TENSOR-00001-of-00399.gguf \
+  -fa auto -amb 1024 -ctk q8_0 -c 32768 -ngl 99 \
+  -b 4096 -ub 4096 --warmup-batch --no-mmap --threads 1 \
+  --main-gpu 0
 ```
 
 </details>
@@ -69,9 +66,9 @@ ulimit -n 9999 # Lifts "too many open files" limitation on Linux
 
 ## 📊 How does it compare to other GGUFs?
 
-Here’s how DeepSeek-R1-0528 quantized with **Thireus’ GGUF Tool Suite** stacks up against other quantizers (lower perplexity = better at equal or lower bpw):
+Here’s how Qwen3.5-4B quantized with **Thireus’ GGUF Tool Suite** stacks up against other quantizers (lower perplexity = better at equal or lower bpw):
 
-![PPLs Compared With Others](https://github.com/Thireus/GGUF-Tool-Suite/raw/main/ppl_graphs/DeepSeek-R1-0528.svg)
+![PPLs Compared With Others](https://github.com/Thireus/GGUF-Tool-Suite/raw/main/ppl_graphs/Qwen3.5-4B.svg)
 
 > _Note: The `recipe_examples` files illustrate good recipes. The Tool Suite computes the optimal ppl/bpw curve for you — just specify your target RAM, VRAM, and quant types, and `quant_assign.py` finds the best mix._  
 
