@@ -62,7 +62,7 @@ USER_REGEX=(
 mkdir Qwen3-4B-Thinking-2507-THIREUS-BF16_BENCHER
 cd Qwen3-4B-Thinking-2507-THIREUS-BF16_BENCHER
 echo '.*=bf16' > bf16.recipe
-../quant_downloader.sh bf16.recipe
+../quant_downloader.sh bf16.recipe --qtype BF16
 ```
 
 ### Speed benchmarking quants (needs to be run with and without `-ot "ffn_=CPU"` for CPU/GPU offloading)

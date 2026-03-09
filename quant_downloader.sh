@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regex entries.       **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-07-2026 -------------------- **#
+#** --------------- Updated: Mar-09-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -269,7 +269,9 @@ DECOMP_OP_TOOL_VALUES=()
 COMPUTE_MISSING_MAP=false
 COMPUTE_ALL_MAP=false
 CONVERT_IGNORE_IMATRIX_RULES=false
-CONVERT_WITH_IMATRIX_FILE=""      # user must pass a file to --with-imatrix; only the flag (no file) will be passed to convert_map_qtype.py
+WITH_IMATRIX_FILE=""           # user must pass a file to --with-imatrix; only the flag (no file) will be passed to convert_map_qtype.py
+SKIP_IMATRIX_HASH=false        # --skip-imatrix-hash : when true, skip imatrix hash verification (must be used with --with-imatrix)
+IMATRIX_HASH_COMPUTED=""       # computed hash string (sha256) for the user-supplied imatrix file
 CONVERT_NO_FALLBACK=false
 declare -a CONVERT_FALLBACK_QUANTS=()
 declare -a CONVERT_FALLBACK_QUANTS_FORBIDDEN=()
@@ -324,7 +326,8 @@ usage() {
   echo "                                           tensors.map.sig -> tensors.<qtype,,>.map.sig" >&2
   echo "                                         This makes it easier to use quantized model repositories locally." >&2
   echo "       --skip-gpg                        Do not verify the gpg signature of the downloaded files" >&2
-  echo "       --skip-hash                       Do not compute or verify SHA256 hashes; treat all hashes as valid (useful when quantizing BF16 shards with a different imatrix for example)" >&2
+  echo "       --skip-hash                       Do not compute or verify SHA256 hashes; treat all hashes as valid (useful when shards have been quantized with a different imatrix for example)" >&2
+  echo "       --skip-imatrix-hash               When used with --with-imatrix, skip imatrix hash computation and mismatch warning; this is different from --skip-hash because achives a different purpose." >&2
   echo "       --skip-gguf-verification          Skip additional gguf_info.py GGUF (important to verify shards locally quantized) checks (default: $SKIP_GGUF_DEF)" >&2
   echo "       --gguf-info-novenv                Do NOT add the '--venv' argument when invoking gguf_info.py (used for gguf-verification). Use this only if you are sure" >&2
   echo "                                         the gguf_info.py script runs correctly on your current Python environment without the virtual-venv helper." >&2
@@ -362,6 +365,7 @@ usage() {
   echo "       --compute-qtypes-regex-map REG1,REG2,...   Instead of downloading map files for matching qtypes, compute them locally via convert_map_qtype.py." >&2
   echo "       --ignore-imatrix-rules            (forwarded to convert_map_qtype.py) Ignore importance-matrix related checks." >&2
   echo "       --with-imatrix IMATRIX_FILE       (forwarded to convert_map_qtype.py) Indicate that an importance matrix file exists. The file must exist on disk." >&2
+  echo "       --skip-imatrix-hash               When used with --with-imatrix, skip imatrix hash computation and mismatch warning; this is different from --skip-hash because achives a different purpose." >&2
   echo "       --fallback-quants Q1,Q2,...       (forwarded to convert_map_qtype.py) Comma or space-separated list of qtypes to whitelist for fallback." >&2
   echo "       --fallback-quants-forbidden REGEX1,REGEX2,...  (forwarded to convert_map_qtype.py) Comma or space-separated list of regex patterns matching forbidden fallback qtypes." >&2
   echo "       --no-fallback                     (forwarded to convert_map_qtype.py) Disable fallback behaviour." >&2
@@ -410,7 +414,7 @@ done
 set -- "${_preprocess_args[@]:-}"
 
 # Parse arguments (supports GNU long options)
-PARSED_OPTS=$(getopt -n "$0" -o j:d:hk:z -l max-jobs:,no-new-map,force-redownload,verify,verify-readonly,qtype:,skip-gpg,skip-hash,dest:,destination:,special-node-id:,total-nodes:,rm-skipped-shards,help,z-compress,z-decompress,z-noauto,z-compress-opt:,z-decompress-opt:,z-custom-tools:,symlink-only,individual-tensors:,compute-missing-map,compute-all-map,ignore-imatrix-rules,with-imatrix:,fallback-quants:,fallback-quants-forbidden:,no-fallback,requantize-quantizeonly-shards,llama-quantize:,quantize-failed-download:,quantize-nthreads:,quantize-all-shards,max-quantize-jobs:,no-final-message,quantize-keep-bf16,quantize-bf16-directory:,skip-gguf-verification,strict-gguf-verification,quantize-f32-warn-verification,quantize-tensors-regex:,quantize-qtypes-regex:,compute-qtypes-regex-map:,max-failed-verification:,gguf-info-novenv -- "$@") || usage
+PARSED_OPTS=$(getopt -n "$0" -o j:d:hk:z -l max-jobs:,no-new-map,force-redownload,verify,verify-readonly,qtype:,skip-gpg,skip-hash,dest:,destination:,special-node-id:,total-nodes:,rm-skipped-shards,help,z-compress,z-decompress,z-noauto,z-compress-opt:,z-decompress-opt:,z-custom-tools:,symlink-only,individual-tensors:,compute-missing-map,compute-all-map,ignore-imatrix-rules,with-imatrix:,skip-imatrix-hash,fallback-quants:,fallback-quants-forbidden:,no-fallback,requantize-quantizeonly-shards,llama-quantize:,quantize-failed-download:,quantize-nthreads:,quantize-all-shards,max-quantize-jobs:,no-final-message,quantize-keep-bf16,quantize-bf16-directory:,skip-gguf-verification,strict-gguf-verification,quantize-f32-warn-verification,quantize-tensors-regex:,quantize-qtypes-regex:,compute-qtypes-regex-map:,max-failed-verification:,gguf-info-novenv -- "$@") || usage
 eval set -- "$PARSED_OPTS"
 while true; do
   case "$1" in
@@ -538,8 +542,12 @@ while true; do
       shift
       ;;
     --with-imatrix)
-      CONVERT_WITH_IMATRIX_FILE="$2"
+      WITH_IMATRIX_FILE="$2"
       shift 2
+      ;;
+    --skip-imatrix-hash)
+      SKIP_IMATRIX_HASH=true
+      shift
       ;;
     --fallback-quants)
       # Accept either comma-separated or space-separated string; split into array
@@ -676,11 +684,17 @@ if [[ "$COMPUTE_QTYPES_REGEX_MAP_ENABLED" == true && "$COMPUTE_ALL_MAP" == true 
 fi
 
 # Validate --with-imatrix file if provided
-if [[ -n "$CONVERT_WITH_IMATRIX_FILE" ]]; then
-  if [[ ! -f "$CONVERT_WITH_IMATRIX_FILE" ]]; then
-    echo "❌ Error: --with-imatrix specified but the file '$CONVERT_WITH_IMATRIX_FILE' does not exist." >&2
+if [[ -n "$WITH_IMATRIX_FILE" ]]; then
+  if [[ ! -f "$WITH_IMATRIX_FILE" ]]; then
+    echo "❌ Error: --with-imatrix specified but the file '$WITH_IMATRIX_FILE' does not exist." >&2
     exit 1
   fi
+fi
+
+# Validate skip-imatrix-hash usage
+if [[ "$SKIP_IMATRIX_HASH" == true && -z "$WITH_IMATRIX_FILE" ]]; then
+  echo "❌ Error: --skip-imatrix-hash can only be used together with --with-imatrix." >&2
+  exit 1
 fi
 
 if [[ "$ARCHIVE_COMPRESS" == true && "$ARCHIVE_DECOMPRESS" == true ]]; then
@@ -1132,7 +1146,19 @@ if [[ "$SKIP_HASH" == true ]]; then
     printf ''
     return 0
   }
-else
+fi
+# If SKIP_IMATRIX_HASH is set, don't require any sha256 utility and provide a harmless stub that
+# returns an empty string (the calling logic will treat skip mode as "passed").
+if [[ "$SKIP_IMATRIX_HASH" == true ]]; then
+  # Define a stub _sha256sum_imatrix that always succeeds but returns empty (caller will substitute expected hash where needed).
+  _sha256sum_imatrix() {
+    # Do nothing, return success with empty output.
+    printf ''
+    return 0
+  }
+fi
+if [[ "$SKIP_HASH" == false ]] || [[ -n "$WITH_IMATRIX_FILE" && "$SKIP_IMATRIX_HASH" == false ]]; then
+  # Try to find a suitable sha256 utility
   if command -v sha256sum >/dev/null 2>&1; then
     # GNU coreutils on Linux
     sha256tool=(sha256sum)
@@ -1150,24 +1176,79 @@ else
     sha256tool=(openssl)
     args=(dgst -sha256)
   else
-    # fallback stub: always errors out (we don't have hashing capability)
+    # No hashing tool found; leave sha256tool empty to indicate failure
     sha256tool=()
     args=()
   fi
 
-  # _sha256sum reads either from file (if you pass an arg) or from stdin
-  _sha256sum() {
-    if (( $# > 0 )); then
-      # file-mode: pass filename as $1
-      "${sha256tool[@]}" "${args[@]}" "$1" | awk '{print $1}'
+  # Only define functions if we actually found a tool
+  if (( ${#sha256tool[@]} > 0 )); then
+    if [[ "$SKIP_HASH" == false ]]; then
+      # Both hash functions are needed: define real _sha256sum and a wrapper for _sha256sum_imatrix
+      _sha256sum() {
+        if (( $# > 0 )); then
+          # file-mode: pass filename as $1
+          "${sha256tool[@]}" "${args[@]}" "$1" | awk '{print $1}'
+        else
+          # stdin-mode: read data from pipe
+          "${sha256tool[@]}" "${args[@]}" | awk '{print $1}'
+        fi
+      }
+      if [[ "$SKIP_IMATRIX_HASH" == false ]]; then
+        # Define the _sha256sum_imatrix
+        _sha256sum_imatrix() {
+          _sha256sum "$@"   # passes along any arguments given to _sha256sum_imatrix
+        }
+      fi
     else
-      # stdin-mode: read data from pipe
-      "${sha256tool[@]}" "${args[@]}" | awk '{print $1}'
+      # SKIP_HASH is true: need real _sha256sum_imatrix
+      _sha256sum_imatrix() {
+        if (( $# > 0 )); then
+          # file-mode: pass filename as $1
+          "${sha256tool[@]}" "${args[@]}" "$1" | awk '{print $1}'
+        else
+          # stdin-mode: read data from pipe
+          "${sha256tool[@]}" "${args[@]}" | awk '{print $1}'
+        fi
+      }
     fi
-  }
+  fi
+  # If no tool was found, both functions remain undefined, and the warning below will trigger.
 fi
 
 command -v _sha256sum &>/dev/null || echo "⚠️ Warning: _sha256sum command missing - hash cannot be verified!" >&2
+
+# -----------------------------------------------------------------
+# Compute SHA256 of --with-imatrix file (if provided) using the detected _sha256sum.
+# If computation fails (no tool available, SKIP_HASH enabled, or error), warn and mark as not computed.
+# This computation happens after _sha256sum is defined so we can reuse it safely.
+# -----------------------------------------------------------------
+if [[ -n "$WITH_IMATRIX_FILE" && "$SKIP_IMATRIX_HASH" == false ]]; then
+  if command -v _sha256sum_imatrix &>/dev/null; then
+    # Try to compute the sha256 using the helper. If SKIP_HASH is true or helper returns empty,
+    # we will warn the user that hash-checks will be skipped.
+    if ! hash_output="$(_sha256sum_imatrix "$WITH_IMATRIX_FILE" 2>/dev/null || true)"; then
+      # _sha256sum_imatrix returned non-zero; treat as failure
+      echo "⚠️ Warning: failed to compute sha256 for --with-imatrix file '$WITH_IMATRIX_FILE' (hash command returned error). Imatrix hash checks will be skipped." >&2
+    else
+      # strip leading/trailing whitespace and any trailing filename from common tools
+      hash_output="$(printf '%s' "$hash_output" | awk '{print $1}' || true)"
+      if [[ -n "$hash_output" ]]; then
+        IMATRIX_HASH_COMPUTED="${hash_output,,}"
+        echo "[Info] computed sha256 for --with-imatrix: ${IMATRIX_HASH_COMPUTED}"
+      elif [[ "$SKIP_HASH" == true ]]; then
+        # empty result (because SKIP_HASH stub is active)
+        echo "[Info] SKIP-HASH: the imatrix file '$WITH_IMATRIX_FILE' won't be hashed because --skip-hash is used. Imatrix hash checks will be skipped."
+      else
+        # empty result
+        echo "⚠️ Warning: could not compute sha256 for --with-imatrix file '$WITH_IMATRIX_FILE' (no hash produced). Imatrix hash checks will be skipped." >&2
+      fi
+    fi
+  else
+    echo "⚠️ Warning: _sha256sum_imatrix command missing - imatrix hash cannot be computed!" >&2
+  fi
+fi
+# -----------------------------------------------------------------
 
 # --------------- DETECT & DEFINE PYTHON HELPER ---------------
 # Provide a helper that detects a usable python3 binary and exposes a small wrapper _python()
@@ -1538,11 +1619,19 @@ check_quantized_gguf() {
   fi
 
   # compare elements/bytes/shape with map if available
-  local map_shape map_elements map_bytes map_dtype
+  local map_shape map_elements map_bytes map_dtype map_imatrix
   map_shape="$(get_t_shape "$qtype" "${expected_tensor:-}")"
   map_elements="$(get_t_elements "$qtype" "${expected_tensor:-}")"
   map_bytes="$(get_t_bytes "$qtype" "${expected_tensor:-}")"
   map_dtype="$(get_t_dtype "$qtype" "${expected_tensor:-}")"
+
+  # obtain imatrix hash from map (if available)
+  # Only perform the check if:
+  #  - the user provided --with-imatrix (WITH_IMATRIX_FILE non-empty)
+  #  - we successfully computed its sha256
+  #  - and the map contains an imatrix hash for this tensor (non-empty)
+  # If SKIP_IMATRIX_HASH is set, skip the verification entirely (user chooses to bypass).
+  map_imatrix="$(get_t_imatrix "$qtype" "${expected_tensor:-}" || true)"
 
   if [[ -n "$map_dtype" && -n "$gguf_dtype" ]]; then
     if [[ "$map_dtype" != "$gguf_dtype" ]] && ([[ "$QUANTIZE_F32_WARN_VERIFICATION" == true ]] || [[ "$gguf_dtype" != "f32" ]]); then
@@ -1578,6 +1667,14 @@ check_quantized_gguf() {
     fi
   else
     echo "⚠️ Warning: shape (map or gguf) is missing for ${shard_file}!" >&2
+  fi
+
+  # imatrix verification logic
+  if [[ -n "$IMATRIX_HASH_COMPUTED" && -n "$map_imatrix" ]]; then
+    if [[ "${map_imatrix,,}" != "${IMATRIX_HASH_COMPUTED,,}" && "$SKIP_IMATRIX_HASH" == false ]]; then
+      echo "⚠️ Warning: imatrix hash mismatch for tensor '${expected_tensor}' in ${shard_file}: map='${map_imatrix,,}' provided='${IMATRIX_HASH_COMPUTED,,}'" >&2
+      warnings=$((warnings + 1))
+    fi
   fi
 
   if (( warnings > 0 )); then
@@ -1759,12 +1856,15 @@ safe_stream_check_quantized_gguf_from_z() {
   fi
 
   # compare to map
-  local map_shape map_elements map_bytes map_dtype
+  local map_shape map_elements map_bytes map_dtype map_imatrix
   map_shape="$(get_t_shape "$qtype" "${expected_tensor:-}")"
   map_elements="$(get_t_elements "$qtype" "${expected_tensor:-}")"
   map_bytes="$(get_t_bytes "$qtype" "${expected_tensor:-}")"
   map_dtype="$(get_t_dtype "$qtype" "${expected_tensor:-}")"
   
+  # obtain imatrix hash from map (if available) and validate against provided --with-imatrix
+  map_imatrix="$(get_t_imatrix "$qtype" "${expected_tensor:-}" || true)"
+
   if [[ -n "$map_dtype" && -n "$gguf_dtype" ]]; then
     if [[ "$map_dtype" != "$gguf_dtype" ]] && ([[ "$QUANTIZE_F32_WARN_VERIFICATION" == true ]] || [[ "$gguf_dtype" != "f32" ]]); then
       echo "⚠️ Warning: dtype (map vs gguf) mismatch for ${z}: map='${map_dtype}' gguf='${gguf_dtype}'" >&2
@@ -1796,6 +1896,14 @@ safe_stream_check_quantized_gguf_from_z() {
     fi
   else
     echo "⚠️ Warning: shape (map or gguf) is missing for ${z}!" >&2
+  fi
+
+  # imatrix verification logic
+  if [[ -n "$IMATRIX_HASH_COMPUTED" && -n "$map_imatrix" ]]; then
+    if [[ "${map_imatrix,,}" != "${IMATRIX_HASH_COMPUTED,,}" && "$SKIP_IMATRIX_HASH" == false ]]; then
+      echo "⚠️ Warning: imatrix mismatch for tensor '${expected_tensor}' in ${z}: map='${map_imatrix,,}' provided='${IMATRIX_HASH_COMPUTED,,}'" >&2
+      warnings=$((warnings + 1))
+    fi
   fi
 
   if (( warnings > 0 )); then
@@ -2279,7 +2387,7 @@ fi
 
 # -------------------- HASH & SHARD STORAGE -------------------
 declare -A T_HASHES SHARD_ID
-# New: per-tensor skip-hash markers (used when the map contains an all-zero hash for a tensor)
+# per-tensor skip-hash markers (used when the map contains an all-zero hash for a tensor)
 declare -A T_SKIP_HASH=()
 set_t_hash() { local key="${1,,}::${2,,}"; T_HASHES["$key"]="$3"; DEBUG "set_t_hash T_HASHES[${key}]=${T_HASHES["$key"]}"; 
   # Detect all-zero hash (64 zeros) and mark this tensor to skip hash verification.
@@ -2439,7 +2547,7 @@ compute_map_for_qtype() {
   if [[ "$CONVERT_IGNORE_IMATRIX_RULES" == true ]]; then
     cmd+=(--ignore-imatrix-rules)
   fi
-  if [[ -n "$CONVERT_WITH_IMATRIX_FILE" ]]; then
+  if [[ -n "$WITH_IMATRIX_FILE" ]]; then
     # user provided a path; per requirement only pass "--with-imatrix" flag (without the file) to the convert script
     cmd+=(--with-imatrix)
   fi
@@ -2864,6 +2972,8 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
       fi
       if [[ -n "${local_imatrix}" ]]; then
         set_t_imatrix "$qtype" "$tname" "$local_imatrix"
+      else
+        set_t_imatrix "$qtype" "$tname" "" # Except for imatrix
       fi
 
       # Filling these lists should only happen once now
@@ -3578,8 +3688,8 @@ quantize_tensor_from_bf16() {
   if [[ "$CONVERT_IGNORE_IMATRIX_RULES" == true ]]; then
     llama_args+=( --ignore-imatrix-rules )
   fi
-  if [[ -n "$CONVERT_WITH_IMATRIX_FILE" ]]; then
-    llama_args+=( --imatrix "$CONVERT_WITH_IMATRIX_FILE" )
+  if [[ -n "$WITH_IMATRIX_FILE" ]]; then
+    llama_args+=( --imatrix "$WITH_IMATRIX_FILE" )
   fi
 
   # Input and output: "<first_gguf_shard>.gguf <output>.gguf bf16 1"

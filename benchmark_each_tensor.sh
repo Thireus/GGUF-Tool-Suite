@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Feb-02-2026 -------------------- **#
+#** --------------- Updated: Mar-09-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -18,7 +18,7 @@
 #**    /    o―ヽニニフ))             · · ɪǫ3_xxs      ~·°        **#
 #**    し―-J                                                   **#
 #**                                                           **#
-#** Copyright © 2025 - Thireus.            Fᵢₙₑ₋ₜᵤₙₑ𝒹 ₒₙ 𝒸ₕₐₒₛ. **#
+#** Copyright © 2026 - Thireus.            Fᵢₙₑ₋ₜᵤₙₑ𝒹 ₒₙ 𝒸ₕₐₒₛ. **#
 #***************************************************************#
 #**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
 #***************************************************************#
@@ -97,6 +97,7 @@ USAGE
 # ---------------- end USAGE / HELP ----------------
 
 # --------------- DETECT & DEFINE SHA256 HELPER ---------------
+# Try to find a suitable sha256 utility
 if command -v sha256sum >/dev/null 2>&1; then
   # GNU coreutils on Linux
   sha256tool=(sha256sum)
@@ -114,21 +115,26 @@ elif command -v openssl >/dev/null 2>&1; then
   sha256tool=(openssl)
   args=(dgst -sha256)
 else
-  # fallback stub: always errors out
+  # No hashing tool found; leave sha256tool empty to indicate failure
   sha256tool=()
   args=()
 fi
 
-# _sha256sum reads either from file (if you pass an arg) or from stdin
-_sha256sum() {
-  if (( $# > 0 )); then
-    # file-mode: pass filename as $1
-    "${sha256tool[@]}" "${args[@]}" "$1" | awk '{print $1}'
-  else
-    # stdin-mode: read data from pipe
-    "${sha256tool[@]}" "${args[@]}" | awk '{print $1}'
-  fi
-}
+# Only define _sha256sum if we actually found a tool
+if (( ${#sha256tool[@]} > 0 )); then
+  # _sha256sum reads either from file (if you pass an arg) or from stdin
+  _sha256sum() {
+    if (( $# > 0 )); then
+      # file-mode: pass filename as $1
+      "${sha256tool[@]}" "${args[@]}" "$1" | awk '{print $1}'
+    else
+      # stdin-mode: read data from pipe
+      "${sha256tool[@]}" "${args[@]}" | awk '{print $1}'
+    fi
+  }
+fi
+
+command -v _sha256sum &>/dev/null || echo "⚠️ Warning: _sha256sum command missing - hash cannot be verified!" >&2
 
 # --- pure-Bash shuffle replacement for `shuf` ---
 shuf() {
