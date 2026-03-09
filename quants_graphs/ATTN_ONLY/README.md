@@ -44,7 +44,7 @@ USER_REGEX=(
 mkdir Qwen3-4B-Thinking-2507-THIREUS-BF16_BENCHER
 cd Qwen3-4B-Thinking-2507-THIREUS-BF16_BENCHER
 echo '.*=bf16' > bf16.recipe
-../quant_downloader.sh bf16.recipe
+../quant_downloader.sh bf16.recipe --qtype BF16
 ```
 
 ### Individual tensor PPL+KLD benchmarking
