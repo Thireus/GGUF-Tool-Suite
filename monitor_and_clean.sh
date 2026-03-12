@@ -5,7 +5,7 @@
 #** tensors.map files and optionally deletes unused shards.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Dec-27-2025 -------------------- **#
+#** --------------- Updated: Mar-12-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -124,6 +124,10 @@ while true; do
                 # Check if user permission is read-only (i.e., 4)
                 if [ "$user_perms" -eq 4 ]; then
                     echo "[$(date '+%Y-%m-%d %H:%M:%S')] tensors.map already produced, skipping directory: $split_dir"
+                    continue
+                elif grep -q ':imatrix=' "$map_file"; then
+                    # If tensors.map contains imatrix entries, skip because it's been enriched with imatrix hash metadata.
+                    echo "[$(date '+%Y-%m-%d %H:%M:%S')] tensors.map contains imatrix entries; skipping directory: $split_dir"
                     continue
                 else
                     last_line=$(tail -n1 "$map_file")
