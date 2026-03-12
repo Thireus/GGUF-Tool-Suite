@@ -24,6 +24,8 @@ Qwen3.5-2B/ppl_results.csv
 Qwen3.5-2B/kld_results.csv
 Qwen3.5-0.8B/ppl_results.csv
 Qwen3.5-0.8B/kld_results.csv
+Qwen3.5-0.8B/group0/ppl_results.csv
+Qwen3.5-0.8B/group0/kld_results.csv
 Kimi-K2-Thinking/ppl_results.csv
 Kimi-K2-Thinking/kld_results.csv
 Kimi-K2-Thinking/group0/ppl_results.csv
