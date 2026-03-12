@@ -400,8 +400,8 @@ Big thanks to **ubergarm** for his support and for providing the invaluable **`i
 📄 Ubergarm's `imatrix` for DeepSeek-V3.1-Terminus can be found here:  
 🔗 [imatrix_DeepSeek-V3.1-Terminus_ubergarm.dat](https://huggingface.co/ubergarm/DeepSeek-V3.1-Terminus-GGUF/blob/main/imatrix-DeepSeek-V3.1-Terminus-Q8_0.dat)
 
-📄 Ubergarm's `imatrix` for DeepSeek-V3.2-Exp can be found here:  
-🔗 [imatrix_DeepSeek-V3.2-Exp_ubergarm.dat](https://huggingface.co/ubergarm/DeepSeek-V3.2-Exp-GGUF/blob/main/imatrix-DeepSeek-V3.2-Exp-Q8_0.dat)
+📄 Ubergarm's `imatrix` for DeepSeek-V3.2-Speciale can be found here:  
+🔗 [imatrix_DeepSeek-V3.2-Speciale_ubergarm.dat](https://huggingface.co/ubergarm/DeepSeek-V3.2-Speciale-GGUF/blob/main/imatrix-DeepSeek-V3.2-Speciale-Q8_0.dat)
 
 📄 Ubergarm's `imatrix` for Kimi-K2-Instruct can be found here:  
 🔗 [imatrix_Kimi-K2-Instruct_ubergarm.dat](https://huggingface.co/ubergarm/Kimi-K2-Instruct-GGUF/blob/main/imatrix-Kimi-K2-Instruct-Q8_0.dat)
@@ -411,6 +411,9 @@ Big thanks to **ubergarm** for his support and for providing the invaluable **`i
 
 📄 Ubergarm's `imatrix` for Kimi-K2-Thinking can be found here:  
 🔗 [imatrix_Kimi-K2-Thinking_ubergarm.dat](https://huggingface.co/ubergarm/Kimi-K2-Thinking-GGUF/blob/main/imatrix-Kimi-K2-Thinking-Q8_0-Q4_0.dat)
+
+📄 Ubergarm's `imatrix` for Kimi-K2.5 can be found here:  
+🔗 [imatrix_Kimi-K2.5_ubergarm.dat](https://huggingface.co/ubergarm/Kimi-K2.5-GGUF/blob/main/imatrix-Kimi-K2.5-Q4_X.dat)
 
 📄 Thireus's computed Ubergarm's `imatrix` for Qwen3-VL-235B-A22B-Instruct can be found in the model directory:  
 🔗 [imatrix_Qwen3-VL-235B-A22B-Instruct_ubergarm.dat](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/models/Qwen3-VL-235B-A22B-Instruct/imatrix_ubergarm.dat)
@@ -432,6 +435,18 @@ Big thanks to **ubergarm** for his support and for providing the invaluable **`i
 
 📄 Ubergarm's `imatrix` for Qwen3-Coder-480B-A35B-Instruct can be found here:  
 🔗 [imatrix_Qwen3-Coder-480B-A35B-Instruct_ubergarm.dat](https://huggingface.co/ubergarm/Qwen3-Coder-480B-A35B-Instruct-GGUF/blob/main/imatrix-Qwen3-Coder-480B-A35B-Instruct-Q8_0.dat)
+
+📄 Ubergarm's `imatrix` for Qwen3.5-27B can be found here:  
+🔗 [imatrix_Qwen3.5-27B_ubergarm.dat](https://huggingface.co/ubergarm/Qwen3.5-27B-GGUF/blob/main/imatrix-Qwen3.5-27B-BF16.dat)
+
+📄 Ubergarm's `imatrix` for Qwen3.5-35B-A3B can be found here:  
+🔗 [imatrix_Qwen3.5-35B-A3B_ubergarm.dat](https://huggingface.co/ubergarm/Qwen3.5-35B-A3B-GGUF/blob/main/imatrix-Qwen3.5-35B-A3B-BF16.dat)
+
+📄 Ubergarm's `imatrix` for Qwen3.5-122B-A10B can be found here:  
+🔗 [imatrix_Qwen3.5-122B-A10B_ubergarm.dat](https://huggingface.co/ubergarm/Qwen3.5-122B-A10B-GGUF/blob/main/imatrix-Qwen3.5-122B-A10B-BF16.dat)
+
+📄 Ubergarm's `imatrix` forQwen3.5-397B-A17B can be found here:  
+🔗 [imatrix_Qwen3.5-397B-A17B_ubergarm.dat](https://huggingface.co/ubergarm/Qwen3.5-397B-A17B-GGUF/blob/main/imatrix-Qwen3.5-397B-A17B-BF16.dat)
 
 📄 Ubergarm's `imatrix` for GLM-4.7-Flash can be found here:  
 🔗 [imatrix_GLM-4.7-Flash_ubergarm.dat](https://huggingface.co/ubergarm/GLM-4.7-Flash-GGUF/blob/main/imatrix-GLM-4.7-Flash-BF16.dat)
