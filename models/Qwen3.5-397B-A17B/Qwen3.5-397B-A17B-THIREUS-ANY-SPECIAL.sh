@@ -498,7 +498,7 @@ mkdir Qwen3.5-397B-A17B-THIREUS-${1^^}-SPECIAL_SPLIT/ && llama-quantize --keep-s
     --custom-q "$custom" \
     --imatrix imatrix_ubergarm.dat \
     --ignore-imatrix-rules \
-    Qwen3.5-397B-A17B-THIREUS-BF16-SPECIAL_SPLIT/Qwen3.5-397B-A17B-THIREUS-BF16-SPECIAL_TENSOR-00001-of-001099.gguf \
+    Qwen3.5-397B-A17B-THIREUS-BF16-SPECIAL_SPLIT/Qwen3.5-397B-A17B-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01099.gguf \
     Qwen3.5-397B-A17B-THIREUS-${1^^}-SPECIAL_SPLIT/Qwen3.5-397B-A17B-THIREUS-${1^^}-SPECIAL_TENSOR.gguf \
     ${1^^} \
     $(nproc) && chmod 444 Qwen3.5-397B-A17B-THIREUS-${1^^}-SPECIAL_SPLIT/*.gguf || echo "ERROR: Something went wrong, please check the directory doesn't already exist and that you have sufficient available disk space!"
