@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regex entries.       **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-09-2026 -------------------- **#
+#** --------------- Updated: Mar-13-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -1136,6 +1136,46 @@ _resolve_symlink_target() {
 # -------------------- TIMESTAMP FUNCTION ---------------------
 timestamp() { date '+%Y-%m-%d %H:%M:%S'; }
 
+# -------------------- HEADER-READ TOOL SELECTION ---------------------
+# choose header-read tool (xxd preferred, fallback to od)
+USE_XXD=0
+USE_OD=0
+if command -v xxd >/dev/null 2>&1; then
+  USE_XXD=1
+fi
+if command -v od >/dev/null 2>&1; then
+  USE_OD=1
+fi
+# Use DEBUG helper to print availability (prints only if DEBUG env var set)
+DEBUG "xxd available: $([[ $USE_XXD -eq 1 ]] && echo yes || echo no)"
+DEBUG "od available: $([[ $USE_OD -eq 1 ]] && echo yes || echo no)"
+# Fail early if neither header-read tool is present
+if [[ $USE_XXD -eq 0 && $USE_OD -eq 0 ]]; then
+  echo "❌ Error: neither 'xxd' nor 'od' is available on PATH. Please install 'xxd' (commonly provided by vim-common) or ensure 'od' (part of coreutils) is present." >&2
+  exit 2
+fi
+
+# Helper to read first N bytes of a file and return a lowercase hex string without whitespace.
+# Arguments:
+#   $1 -> file path
+#   $2 -> max bytes to read (integer)
+# Returns: printed header string
+read_file_header() {
+  local file="$1"
+  local max_bytes="$2"
+  local header=""
+  if (( USE_XXD )); then
+    # xxd produces a clean hex stream (may include trailing newline)
+    header="$(xxd -p -l "$max_bytes" -- "$file" 2>/dev/null | tr -d ' \n' | tr '[:upper:]' '[:lower:]' || true)"
+  else
+    # od prints bytes with spaces; remove spaces/newlines after converting
+    # od arguments: -An (no address), -v (show all), -t x1 (hex bytes), -N bytes (limit)
+    header="$(od -An -v -t x1 -N "$max_bytes" -- "$file" 2>/dev/null | tr -d ' \n' | tr '[:upper:]' '[:lower:]' || true)"
+  fi
+  printf '%s' "$header"
+}
+# ---------------------------------------------------------------------
+
 # --------------- DETECT & DEFINE SHA256 HELPER ---------------
 # If SKIP_HASH is set, don't require any sha256 utility and provide a harmless stub that
 # returns an empty string (the calling logic will treat skip mode as "passed").
@@ -1463,7 +1503,8 @@ safe_stream_sha256_from_z() {
   # Read the first N bytes of the file only once
   local file_header=""
   if [ "$max_magic_bytes" -gt 0 ]; then
-    file_header=$(xxd -p -l "$max_magic_bytes" "$1" | tr '[:upper:]' '[:lower:]')
+    # Use the portable helper that chooses xxd or od
+    file_header="$(read_file_header "$1" "$max_magic_bytes")"
   fi
 
   # Run magic-matching tool to produce the output file.
@@ -1731,7 +1772,8 @@ safe_stream_check_quantized_gguf_from_z() {
 
   local file_header=""
   if [ "$max_magic_bytes" -gt 0 ]; then
-    file_header=$(xxd -p -l "$max_magic_bytes" "$z" | tr '[:upper:]' '[:lower:]')
+    # Use the portable helper that chooses xxd or od
+    file_header="$(read_file_header "$z" "$max_magic_bytes")"
   fi
 
   # Find matching tool & stream-decompress into gguf_info.py reading from stdin (use '-' as filename if supported)
@@ -1959,7 +2001,8 @@ decompress_archive_to_file() {
   # Read the first N bytes of the file only once
   local file_header=""
   if [ "$max_magic_bytes" -gt 0 ]; then
-    file_header=$(xxd -p -l "$max_magic_bytes" "$1" | tr '[:upper:]' '[:lower:]')
+    # Use the portable helper that chooses xxd or od
+    file_header="$(read_file_header "$1" "$max_magic_bytes")"
   fi
 
   # Run magic-matching tool to produce the output file.
