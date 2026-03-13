@@ -509,7 +509,12 @@ while true; do
       ;;
     --z-custom-tools)
       # Accept only a single comma-separated string of tool:magic entries.
+      # IMPORTANT: when the user passes --z-custom-tools we REPLACE the default CUSTOM_TOOLS
+      # with the user's list (previous behavior appended to the defaults). This ensures the
+      # user's explicit specification is honored exactly.
       IFS=',' read -r -a __tools_parts <<< "$2"
+      # overwrite defaults with user-provided entries
+      CUSTOM_TOOLS=()
       for __t in "${__tools_parts[@]}"; do
         # trim whitespace
         __t="${__t#"${__t%%[![:space:]]*}"}"
