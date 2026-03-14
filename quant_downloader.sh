@@ -968,8 +968,8 @@ fi
 if [[ "$ARCHIVE_COMPRESS" != true && "$ARCHIVE_DECOMPRESS" != true && "$ARCHIVE_NOAUTO" != true ]]; then
   # Count files robustly using nullglob to avoid find portability differences
   shopt -s nullglob 2>/dev/null || true
-  gguf_files=( "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf )
-  zbst_files=(  "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf.zbst )
+  gguf_files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf )
+  zbst_files=(  "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf.zbst )
   shopt -u nullglob 2>/dev/null || true
 
   # Get array lengths (do NOT use ${#array[@]:-0} — some shells reject that)
@@ -4034,14 +4034,14 @@ if [[ "$VERIFY" == true ]]; then
   # - If neither -z nor -zd used with --verify: verify only .gguf; warn if any .gguf.zbst present (they will be ignored)
   if [[ "$ARCHIVE_COMPRESS" == true ]]; then
     # Verify only .gguf.zbst
-    if comp=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -name "${QTYPE^^}-*-of-*.gguf" -print -quit 2>/dev/null || true); then
+    if comp=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -name "*-${QTYPE^^}-*-of-*.gguf" -print -quit 2>/dev/null || true); then
       if [[ -n "$comp" ]]; then
         echo "⚠️ Warning: found .gguf files in model dir while --verify + -z is used. These will be ignored; verifying only .gguf.zbst files." >&2
       fi
     fi
   else
     # Verify only .gguf
-    if comp=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -name "${QTYPE^^}-*-of-*.gguf.zbst" -print -quit 2>/dev/null || true); then
+    if comp=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -name "*-${QTYPE^^}-*-of-*.gguf.zbst" -print -quit 2>/dev/null || true); then
       if [[ -n "$comp" ]]; then
         echo "⚠️ Warning: found .gguf.zbst files in model dir while --verify without -z. These will be ignored; verifying only .gguf files." >&2
       fi
@@ -4055,9 +4055,9 @@ if [[ "$VERIFY" == true ]]; then
     shopt -s nullglob 2>/dev/null || true
     files=()
     if [[ "$ARCHIVE_COMPRESS" == true ]]; then
-      files=( "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf.zbst )
+      files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf.zbst )
     else
-      files=( "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf )
+      files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf )
     fi
     shopt -u nullglob 2>/dev/null || true
 
@@ -4963,12 +4963,12 @@ shopt -u nullglob
 # Use shell globbing (nullglob) for portability and predictable behavior.
 shopt -s nullglob 2>/dev/null || true
 if [[ "$ARCHIVE_COMPRESS" == true ]]; then
-  files=( "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf.zbst )
+  files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf.zbst )
 elif [[ "$ARCHIVE_DECOMPRESS" == true ]]; then
   # prefer already-decompressed .gguf if present, otherwise accept .gguf.zbst
-  files=( "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf.zbst )
+  files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf.zbst )
 else
-  files=( "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf )
+  files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf )
 fi
 shopt -u nullglob 2>/dev/null || true
 
@@ -5278,19 +5278,19 @@ else
   if [[ "$ARCHIVE_COMPRESS" == true ]]; then
     # only consider .gguf.zbst for completeness
     shopt -s nullglob 2>/dev/null || true
-    files=( "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf.zbst )
+    files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf.zbst )
     shopt -u nullglob 2>/dev/null || true
   elif [[ "$ARCHIVE_DECOMPRESS" == true ]]; then
     # if z-decompress, prefer .gguf files (we expect decompressed .gguf). If .gguf absent, consider .gguf.zbst
     shopt -s nullglob 2>/dev/null || true
-    files=( "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf )
+    files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf )
     if [[ ${#files[@]} -eq 0 ]]; then
-      files=( "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf.zbst )
+      files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf.zbst )
     fi
     shopt -u nullglob 2>/dev/null || true
   else
     shopt -s nullglob 2>/dev/null || true
-    files=( "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf )
+    files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf )
     shopt -u nullglob 2>/dev/null || true
   fi
 
