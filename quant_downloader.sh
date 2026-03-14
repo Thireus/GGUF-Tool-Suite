@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regex entries.       **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-13-2026 -------------------- **#
+#** --------------- Updated: Mar-14-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -968,8 +968,8 @@ fi
 if [[ "$ARCHIVE_COMPRESS" != true && "$ARCHIVE_DECOMPRESS" != true && "$ARCHIVE_NOAUTO" != true ]]; then
   # Count files robustly using nullglob to avoid find portability differences
   shopt -s nullglob 2>/dev/null || true
-  gguf_files=( "$LOCAL_MODEL_DIR"/*-*-of-*.gguf )
-  zbst_files=(  "$LOCAL_MODEL_DIR"/*-*-of-*.gguf.zbst )
+  gguf_files=( "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf )
+  zbst_files=(  "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf.zbst )
   shopt -u nullglob 2>/dev/null || true
 
   # Get array lengths (do NOT use ${#array[@]:-0} — some shells reject that)
@@ -2263,7 +2263,7 @@ run_downloader() {
       # If downloader produced a .gguf.zbst but user has not enabled -z or -zd, that is unexpected:
       if [[ -f "$destdir/$filename" || -L "$destdir/$filename" ]]; then
         if [[ "$filename" == *.gguf.zbst && "$ARCHIVE_COMPRESS" != true && "$ARCHIVE_DECOMPRESS" != true ]]; then
-          echo "❌ Error: The downloader produced a compressed file '$destdir/$filename' (.gguf.zbst) but you did not enable -z or -zd. Please rerun the script with either --z-compress (-z) or --z-decompress (-zd) to work with compressed files." >&2
+          echo "❌ Error: The downloader fetched a compressed file '$destdir/$filename' (.gguf.zbst) but you did not enable -z or -zd. Please rerun the script with either --z-compress (-z) or --z-decompress (-zd) to work with compressed files." >&2
           exit_from_subprocess 13
         fi
       fi
@@ -3817,13 +3817,13 @@ download_shard() {
         if safe_file_exists "$local_z"; then
           echo "[$(timestamp)] z-decompress: found $local_z -> decompressing to $local_gguf (overwrite)"
           if ! decompress_archive_to_file "$local_z" "$local_gguf"; then
-            echo "[$(timestamp)] ⚠️ decompression failed for $local_z — treating as corrupted and will redownload." >&2
+            echo "[$(timestamp)] ⚠️ decompression failed for $local_z (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
           fi
           rm -f "$local_z" || true
         elif safe_file_exists "$dl_z"; then
           echo "[$(timestamp)] z-decompress: found $dl_z in download dir -> decompressing to $local_gguf (overwrite)"
           if ! decompress_archive_to_file "$dl_z" "$local_gguf"; then
-            echo "[$(timestamp)] ⚠️ decompression failed for $dl_z in download dir — treating as corrupted and will redownload." >&2
+            echo "[$(timestamp)] ⚠️ decompression failed for $dl_z in download dir (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
           fi
           rm -f "$dl_z" || true
         fi
@@ -3894,13 +3894,13 @@ download_shard() {
             if safe_file_exists "$local_z"; then
               echo "[$(timestamp)] z-decompress: found $local_z -> decompressing to $local_gguf (overwrite)"
               if ! decompress_archive_to_file "$local_z" "$local_gguf"; then
-                echo "[$(timestamp)] ⚠️ decompression failed for $local_z — treating as corrupted and will redownload." >&2
+                echo "[$(timestamp)] ⚠️ decompression failed for $local_z (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
               fi
               rm -f "$local_z" || true
             elif safe_file_exists "$dl_z"; then
               echo "[$(timestamp)] z-decompress: found $dl_z in download dir -> decompressing to $local_gguf (overwrite)"
               if ! decompress_archive_to_file "$dl_z" "$local_gguf"; then
-                echo "[$(timestamp)] ⚠️ decompression failed for $dl_z in download dir — treating as corrupted and will redownload." >&2
+                echo "[$(timestamp)] ⚠️ decompression failed for $dl_z (data corruption or invalid tool or tool options) in download dir — treating as corrupted and will redownload." >&2
               fi
               rm -f "$dl_z" || true
             fi
@@ -4034,14 +4034,14 @@ if [[ "$VERIFY" == true ]]; then
   # - If neither -z nor -zd used with --verify: verify only .gguf; warn if any .gguf.zbst present (they will be ignored)
   if [[ "$ARCHIVE_COMPRESS" == true ]]; then
     # Verify only .gguf.zbst
-    if comp=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -name "*-*-of-*.gguf" -print -quit 2>/dev/null || true); then
+    if comp=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -name "${QTYPE^^}-*-of-*.gguf" -print -quit 2>/dev/null || true); then
       if [[ -n "$comp" ]]; then
         echo "⚠️ Warning: found .gguf files in model dir while --verify + -z is used. These will be ignored; verifying only .gguf.zbst files." >&2
       fi
     fi
   else
     # Verify only .gguf
-    if comp=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -name "*-*-of-*.gguf.zbst" -print -quit 2>/dev/null || true); then
+    if comp=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -name "${QTYPE^^}-*-of-*.gguf.zbst" -print -quit 2>/dev/null || true); then
       if [[ -n "$comp" ]]; then
         echo "⚠️ Warning: found .gguf.zbst files in model dir while --verify without -z. These will be ignored; verifying only .gguf files." >&2
       fi
@@ -4055,9 +4055,9 @@ if [[ "$VERIFY" == true ]]; then
     shopt -s nullglob 2>/dev/null || true
     files=()
     if [[ "$ARCHIVE_COMPRESS" == true ]]; then
-      files=( "$LOCAL_MODEL_DIR"/*-*-of-*.gguf.zbst )
+      files=( "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf.zbst )
     else
-      files=( "$LOCAL_MODEL_DIR"/*-*-of-*.gguf )
+      files=( "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf )
     fi
     shopt -u nullglob 2>/dev/null || true
 
@@ -4106,7 +4106,7 @@ if [[ "$VERIFY" == true ]]; then
                 tmpf="$(mktemp "$GNUPG_TMPDIR/first.XXXXXX.gguf")"
               fi
               if ! decompress_archive_to_file "$LOCAL_MODEL_DIR/$gguf_first.zbst" "$tmpf" skip_symlink_force; then
-                echo "[$(timestamp)] ❌ VERIFY: decompression failed for '$LOCAL_MODEL_DIR/$gguf_first.zbst' (data corruption). Maybe you need to specify --z-decompress-opt? Treating as verification failure." >&2
+                echo "[$(timestamp)] ❌ VERIFY: decompression failed for '$LOCAL_MODEL_DIR/$gguf_first.zbst' (data corruption or invalid tool or tool options). Maybe you need to specify --z-decompress-opt? Treating as verification failure." >&2
                 rm -f "$tmpf"
                 kill -s TERM "$SCRIPT_PID"
                 touch "$FAIL_MARKER"
@@ -4638,13 +4638,13 @@ while ( ((${#TENSORS_TO_FETCH_DYNAMIC[@]} > 0)) || ( ((${#TENSORS_TO_QUANTIZE_DY
         if safe_file_exists "$local_z"; then
           echo "[$(timestamp)] z-decompress: found $local_z -> decompressing to $local_gguf (overwrite)"
           if ! decompress_archive_to_file "$local_z" "$local_gguf"; then
-            echo "[$(timestamp)] ⚠️ decompression failed for $local_z — treating as corrupted and will redownload." >&2
+            echo "[$(timestamp)] ⚠️ decompression failed for $local_z (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
           fi
           rm -f "$local_z" || true
         elif safe_file_exists "$dl_z"; then
           echo "[$(timestamp)] z-decompress: found $dl_z in download dir -> decompressing to $local_gguf (overwrite)"
           if ! decompress_archive_to_file "$dl_z" "$local_gguf"; then
-            echo "[$(timestamp)] ⚠️ decompression failed for $dl_z in download dir — treating as corrupted and will redownload." >&2
+            echo "[$(timestamp)] ⚠️ decompression failed for $dl_z in download dir (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
           fi
           rm -f "$dl_z" || true
         fi
@@ -4689,13 +4689,13 @@ while ( ((${#TENSORS_TO_FETCH_DYNAMIC[@]} > 0)) || ( ((${#TENSORS_TO_QUANTIZE_DY
           if safe_file_exists "$local_z"; then
             echo "[$(timestamp)] z-decompress: found quantized $local_z -> decompressing to $local_gguf (overwrite)"
             if ! decompress_archive_to_file "$local_z" "$local_gguf"; then
-              echo "[$(timestamp)] ⚠️ decompression failed for quantized $local_z — treating as corrupted and will re-quantize." >&2
+              echo "[$(timestamp)] ⚠️ decompression failed for quantized $local_z (data corruption or invalid tool or tool options) — treating as corrupted and will re-quantize." >&2
             fi
             rm -f "$local_z" || true
           elif safe_file_exists "$dl_z"; then
             echo "[$(timestamp)] z-decompress: found quantized $dl_z in download dir -> decompressing to $local_gguf (overwrite)"
             if ! decompress_archive_to_file "$dl_z" "$local_gguf"; then
-              echo "[$(timestamp)] ⚠️ decompression failed for quantized $dl_z in download dir — treating as corrupted and will re-quantize." >&2
+              echo "[$(timestamp)] ⚠️ decompression failed for quantized $dl_z in download dir (data corruption or invalid tool or tool options) — treating as corrupted and will re-quantize." >&2
             fi
             rm -f "$dl_z" || true
           fi
@@ -4963,12 +4963,12 @@ shopt -u nullglob
 # Use shell globbing (nullglob) for portability and predictable behavior.
 shopt -s nullglob 2>/dev/null || true
 if [[ "$ARCHIVE_COMPRESS" == true ]]; then
-  files=( "$LOCAL_MODEL_DIR"/*-*-of-*.gguf.zbst )
+  files=( "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf.zbst )
 elif [[ "$ARCHIVE_DECOMPRESS" == true ]]; then
   # prefer already-decompressed .gguf if present, otherwise accept .gguf.zbst
-  files=( "$LOCAL_MODEL_DIR"/*-*-of-*.gguf "$LOCAL_MODEL_DIR"/*-*-of-*.gguf.zbst )
+  files=( "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf.zbst )
 else
-  files=( "$LOCAL_MODEL_DIR"/*-*-of-*.gguf )
+  files=( "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf )
 fi
 shopt -u nullglob 2>/dev/null || true
 
@@ -5002,24 +5002,68 @@ if [[ "$should_verify_first" == true ]]; then
   if [[ "$VERIFY" != true ]]; then
     echo "[$(timestamp)] Fetching first shard separately"
     if [[ "$total" != "" ]] && [[ "$gguf_first" != "" ]]; then
+    
+      local_gguf="$LOCAL_MODEL_DIR/$gguf_first"
+      dl_gguf="$LOCAL_DOWNLOAD_DIR/$gguf_first"
+      local_z="${local_gguf}.zbst"
+      dl_z="${dl_gguf}.zbst"
+
       if [[ "$FORCE_REDOWNLOAD" == true ]]; then
         echo "[$(timestamp)] Force redownload: removing existing first shard (and gpg signature)"
-        rm -f "$LOCAL_MODEL_DIR/$gguf_first" "$LOCAL_DOWNLOAD_DIR/$gguf_first" || true
-        rm -f "$LOCAL_MODEL_DIR/$gguf_first.sig" "$LOCAL_DOWNLOAD_DIR/$gguf_first.sig" || true
-        rm -f "$LOCAL_MODEL_DIR/$gguf_first.zbst" "$LOCAL_DOWNLOAD_DIR/$gguf_first.zbst" || true
+        rm -f "$local_gguf" "$dl_gguf" || true
+        rm -f "$local_gguf.sig" "$dl_gguf.sig" || true
+        rm -f "$local_z" "$dl_z" || true
         sync || true
       fi
-      if ! [ -f "$LOCAL_MODEL_DIR/$gguf_first" ] && ! [ -f "$LOCAL_MODEL_DIR/$gguf_first.zbst" ]; then
-        until run_downloader_shard "${QTYPE}" 1 "$LOCAL_DOWNLOAD_DIR" "$(basename "$gguf_first")"; do
+
+      # If ARCHIVE_DECOMPRESS true: if a .zbst exists, decompress to .gguf (overwrite) so script works on .gguf
+      if [[ "$ARCHIVE_DECOMPRESS" == true ]]; then
+        if safe_file_exists "$local_z"; then
+          echo "[$(timestamp)] z-decompress: found first shard $local_z -> decompressing to $local_gguf (overwrite)"
+          if ! decompress_archive_to_file "$local_z" "$local_gguf"; then
+            echo "[$(timestamp)] ⚠️ decompression failed for first shard $local_z (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
+          fi
+          rm -f "$local_z" || true
+        elif safe_file_exists "$dl_z"; then
+          echo "[$(timestamp)] z-decompress: found first shard $dl_z in download dir -> decompressing to $local_gguf (overwrite)"
+          if ! decompress_archive_to_file "$dl_z" "$local_gguf"; then
+            echo "[$(timestamp)] ⚠️ decompression failed for first shard $dl_z in download dir (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
+          fi
+          rm -f "$dl_z" || true
+        fi
+      fi
+
+      if ! safe_file_exists "$local_gguf" && ! safe_file_exists "$local_z"; then
+        # Perform cleanup to ensure we only have one first shard after download
+        rm -f "$dl_gguf" "$dl_z" || true
+
+        until run_downloader_shard "${QTYPE}" 1 "$LOCAL_DOWNLOAD_DIR" "$gguf_first"; do
           echo "[$(timestamp)] First shard download failed; retrying in 10s..."
           sleep 10
         done
 
-        # Move whichever file was produced (.gguf or .gguf.zbst)
-        if safe_file_exists "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first")"; then
-          mv -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first")" "$LOCAL_MODEL_DIR/"
-        elif safe_file_exists "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first").zbst"; then
-          mv -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first").zbst" "$LOCAL_MODEL_DIR/"
+        # DO IT AGAIN (because we may have downloaded a compressed file): If ARCHIVE_DECOMPRESS true: if a .zbst exists, decompress to .gguf (overwrite) so script works on .gguf
+        if [[ "$ARCHIVE_DECOMPRESS" == true ]]; then
+          if safe_file_exists "$dl_z"; then
+            echo "[$(timestamp)] z-decompress: found first shard $dl_z -> decompressing to $dl_gguf (overwrite)"
+            if ! decompress_archive_to_file "$dl_z" "$dl_gguf"; then
+              echo "[$(timestamp)] ⚠️ decompression failed for first shard $dl_z (data corruption or invalid tool or tool options) — treating as corrupted." >&2
+            fi
+            rm -f "$dl_z" || true
+          fi
+        fi
+
+        # Move whichever file was fetched or was already there (.gguf or .gguf.zbst)
+        if safe_file_exists "$dl_gguf"; then
+          mv -f "$dl_gguf" "$local_gguf"
+        elif safe_file_exists "$dl_z"; then
+          if [[ "$ARCHIVE_COMPRESS" == true ]]; then
+            mv -f "$dl_z" "$local_z"
+          else
+            echo "❌ Error: The downloader fetched a compressed file '$dl_z' (.gguf.zbst) but you did not enable -z or -zd. Please rerun the script with either --z-compress (-z) or --z-decompress (-zd) to work with compressed files." >&2
+            touch "$FAIL_MARKER"
+            exit 11
+          fi
         else
           echo "[$(timestamp)] ❌ Error: expected first shard in download dir but none found after download." >&2
           touch "$FAIL_MARKER"
@@ -5027,63 +5071,96 @@ if [[ "$should_verify_first" == true ]]; then
         fi
 
         echo "[$(timestamp)] First shard saved"
-        if [[ "$SKIP_GPG" != true ]]; then
-          until run_downloader_shard "${QTYPE}" -2 "$LOCAL_DOWNLOAD_DIR" "$(basename "$gguf_first.sig")"; do
+
+      else
+
+        echo "[$(timestamp)] First shard already exists"
+
+        # DO IT AGAIN (because we may have downloaded files again): If ARCHIVE_DECOMPRESS true: if a .zbst exists, decompress to .gguf (overwrite) so script works on .gguf
+        if [[ "$ARCHIVE_DECOMPRESS" == true ]]; then
+          if safe_file_exists "$local_z"; then
+            echo "[$(timestamp)] z-decompress: found first shard $local_z -> decompressing to $local_gguf (overwrite)"
+            if ! decompress_archive_to_file "$local_z" "$local_gguf"; then
+              echo "[$(timestamp)] ⚠️ decompression failed for first shard $local_z (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
+            fi
+            rm -f "$local_z" || true
+          fi
+        elif ! safe_file_exists "$local_gguf"; then
+          # This condition is sufficient to know $local_z exists because we're already into a condition that has at least one of these two files exist
+          if [[ "$ARCHIVE_COMPRESS" != true ]]; then
+            echo "❌ Error: The existing first shard is a compressed file '$local_z' (.gguf.zbst) but you did not enable -z or -zd. Please rerun the script with either --z-compress (-z) or --z-decompress (-zd) to work with compressed files." >&2
+            touch "$FAIL_MARKER"
+            exit 11
+          fi
+        elif safe_file_exists "$local_z"; then
+          # Both $local_gguf and $local_z files are present, we choose which one to keep
+          if [[ "$ARCHIVE_COMPRESS" == true ]]; then
+            rm -f "$local_gguf" || true
+          else
+            # Cleanup of the existing $local_z file if present, because the $local_gguf already exists
+            rm -f "$local_z" || true
+          fi
+        fi
+
+      fi
+
+      # Obtain signature if not available
+      if [[ "$SKIP_GPG" != true ]]; then
+        if ! safe_file_exists "$local_gguf.sig"; then
+          until run_downloader_shard "${QTYPE}" -2 "$LOCAL_DOWNLOAD_DIR" "$gguf_first.sig"; do
             echo "[$(timestamp)] First shard signature download failed; retrying in 10s..."
             sleep 10
           done
-
-          # Move file that was procurred .gguf.sig
-          if safe_file_exists "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first.sig")"; then
-            mv -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first.sig")" "$LOCAL_MODEL_DIR/"
+          # Move .gguf.sig file that was fetched
+          if safe_file_exists "$dl_gguf.sig"; then
+            mv -f "$dl_gguf.sig" "$local_gguf.sig"
           else
             echo "[$(timestamp)] ❌ Error: expected first shard signature in download dir but none found after download." >&2
             touch "$FAIL_MARKER"
             exit 1
           fi
-
-          echo "[$(timestamp)] First shard gpg signature saved"
-        fi
-      else
-        echo "[$(timestamp)] First shard already exists"
-        if [[ "$SKIP_GPG" != true ]]; then
-          if ! [ -f "$LOCAL_MODEL_DIR/$gguf_first.sig" ]; then
-            until run_downloader_shard "${QTYPE}" -2 "$LOCAL_DOWNLOAD_DIR" "$(basename "$gguf_first.sig")"; do
-              echo "[$(timestamp)] First shard gpg signature download failed; retrying in 10s..."
-              sleep 10
-            done
-            mv -f "$LOCAL_DOWNLOAD_DIR/$(basename "$gguf_first.sig")" "$LOCAL_MODEL_DIR/"
-            echo "[$(timestamp)] First shard gpg signature saved"
-          else
-            echo "[$(timestamp)] First shard gpg signature already exists"
-          fi
+          echo "[$(timestamp)] First shard gpg signature saved."
+        else
+          echo "[$(timestamp)] First shard gpg signature already available, download not needed."
         fi
       fi
 
       # After ensuring first shard and signature present, perform GPG verification if required.
       if [[ "$SKIP_GPG" != true ]]; then
         if command -v gpg >/dev/null 2>&1; then
+          # ensure counter exists (preserve existing value if set)
+          failed_verifications=${failed_verifications:-0}
           # We'll attempt verification and on corruption/verify failure (when not verify-readonly) we will redownload and retry.
           # Prefer verifying the actual .gguf file if present (this avoids trying to decompress a missing/non-updated .gguf.zbst).
-          if safe_file_exists "$LOCAL_MODEL_DIR/$gguf_first"; then
+          if safe_file_exists "$local_gguf"; then
             # verify using the .gguf that we just ensured is present
             while :; do
-              if [ ! -f "$LOCAL_MODEL_DIR/$gguf_first.sig" ]; then
-                echo "[$(timestamp)] ⚠️ Signature file '$gguf_first.sig' is missing — treating as corrupted and will redownload." >&2
-                if attempt_redownload_first; then
-                  continue
-                else
-                  echo "❌ Error: Signature file '$gguf_first.sig' is missing." >&2
-                  [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
-                  touch "$FAIL_MARKER"
-                  exit 5
-                fi
+              # Important check because attempt_redownload_first might have downloaded a .zbst
+              if ! safe_file_exists "$local_gguf" && [[ "$ARCHIVE_COMPRESS" != true ]] && [[ "$ARCHIVE_DECOMPRESS" != true ]] && safe_file_exists "$local_z"; then
+                echo "❌ Error: The existing first shard is a compressed file '$local_z' (.gguf.zbst) but you did not enable -z or -zd. Please rerun the script with either --z-compress (-z) or --z-decompress (-zd) to work with compressed files." >&2
+                touch "$FAIL_MARKER"
+                exit 10
+              elif ! safe_file_exists "$local_gguf"; then
+                # New downloaded files are apparently .zst, so we switch to the next condition which performs verifications on the $local_z
+                break
               fi
-              if safe_gpg_verify "$LOCAL_MODEL_DIR/$gguf_first.sig" "$LOCAL_MODEL_DIR/$gguf_first" > /dev/null 2>&1; then
+              if safe_gpg_verify "$local_gguf.sig" "$local_gguf" > /dev/null 2>&1; then
                 echo "[$(timestamp)] First shard gpg signature verification successful."
                 break
               else
-                echo "[$(timestamp)] ⚠️ GPG signature verification failed for '$gguf_first.sig' — treating as corrupted and will redownload." >&2
+                # increment failure counter
+                failed_verifications=$((failed_verifications + 1))
+                # if we've reached the maximum allowed failed verifications, abort without attempting to redownload
+                if [ "$failed_verifications" -ge "$MAX_FAILED_VERIFICATION" ]; then
+                  echo "[$(timestamp)] ❌ Error: downloaded signature and first shard produce an invalid signature after $failed_verifications attempts. Removing downloaded files and aborting." >&2
+                  rm -f -- "$local_gguf" "$local_gguf.sig" || true
+                  [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+                  touch "$FAIL_MARKER"
+                  # explanatory message for the user (see script log) and exit with non-zero code
+                  echo "[$(timestamp)] ❗ Please raise an issue if this persists: https://github.com/Thireus/GGUF-Tool-Suite/issues" >&2
+                  exit 666
+                fi
+                echo "[$(timestamp)] ⚠️ First shard GPG signature verification failed for '$gguf_first.sig' — treating as corrupted and will redownload (attempt $failed_verifications/$MAX_FAILED_VERIFICATION)." >&2
                 if attempt_redownload_first; then
                   continue
                 else
@@ -5094,66 +5171,60 @@ if [[ "$should_verify_first" == true ]]; then
                 fi
               fi
             done
-          elif safe_file_exists "$LOCAL_MODEL_DIR/$gguf_first.zbst"; then
+          fi
+          if ! safe_file_exists "$local_gguf" && safe_file_exists "$local_z"; then
             # If only a .zbst exists, decompress to temp (or to local model directory if -zd) and verify.
             while :; do
-              if [[ "$VERIFY_READONLY" == true ]]; then
-                tmpf="$(mktemp "$VERIFY_TMPDIR/first.XXXXXX.gguf")"
-              elif [[ "$ARCHIVE_DECOMPRESS" == true ]] || ([[ "$ARCHIVE_COMPRESS" == true ]] && [[ ! -f "$LOCAL_MODEL_DIR/$gguf_first.zbst" ]]); then
-                tmpf="$LOCAL_MODEL_DIR/$gguf_first"
-              else
-                tmpf="$(mktemp "$GNUPG_TMPDIR/first.XXXXXX.gguf")"
+              if ([[ "$ARCHIVE_COMPRESS" != true ]] && [[ "$ARCHIVE_DECOMPRESS" != true ]]) && safe_file_exists "$local_z"; then
+                echo "❌ Error: The existing first shard is a compressed file '$local_z' (.gguf.zbst) but you did not enable -z or -zd. Please rerun the script with either --z-compress (-z) or --z-decompress (-zd) to work with compressed files." >&2
+                touch "$FAIL_MARKER"
+                exit 10
               fi
-
-              if safe_file_exists "$LOCAL_MODEL_DIR/$gguf_first.zbst" && ! decompress_archive_to_file "$LOCAL_MODEL_DIR/$gguf_first.zbst" "$tmpf" skip_symlink_force; then
-                echo "[$(timestamp)] ⚠️ decompression failed for '$LOCAL_MODEL_DIR/$gguf_first.zbst' (data corruption) — treating as corrupted and will redownload." >&2
-                rm -f "$tmpf"
-                if attempt_redownload_first; then
-                  # redownloaded, retry loop
-                  continue
-                else
+              # Important to keep the safe_file_exists "$local_z" check here as well because a newly downloaded file could be non-zbst
+              if safe_file_exists "$local_z" && ! decompress_archive_to_file "$local_z" "$local_gguf" skip_symlink_force; then
+                # Perform a cleanup and try again
+                rm -f "$local_z" "$local_gguf" || true
+                if [ "$failed_verifications" -ge "$MAX_FAILED_VERIFICATION" ]; then
                   # cannot redownload (readonly) -> mark failure and exit
-                  echo "❌ Error: decompression failed for '$LOCAL_MODEL_DIR/$gguf_first.zbst' (data corruption)." >&2
+                  echo "❌ Error: decompression failed for '$local_z' (data corruption or invalid tool or tool options)." >&2
                   [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
                   touch "$FAIL_MARKER"
                   exit 1
+                else
+                  echo "[$(timestamp)] ⚠️ decompression failed for '$local_z' (data corruption or invalid tool or tool options) — will automatically fail GPG signature to redownload." >&2
                 fi
               fi
 
-              if [ ! -f "$LOCAL_MODEL_DIR/$gguf_first.sig" ]; then
-                echo "[$(timestamp)] ⚠️ Signature file '$gguf_first.sig' is missing — treating as corrupted and will redownload." >&2
-                rm -f "$tmpf"
-                if attempt_redownload_first; then
-                  continue
-                else
-                  echo "❌ Error: Signature file '$gguf_first.sig' is missing." >&2
-                  [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
-                  touch "$FAIL_MARKER"
-                  exit 5
-                fi
-              fi
-
-              if safe_gpg_verify "$LOCAL_MODEL_DIR/$gguf_first.sig" "$tmpf" > /dev/null 2>&1; then
-                if [[ "$tmpf" != "$LOCAL_MODEL_DIR/$gguf_first" ]]; then
-                  echo "[$(timestamp)] First shard gpg signature verification succeeded (via temp decompressed file)."
-                  rm -f "$tmpf"
-                else
-                  echo "[$(timestamp)] First shard gpg signature verification succeeded."
-                fi
+              if safe_file_exists "$local_gguf" && safe_gpg_verify "$local_gguf.sig" "$local_gguf" > /dev/null 2>&1; then
+                echo "[$(timestamp)] First shard gpg signature verification succeeded."
                 # If both .gguf and .gguf.zbst existed, remove .gguf to keep only .gguf.zbst in compress mode
-                if [[ "$ARCHIVE_COMPRESS" == true && -f "$LOCAL_MODEL_DIR/$gguf_first" ]]; then
-                  if [ ! -f "$LOCAL_MODEL_DIR/$gguf_first.zbst" ]; then
-                    echo "[$(timestamp)] z-compress validated \"$LOCAL_MODEL_DIR/$gguf_first\""
-                    compress_gguf_to_archive "$LOCAL_MODEL_DIR/$gguf_first"
+                if [[ "$ARCHIVE_COMPRESS" == true ]] && safe_file_exists "$local_gguf"; then
+                  if ! safe_file_exists "$local_z"; then
+                    echo "[$(timestamp)] z-compress validated \"$local_gguf\""
+                    compress_gguf_to_archive "$local_gguf"
                   else
-                    rm -f "$LOCAL_MODEL_DIR/$gguf_first" || true
-                    echo "[$(timestamp)] Removed corresponding .gguf for '$gguf_first' because .gguf.zbst is present and valid"
+                    rm -f "$local_gguf" || true
+                    echo "[$(timestamp)] Removed the '$gguf_first' because the decompressed .gguf.zbst produced a valid signature."
                   fi
                 fi
+                # No need to echo that the shard is valid here because final verification of the first shard will be reported to the user later
                 break
               else
-                echo "[$(timestamp)] ⚠️ First shard gpg signature verification failed for '$gguf_first.sig'." >&2
-                rm -f "$tmpf"
+                # increment failure counter
+                failed_verifications=$((failed_verifications + 1))
+                # if we've reached the maximum allowed failed verifications, abort without attempting to redownload
+                if [ "$failed_verifications" -ge "$MAX_FAILED_VERIFICATION" ]; then
+                  echo "[$(timestamp)] ❌ Error: downloaded signature and first shard produce an invalid signature after $failed_verifications attempts. Removing downloaded files and aborting." >&2
+                  rm -f -- "$local_z" "$local_gguf" "$local_gguf.sig" || true
+                  [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+                  touch "$FAIL_MARKER"
+                  # explanatory message for the user (see script log) and exit with non-zero code
+                  echo "[$(timestamp)] ❗ Please raise an issue if this persists: https://github.com/Thireus/GGUF-Tool-Suite/issues" >&2
+                  exit 667
+                fi
+                echo "[$(timestamp)] ⚠️ First shard GPG signature verification failed for '$gguf_first.sig' — treating as corrupted and will redownload (attempt $failed_verifications/$MAX_FAILED_VERIFICATION)." >&2
+                # Cleaning file because in theory didn't use to exist (although not entirely true)
+                rm -f "$local_gguf" || true
                 if attempt_redownload_first; then
                   continue
                 else
@@ -5164,29 +5235,36 @@ if [[ "$should_verify_first" == true ]]; then
                 fi
               fi
             done
-          else
-            echo "❌ Error: unable to find previous shards..." >&2
+          fi
+          if ! safe_file_exists "$local_gguf" && ! safe_file_exists "$local_z"; then
+            echo "❌ Error: unable to find the first shard that previously existed..." >&2
             touch "$FAIL_MARKER"
+            exit 12
           fi
         else
           echo "⚠️ Warning: 'gpg' command not found. Signature verification skipped." >&2
         fi
       fi
 
-      # After verification, if compression is enabled, ensure only .zbst remains (compress if necessary)
+      # After verification (or not), if compression is enabled, ensure only .zbst remains (compress if necessary)
       if [[ "$ARCHIVE_COMPRESS" == true ]]; then
-        if safe_file_exists "$LOCAL_MODEL_DIR/$gguf_first"; then
-          echo "[$(timestamp)] z-compress verified first shard to .zbst"
-          compress_gguf_to_archive "$LOCAL_MODEL_DIR/$gguf_first"
+        if safe_file_exists "$local_gguf"; then
+          echo "[$(timestamp)] z-compress first shard to .zbst"
+          compress_gguf_to_archive "$local_gguf"
         fi
+        # Cleanup remaining files (although $local_gguf should have been deleted by compress_gguf_to_archive)
+        rm -f "$local_gguf" "$dl_gguf" || true
+      else
+        # Cleanup remaining files
+        rm -f "$local_z" "$dl_z" || true
       fi
 
     else
-      echo "[$(timestamp)] Skipping$_del first-shard signature download/verification due to special-node-id/xxhsum assignment (not BF16 or assigned node) or --individual-tensors selection."
+      echo "[$(timestamp)] Skipping$_del first-shard download/verification due to other gguf shards missing."
     fi
   fi
 else
-  echo "[$(timestamp)] Skipping$_del first-shard signature download/verification due to special-node-id/xxhsum assignment (not BF16 or assigned node) or --individual-tensors selection."
+  echo "[$(timestamp)] Skipping$_del first-shard download / signature verification due to special-node-id/xxhsum assignment (not BF16 or assigned node) or --individual-tensors selection."
 fi
 
 # ------------- FINAL VERIFICATION & SHARD SEQUENCE --------
@@ -5200,19 +5278,19 @@ else
   if [[ "$ARCHIVE_COMPRESS" == true ]]; then
     # only consider .gguf.zbst for completeness
     shopt -s nullglob 2>/dev/null || true
-    files=( "$LOCAL_MODEL_DIR"/*-*-of-*.gguf.zbst )
+    files=( "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf.zbst )
     shopt -u nullglob 2>/dev/null || true
   elif [[ "$ARCHIVE_DECOMPRESS" == true ]]; then
     # if z-decompress, prefer .gguf files (we expect decompressed .gguf). If .gguf absent, consider .gguf.zbst
     shopt -s nullglob 2>/dev/null || true
-    files=( "$LOCAL_MODEL_DIR"/*-*-of-*.gguf )
+    files=( "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf )
     if [[ ${#files[@]} -eq 0 ]]; then
-      files=( "$LOCAL_MODEL_DIR"/*-*-of-*.gguf.zbst )
+      files=( "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf.zbst )
     fi
     shopt -u nullglob 2>/dev/null || true
   else
     shopt -s nullglob 2>/dev/null || true
-    files=( "$LOCAL_MODEL_DIR"/*-*-of-*.gguf )
+    files=( "$LOCAL_MODEL_DIR"/${QTYPE^^}-*-of-*.gguf )
     shopt -u nullglob 2>/dev/null || true
   fi
 
@@ -5316,7 +5394,7 @@ if [[ "$SKIP_GPG" != true ]]; then
           touch "$FAIL_MARKER"
           exit 5
       fi
-      if [ ! -f "$LOCAL_MODEL_DIR/$gguf_first.sig" ]; then
+      if ! safe_file_exists "$LOCAL_MODEL_DIR/$gguf_first.sig"; then
           echo "❌ Error: Signature file '$gguf_first.sig' is missing." >&2
           echo "Hint: To skip GPG verification, re-run this script with the --skip-gpg option." >&2
           [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
@@ -5333,7 +5411,7 @@ if [[ "$SKIP_GPG" != true ]]; then
           tmpf="$(mktemp "$GNUPG_TMPDIR/first.XXXXXX.gguf")"
         fi
         if ! decompress_archive_to_file "$LOCAL_MODEL_DIR/$gguf_first.zbst" "$tmpf" skip_symlink_force; then
-          echo "❌ Error: decompression failed for '$LOCAL_MODEL_DIR/$gguf_first.zbst' (data corruption)." >&2
+          echo "❌ Error: decompression failed for '$LOCAL_MODEL_DIR/$gguf_first.zbst' (data corruption or invalid tool or tool options)." >&2
           rm -f "$tmpf"
           [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
           touch "$FAIL_MARKER"
@@ -5342,9 +5420,9 @@ if [[ "$SKIP_GPG" != true ]]; then
         if safe_gpg_verify "$LOCAL_MODEL_DIR/$gguf_first.sig" "$tmpf" > /dev/null 2>&1; then
             echo "[$(timestamp)] GPG signature verification for '$gguf_first.sig' successful (via temp decompressed file)."
             # If both .gguf and .gguf.zbst existed, remove .gguf to keep only .gguf.zbst in compress mode
-            if [[ "$ARCHIVE_COMPRESS" == true && -f "$LOCAL_MODEL_DIR/$gguf_first" ]]; then
+            if [[ "$ARCHIVE_COMPRESS" == true ]] && safe_file_exists "$LOCAL_MODEL_DIR/$gguf_first"; then
               rm -f "$LOCAL_MODEL_DIR/$gguf_first" || true
-              echo "[$(timestamp)] Removed corresponding .gguf for '$gguf_first' because .gguf.zbst is present and valid"
+              echo "[$(timestamp)] Removed the '$gguf_first' because .gguf.zbst is present and valid"
             fi
         else
             echo "❌ Error: GPG signature verification failed for '$gguf_first.sig'." >&2
@@ -5357,7 +5435,7 @@ if [[ "$SKIP_GPG" != true ]]; then
         # If z-decompress requested, convert to regular .gguf permanently
         if [[ "$ARCHIVE_DECOMPRESS" == true ]]; then
           if ! decompress_archive_to_file "$LOCAL_MODEL_DIR/$gguf_first.zbst" "$LOCAL_MODEL_DIR/$gguf_first"; then
-            echo "❌ Error: decompression failed while converting '$LOCAL_MODEL_DIR/$gguf_first.zbst' -> '$LOCAL_MODEL_DIR/$gguf_first' (data corruption)." >&2
+            echo "❌ Error: decompression failed while converting '$LOCAL_MODEL_DIR/$gguf_first.zbst' -> '$LOCAL_MODEL_DIR/$gguf_first' (data corruption or invalid tool or tool options)." >&2
             rm -f "$LOCAL_MODEL_DIR/$gguf_first" || true
             touch "$FAIL_MARKER"
             exit 1
