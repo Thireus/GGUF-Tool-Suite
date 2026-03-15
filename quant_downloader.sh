@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regex entries.       **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-14-2026 -------------------- **#
+#** --------------- Updated: Mar-15-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -1039,8 +1039,21 @@ if [[ "$ARCHIVE_COMPRESS" == true || "$ARCHIVE_DECOMPRESS" == true ]]; then
   
   # If any tools are missing, show detailed error and exit
   if [[ ${#missing_tools[@]} -gt 0 ]]; then
-    echo "❌ Error: None of these configured compression tools are available: ${missing_tools[*]}" >&2
-    exit 2
+    # NOTE: original behavior previously exited here. We intentionally keep the original comment
+    # but change behavior to warn the user and continue, because some fallback logic exists
+    # (for example lbzip2 -> bzip2 fallback for decompression). Provide actionable advice.
+    echo "⚠️ Warning: The following configured compression tools are not available on PATH: ${missing_tools[*]}" >&2
+    echo "   When you use -z/--z-compress or -zd/--z-decompress, or if you download or verify .zbst compressed shards, compression/decompression may fail without these tools." >&2
+    echo "   Please install the missing tools set by --z-custom-tools to ensure reliable compression/decompression. Example installation commands (pick the one appropriate for your OS):" >&2
+    echo "     Debian/Ubuntu: sudo apt-get update && sudo apt-get install -y ${missing_tools[*]}" >&2
+    echo "     Fedora/RHEL (dnf): sudo dnf install -y ${missing_tools[*]}" >&2
+    echo "     macOS (Homebrew): brew install ${missing_tools[*]}" >&2
+    echo "     macOS (MacPort): sudo port install ${missing_tools[*]}" >&2
+    echo "   Thireus' hosted .zbst models commonly use (l)bzip2 compression only (for example the \"Kimi-K2.5-THIREUS-BF16-SPECIAL_SPLIT\" model)," >&2
+    echo "   so you may only install 'lbzip2' for parallel/better performance. If 'lbzip2' is not present, the script will try to fall back to 'bzip2' if available for decompression only," >&2
+    echo "   but installing 'lbzip2' is preferred to avoid performance and compatibility issues." >&2
+    echo "   You can still proceed, but be aware some compression/decompression operations may fail at runtime if used." >&2
+    # Continue without exiting to allow fallback behavior elsewhere in the script.
   fi
 fi
 
@@ -1524,12 +1537,21 @@ safe_stream_sha256_from_z() {
       tool="${CUSTOM_TOOL_NAMES[$i]}"
       local opts="$(get_decompress_opts_for_tool "$tool")"
 
+      # If tool is lbzip2 but lbzip2 binary is not present, fall back to bzip2 and notify the user.
+      local actual_tool="$tool"
+      local actual_opts="$opts"
+      if [[ "$tool" == "lbzip2" ]] && ! command -v lbzip2 >/dev/null 2>&1 && command -v bzip2 >/dev/null 2>&1; then
+        actual_tool="bzip2"
+        #actual_opts="$(get_decompress_opts_for_tool "$actual_tool")"
+        echo "[$(timestamp)] ⚠️ Notice: 'lbzip2' not found — falling back to 'bzip2' for decompression. Consider installing 'lbzip2' for better performance." >&2
+      fi
+
       # Run pipeline in a subshell with pipefail so any failure (including tool decoding) sets non-zero exit code.
-      echo "[$(timestamp)] z-decompress (stream): ${tool} ${opts} -k -d -c -- \"$z\"" >&2
+      echo "[$(timestamp)] z-decompress (stream): ${actual_tool} ${actual_opts} -k -d -c -- \"$z\"" >&2
       out=$(
         (
           set -o pipefail
-          ${tool} ${opts} -k -d -c -- "$z" 2>/dev/null | _sha256sum
+          ${actual_tool} ${actual_opts} -k -d -c -- "$z" 2>/dev/null | _sha256sum
         )
       )
       
@@ -1790,12 +1812,21 @@ safe_stream_check_quantized_gguf_from_z() {
       local opts
       opts="$(get_decompress_opts_for_tool "$tool")"
 
+      # If tool is lbzip2 but lbzip2 binary is not present, fall back to bzip2 and notify the user.
+      local actual_tool="$tool"
+      local actual_opts="$opts"
+      if [[ "$tool" == "lbzip2" ]] && ! command -v lbzip2 >/dev/null 2>&1 && command -v bzip2 >/dev/null 2>&1; then
+        actual_tool="bzip2"
+        #actual_opts="$(get_decompress_opts_for_tool "$actual_tool")"
+        echo "[$(timestamp)] ⚠️ Notice: 'lbzip2' not found — falling back to 'bzip2' for decompression. Consider installing 'lbzip2' for better performance." >&2
+      fi
+
       # The pipeline: tool -d -c "$z" 2>/dev/null | python3 gguf_info.py -
-      echo "[$(timestamp)] z-decompress (stream->gguf_info): ${tool} ${opts} -k -d -c -- \"$z\" | python3 \"$gguf_info_script\" -" >&2
+      echo "[$(timestamp)] z-decompress (stream->gguf_info): ${actual_tool} ${actual_opts} -k -d -c -- \"$z\" | python3 \"$gguf_info_script\" -" >&2
       out=$(
         (
           set -o pipefail
-          ${tool} ${opts} -k -d -c -- "$z" 2>/dev/null | _python "$gguf_info_script" "${GGUF_INFO_EXTRA[@]}" - 2>/dev/null
+          ${actual_tool} ${actual_opts} -k -d -c -- "$z" 2>/dev/null | _python "$gguf_info_script" "${GGUF_INFO_EXTRA[@]}" - 2>/dev/null
         )
       )
       rc=$?
@@ -2019,8 +2050,18 @@ decompress_archive_to_file() {
     if [ "$magic_byte_count" -le "$max_magic_bytes" ] && [ "${file_header:0:${#magic}}" = "$(echo "$magic" | tr '[:upper:]' '[:lower:]')" ]; then
       tool="${CUSTOM_TOOL_NAMES[$i]}"
       local opts="$(get_decompress_opts_for_tool "$tool")"
-      echo "[$(timestamp)] z-decompress: ${tool} ${opts} -k -d -c -- \"$z\" > \"$out\"" >&2
-      "${tool}" ${opts} -k -d -c -- "$z" > "$out" 2>/dev/null
+
+      # If tool is lbzip2 but lbzip2 binary is not present, fall back to bzip2 and notify the user.
+      local actual_tool="$tool"
+      local actual_opts="$opts"
+      if [[ "$tool" == "lbzip2" ]] && ! command -v lbzip2 >/dev/null 2>&1 && command -v bzip2 >/dev/null 2>&1; then
+        actual_tool="bzip2"
+        #actual_opts="$(get_decompress_opts_for_tool "$actual_tool")"
+        echo "[$(timestamp)] ⚠️ Notice: 'lbzip2' not found — falling back to 'bzip2' for decompression. Consider installing 'lbzip2' for better performance." >&2
+      fi
+
+      echo "[$(timestamp)] z-decompress: ${actual_tool} ${actual_opts} -k -d -c -- \"$z\" > \"$out\"" >&2
+      "${actual_tool}" ${actual_opts} -k -d -c -- "$z" > "$out" 2>/dev/null
       rc=$?
       # Special condition for lbzip2 exit code 4
       [[ "${tool}" == "lbzip2" && $rc -eq 4 ]] && rc=0
