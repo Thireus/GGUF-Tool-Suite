@@ -356,6 +356,15 @@ do_rsync() {
     SRC="${RUSER}@${RHOST}:${RPATH}/${REPOSITORY_NAME}/${FILENAME}"
     DST="${DEST}/${CUSTOM_FILENAME}"
 
+    # If .gguf requested, also prepare to check for a .gguf.zbst (compressed .gguf) variant
+    if [[ "${FileID_zbst_chunk}" == false ]]; then
+      ZBST_FILENAME="${FILENAME}.zbst"
+      ZBST_SRC="${RUSER}@${RHOST}:${RPATH}/${REPOSITORY_NAME}/${ZBST_FILENAME}"
+    else
+      ZBST_FILENAME=""
+      ZBST_SRC=""
+    fi
+
     if [ -f "${DST}" ]; then
       log "File already exists, verifying…"
       if verify_download "${DST}"; then
@@ -369,6 +378,23 @@ do_rsync() {
     fi
 
     log "Trying rsync from ${SRC} (port ${RPORT})"
+
+    # First do a cheap rsync --list-only probe to see if the file exists remotely.
+    # This avoids initiating a full transfer and lets us check for a .zbst variant if absent.
+    if rsync -e "ssh -p ${RPORT}" --list-only "${RUSER}@${RHOST}:${RPATH}/${REPOSITORY_NAME}/${FILENAME}" >/dev/null 2>&1; then
+      :
+    else
+      log "✗ Not found via rsync at ${SRC}; checking .gguf.zbst variant"
+      if [[ -n "${ZBST_SRC}" ]]; then
+        if rsync -e "ssh -p ${RPORT}" --list-only "${ZBST_SRC}" >/dev/null 2>&1; then
+          ANY_ZBST_200=1
+          log "♋︎ Variant found (rsync) .gguf.zbst at ${ZBST_SRC}"
+        fi
+      fi
+      # skip to next rsync server
+      continue
+    fi
+
     if [ "${SHOW_PROGRESS:-false}" = true ]; then
       RSYNC_OPTS="-vP"
     else
@@ -390,8 +416,6 @@ do_rsync() {
         log "✗ Verification failed; removing and trying next"
         rm -f "${DST}"
       fi
-    else
-      log "✗ Rsync failed; trying next"
     fi
   done
   return 1
@@ -641,6 +665,15 @@ do_copy() {
     DST="${DEST}/${CUSTOM_FILENAME}"
 
     if [ ! -f "${SRC}" ]; then
+      # If the exact file isn't present locally, check for a .gguf.zbst variant (when applicable)
+      if [[ "${FileID_zbst_chunk}" == false ]]; then
+        ZBST_SRC="${folder}/${REPOSITORY_NAME}/${FILENAME}.zbst"
+        if [ -f "${ZBST_SRC}" ]; then
+          ANY_ZBST_200=1
+          log "♋︎ Variant found (local copy) .gguf.zbst at ${ZBST_SRC}"
+        fi
+      fi
+
       log "✗ Source not found for copy: ${SRC}; trying next"
       continue
     fi
@@ -695,6 +728,15 @@ do_symlink() {
     fi
 
     if [ ! -f "${SRC}" ]; then
+      # If the exact file isn't present locally, check for a .gguf.zbst variant (when applicable)
+      if [[ "${FileID_zbst_chunk}" == false ]]; then
+        ZBST_CAND="${folder}/${REPOSITORY_NAME}/${FILENAME}.zbst"
+        if [ -f "${ZBST_CAND}" ]; then
+          ANY_ZBST_200=1
+          log "♋︎ Variant found (local symlink) .gguf.zbst at ${ZBST_CAND}"
+        fi
+      fi
+
       log "✗ File not found for: ${_SRC} resolving to '${SRC}'; trying next"
       continue
     fi
