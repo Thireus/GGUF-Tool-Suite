@@ -162,6 +162,7 @@ shutdown_on_signal() {
     INT_TIMESTAMP=$(date +%s)
   elif [[ $(( $(date +%s) - INT_TIMESTAMP )) -gt 10 ]]; then
     echo "💀 10 seconds elapsed — forcing termination now: sending SIGKILL to the process group (-$$)." >&2
+    echo "   If you did not initiate this termination, please consult the ❌ error messages in the logs to determine the cause." >&2
     kill -s KILL -- -$$ 2>/dev/null || true
   fi
   sleep 1 # Slow down the shutdown_on_signal loop
@@ -174,13 +175,22 @@ trap 'shutdown_on_signal' INT TERM
 # ------------------------------------------------------------
 
 # Record main script PID so subshells/background workers can cause the entire script to exit.
-# This is used by exit_from_subprocess() below to ensure that any fatal condition (previously returning 666)
+# This is used by exit_from_subprocess() below to ensure that any fatal condition
 # terminates the whole script rather than just the function or subshell.
 SCRIPT_MAIN_PID=$$
 
 # Fatal exit helper: ensures whole script terminates from functions or subshells.
 exit_from_subprocess() {
   local _code="${1:-1}"
+  kill -TERM "${SCRIPT_MAIN_PID}" 2>/dev/null || true
+  # Exit this process (if parent still running, above kills should stop it).
+  exit "$_code"
+}
+
+# Fatal exit helper from anywhere with message: ensures whole script terminates from functions or subshells.
+exit_anywhere_with_message() {
+  echo "$1" >&2
+  local _code="${2:-1}"
   kill -TERM "${SCRIPT_MAIN_PID}" 2>/dev/null || true
   # Exit this process (if parent still running, above kills should stop it).
   exit "$_code"
@@ -1818,7 +1828,7 @@ safe_stream_check_quantized_gguf_from_z() {
       if [[ "$tool" == "lbzip2" ]] && ! command -v lbzip2 >/dev/null 2>&1 && command -v bzip2 >/dev/null 2>&1; then
         actual_tool="bzip2"
         #actual_opts="$(get_decompress_opts_for_tool "$actual_tool")"
-        echo "[$(timestamp)] ⚠️ Notice: 'lbzip2' not found — falling back to 'bzip2' for decompression. Consider installing 'lbzip2' for better performance." >&2
+        echo "[$(timestamp)] ⚠️ Notice: 'lbzip2' not found — falling back to 'bzip2' for decompression. Consider installing 'lbzip2' for better performance (can be installed while this script is running)." >&2
       fi
 
       # The pipeline: tool -d -c "$z" 2>/dev/null | python3 gguf_info.py -
@@ -3527,6 +3537,8 @@ attempt_redownload_first() {
 
   # download shard (keep retrying until success)
   until run_downloader_shard "${QTYPE}" 1 "$LOCAL_DOWNLOAD_DIR" "$(basename "$gguf_first")"; do
+    rc_run_downloader_shard=$?  # exit status of run_downloader_shard
+    [ "$rc_run_downloader_shard" -eq 69 ] && exit_anywhere_with_message "❌ Error: only compressed .gguf.zbst found, but -z/--z-compress or -zd/--z-decompress was not enabled. Rerun with one of those options. Use -zd to download and auto-decompress to .gguf." 69 && exit 69
     echo "[$(timestamp)] First shard download failed; retrying in 10s..." >&2
     sleep 10
   done
@@ -4038,6 +4050,8 @@ download_shard() {
         if [[ "$need_download" == true ]]; then
           echo "[$(timestamp)] Downloading file id '$shard_id' - tensor '$tensor' of qtype: '$qtype' (chunk_id=$chunk_id)"
           until run_downloader_shard "$dl_type" "$chunk_id" "$LOCAL_DOWNLOAD_DIR" "$shard_file"; do
+            rc_run_downloader_shard=$?  # exit status of run_downloader_shard
+            [ "$rc_run_downloader_shard" -eq 69 ] && exit_anywhere_with_message "❌ Error: only compressed .gguf.zbst found, but -z/--z-compress or -zd/--z-decompress was not enabled. Rerun with one of those options. Use -zd to download and auto-decompress to .gguf." 69 && exit 69
             echo "[$(timestamp)] Download failed; retrying in 10s..."
             sleep 10
           done
@@ -5079,6 +5093,8 @@ if [[ "$should_verify_first" == true ]]; then
         rm -f "$dl_gguf" "$dl_z" || true
 
         until run_downloader_shard "${QTYPE}" 1 "$LOCAL_DOWNLOAD_DIR" "$gguf_first"; do
+          rc_run_downloader_shard=$?  # exit status of run_downloader_shard
+          [ "$rc_run_downloader_shard" -eq 69 ] && exit_anywhere_with_message "❌ Error: only compressed .gguf.zbst found, but -z/--z-compress or -zd/--z-decompress was not enabled. Rerun with one of those options. Use -zd to download and auto-decompress to .gguf." 69 && exit 69
           echo "[$(timestamp)] First shard download failed; retrying in 10s..."
           sleep 10
         done
@@ -5199,7 +5215,7 @@ if [[ "$should_verify_first" == true ]]; then
                   touch "$FAIL_MARKER"
                   # explanatory message for the user (see script log) and exit with non-zero code
                   echo "[$(timestamp)] ❗ Please raise an issue if this persists: https://github.com/Thireus/GGUF-Tool-Suite/issues" >&2
-                  exit 666
+                  exit 66
                 fi
                 echo "[$(timestamp)] ⚠️ First shard GPG signature verification failed for '$gguf_first.sig' — treating as corrupted and will redownload (attempt $failed_verifications/$MAX_FAILED_VERIFICATION)." >&2
                 if attempt_redownload_first; then
@@ -5261,7 +5277,7 @@ if [[ "$should_verify_first" == true ]]; then
                   touch "$FAIL_MARKER"
                   # explanatory message for the user (see script log) and exit with non-zero code
                   echo "[$(timestamp)] ❗ Please raise an issue if this persists: https://github.com/Thireus/GGUF-Tool-Suite/issues" >&2
-                  exit 667
+                  exit 67
                 fi
                 echo "[$(timestamp)] ⚠️ First shard GPG signature verification failed for '$gguf_first.sig' — treating as corrupted and will redownload (attempt $failed_verifications/$MAX_FAILED_VERIFICATION)." >&2
                 # Cleaning file because in theory didn't use to exist (although not entirely true)

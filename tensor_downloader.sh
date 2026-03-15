@@ -5,7 +5,7 @@
 #** downloads pre-quantised tensors/shards to cook recipes.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-05-2026 -------------------- **#
+#** --------------- Updated: Mar-15-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -18,7 +18,7 @@
 #**    /    o―ヽニニフ))             · · ɪǫ3_xxs      ~·°        **#
 #**    し―-J                                                   **#
 #**                                                           **#
-#** Copyright © 2025 - Thireus. ₚₒ𝓌ₑᵣₑ𝒹 ᵦᵧ Gₚₜ₋ₒ₃.₁ᵢ₋ᵤₗₜᵣₐ₋ₘᵢₙᵢ **#
+#** Copyright © 2026 - Thireus. ₚₒ𝓌ₑᵣₑ𝒹 ᵦᵧ Gₚₜ₋ₒ₃.₁ᵢ₋ᵤₗₜᵣₐ₋ₘᵢₙᵢ **#
 #***************************************************************#
 #**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
 #***************************************************************#
@@ -181,6 +181,9 @@ log() {
 # -----------------------------------------------------------------------------
 # Indicator if any child process was killed by a signal (set to 1 if so)
 KILLED_BY_SIGNAL=0
+
+# Track whether at least one .gguf.zbst HEAD returned 200 when checking non-zbst FileIDs
+ANY_ZBST_200=0
 
 # mark_if_killed_by_signal STATUS DST METHOD
 # - If STATUS corresponds to a known "killed by signal" condition, set KILLED_BY_SIGNAL=1,
@@ -402,6 +405,15 @@ do_huggingface() {
     URL="https://huggingface.co/${ORG}/${REPOSITORY_NAME}/resolve/${BRANCH}/${FILENAME}?download=true"
     DST="${DEST}/${CUSTOM_FILENAME}"
 
+    # If .gguf requested, also check for a .gguf.zbst (compressed .gguf) variant (only when we are not already requesting a zbst chunk)
+    if [[ "${FileID_zbst_chunk}" == false ]]; then
+      ZBST_FILENAME="${FILENAME}.zbst"
+      ZBST_URL="https://huggingface.co/${ORG}/${REPOSITORY_NAME}/resolve/${BRANCH}/${ZBST_FILENAME}?download=true"
+    else
+      ZBST_FILENAME=""
+      ZBST_URL=""
+    fi
+
     if [ -f "${DST}" ]; then
       log "File already exists, verifying…"
       if verify_download "${DST}"; then
@@ -415,27 +427,54 @@ do_huggingface() {
     fi
 
     log "Trying huggingface from ${URL}"
-    if [ "${SHOW_PROGRESS:-false}" = true ]; then
-      CURL_OPTS="--progress-bar"
-    else
-      CURL_OPTS="--silent"
-    fi
-    curl --fail -L --retry 5 --retry-connrefused --retry-all-errors --retry-delay 5 --retry-max-time 600 --connect-timeout 15  -C - ${CURL_OPTS} -R "${URL}" -o "${DST}"
-    status=$?
-    if mark_if_killed_by_signal "$status" "$DST" "curl (huggingface)"; then
-      return 1
-    elif [ $status -eq 0 ]; then
-      log "Download complete, verifying…"
-      if verify_download "${DST}"; then
-        log "✓ Verified and saved via huggingface (org: ${ORG}, branch: ${BRANCH}) - ${DST} (${QUANT_U})"
-        chmod 444 "${DST}"
-        return 0
-      else
-        log "✗ Verification failed; removing and trying next"
-        rm -f "${DST}"
+
+    # First do a cheap HEAD-style probe to see if file exists (and avoid full download on 404)
+    # Use a shortish retry/max-time since this is just a probe
+    HTTP_CODE=$(curl -L -s -o /dev/null -w "%{http_code}" --retry 5 --retry-connrefused --retry-delay 5 --retry-max-time 60 --connect-timeout 15 -I "${URL}" || echo "000")
+    if [[ "${HTTP_CODE}" == "404" ]]; then
+      log "✗ Not found (404) at ${URL}; skipping actual download for this repo"
+      # If we are not requesting zbst but want to know if .zbst exists, probe it too
+      if [[ -n "${ZBST_URL}" ]]; then
+        ZBST_HTTP_CODE=$(curl -L -s -o /dev/null -w "%{http_code}" --retry 5 --retry-connrefused --retry-delay 5 --retry-max-time 60 --connect-timeout 15 -I "${ZBST_URL}" || echo "000")
+        if [[ "${ZBST_HTTP_CODE}" == "200" ]]; then
+          ANY_ZBST_200=1
+          log "♋︎ Variant found (200) .gguf.zbst (compressed .gguf) at ${ZBST_URL}"
+        fi
       fi
-    else
-      log "✗ Huggingface failed; trying next"
+      # skip to next huggingface org entry
+      continue
+    elif [[ "${HTTP_CODE}" != "200" ]] && [[ "${HTTP_CODE}" != "404" ]] && [[ -n "${ZBST_URL}" ]]; then
+      ZBST_HTTP_CODE=$(curl -L -s -o /dev/null -w "%{http_code}" --retry 5 --retry-connrefused --retry-delay 5 --retry-max-time 60 --connect-timeout 15 -I "${ZBST_URL}" || echo "000")
+      if [[ "${ZBST_HTTP_CODE}" == "200" ]]; then
+        ANY_ZBST_200=1
+        log "♋︎ Variant found (200) .gguf.zbst (compressed .gguf) at ${ZBST_URL}"
+      fi
+    fi
+
+    # If probe returned 200 (or any non-404), proceed to actual download attempt
+    if [[ "${HTTP_CODE}" == "200" ]] || [[ "${HTTP_CODE}" != "404" ]]; then
+      if [ "${SHOW_PROGRESS:-false}" = true ]; then
+        CURL_OPTS="--progress-bar"
+      else
+        CURL_OPTS="--silent"
+      fi
+      curl --fail -L --retry 5 --retry-connrefused --retry-all-errors --retry-delay 5 --retry-max-time 600 --connect-timeout 15  -C - ${CURL_OPTS} -R "${URL}" -o "${DST}"
+      status=$?
+      if mark_if_killed_by_signal "$status" "$DST" "curl (huggingface)"; then
+        return 1
+      elif [ $status -eq 0 ]; then
+        log "Download complete, verifying…"
+        if verify_download "${DST}"; then
+          log "✓ Verified and saved via huggingface (org: ${ORG}, branch: ${BRANCH}) - ${DST} (${QUANT_U})"
+          chmod 444 "${DST}"
+          return 0
+        else
+          log "✗ Verification failed; removing and trying next"
+          rm -f "${DST}"
+        fi
+      else
+        log "✗ Huggingface failed; trying next"
+      fi
     fi
   done
   return 1
@@ -518,6 +557,15 @@ do_curl() {
     URL="${_URL}/${REPOSITORY_NAME}/${FILENAME}"
     DST="${DEST}/${CUSTOM_FILENAME}"
 
+    # If .gguf requested, also check for a .gguf.zbst (compressed .gguf) variant (only when we are not already requesting a zbst chunk)
+    if [[ "${FileID_zbst_chunk}" == false ]]; then
+      ZBST_FILENAME="${FILENAME}.zbst"
+      ZBST_URL="${_URL}/${REPOSITORY_NAME}/${ZBST_FILENAME}"
+    else
+      ZBST_FILENAME=""
+      ZBST_URL=""
+    fi
+
     if [ -f "${DST}" ]; then
       log "File already exists, verifying…"
       if verify_download "${DST}"; then
@@ -531,27 +579,55 @@ do_curl() {
     fi
 
     log "Trying curl from ${URL}"
-    if [ "${SHOW_PROGRESS:-false}" = true ]; then
-      CURL_OPTS="--progress-bar"
-    else
-      CURL_OPTS="--silent"
-    fi
-    curl --fail -L --retry 5 --retry-connrefused --retry-all-errors --retry-delay 5 --retry-max-time 600 --connect-timeout 15 -C - ${CURL_OPTS} -R "${URL}" -o "${DST}"
-    status=$?
-    if mark_if_killed_by_signal "$status" "$DST" "curl"; then
-      return 1
-    elif [ $status -eq 0 ]; then
-      log "Download complete, verifying…"
-      if verify_download "${DST}"; then
-        log "✓ Verified and saved via curl - ${DST} (${QUANT_U})"
-        chmod 444 "${DST}"
-        return 0
-      else
-        log "✗ Verification failed; removing and trying next"
-        rm -f "${DST}"
+
+
+    # First do a cheap HEAD-style probe to see if file exists (and avoid full download on 404)
+    # Use a shortish retry/max-time since this is just a probe
+    HTTP_CODE=$(curl -L -s -o /dev/null -w "%{http_code}" --retry 5 --retry-connrefused --retry-delay 5 --retry-max-time 60 --connect-timeout 15 -I "${URL}" || echo "000")
+    if [[ "${HTTP_CODE}" == "404" ]]; then
+      log "✗ Not found (404) at ${URL}; skipping actual download for this repo"
+      # If we are not requesting zbst but want to know if .zbst exists, probe it too
+      if [[ -n "${ZBST_URL}" ]]; then
+        ZBST_HTTP_CODE=$(curl -L -s -o /dev/null -w "%{http_code}" --retry 5 --retry-connrefused --retry-delay 5 --retry-max-time 60 --connect-timeout 15 -I "${ZBST_URL}" || echo "000")
+        if [[ "${ZBST_HTTP_CODE}" == "200" ]]; then
+          ANY_ZBST_200=1
+          log "♋︎ Variant found (200) .gguf.zbst (compressed .gguf) at ${ZBST_URL}"
+        fi
       fi
-    else
-      log "✗ Curl failed; trying next - $status"
+      # skip to next huggingface org entry
+      continue
+    elif [[ "${HTTP_CODE}" != "200" ]] && [[ "${HTTP_CODE}" != "404" ]] && [[ -n "${ZBST_URL}" ]]; then
+      ZBST_HTTP_CODE=$(curl -L -s -o /dev/null -w "%{http_code}" --retry 5 --retry-connrefused --retry-delay 5 --retry-max-time 60 --connect-timeout 15 -I "${ZBST_URL}" || echo "000")
+      if [[ "${ZBST_HTTP_CODE}" == "200" ]]; then
+        ANY_ZBST_200=1
+        log "♋︎ Variant found (200) .gguf.zbst (compressed .gguf) at ${ZBST_URL}"
+      fi
+    fi
+
+    # If probe returned 200 (or any non-404), proceed to actual download attempt
+    if [[ "${HTTP_CODE}" == "200" ]] || [[ "${HTTP_CODE}" != "404" ]]; then
+      if [ "${SHOW_PROGRESS:-false}" = true ]; then
+        CURL_OPTS="--progress-bar"
+      else
+        CURL_OPTS="--silent"
+      fi
+      curl --fail -L --retry 5 --retry-connrefused --retry-all-errors --retry-delay 5 --retry-max-time 600 --connect-timeout 15 -C - ${CURL_OPTS} -R "${URL}" -o "${DST}"
+      status=$?
+      if mark_if_killed_by_signal "$status" "$DST" "curl"; then
+        return 1
+      elif [ $status -eq 0 ]; then
+        log "Download complete, verifying…"
+        if verify_download "${DST}"; then
+          log "✓ Verified and saved via curl - ${DST} (${QUANT_U})"
+          chmod 444 "${DST}"
+          return 0
+        else
+          log "✗ Verification failed; removing and trying next"
+          rm -f "${DST}"
+        fi
+      else
+        log "✗ Curl failed; trying next - $status"
+      fi
     fi
   done
   return 1
@@ -703,5 +779,11 @@ if [ "${KILLED_BY_SIGNAL:-0}" -eq 1 ]; then
   exit 130
 else
   log "ERROR: All download methods failed for ${FILENAME}"
+  # Special-case: if the request was for a non-.zbst file, but at least one repository
+  # reported a .gguf.zbst (compressed .gguf) variant (HTTP 200), then return special exit code 69
+  if [[ "${FileID_zbst_chunk}" == false ]] && [[ "${ANY_ZBST_200}" -eq 1 ]]; then
+    log "NOTICE: ${FILENAME} not found, but at least one .gguf.zbst (compressed .gguf) variant exists. Exiting with code 69."
+    exit 69
+  fi
   exit 1
 fi
