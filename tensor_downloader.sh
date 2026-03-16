@@ -5,7 +5,7 @@
 #** downloads pre-quantised tensors/shards to cook recipes.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-15-2026 -------------------- **#
+#** --------------- Updated: Mar-16-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -454,12 +454,12 @@ do_huggingface() {
 
     # First do a cheap HEAD-style probe to see if file exists (and avoid full download on 404)
     # Use a shortish retry/max-time since this is just a probe
-    HTTP_CODE=$(curl -L -s -o /dev/null -w "%{http_code}" --retry 5 --retry-connrefused --retry-delay 5 --retry-max-time 60 --connect-timeout 15 -I "${URL}" || echo "000")
+    HTTP_CODE=$(curl -L -s -o /dev/null -w '%{http_code}' --retry 5 --retry-connrefused --retry-delay 5 --retry-max-time 60 --connect-timeout 15 "${URL}")
     if [[ "${HTTP_CODE}" == "404" ]]; then
       log "✗ Not found (404) at ${URL}; skipping actual download for this repo"
       # If we are not requesting zbst but want to know if .zbst exists, probe it too
       if [[ -n "${ZBST_URL}" ]]; then
-        ZBST_HTTP_CODE=$(curl -L -s -o /dev/null -w "%{http_code}" --retry 5 --retry-connrefused --retry-delay 5 --retry-max-time 60 --connect-timeout 15 -I "${ZBST_URL}" || echo "000")
+        ZBST_HTTP_CODE=$(curl -L -s -o /dev/null -w '%{http_code}' --retry 5 --retry-connrefused --retry-delay 5 --retry-max-time 60 --connect-timeout 15 "${ZBST_URL}")
         if [[ "${ZBST_HTTP_CODE}" == "200" ]]; then
           ANY_ZBST_200=1
           log "♋︎ Variant found (200) .gguf.zbst (compressed .gguf) at ${ZBST_URL}"
@@ -468,7 +468,7 @@ do_huggingface() {
       # skip to next huggingface org entry
       continue
     elif [[ "${HTTP_CODE}" != "200" ]] && [[ "${HTTP_CODE}" != "404" ]] && [[ -n "${ZBST_URL}" ]]; then
-      ZBST_HTTP_CODE=$(curl -L -s -o /dev/null -w "%{http_code}" --retry 5 --retry-connrefused --retry-delay 5 --retry-max-time 60 --connect-timeout 15 -I "${ZBST_URL}" || echo "000")
+      ZBST_HTTP_CODE=$(curl -L -s -o /dev/null -w '%{http_code}' --retry 5 --retry-connrefused --retry-delay 5 --retry-max-time 60 --connect-timeout 15 "${ZBST_URL}")
       if [[ "${ZBST_HTTP_CODE}" == "200" ]]; then
         ANY_ZBST_200=1
         log "♋︎ Variant found (200) .gguf.zbst (compressed .gguf) at ${ZBST_URL}"
@@ -572,7 +572,13 @@ do_curl() {
     _URL=""
     if [[ -n "$TOTAL_NODES" ]]; then
       nid=$(node_id "${REPOSITORY_NAME}" "${FileID}" ${TOTAL_NODES})
-      [[ "${QUANT_U}" == "BF16" ]] && [ $FileID -le 1 ] && nid=$((RANDOM % TOTAL_NODES)) || ([ $FileID -eq 0 ] || [ $FileID -eq -1 ]) && nid=$((RANDOM % N)) || nid=$((nid * N / TOTAL_NODES))
+      if [[ "${QUANT_U}" == "BF16" ]] && [ $FileID -le 1 ]; then
+        nid=$((RANDOM % TOTAL_NODES))
+      elif ([ $FileID -eq 0 ] || [ $FileID -eq -1 ]); then
+        nid=$((RANDOM % N))
+      elif [[ "${QUANT_U}" != "BF16" ]]; then
+        nid=$((nid * N / TOTAL_NODES))
+      fi
       _URL="$(echo "$crl" | sed "s|$placeholder|$nid|g")"
     else
       _URL="$crl"
@@ -604,15 +610,14 @@ do_curl() {
 
     log "Trying curl from ${URL}"
 
-
     # First do a cheap HEAD-style probe to see if file exists (and avoid full download on 404)
     # Use a shortish retry/max-time since this is just a probe
-    HTTP_CODE=$(curl -L -s -o /dev/null -w "%{http_code}" --retry 5 --retry-connrefused --retry-delay 5 --retry-max-time 60 --connect-timeout 15 -I "${URL}" || echo "000")
+    HTTP_CODE=$(curl -L -s -o /dev/null -w '%{http_code}' --retry 5 --retry-connrefused --retry-delay 5 --retry-max-time 60 --connect-timeout 15 "${URL}")
     if [[ "${HTTP_CODE}" == "404" ]]; then
       log "✗ Not found (404) at ${URL}; skipping actual download for this repo"
       # If we are not requesting zbst but want to know if .zbst exists, probe it too
       if [[ -n "${ZBST_URL}" ]]; then
-        ZBST_HTTP_CODE=$(curl -L -s -o /dev/null -w "%{http_code}" --retry 5 --retry-connrefused --retry-delay 5 --retry-max-time 60 --connect-timeout 15 -I "${ZBST_URL}" || echo "000")
+        ZBST_HTTP_CODE=$(curl -L -s -o /dev/null -w '%{http_code}' --retry 5 --retry-connrefused --retry-delay 5 --retry-max-time 60 --connect-timeout 15 "${ZBST_URL}")
         if [[ "${ZBST_HTTP_CODE}" == "200" ]]; then
           ANY_ZBST_200=1
           log "♋︎ Variant found (200) .gguf.zbst (compressed .gguf) at ${ZBST_URL}"
@@ -621,7 +626,7 @@ do_curl() {
       # skip to next huggingface org entry
       continue
     elif [[ "${HTTP_CODE}" != "200" ]] && [[ "${HTTP_CODE}" != "404" ]] && [[ -n "${ZBST_URL}" ]]; then
-      ZBST_HTTP_CODE=$(curl -L -s -o /dev/null -w "%{http_code}" --retry 5 --retry-connrefused --retry-delay 5 --retry-max-time 60 --connect-timeout 15 -I "${ZBST_URL}" || echo "000")
+      ZBST_HTTP_CODE=$(curl -L -s -o /dev/null -w '%{http_code}' --retry 5 --retry-connrefused --retry-delay 5 --retry-max-time 60 --connect-timeout 15 "${ZBST_URL}")
       if [[ "${ZBST_HTTP_CODE}" == "200" ]]; then
         ANY_ZBST_200=1
         log "♋︎ Variant found (200) .gguf.zbst (compressed .gguf) at ${ZBST_URL}"
