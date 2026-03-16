@@ -102,6 +102,22 @@ error_reporting() {
 
 # Install the trap. Use single quotes so expansion occurs at trap time, not now.
 trap 'error_reporting' ERR
+
+# When main receives USR1 -> enable compress
+_enable_archive_compress_trap() {
+    # set and export so future child processes inherit
+    export ARCHIVE_COMPRESS=true
+    # optional logging for debug
+    printf '%s\n' "[$(date +'%F %T')] Received USR1: ARCHIVE_COMPRESS enabled" >&2
+}
+trap '_enable_archive_compress_trap' USR1
+
+# When main receives USR2 -> enable decompress
+_enable_archive_decompress_trap() {
+    export ARCHIVE_DECOMPRESS=true
+    printf '%s\n' "[$(date +'%F %T')] Received USR2: ARCHIVE_DECOMPRESS enabled" >&2
+}
+trap '_enable_archive_decompress_trap' USR2
 # ----------------------------------------------------------------
 
 # DEBUG function
@@ -194,6 +210,47 @@ exit_anywhere_with_message() {
   kill -TERM "${SCRIPT_MAIN_PID}" 2>/dev/null || true
   # Exit this process (if parent still running, above kills should stop it).
   exit "$_code"
+}
+
+# --- Request functions (call these in subprocesses to ask main to enable) ---
+# These will send a signal to $SCRIPT_MAIN_PID unless the flag is already true.
+global_compress() {
+    # if this process already sees variable enabled, no-op
+    if [ "${ARCHIVE_COMPRESS:-}" = true ]; then
+        return 0
+    fi
+    ARCHIVE_COMPRESS=true
+    if [ -z "${SCRIPT_MAIN_PID:-}" ]; then
+        printf '%s\n' "global_compress: SCRIPT_MAIN_PID is not set" >&2
+        return 1
+    fi
+    # check that target PID exists
+    if kill -0 "$SCRIPT_MAIN_PID" 2>/dev/null; then
+        # send USR1 to request enabling
+        kill -USR1 "$SCRIPT_MAIN_PID" 2>/dev/null || true
+        return 0
+    else
+        printf '%s\n' "global_compress: main pid %s not running" "$SCRIPT_MAIN_PID" >&2
+        return 1
+    fi
+}
+
+global_decompress() {
+    if [ "${ARCHIVE_DECOMPRESS:-}" = true ]; then
+        return 0
+    fi
+    ARCHIVE_DECOMPRESS=true
+    if [ -z "${SCRIPT_MAIN_PID:-}" ]; then
+        printf '%s\n' "global_decompress: SCRIPT_MAIN_PID is not set" >&2
+        return 1
+    fi
+    if kill -0 "$SCRIPT_MAIN_PID" 2>/dev/null; then
+        kill -USR2 "$SCRIPT_MAIN_PID" 2>/dev/null || true
+        return 0
+    else
+        printf '%s\n' "global_decompress: main pid %s not running" "$SCRIPT_MAIN_PID" >&2
+        return 1
+    fi
 }
 
 # ----------------- DEFAULTS & INITIALIZATION -----------------
@@ -3536,11 +3593,29 @@ attempt_redownload_first() {
   mkdir -p "$LOCAL_DOWNLOAD_DIR" 2>/dev/null || true
 
   # download shard (keep retrying until success)
-  until run_downloader_shard "${QTYPE}" 1 "$LOCAL_DOWNLOAD_DIR" "$(basename "$gguf_first")"; do
+  until run_downloader_shard "${QTYPE}" 1 "$LOCAL_DOWNLOAD_DIR" "$gguf_first"; do
     rc_run_downloader_shard=$?  # exit status of run_downloader_shard
-    [ "$rc_run_downloader_shard" -eq 69 ] && exit_anywhere_with_message "❌ Error: only compressed .gguf.zbst found, but -z/--z-compress or -zd/--z-decompress was not enabled. Rerun with one of those options. Use -zd to download and auto-decompress to .gguf." 69 && exit 69
-    echo "[$(timestamp)] First shard download failed; retrying in 10s..." >&2
-    sleep 10
+    if [ "$rc_run_downloader_shard" -eq 69 ]; then
+      if [[ "$ARCHIVE_NOAUTO" == false && "$ARCHIVE_COMPRESS" != true && "$ARCHIVE_DECOMPRESS" != true ]]; then
+        mark_qtype_zbst "${QTYPE}"
+        if [[ "$VERIFY" == true ]]; then
+          # In verify mode, prefer verifying compressed streams; choose -z
+          global_compress
+          echo "⚠️ Warning: Auto-enabled -z (verify .gguf.zbst) because "$gguf_first" is only hosted in .gguf.zbst compressed format and --verify mode used!" >&2
+          echo "   If you prefer to keep automatic selection disabled, re-run with --z-noauto." >&2
+        else
+          global_decompress
+          echo "⚠️ Warning: Auto-enabled -zd (decompress) because "$gguf_first" is only hosted in .gguf.zbst compressed format!" >&2
+          echo "   If you prefer to keep automatic selection disabled, re-run with --z-noauto." >&2
+        fi
+      else
+        exit_anywhere_with_message "❌ Error: only compressed "$gguf_first".zbst found, but --z-noauto is used. Rerun with -z/--z-compress or -zd/--z-decompress, or remove --z-noauto. For example: use -zd to download and auto-decompress to .gguf." 69
+      fi
+      echo "[$(timestamp)] First shard download switching to .gguf.zbst; retrying now!" >&2
+    else
+      echo "[$(timestamp)] First shard download failed; retrying in 10s..." >&2
+      sleep 10
+    fi
   done
 
   # Move whichever artifact was produced (.gguf OR .gguf.zbst)
@@ -4051,9 +4126,27 @@ download_shard() {
           echo "[$(timestamp)] Downloading file id '$shard_id' - tensor '$tensor' of qtype: '$qtype' (chunk_id=$chunk_id)"
           until run_downloader_shard "$dl_type" "$chunk_id" "$LOCAL_DOWNLOAD_DIR" "$shard_file"; do
             rc_run_downloader_shard=$?  # exit status of run_downloader_shard
-            [ "$rc_run_downloader_shard" -eq 69 ] && exit_anywhere_with_message "❌ Error: only compressed .gguf.zbst found, but -z/--z-compress or -zd/--z-decompress was not enabled. Rerun with one of those options. Use -zd to download and auto-decompress to .gguf." 69 && exit 69
-            echo "[$(timestamp)] Download failed; retrying in 10s..."
-            sleep 10
+            if [ "$rc_run_downloader_shard" -eq 69 ]; then
+              if [[ "$ARCHIVE_NOAUTO" == false && "$ARCHIVE_COMPRESS" != true && "$ARCHIVE_DECOMPRESS" != true ]]; then
+                mark_qtype_zbst "${dl_type}"
+                if [[ "$VERIFY" == true ]]; then
+                  # In verify mode, prefer verifying compressed streams; choose -z
+                  global_compress
+                  echo "⚠️ Warning: Auto-enabled -z (verify .gguf.zbst) because "$shard_file" is only hosted in .gguf.zbst compressed format and --verify mode used!" >&2
+                  echo "   If you prefer to keep automatic selection disabled, re-run with --z-noauto." >&2
+                else
+                  global_decompress
+                  echo "⚠️ Warning: Auto-enabled -zd (decompress) because "$shard_file" is only hosted in .gguf.zbst compressed format!" >&2
+                  echo "   If you prefer to keep automatic selection disabled, re-run with --z-noauto." >&2
+                fi
+              else
+                exit_anywhere_with_message "❌ Error: only compressed "$shard_file".zbst found, but --z-noauto is used. Rerun with -z/--z-compress or -zd/--z-decompress, or remove --z-noauto. For example: use -zd to download and auto-decompress to .gguf." 69
+              fi
+              echo "[$(timestamp)] Download switching to .gguf.zbst; retrying now!" >&2
+            else
+              echo "[$(timestamp)] Download failed; retrying in 10s..." >&2
+              sleep 10
+            fi
           done
           need_download=false
           skip_mv=false
@@ -5094,9 +5187,27 @@ if [[ "$should_verify_first" == true ]]; then
 
         until run_downloader_shard "${QTYPE}" 1 "$LOCAL_DOWNLOAD_DIR" "$gguf_first"; do
           rc_run_downloader_shard=$?  # exit status of run_downloader_shard
-          [ "$rc_run_downloader_shard" -eq 69 ] && exit_anywhere_with_message "❌ Error: only compressed .gguf.zbst found, but -z/--z-compress or -zd/--z-decompress was not enabled. Rerun with one of those options. Use -zd to download and auto-decompress to .gguf." 69 && exit 69
-          echo "[$(timestamp)] First shard download failed; retrying in 10s..."
-          sleep 10
+            if [ "$rc_run_downloader_shard" -eq 69 ]; then
+              if [[ "$ARCHIVE_NOAUTO" == false && "$ARCHIVE_COMPRESS" != true && "$ARCHIVE_DECOMPRESS" != true ]]; then
+                mark_qtype_zbst "${QTYPE}"
+                if [[ "$VERIFY" == true ]]; then
+                  # In verify mode, prefer verifying compressed streams; choose -z
+                  global_compress
+                  echo "⚠️ Warning: Auto-enabled -z (verify .gguf.zbst) because "$gguf_first" is only hosted in .gguf.zbst compressed format and --verify mode used!" >&2
+                  echo "   If you prefer to keep automatic selection disabled, re-run with --z-noauto." >&2
+                else
+                  global_decompress
+                  echo "⚠️ Warning: Auto-enabled -zd (decompress) because "$gguf_first" is only hosted in .gguf.zbst compressed format!" >&2
+                  echo "   If you prefer to keep automatic selection disabled, re-run with --z-noauto." >&2
+                fi
+              else
+                exit_anywhere_with_message "❌ Error: only compressed "$gguf_first".zbst found, but --z-noauto is used. Rerun with -z/--z-compress or -zd/--z-decompress, or remove --z-noauto. For example: use -zd to download and auto-decompress to .gguf." 69
+              fi
+              echo "[$(timestamp)] First shard download switching to .gguf.zbst; retrying now!" >&2
+            else
+              echo "[$(timestamp)] First shard download failed; retrying in 10s..." >&2
+              sleep 10
+            fi
         done
 
         # DO IT AGAIN (because we may have downloaded a compressed file): If ARCHIVE_DECOMPRESS true: if a .zbst exists, decompress to .gguf (overwrite) so script works on .gguf
