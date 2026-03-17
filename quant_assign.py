@@ -3125,9 +3125,9 @@ def main():
     if not args.exponential_factor or not args.quant_degradation_equation:
         print(f"# - Hidden parameters (not passed as CLI args):")
         if not args.exponential_factor:
-            print(f"# - Exponential factor: {exp_factor_final:.8f}".rstrip('0').rstrip('.'))
+            print(f"#   Exponential factor: {exp_factor_final:.8f}".rstrip('0').rstrip('.'))
         if not args.quant_degradation_equation:
-            print(f"# - Quant degradation eq: {quant_equation_str}")
+            print(f"#   Quant degradation eq: {quant_equation_str}")
 
     # Wrap the command into lines starting with "# "
     wrapped_lines = textwrap.wrap(
