@@ -382,6 +382,7 @@ cp -f models/DeepSeek-R1-0528/download.conf .
 ## 🙏 Acknowledgements
 
 Big thanks to **ubergarm** for his support and for providing the invaluable **`imatrix` files**.
+Note that the GGUF shards I produce and the callibration data benchmarks and other related benchmarks use an imatrix. Therefore, the results of cooking recipes without an imatrix or using custom non-imatrix shards is not recommended. 
 
 <details>
 
