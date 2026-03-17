@@ -71,5 +71,9 @@ Qwen3.5-4B/ppl_results.csv
 Qwen3.5-4B/kld_results.csv
 Kimi-K2-Instruct-0905/ppl_results.csv
 Qwen3-Coder-480B-A35B-Instruct/ppl_results.csv
+Qwen3.5-27B/ppl_results.csv
+Qwen3.5-27B/kld_results.csv
+Qwen3.5-27B/group0/ppl_results.csv
+Qwen3.5-27B/group0/kld_results.csv
 DeepSeek-V3-0324/ppl_results.csv
 Kimi-K2-Instruct/ppl_results.csv
