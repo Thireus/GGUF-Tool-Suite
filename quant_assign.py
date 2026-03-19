@@ -1865,9 +1865,9 @@ def main():
     parser.add_argument('--gpu-tensors-max-size', type=str, help='Max GPU-friendly tensors size in GiB or percent (e.g., 80%%)')
     parser.add_argument('--exponential-factor', type=float, default=None,
                         help=('Exponent controlling midpoint adjustment aggressiveness during stretch sweeps for default quant assignment method. '
-                              'Higher values push quantization toward extremes. When not using --use-greedy-quant-assign the default value is 8. When using --use-greedy-quant-assign, the script will compute a default value using the equation: y = 0.5 * ln(x), '
-                              'where x is the bf16 total tensor size in GiB, and use that as the exponential-factor. If computation fails, it will fallback to 3.0 as default value.'
-                              'If you do provide --exponential-factor it overrides the automatic calculation. Recommended manual range for greedy quant assign is 1.0 to 5.0 when using KLD metrics with 3.0 being a good starting point.'))
+                              'Higher values push quantization toward extremes. When not using --use-greedy-quant-assign the default value is 8. When using --use-greedy-quant-assign with --quant-degradation-csv (using the model\'s group0/kld_results.csv for example) or --quant-degradation-equation, the script will use a default exponential factor value of 1 as the curvature of the degradation data is expected to be an exact match with the model\'s quant optimum distribution. When using --use-greedy-quant-assign alone, the script will compute an approximate value using the equation: y = 0.5 * ln(x), '
+                              'which aims to re-shape the provided (or default) quant degradation data to approximate a theoretical degradation data (doesn\'t always work well and requires to be manually tweaked) - x is the bf16 total tensor size in GiB, and use that as the exponential-factor. If computation fails, it will fallback to 3.0 as default value. '
+                              'If you do provide --exponential-factor it overrides the automatic calculation. Recommended manual range for greedy quant assign is 0.3 to 5.0 when using KLD metrics with the default value seen in recipe hidden parameters section when --exponential-factor isn\'t used being a good starting point.'))
     parser.add_argument('--ignore-f32', action='store_true', help='Ignore f32 tensors (default: not ignored)')
     parser.add_argument('--tensors-from-csv', action='store_true', help='Obtains list of tensors from csv file only (default: tensors are obtained from map file)')
     parser.add_argument('--skip-gpg', action='store_true',
@@ -2089,9 +2089,9 @@ def main():
         # Force user to supply equation
         if args.quant_degradation_csv and not args.quant_degradation_equation:
             suggested_cmd = (
-                f'./model_tensor_bpw_metric.py --results-csv {shlex.quote(args.quant_degradation_csv)} '
-                '--d-free --c-free --exclude-qtypes \'.*_bn.*$\' --transforms "identity" --ignore-outliers 50 '
-                '--allow-impure-map --plot --p-grid-max 15 --p-grid-steps 100 --penalize-above 15'
+                f'cd models/MODEL/group0 && ../../../model_tensor_bpw_metric.py --results-csv {shlex.quote(args.quant_degradation_csv)} '
+                'cd models/Qwen3-4B-Thinking-2507/group0 && ../../../model_tensor_bpw_metric.py --results-csv kld_results.csv --c-free --exclude-qtypes \'.*_bn.*$\' '
+                '--transforms "identity" --ignore-outliers 50 --allow-impure-map --plot --p-grid-max 15 --p-grid-steps 100 --d-from-lowest 1 --penalize-above 15 --resemblance-metric r2'
             )
             print(f"[Error] Quant degradation value for qtype '{qtype}' missing from custom CSV. "
                 "You can produce a fallback --quant-degradation-equation from your CSV with a command like:", file=sys.stderr)
@@ -2234,9 +2234,15 @@ def main():
     # Determine effective exponential-factor
     if args.exponential_factor is not None:
         exp_factor_final = float(args.exponential_factor)
+        if INFO:
+            print(f"[Info] Exponential-factor value set by the user: {exp_factor_final}", file=sys.stderr)
     else:
         # Not specified by user
-        if args.use_greedy_quant_assign:
+        if args.use_greedy_quant_assign and (args.quant_degradation_csv or args.quant_degradation_equation):
+            if INFO:
+                print(f"[Info] Using exponential-factor value of 1.0 because quant degradation csv or equation provided", file=sys.stderr)
+            exp_factor_final = 1.0
+        elif args.use_greedy_quant_assign:
             # Use the requested equation: y = 0.5 * ln(x), where x is the bf16 total tensor size in GiB.
             # If bf16_total_gib is <= 0 or ln is non-positive result, fallback to 8.0
             try:
@@ -2262,6 +2268,8 @@ def main():
                 print(f"[Info] Automatic exponential-factor equation: y = 0.5 * ln(x) (x = bf16 total size in GiB).", file=sys.stderr)
                 print(f"[Info] bf16 total size x = {bf16_total_gib:.6f} GiB -> y = {exp_factor_final}", file=sys.stderr)
         else:
+            if INFO:
+                print(f"[Info] Greedy not used, exponential-factor value set to 8.0", file=sys.stderr)
             # Not using greedy and user did not specify => default 8.0
             exp_factor_final = 8.0
 

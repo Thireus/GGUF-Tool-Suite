@@ -1,36 +1,38 @@
 ## Quant mix recipe created using Thireus' GGUF Tool Suite - https://gguf.thireus.com/
 
-## Model head & embeddings — qbits: 32 16
+## Model head & embeddings — qbits: 32 16 
 ^token_embd\.weight$=bf16
 ^output_norm\.weight$=f32
 
-## Multi-headed attention parameters — qbits: 32 16
-^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.attn_gate\.weight$=bf16
+## Multi-headed attention parameters — qbits: 32 16 
+^blk\.([0-9]|[1-2][0-9]|3[0-1])\.attn_norm\.weight$=f32
+^blk\.(3|7|11|15|19|23|27|31)\.attn_v\.weight$=bf16
+^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.attn_qkv\.weight$=bf16
+^blk\.(3|7|11|15|19|23|27|31)\.attn_output\.weight$=bf16
 ^blk\.(3|7|11|15|19|23|27|31)\.attn_k\.weight$=bf16
 ^blk\.(3|7|11|15|19|23|27|31)\.attn_k_norm\.weight$=f32
-^blk\.([0-9]|[1-2][0-9]|3[0-1])\.attn_norm\.weight$=f32
-^blk\.(3|7|11|15|19|23|27|31)\.attn_output\.weight$=bf16
-^blk\.(3|7|11|15|19|23|27|31)\.attn_q\.weight$=bf16
 ^blk\.(3|7|11|15|19|23|27|31)\.attn_q_norm\.weight$=f32
-^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.attn_qkv\.weight$=bf16
-^blk\.(3|7|11|15|19|23|27|31)\.attn_v\.weight$=bf16
+^blk\.(3|7|11|15|19|23|27|31)\.attn_q\.weight$=bf16
+^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.attn_gate\.weight$=bf16
 
-## Dense Feed-Forward Network weights — qbits: 16
+## Dense Feed-Forward Network weights — qbits: 16 
 ^blk\.([0-9]|[1-2][0-9]|3[0-1])\.ffn_down\.weight$=bf16
 ^blk\.([0-9]|[1-2][0-9]|3[0-1])\.ffn_up\.weight$=bf16
 
-## Gating network — qbits: 16
+## Gating network — qbits: 16 
 ^blk\.([0-9]|[1-2][0-9]|3[0-1])\.ffn_gate\.weight$=bf16
 
-## Misc / Other tensors — qbits: 32 16
+## Misc / Other tensors — qbits: 32 16 
+^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.ssm_dt\.bias$=f32
+^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.ssm_conv1d\.weight$=f32
 ^blk\.([0-9]|[1-2][0-9]|3[0-1])\.post_attention_norm\.weight$=f32
-^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.ssm_a$=f32
+^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.ssm_norm\.weight$=f32
 ^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.ssm_alpha\.weight$=bf16
 ^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.ssm_beta\.weight$=bf16
-^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.ssm_conv1d\.weight$=f32
-^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.ssm_dt\.bias$=f32
-^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.ssm_norm\.weight$=f32
 ^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.ssm_out\.weight$=bf16
+^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.ssm_a$=f32
+
 
 
 ## THE END!
+# --no-file: would have written to THIREUS-0bpw-0GB-GGUF_0GB-GPU_0GB-CPU._e3b0c44.recipe
