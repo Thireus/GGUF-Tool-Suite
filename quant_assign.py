@@ -2033,11 +2033,15 @@ def main():
         print("[Error] Invalid --quant-degradation-equation provided; aborting.", file=sys.stderr)
         sys.exit(2)
 
+    def uppercase_quant_degradation_keys(values: Dict[str, float]) -> Dict[str, float]:
+        return {k.upper(): v for k, v in values.items()}
+
     # User provided CSV?
     quant_degradation_values: Dict[str, float] = {}
     if args.quant_degradation_csv:
         try:
             quant_degradation_values = load_quant_degradation_values(args.quant_degradation_csv)
+            quant_degradation_values = uppercase_quant_degradation_keys(quant_degradation_values)
         except Exception as e:
             print(f"[Error] Failed to load quant degradation CSV {args.quant_degradation_csv}: {e}", file=sys.stderr)
             sys.exit(2)
@@ -2047,6 +2051,7 @@ def main():
     else:
         # No CSV and not equation provided: use Qwen3-4B-Thinking-2507's degradation values from models/Qwen3-4B-Thinking-2507/group0/kld_results.csv
         quant_degradation_values = {'bf16': 0.0, 'iq1_bn': 14.758228, 'iq1_kt': 2.692801, 'iq1_m': 4.684445, 'iq1_m_r4': 4.617296, 'iq2_bn': 15.467749, 'iq2_bn_r4': 15.445743, 'iq2_k': 0.883945, 'iq2_k_r4': 0.883945, 'iq2_kl': 0.584754, 'iq2_ks': 1.347207, 'iq2_kt': 1.214565, 'iq3_k': 0.164337, 'iq3_k_r4': 0.164337, 'iq3_ks': 0.211158, 'iq3_kt': 0.214378, 'iq3_s': 0.210123, 'iq3_s_r4': 0.213001, 'iq3_xxs': 0.348842, 'iq3_xxs_r4': 0.351102, 'iq4_k': 0.034494, 'iq4_k_r4': 0.034494, 'iq4_ks': 0.047722, 'iq4_ks_r4': 0.047722, 'iq4_kss': 0.073993, 'iq4_kt': 0.071823, 'iq4_nl': 0.052065, 'iq4_nl_r4': 0.051893, 'iq4_xs': 0.052575, 'iq4_xs_r8': 0.055797, 'iq5_k': 0.009814, 'iq5_k_r4': 0.009814, 'iq5_ks': 0.012268, 'iq5_ks_r4': 0.012268, 'iq6_k': 0.003411, 'q2_K': 0.895361, 'q2_k_r4': 0.896636, 'q3_K': 0.226457, 'q3_k_r4': 0.228156, 'q4_0': 0.070737, 'q4_0_r8': 0.070601, 'q4_1': 0.050200, 'q4_K': 0.046677, 'q4_k_r4': 0.046609, 'q5_0': 0.018810, 'q5_0_r4': 0.018876, 'q5_1': 0.014465, 'q5_K': 0.015590, 'q5_k_r4': 0.015766, 'q6_0': 0.005317, 'q6_0_r4': 0.005244, 'q6_K': 0.004040, 'q6_k_r4': 0.006687, 'q8_0': 0.001449, 'q8_0_r8': 0.001515, 'q8_k_r8': 0.004102, 'q8_KV': 0.038383, 'iq1_s': 4.562480, 'iq1_s_r4': 5.124850, 'iq2_s': 0.465971, 'iq2_xs': 0.633596, 'iq2_xs_r4': 0.636844, 'iq2_xxs': 1.202639, 'iq2_xxs_r4': 1.208328}
+        quant_degradation_values = uppercase_quant_degradation_keys(quant_degradation_values)
 
     if INFO:
         if args.quant_degradation_csv:
@@ -2070,21 +2075,23 @@ def main():
         # Prefer CSV value
 
         # 1. Exact match
-        if qtype in quant_degradation_values:
-            return quant_degradation_values[qtype]
+        if qtype.upper() in quant_degradation_values:
+            return quant_degradation_values[qtype.upper()]
 
         # The degradation data for iq1_s != iq1_s_r4, this is the only exception
         if qtype != "iq1_s" and qtype != "iq1_s_r4":
             # 2. If qtype ends with _r4 or _r8 → try base
             base_qtype = re.sub(r"_r[48]$", "", qtype)
-            if base_qtype != qtype and base_qtype in quant_degradation_values:
-                return quant_degradation_values[base_qtype]
+            _base_qtype = base_qtype.upper()
+            if _base_qtype != qtype.upper() and _base_qtype in quant_degradation_values:
+                return quant_degradation_values[_base_qtype]
 
             # 3. If base not found → try adding _r4 and _r8
             for suffix in ("_r4", "_r8"):
                 candidate = base_qtype + suffix
-                if candidate in quant_degradation_values:
-                    return quant_degradation_values[candidate]
+                _candidate = candidate.upper()
+                if _candidate in quant_degradation_values:
+                    return quant_degradation_values[_candidate]
             
         # If absent, try to guess from equation using bpw
 
