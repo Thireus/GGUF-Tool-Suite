@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-17-2026 -------------------- **#
+#** --------------- Updated: Mar-21-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -2073,16 +2073,18 @@ def main():
         if qtype in quant_degradation_values:
             return quant_degradation_values[qtype]
 
-        # 2. If qtype ends with _r4 or _r8 → try base
-        base_qtype = re.sub(r"_r[48]$", "", qtype)
-        if base_qtype != qtype and base_qtype in quant_degradation_values:
-            return quant_degradation_values[base_qtype]
+        # The degradation data for iq1_s != iq1_s_r4, this is the only exception
+        if qtype != "iq1_s" and qtype != "iq1_s_r4":
+            # 2. If qtype ends with _r4 or _r8 → try base
+            base_qtype = re.sub(r"_r[48]$", "", qtype)
+            if base_qtype != qtype and base_qtype in quant_degradation_values:
+                return quant_degradation_values[base_qtype]
 
-        # 3. If base not found → try adding _r4 and _r8
-        for suffix in ("_r4", "_r8"):
-            candidate = base_qtype + suffix
-            if candidate in quant_degradation_values:
-                return quant_degradation_values[candidate]
+            # 3. If base not found → try adding _r4 and _r8
+            for suffix in ("_r4", "_r8"):
+                candidate = base_qtype + suffix
+                if candidate in quant_degradation_values:
+                    return quant_degradation_values[candidate]
             
         # If absent, try to guess from equation using bpw
 
