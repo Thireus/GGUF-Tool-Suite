@@ -1,0 +1,179 @@
+main: build = 1 (5e95108)
+main: built with MSVC 19.44.35223.0 for 
+main: seed  = 1337
+ggml_cuda_init: GGML_CUDA_FORCE_MMQ:    no
+ggml_cuda_init: GGML_CUDA_FORCE_CUBLAS: no
+ggml_cuda_init: found 1 CUDA devices:
+  Device 0: NVIDIA RTX PRO 6000 Blackwell Workstation Edition, compute capability 12.0, VMM: yes, VRAM: 97886 MiB
+CUDA0: using device CUDA0 - 95276 MiB free
+llama_model_loader: max stdio successfully set to 2048
+llama_model_loader: additional 427 GGUFs metadata loaded.
+llama_model_loader: loaded meta data with 44 key-value pairs and 427 tensors from ./Qwen3.5-9B-THIREUS-BF16-SPECIAL_TENSOR-00001-of-00428.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = qwen35
+llama_model_loader: - kv   1:                               general.type str              = model
+llama_model_loader: - kv   2:                               general.name str              = Qwen3.5 9B
+llama_model_loader: - kv   3:                           general.basename str              = Qwen3.5
+llama_model_loader: - kv   4:                         general.size_label str              = 9B
+llama_model_loader: - kv   5:                            general.license str              = apache-2.0
+llama_model_loader: - kv   6:                       general.license.link str              = https://huggingface.co/Qwen/Qwen3.5-9...
+llama_model_loader: - kv   7:                   general.base_model.count u32              = 1
+llama_model_loader: - kv   8:                  general.base_model.0.name str              = Qwen3.5 9B Base
+llama_model_loader: - kv   9:          general.base_model.0.organization str              = Qwen
+llama_model_loader: - kv  10:              general.base_model.0.repo_url str              = https://huggingface.co/Qwen/Qwen3.5-9...
+llama_model_loader: - kv  11:                               general.tags arr[str,1]       = ["image-text-to-text"]
+llama_model_loader: - kv  12:                         qwen35.block_count u32              = 32
+llama_model_loader: - kv  13:                      qwen35.context_length u32              = 262144
+llama_model_loader: - kv  14:                    qwen35.embedding_length u32              = 4096
+llama_model_loader: - kv  15:                 qwen35.feed_forward_length u32              = 12288
+llama_model_loader: - kv  16:                qwen35.attention.head_count u32              = 16
+llama_model_loader: - kv  17:             qwen35.attention.head_count_kv u32              = 4
+llama_model_loader: - kv  18:             qwen35.rope.dimension_sections arr[i32,4]       = [11, 11, 10, 0]
+llama_model_loader: - kv  19:                      qwen35.rope.freq_base f32              = 10000000.000000
+llama_model_loader: - kv  20:    qwen35.attention.layer_norm_rms_epsilon f32              = 0.000001
+llama_model_loader: - kv  21:                qwen35.attention.key_length u32              = 256
+llama_model_loader: - kv  22:              qwen35.attention.value_length u32              = 256
+llama_model_loader: - kv  23:                          general.file_type u32              = 32
+llama_model_loader: - kv  24:                     qwen35.ssm.conv_kernel u32              = 4
+llama_model_loader: - kv  25:                      qwen35.ssm.state_size u32              = 128
+llama_model_loader: - kv  26:                     qwen35.ssm.group_count u32              = 16
+llama_model_loader: - kv  27:                  qwen35.ssm.time_step_rank u32              = 32
+llama_model_loader: - kv  28:                      qwen35.ssm.inner_size u32              = 4096
+llama_model_loader: - kv  29:             qwen35.full_attention_interval u32              = 4
+llama_model_loader: - kv  30:                qwen35.rope.dimension_count u32              = 64
+llama_model_loader: - kv  31:               general.quantization_version u32              = 2
+llama_model_loader: - kv  32:                       tokenizer.ggml.model str              = gpt2
+llama_model_loader: - kv  33:                         tokenizer.ggml.pre str              = qwen35
+llama_model_loader: - kv  34:                      tokenizer.ggml.tokens arr[str,248320]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+llama_model_loader: - kv  35:                  tokenizer.ggml.token_type arr[i32,248320]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  36:                      tokenizer.ggml.merges arr[str,247587]  = ["Ġ Ġ", "ĠĠ ĠĠ", "i n", "Ġ t",...
+llama_model_loader: - kv  37:                tokenizer.ggml.eos_token_id u32              = 248046
+llama_model_loader: - kv  38:            tokenizer.ggml.padding_token_id u32              = 248044
+llama_model_loader: - kv  39:               tokenizer.ggml.add_bos_token bool             = false
+llama_model_loader: - kv  40:                    tokenizer.chat_template str              = {%- set image_count = namespace(value...
+llama_model_loader: - kv  41:                                   split.no u16              = 0
+llama_model_loader: - kv  42:                                split.count u16              = 428
+llama_model_loader: - kv  43:                        split.tensors.count i32              = 427
+llama_model_loader: - type  f32:  177 tensors
+llama_model_loader: - type bf16:  250 tensors
+load: printing all EOG tokens:
+load:   - 248044 ('<|endoftext|>')
+load:   - 248046 ('<|im_end|>')
+load:   - 248063 ('<|fim_pad|>')
+load:   - 248064 ('<|repo_name|>')
+load:   - 248065 ('<|file_sep|>')
+load: special tokens cache size = 33
+load: token to piece cache size = 1.7581 MB
+llm_load_print_meta: format           = GGUF V3 (latest)
+llm_load_print_meta: arch             = qwen35
+llm_load_print_meta: n_ctx_train      = 262144
+llm_load_print_meta: n_embd           = 4096
+llm_load_print_meta: n_layer          = 32
+llm_load_print_meta: n_head           = 16
+llm_load_print_meta: n_head_kv        = 4
+llm_load_print_meta: n_rot            = 64
+llm_load_print_meta: n_swa            = 0
+llm_load_print_meta: n_swa_pattern    = 1
+llm_load_print_meta: n_embd_head_k    = 256
+llm_load_print_meta: n_embd_head_v    = 256
+llm_load_print_meta: n_gqa            = 4
+llm_load_print_meta: n_embd_k_gqa     = 1024
+llm_load_print_meta: n_embd_v_gqa     = 1024
+llm_load_print_meta: f_norm_eps       = 0.0e+00
+llm_load_print_meta: f_norm_rms_eps   = 1.0e-06
+llm_load_print_meta: f_clamp_kqv      = 0.0e+00
+llm_load_print_meta: f_max_alibi_bias = 0.0e+00
+llm_load_print_meta: f_logit_scale    = 0.0e+00
+llm_load_print_meta: n_ff             = 12288
+llm_load_print_meta: n_expert         = 0
+llm_load_print_meta: n_expert_used    = 0
+llm_load_print_meta: causal attn      = 1
+llm_load_print_meta: pooling type     = 0
+llm_load_print_meta: rope type        = 40
+llm_load_print_meta: rope scaling     = linear
+llm_load_print_meta: freq_base_train  = 10000000.0
+llm_load_print_meta: freq_scale_train = 1
+llm_load_print_meta: n_ctx_orig_yarn  = 262144
+llm_load_print_meta: rope_finetuned   = unknown
+llm_load_print_meta: mrope sections   = [11, 11, 10, 0]
+llm_load_print_meta: ssm_d_conv       = 4
+llm_load_print_meta: ssm_d_inner      = 4096
+llm_load_print_meta: ssm_d_state      = 128
+llm_load_print_meta: ssm_dt_rank      = 32
+llm_load_print_meta: ssm_n_group      = 16
+llm_load_print_meta: model type       = 9B
+llm_load_print_meta: model ftype      = BF16
+llm_load_print_meta: model params     = 8.954 B
+llm_load_print_meta: model size       = 16.680 GiB (16.002 BPW) 
+llm_load_print_meta: repeating layers = 12.891 GiB (16.002 BPW, 6.920 B parameters)
+llm_load_print_meta: general.name     = Qwen3.5 9B
+print_info: vocab type       = BPE
+print_info: n_vocab          = 248320
+print_info: n_merges         = 247587
+print_info: BOS token        = 11 ','
+print_info: EOS token        = 248046 '<|im_end|>'
+print_info: EOT token        = 248046 '<|im_end|>'
+print_info: PAD token        = 248044 '<|endoftext|>'
+print_info: LF token         = 198 'Ċ'
+print_info: FIM PRE token    = 248060 '<|fim_prefix|>'
+print_info: FIM SUF token    = 248062 '<|fim_suffix|>'
+print_info: FIM MID token    = 248061 '<|fim_middle|>'
+print_info: FIM PAD token    = 248063 '<|fim_pad|>'
+print_info: FIM REP token    = 248064 '<|repo_name|>'
+print_info: FIM SEP token    = 248065 '<|file_sep|>'
+print_info: EOG token        = 248044 '<|endoftext|>'
+print_info: EOG token        = 248046 '<|im_end|>'
+print_info: EOG token        = 248063 '<|fim_pad|>'
+print_info: EOG token        = 248064 '<|repo_name|>'
+print_info: EOG token        = 248065 '<|file_sep|>'
+print_info: max token length = 256
+llm_load_tensors: ggml ctx size =    0.37 MiB
+llm_load_tensors: offloading 32 repeating layers to GPU
+llm_load_tensors: offloading non-repeating layers to GPU
+llm_load_tensors: offloaded 33/33 layers to GPU
+llm_load_tensors:  CUDA_Host buffer size =  1940.00 MiB
+llm_load_tensors:      CUDA0 buffer size = 15140.05 MiB
+................................................................................
+llama_init_from_model: n_ctx         = 512
+llama_init_from_model: n_batch       = 512
+llama_init_from_model: n_ubatch      = 512
+llama_init_from_model: flash_attn    = 1
+llama_init_from_model: attn_max_b    = 1024
+llama_init_from_model: fused_moe     = 1
+llama_init_from_model: grouped er    = 0
+llama_init_from_model: fused_up_gate = 1
+llama_init_from_model: fused_mmad    = 1
+llama_init_from_model: rope_cache    = 0
+llama_init_from_model: graph_reuse   = 1
+llama_init_from_model: k_cache_hadam = 0
+llama_init_from_model: split_mode_graph_scheduling = 0
+llama_init_from_model: reduce_type   = f16
+llama_init_from_model: sched_async   = 0
+llama_init_from_model: ser           = -1, 0
+llama_init_from_model: freq_base     = 10000000.0
+llama_init_from_model: freq_scale    = 1
+llama_kv_cache_init:      CUDA0 KV buffer size =    66.25 MiB
+llama_init_from_model: KV self size  =   16.00 MiB, K (f16):    8.00 MiB, V (f16):    8.00 MiB
+llama_init_from_model:  CUDA_Host  output buffer size =     0.95 MiB
+llama_init_from_model:      CUDA0 compute buffer size =   501.00 MiB
+llama_init_from_model:  CUDA_Host compute buffer size =     8.51 MiB
+llama_init_from_model: graph nodes  = 1701
+llama_init_from_model: graph splits = 2
+llama_init_from_model: enabling only_active_experts scheduling
+
+system_info: n_threads = 1 / 36 | AVX = 1 | AVX_VNNI = 0 | AVX2 = 1 | AVX512 = 1 | AVX512_VBMI = 0 | AVX512_VNNI = 0 | AVX512_BF16 = 0 | FMA = 1 | NEON = 0 | SVE = 0 | ARM_FMA = 0 | F16C = 1 | FP16_VA = 0 | WASM_SIMD = 0 | BLAS = 1 | SSE3 = 1 | SSSE3 = 1 | VSX = 0 | MATMUL_INT8 = 0 | 
+perplexity: saving all logits to bench_kld_result.baseline.bf16.829.bin
+perplexity: tokenizing the input ..
+perplexity: tokenization took 1973.11 ms
+perplexity: calculating perplexity over 829 chunks, n_ctx=512, batch_size=512, n_seq=1
+perplexity: 0.24 seconds per pass - ETA 3.33 minutes
+~ggml_backend_cuda_context: have 0 graphs
+[1]6.3970,[2]6.9693,[3]4.6767,[4]4.0704,[5]3.3521,[6]2.8342,[7]2.4606,[8]2.2247,[9]2.0564,[10]2.0544,[11]1.9600,[12]2.1355,[13]2.4373,[14]2.7051,[15]2.7512,[16]2.6607,[17]2.5554,[18]2.4421,[19]2.3881,[20]2.3261,[21]2.2397,[22]2.1887,[23]2.1270,[24]2.0741,[25]2.0411,[26]2.0167,[27]1.9792,[28]1.9977,[29]2.0516,[30]2.1229,[31]2.2179,[32]2.2030,[33]2.1854,[34]2.1946,[35]2.1723,[36]2.2489,[37]2.2868,[38]2.3284,[39]2.3704,[40]2.4154,[41]2.4729,[42]2.5228,[43]2.5243,[44]2.5447,[45]2.5814,[46]2.6319,[47]2.6857,[48]2.7093,[49]2.7300,[50]2.7338,[51]2.7235,[52]2.7577,[53]2.7632,[54]2.7471,[55]2.7624,[56]2.7857,[57]2.7527,[58]2.7376,[59]2.7240,[60]2.7098,[61]2.6909,[62]2.6749,[63]2.6640,[64]2.6542,[65]2.7152,[66]2.7726,[67]2.8306,[68]2.9013,[69]2.9567,[70]2.9974,[71]3.0148,[72]3.1045,[73]3.1805,[74]3.2302,[75]3.2762,[76]3.2775,[77]3.3038,[78]3.3535,[79]3.4144,[80]3.4716,[81]3.4717,[82]3.4911,[83]3.5370,[84]3.6144,[85]3.6732,[86]3.6911,[87]3.7040,[88]3.7115,[89]3.7244,[90]3.7692,[91]3.8507,[92]3.8600,[93]3.8426,[94]3.8353,[95]3.8633,[96]3.8681,[97]3.8356,[98]3.8605,[99]3.8706,[100]3.8982,[101]3.8788,[102]3.8833,[103]3.9330,[104]3.9984,[105]4.0329,[106]4.0869,[107]4.1320,[108]4.1659,[109]4.2183,[110]4.2107,[111]4.2412,[112]4.2684,[113]4.2809,[114]4.2955,[115]4.3236,[116]4.3664,[117]4.3688,[118]4.4014,[119]4.4354,[120]4.4913,[121]4.5027,[122]4.4575,[123]4.4327,[124]4.4180,[125]4.4105,[126]4.4058,[127]4.4349,[128]4.4467,[129]4.4706,[130]4.5085,[131]4.5547,[132]4.5992,[133]4.6598,[134]4.7217,[135]4.7908,[136]4.8311,[137]4.8195,[138]4.8418,[139]4.8882,[140]4.9272,[141]4.9112,[142]4.9331,[143]4.9577,[144]5.0038,[145]5.0524,[146]5.1021,[147]5.1289,[148]5.1441,[149]5.1590,[150]5.1597,[151]5.1651,[152]5.1617,[153]5.1541,[154]5.1746,[155]5.1922,[156]5.1802,[157]5.1762,[158]5.1817,[159]5.1757,[160]5.1765,[161]5.1883,[162]5.1953,[163]5.1863,[164]5.1992,[165]5.1904,[166]5.1906,[167]5.1848,[168]5.1853,[169]5.1744,[170]5.1715,[171]5.1710,[172]5.1911,[173]5.2026,[174]5.2029,[175]5.2067,[176]5.2202,[177]5.2012,[178]5.2179,[179]5.2182,[180]5.2288,[181]5.2399,[182]5.2535,[183]5.2349,[184]5.2169,[185]5.1953,[186]5.1767,[187]5.1588,[188]5.1391,[189]5.1205,[190]5.1111,[191]5.1220,[192]5.1391,[193]5.1784,[194]5.2218,[195]5.2633,[196]5.3181,[197]5.3566,[198]5.3773,[199]5.3938,[200]5.4157,[201]5.4183,[202]5.4180,[203]5.4031,[204]5.3894,[205]5.4092,[206]5.4241,[207]5.4368,[208]5.4520,[209]5.4745,[210]5.4931,[211]5.5090,[212]5.5297,[213]5.5430,[214]5.5279,[215]5.5526,[216]5.5871,[217]5.6158,[218]5.6503,[219]5.6832,[220]5.7133,[221]5.7238,[222]5.7501,[223]5.7201,[224]5.7049,[225]5.7448,[226]5.7894,[227]5.8240,[228]5.8519,[229]5.8712,[230]5.8950,[231]5.9203,[232]5.9488,[233]5.9781,[234]6.0241,[235]6.0690,[236]6.0820,[237]6.0987,[238]6.1185,[239]6.1439,[240]6.1594,[241]6.1653,[242]6.1796,[243]6.1881,[244]6.2363,[245]6.2666,[246]6.2854,[247]6.3104,[248]6.3335,[249]6.3522,[250]6.3731,[251]6.3912,[252]6.4176,[253]6.4418,[254]6.4479,[255]6.4535,[256]6.4607,[257]6.4813,[258]6.4894,[259]6.5054,[260]6.5268,[261]6.5458,[262]6.5651,[263]6.5787,[264]6.5977,[265]6.6174,[266]6.6369,[267]6.6480,[268]6.6548,[269]6.6663,[270]6.6944,[271]6.7224,[272]6.7376,[273]6.7613,[274]6.7682,[275]6.7784,[276]6.7860,[277]6.7985,[278]6.8090,[279]6.8265,[280]6.8475,[281]6.8643,[282]6.8682,[283]6.8812,[284]6.8952,[285]6.9185,[286]6.9304,[287]6.9510,[288]6.9524,[289]6.9729,[290]6.9707,[291]6.9872,[292]6.9866,[293]6.9960,[294]7.0339,[295]7.0524,[296]7.0717,[297]7.0949,[298]7.1001,[299]7.1154,[300]7.1288,[301]7.1473,[302]7.1644,[303]7.1812,[304]7.1973,[305]7.2078,[306]7.2210,[307]7.2268,[308]7.2384,[309]7.2623,[310]7.2709,[311]7.2837,[312]7.2869,[313]7.2935,[314]7.3039,[315]7.3272,[316]7.3339,[317]7.3390,[318]7.3546,[319]7.3856,[320]7.4133,[321]7.4291,[322]7.4060,[323]7.4095,[324]7.4298,[325]7.4122,[326]7.4421,[327]7.4365,[328]7.3919,[329]7.3606,[330]7.3643,[331]7.3756,[332]7.3644,[333]7.3752,[334]7.3850,[335]7.4067,[336]7.3856,[337]7.3870,[338]7.4244,[339]7.4319,[340]7.4475,[341]7.4425,[342]7.3990,[343]7.4095,[344]7.4488,[345]7.4782,[346]7.5057,[347]7.5371,[348]7.5465,[349]7.5410,[350]7.5520,[351]7.5603,[352]7.5614,[353]7.5756,[354]7.5710,[355]7.5760,[356]7.5778,[357]7.6005,[358]7.5898,[359]7.5896,[360]7.5983,[361]7.5867,[362]7.5957,[363]7.6056,[364]7.6013,[365]7.6002,[366]7.5713,[367]7.5435,[368]7.5218,[369]7.4992,[370]7.4864,[371]7.4720,[372]7.4349,[373]7.4243,[374]7.4151,[375]7.4089,[376]7.3801,[377]7.3631,[378]7.3368,[379]7.3185,[380]7.2929,[381]7.2791,[382]7.2524,[383]7.2384,[384]7.2212,[385]7.1942,[386]7.1919,[387]7.1792,[388]7.1781,[389]7.1662,[390]7.1564,[391]7.1301,[392]7.1133,[393]7.0889,[394]7.0754,[395]7.0580,[396]7.0329,[397]6.9987,[398]6.9677,[399]6.9371,[400]6.9298,[401]6.9193,[402]6.9097,[403]6.8891,[404]6.8915,[405]6.8765,[406]6.8507,[407]6.8220,[408]6.7997,[409]6.7878,[410]6.7610,[411]6.7387,[412]6.7187,[413]6.6966,[414]6.6788,[415]6.6666,[416]6.6452,[417]6.6227,[418]6.6018,[419]6.5843,[420]6.5735,[421]6.5551,[422]6.5433,[423]6.5330,[424]6.5273,[425]6.5127,[426]6.5016,[427]6.4820,[428]6.4585,[429]6.4337,[430]6.4128,[431]6.3967,[432]6.3741,[433]6.3536,[434]6.3326,[435]6.3119,[436]6.2953,[437]6.2732,[438]6.2663,[439]6.2504,[440]6.2405,[441]6.2243,[442]6.2076,[443]6.1871,[444]6.1742,[445]6.1640,[446]6.1451,[447]6.1482,[448]6.1247,[449]6.1045,[450]6.0905,[451]6.0729,[452]6.0547,[453]6.0428,[454]6.0284,[455]6.0204,[456]6.0045,[457]5.9977,[458]5.9943,[459]5.9864,[460]5.9780,[461]5.9691,[462]5.9585,[463]5.9507,[464]5.9377,[465]5.9204,[466]5.9182,[467]5.9054,[468]5.8883,[469]5.8755,[470]5.8564,[471]5.8414,[472]5.8266,[473]5.8089,[474]5.7929,[475]5.7756,[476]5.7656,[477]5.7611,[478]5.7414,[479]5.7321,[480]5.7196,[481]5.7123,[482]5.6988,[483]5.6857,[484]5.6725,[485]5.6595,[486]5.6464,[487]5.6333,[488]5.6211,[489]5.6081,[490]5.5951,[491]5.5833,[492]5.5705,[493]5.5580,[494]5.5455,[495]5.5360,[496]5.5233,[497]5.5092,[498]5.5006,[499]5.4908,[500]5.4825,[501]5.4746,[502]5.4565,[503]5.4409,[504]5.4256,[505]5.4099,[506]5.3973,[507]5.3879,[508]5.3781,[509]5.3713,[510]5.3604,[511]5.3526,[512]5.3396,[513]5.3361,[514]5.3273,[515]5.3171,[516]5.3083,[517]5.3057,[518]5.3046,[519]5.3053,[520]5.3006,[521]5.3018,[522]5.3000,[523]5.3008,[524]5.2989,[525]5.3071,[526]5.3207,[527]5.3328,[528]5.3429,[529]5.3528,[530]5.3637,[531]5.3749,[532]5.3883,[533]5.4012,[534]5.4109,[535]5.4154,[536]5.4361,[537]5.4543,[538]5.4734,[539]5.4843,[540]5.4923,[541]5.4977,[542]5.5067,[543]5.5092,[544]5.5133,[545]5.5213,[546]5.5276,[547]5.5351,[548]5.5420,[549]5.5498,[550]5.5584,[551]5.5630,[552]5.5656,[553]5.5788,[554]5.5933,[555]5.5995,[556]5.6053,[557]5.6077,[558]5.6119,[559]5.6155,[560]5.6233,[561]5.6310,[562]5.6404,[563]5.6519,[564]5.6600,[565]5.6711,[566]5.6830,[567]5.6888,[568]5.6993,[569]5.7072,[570]5.7099,[571]5.7155,[572]5.7236,[573]5.7279,[574]5.7352,[575]5.7352,[576]5.7467,[577]5.7502,[578]5.7574,[579]5.7562,[580]5.7613,[581]5.7648,[582]5.7714,[583]5.7686,[584]5.7757,[585]5.7749,[586]5.7802,[587]5.7844,[588]5.7861,[589]5.7856,[590]5.7886,[591]5.7861,[592]5.7860,[593]5.7824,[594]5.7854,[595]5.7810,[596]5.7792,[597]5.7703,[598]5.7701,[599]5.7673,[600]5.7620,[601]5.7576,[602]5.7492,[603]5.7464,[604]5.7413,[605]5.7398,[606]5.7393,[607]5.7375,[608]5.7358,[609]5.7297,[610]5.7301,[611]5.7321,[612]5.7304,[613]5.7276,[614]5.7242,[615]5.7224,[616]5.7216,[617]5.7169,[618]5.7144,[619]5.7155,[620]5.7191,[621]5.7230,[622]5.7185,[623]5.7183,[624]5.7183,[625]5.7204,[626]5.7129,[627]5.7082,[628]5.6925,[629]5.6769,[630]5.6615,[631]5.6503,[632]5.6468,[633]5.6489,[634]5.6507,[635]5.6487,[636]5.6529,[637]5.6586,[638]5.6501,[639]5.6506,[640]5.6551,[641]5.6617,[642]5.6663,[643]5.6581,[644]5.6504,[645]5.6470,[646]5.6406,[647]5.6405,[648]5.6445,[649]5.6437,[650]5.6419,[651]5.6423,[652]5.6470,[653]5.6526,[654]5.6539,[655]5.6530,[656]5.6589,[657]5.6630,[658]5.6671,[659]5.6684,[660]5.6697,[661]5.6697,[662]5.6724,[663]5.6734,[664]5.6717,[665]5.6756,[666]5.6761,[667]5.6783,[668]5.6756,[669]5.6723,[670]5.6718,[671]5.6685,[672]5.6634,[673]5.6599,[674]5.6573,[675]5.6533,[676]5.6516,[677]5.6518,[678]5.6503,[679]5.6469,[680]5.6414,[681]5.6340,[682]5.6314,[683]5.6265,[684]5.6244,[685]5.6191,[686]5.6114,[687]5.6061,[688]5.6033,[689]5.5970,[690]5.5920,[691]5.5872,[692]5.5838,[693]5.5786,[694]5.5794,[695]5.5813,[696]5.5782,[697]5.5775,[698]5.5759,[699]5.5733,[700]5.5669,[701]5.5642,[702]5.5624,[703]5.5587,[704]5.5558,[705]5.5558,[706]5.5534,[707]5.5482,[708]5.5432,[709]5.5384,[710]5.5332,[711]5.5280,[712]5.5232,[713]5.5185,[714]5.5139,[715]5.5087,[716]5.5040,[717]5.4997,[718]5.4948,[719]5.4907,[720]5.4838,[721]5.4785,[722]5.4733,[723]5.4682,[724]5.4675,[725]5.4669,[726]5.4660,[727]5.4654,[728]5.4648,[729]5.4635,[730]5.4640,[731]5.4624,[732]5.4627,[733]5.4638,[734]5.4606,[735]5.4609,[736]5.4610,[737]5.4612,[738]5.4606,[739]5.4612,[740]5.4605,[741]5.4576,[742]5.4546,[743]5.4529,[744]5.4544,[745]5.4545,[746]5.4521,[747]5.4486,[748]5.4465,[749]5.4472,[750]5.4478,[751]5.4475,[752]5.4478,[753]5.4480,[754]5.4465,[755]5.4445,[756]5.4432,[757]5.4432,[758]5.4418,[759]5.4413,[760]5.4424,[761]5.4413,[762]5.4422,[763]5.4404,[764]5.4385,[765]5.4354,[766]5.4351,[767]5.4342,[768]5.4322,[769]5.4318,[770]5.4318,[771]5.4320,[772]5.4310,[773]5.4298,[774]5.4287,[775]5.4286,[776]5.4263,[777]5.4256,[778]5.4240,[779]5.4222,[780]5.4235,[781]5.4230,[782]5.4207,[783]5.4204,[784]5.4178,[785]5.4167,[786]5.4166,[787]5.4140,[788]5.4133,[789]5.4118,[790]5.4107,[791]5.4112,[792]5.4089,[793]5.4087,[794]5.4075,[795]5.4055,[796]5.4040,[797]5.4031,[798]5.4014,[799]5.3991,[800]5.3989,[801]5.3980,[802]5.3979,[803]5.3985,[804]5.3987,[805]5.3975,[806]5.3944,[807]5.3927,[808]5.3931,[809]5.3947,[810]5.3945,[811]5.3932,[812]5.3917,[813]5.3945,[814]5.3941,[815]5.3918,[816]5.3912,[817]5.3919,[818]5.3911,[819]5.3908,[820]5.3912,[821]5.3908,[822]5.3898,[823]5.3902,[824]5.3911,[825]5.3905,[826]5.3893,[827]5.3888,[828]5.3880,[829]5.3866,
+llama_print_timings:        load time =   19142.40 ms
+llama_print_timings:      sample time =       0.00 ms /     1 runs   (    0.00 ms per token,      inf tokens per second)
+llama_print_timings: prompt eval time =   63918.05 ms / 424448 tokens (    0.15 ms per token,  6640.50 tokens per second)
+llama_print_timings:        eval time =       0.00 ms /     1 runs   (    0.00 ms per token,      inf tokens per second)
+llama_print_timings:       total time =  214551.42 ms / 424449 tokens
+
+Final estimate: PPL over 829 chunks for n_ctx=512 = 5.3866 +/- 0.02807
+~ggml_backend_cuda_context: have 2 graphs
