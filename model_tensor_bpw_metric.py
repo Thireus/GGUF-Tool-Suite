@@ -5,7 +5,7 @@
 #** quantized model bpw versus reported metrics such as KLD.  **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jan-11-2026 -------------------- **#
+#** --------------- Updated: Mar-22-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -18,7 +18,7 @@
 #**    /    o―ヽニニフ))             · · ɪǫ3_xxs      ~·°        **#
 #**    し―-J                                                   **#
 #**                                                           **#
-#** Copyright © 2025 - Thireus.          ᵥᵢᵦₑ 𝒸ₒ𝒹ᵢₙ𝑔 ₑₙ𝑔ᵢₙₑₑᵣ **#
+#** Copyright © 2026 - Thireus.          ᵥᵢᵦₑ 𝒸ₒ𝒹ᵢₙ𝑔 ₑₙ𝑔ᵢₙₑₑᵣ **#
 #***************************************************************#
 #**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
 #***************************************************************#
@@ -2320,7 +2320,7 @@ def main():
                                                                penalize_below=args.penalize_below,
                                                                drift_below=args.drift_below,
                                                                drift_above=args.drift_above)
-                print(f"Wrote BPW CSV: {out_csv}")
+                print(f"Wrote BPW CSV: {out_csv}", file=sys.stderr)
         except Exception as ex:
             print(f"ERROR: failed to produce {out_csv}: {ex}", file=sys.stderr)
             sys.exit(6)
