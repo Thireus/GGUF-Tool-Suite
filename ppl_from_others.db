@@ -235,7 +235,7 @@ Qwen3.5-397B-A17B|ubergarm|IQ2_KL|2.994|3.6536|https://huggingface.co/ubergarm/Q
 Qwen3.5-397B-A17B|ubergarm|smol-IQ2_XS|2.46|3.8717|https://huggingface.co/ubergarm/Qwen3.5-397B-A17B-GGUF/tree/main/smol-IQ2_XS
 Qwen3.5-397B-A17B|ubergarm|smol-IQ2_KS|2.344|3.9153|https://huggingface.co/ubergarm/Qwen3.5-397B-A17B-GGUF/tree/main/smol-IQ2_KS
 Qwen3.5-397B-A17B|ubergarm|smol-IQ1_KT|1.925|4.2523|https://huggingface.co/ubergarm/Qwen3.5-397B-A17B-GGUF/tree/main/smol-IQ1_KT
-Kimi-K2.5|ubergarm|Q4_X|4.549|1.8235|https://huggingface.co/ubergarm/Kimi-K2.5-GGUF/blob/main/Kimi-K2.5-Q4_X.gguf
+Kimi-K2.5|ubergarm|Q4_X|4.549|1.8235
 Kimi-K2.5|ubergarm|IQ3_K|3.845|1.8775|https://huggingface.co/ubergarm/Kimi-K2.5-GGUF/tree/main/IQ3_K
 Kimi-K2.5|ubergarm|smol-IQ3_KS|3.249|1.9562|https://huggingface.co/ubergarm/Kimi-K2.5-GGUF/tree/main/smol-IQ3_KS
 Kimi-K2.5|ubergarm|smol-IQ2_KL|2.755|2.1813|https://huggingface.co/ubergarm/Kimi-K2.5-GGUF/tree/main/smol-IQ2_KL
