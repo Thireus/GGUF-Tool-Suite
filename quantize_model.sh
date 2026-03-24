@@ -173,8 +173,54 @@ qtype_in_list() {
   return 1
 }
 
+qtype_is_r4_or_r8() {
+  local qtype_upper
+  qtype_upper="$(normalize_qtype "$1")"
+  [[ "$qtype_upper" =~ _R[48]$ ]]
+}
+
+qtype_base_without_r4_r8() {
+  local qtype_upper
+  qtype_upper="$(normalize_qtype "$1")"
+  if qtype_is_r4_or_r8 "$qtype_upper"; then
+    printf '%s' "${qtype_upper%_*}"
+  else
+    printf '%s' "$qtype_upper"
+  fi
+}
+
+qtype_suffix_rank() {
+  local qtype_upper
+  qtype_upper="$(normalize_qtype "$1")"
+  case "$qtype_upper" in
+    *_R4) printf '%s' 1 ;;
+    *_R8) printf '%s' 2 ;;
+    *) printf '%s' 0 ;;
+  esac
+}
+
+qtype_is_forbidden_fallback() {
+  local qtype_upper base_upper
+  qtype_upper="$(normalize_qtype "$1")"
+  base_upper="$(qtype_base_without_r4_r8 "$qtype_upper")"
+
+  if [[ "$qtype_upper" =~ (_KV|_BN|_1|_2)$ ]]; then
+    return 0
+  fi
+
+  if [[ "$base_upper" =~ (_KV|_BN|_1|_2)$ ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
 is_float_greater() {
   awk -v a="$1" -v b="$2" 'BEGIN { exit !(a > b) }'
+}
+
+is_float_greater_or_equal() {
+  awk -v a="$1" -v b="$2" 'BEGIN { exit !((a > b) || (a == b)) }'
 }
 
 format_duration() {
@@ -351,24 +397,81 @@ cleanup_partial_output() {
 
 next_fallback_qtype() {
   local current_upper="$1"
-  local current_bpw candidate_upper candidate_bpw candidate_key
+  local current_bpw candidate_upper candidate_bpw sort_key
+  current_upper="$(normalize_qtype "$current_upper")"
   current_bpw="$(bpw_of "$current_upper")" || return 1
+
+  local current_base current_variant
+  current_base="$(qtype_base_without_r4_r8 "$current_upper")"
+  current_variant=0
+  if qtype_is_r4_or_r8 "$current_upper"; then
+    current_variant=1
+  fi
 
   local -a candidates=()
   local idx
   for idx in "${!FALLBACK_QTYPES[@]}"; do
     candidate_upper="$(normalize_qtype "${FALLBACK_QTYPES[$idx]}")"
-    [[ "$candidate_upper" == "BF16" ]] && continue
-    candidate_bpw="$(bpw_of "$candidate_upper")" || continue
 
-    if is_float_greater "$candidate_bpw" "$current_bpw"; then
-      candidates+=("$candidate_bpw|$idx|$candidate_upper")
+    [[ "$candidate_upper" == "BF16" ]] && continue
+    [[ "$candidate_upper" == "$current_upper" ]] && continue
+    qtype_is_forbidden_fallback "$candidate_upper" && continue
+
+    candidate_bpw="$(bpw_of "$candidate_upper")" || continue
+    is_float_greater_or_equal "$candidate_bpw" "$current_bpw" || continue
+
+    local candidate_base candidate_variant same_bpw_priority same_stem_priority same_stem_relation i_priority suffix_priority suffix_rank
+    candidate_base="$(qtype_base_without_r4_r8 "$candidate_upper")"
+    candidate_variant=0
+    if qtype_is_r4_or_r8 "$candidate_upper"; then
+      candidate_variant=1
     fi
+
+    same_bpw_priority=1
+    [[ "$candidate_bpw" == "$current_bpw" ]] && same_bpw_priority=0
+
+    same_stem_priority=1
+    same_stem_relation=2
+    if [[ "$candidate_base" == "$current_base" ]]; then
+      same_stem_priority=0
+      if (( candidate_variant != current_variant )); then
+        same_stem_relation=0
+      else
+        same_stem_relation=1
+      fi
+    fi
+
+    i_priority=1
+    [[ "$candidate_upper" == I* ]] && i_priority=0
+
+    suffix_priority=0
+    if qtype_is_r4_or_r8 "$candidate_upper"; then
+      suffix_priority=1
+    fi
+
+    suffix_rank="$(qtype_suffix_rank "$candidate_upper")"
+
+    sort_key="$(printf '%d|%s|%d|%d|%d|%d|%s' \
+      "$same_bpw_priority" \
+      "$candidate_bpw" \
+      "$same_stem_priority" \
+      "$same_stem_relation" \
+      "$i_priority" \
+      "$suffix_priority" \
+      "$suffix_rank|$candidate_upper")"
+
+    candidates+=("$sort_key")
   done
 
   ((${#candidates[@]} > 0)) || return 1
-  candidate_key="$(printf '%s\n' "${candidates[@]}" | sort -t'|' -k1,1n -k2,2n | head -n1)"
-  printf '%s' "${candidate_key##*|}"
+
+  sort_key="$(
+    printf '%s\n' "${candidates[@]}" \
+      | sort -t'|' -k1,1n -k2,2g -k3,3n -k4,4n -k5,5n -k6,6n -k7,7 \
+      | head -n1
+  )"
+
+  printf '%s' "${sort_key##*|}"
 }
 
 print_summary() {
