@@ -173,6 +173,18 @@ qtype_in_list() {
   return 1
 }
 
+qtype_in_array() {
+  local needle
+  needle="$(normalize_qtype "$1")"
+  shift
+
+  local item
+  for item in "$@"; do
+    [[ "$needle" == "$(normalize_qtype "$item")" ]] && return 0
+  done
+  return 1
+}
+
 qtype_is_r4_or_r8() {
   local qtype_upper
   qtype_upper="$(normalize_qtype "$1")"
@@ -397,7 +409,9 @@ cleanup_partial_output() {
 
 next_fallback_qtype() {
   local current_upper="$1"
-  local current_bpw candidate_upper candidate_bpw sort_key
+  shift
+
+  local current_bpw candidate_upper candidate_bpw candidate_key
   current_upper="$(normalize_qtype "$current_upper")"
   current_bpw="$(bpw_of "$current_upper")" || return 1
 
@@ -408,6 +422,7 @@ next_fallback_qtype() {
     current_variant=1
   fi
 
+  local -a tested_qtypes=("$@")
   local -a candidates=()
   local idx
   for idx in "${!FALLBACK_QTYPES[@]}"; do
@@ -416,6 +431,7 @@ next_fallback_qtype() {
     [[ "$candidate_upper" == "BF16" ]] && continue
     [[ "$candidate_upper" == "$current_upper" ]] && continue
     qtype_is_forbidden_fallback "$candidate_upper" && continue
+    qtype_in_array "$candidate_upper" "${tested_qtypes[@]}" && continue
 
     candidate_bpw="$(bpw_of "$candidate_upper")" || continue
     is_float_greater_or_equal "$candidate_bpw" "$current_bpw" || continue
@@ -451,7 +467,7 @@ next_fallback_qtype() {
 
     suffix_rank="$(qtype_suffix_rank "$candidate_upper")"
 
-    sort_key="$(printf '%d|%s|%d|%d|%d|%d|%s' \
+    candidate_key="$(printf '%d|%s|%d|%d|%d|%d|%s' \
       "$same_bpw_priority" \
       "$candidate_bpw" \
       "$same_stem_priority" \
@@ -460,18 +476,18 @@ next_fallback_qtype() {
       "$suffix_priority" \
       "$suffix_rank|$candidate_upper")"
 
-    candidates+=("$sort_key")
+    candidates+=("$candidate_key")
   done
 
   ((${#candidates[@]} > 0)) || return 1
 
-  sort_key="$(
+  candidate_key="$(
     printf '%s\n' "${candidates[@]}" \
       | sort -t'|' -k1,1n -k2,2g -k3,3n -k4,4n -k5,5n -k6,6n -k7,7 \
       | head -n1
   )"
 
-  printf '%s' "${sort_key##*|}"
+  printf '%s' "${candidate_key##*|}"
 }
 
 print_summary() {
@@ -939,6 +955,7 @@ for i in "${SHARD_IDS_TO_PROCESS[@]}"; do
   shard_attempts=0
   shard_used_fallbacks=0
   shard_chain=("$current_qtype")
+  shard_tested_qtypes=()
 
   while :; do
     if [[ "$current_qtype" == "BF16" ]]; then
@@ -988,7 +1005,9 @@ for i in "${SHARD_IDS_TO_PROCESS[@]}"; do
     echo "⚠️  Shard $i failed with ${current_qtype} after $(format_duration "$attempt_elapsed")."
     cleanup_partial_output "$output_actual_shard"
 
-    next_qtype="$(next_fallback_qtype "$current_qtype" || true)"
+    shard_tested_qtypes+=("$current_qtype")
+
+    next_qtype="$(next_fallback_qtype "$current_qtype" "${shard_tested_qtypes[@]}" || true)"
     if [[ -z "$next_qtype" ]]; then
       echo "❌ Error: No higher-BPW fallback remains for ${current_qtype}." >&2
       echo "The fallback pool is exhausted before BF16, so this shard cannot continue." >&2
