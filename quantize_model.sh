@@ -5,7 +5,7 @@
 #** repositories from Thireus' special BF16 sharded model.    **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-23-2026 -------------------- **#
+#** --------------- Updated: Mar-24-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -141,6 +141,7 @@ USE_IK_FALLBACK=0
 USE_INDIVIDUAL_TENSORS=0
 CUSTOM_FALLBACK_QTYPES=()
 FALLBACK_QTYPES=()
+FALLBACK_POOL_LABEL=""
 INDIVIDUAL_TENSORS=()
 SHARD_IDS_TO_PROCESS=()
 
@@ -158,6 +159,18 @@ bpw_of() {
   qtype_upper="$(normalize_qtype "$1")"
   [[ -n "${BPW_TABLE[$qtype_upper]+x}" ]] || return 1
   printf '%s' "${BPW_TABLE[$qtype_upper]}"
+}
+
+qtype_in_list() {
+  local needle
+  needle="$(normalize_qtype "$1")"
+  shift
+
+  local item
+  for item in "$@"; do
+    [[ "$needle" == "$(normalize_qtype "$item")" ]] && return 0
+  done
+  return 1
 }
 
 is_float_greater() {
@@ -208,6 +221,13 @@ Options:
 Notes:
   --ik-fallback and --fallback-qtypes cannot be used at the same time.
   --individual-tensors overrides the sequential shard loop.
+  When --individual-tensors is used, the ids are sorted numerically and deduplicated
+  before processing.
+  Resume in --individual-tensors mode is sequence-aware: the script checks the
+  requested ids in order, deletes the last completed shard before the first missing
+  one, and resumes from there.
+  If no custom fallback pool is provided, the script uses FALLBACK_LLAMA_QUANTS for
+  llama-quantize targets and FALLBACK_IK_QUANTS for ik_llama.cpp targets.
   The source shard total is detected automatically from the shard named
   ...-00001-of-#####.gguf.
 EOF
@@ -238,6 +258,12 @@ append_individual_tensors_from_arg() {
       exit 20
     fi
   done
+}
+
+sort_unique_individual_tensors() {
+  local -a sorted_unique=()
+  mapfile -t sorted_unique < <(printf '%s\n' "${INDIVIDUAL_TENSORS[@]}" | LC_ALL=C sort -n -u)
+  INDIVIDUAL_TENSORS=("${sorted_unique[@]}")
 }
 
 # ------------------ LLAMA-QUANTIZE SUPPORT CHECK ------------------
@@ -372,6 +398,7 @@ print_summary() {
   echo "Exit status: $exit_code"
   echo "Model: $MODEL"
   echo "Target dtype: $TARGET_QTYPE"
+  echo "Fallback pool: $FALLBACK_POOL_LABEL"
   echo "Imatrix file: $IMATRIX_FILE"
   echo "Output directory: $TARGET_DIR"
   if (( USE_INDIVIDUAL_TENSORS )); then
@@ -567,10 +594,19 @@ if (( ${#CUSTOM_FALLBACK_QTYPES[@]} > 0 )); then
     fi
   done
   FALLBACK_QTYPES=("${CUSTOM_FALLBACK_QTYPES[@]}")
+  FALLBACK_POOL_LABEL="custom"
 elif (( USE_IK_FALLBACK )); then
   FALLBACK_QTYPES=("${FALLBACK_IK_QUANTS[@]}")
+  FALLBACK_POOL_LABEL="ik_llama.cpp (forced)"
 else
-  FALLBACK_QTYPES=("${FALLBACK_LLAMA_QUANTS[@]}")
+  if qtype_in_list "$TARGET_QTYPE" "${FALLBACK_LLAMA_QUANTS[@]}"; then
+    FALLBACK_QTYPES=("${FALLBACK_LLAMA_QUANTS[@]}")
+    FALLBACK_POOL_LABEL="llama.cpp"
+  else
+    FALLBACK_QTYPES=("${FALLBACK_IK_QUANTS[@]}")
+    FALLBACK_POOL_LABEL="ik_llama.cpp (auto-selected)"
+    echo "⚠️  Target qtype '$TARGET_QTYPE' is not listed in FALLBACK_LLAMA_QUANTS; using the ik_llama.cpp fallback pool for this run."
+  fi
 fi
 
 if [[ -z "$SOURCE_DIR" ]]; then
@@ -586,36 +622,58 @@ TARGET_PREFIX="${MODEL}-${MAINTAINER}-${TARGET_QTYPE}-SPECIAL_TENSOR"
 # ------------------------------------------------------------------------
 
 # ------------------ RESUME / EXISTING SHARDS CHECK ------------------
+# When --individual-tensors is used, resume detection is sequence-aware: we inspect
+# the requested ids in order, delete the last completed shard before the first
+# missing one, and resume from that point.
 RESUME_START=2
 mkdir -p "$TARGET_DIR"
-count_existing_shards
 
-if (( EXISTING_SHARD_COUNT > 0 )); then
-  if [[ -n "${HIGHEST_SHARD_ID:-}" && "$HIGHEST_SHARD_ID" -eq 1 ]]; then
-    echo "⚠️  Only shard 00001 exists in '$TARGET_DIR'."
-    if prompt_delete_latest_shard "${HIGHEST_SHARD_PATH}" "${HIGHEST_SHARD_ID}"; then
-      rm -f -- "${HIGHEST_SHARD_PATH}"
-      RESUME_START=2
+if (( USE_INDIVIDUAL_TENSORS )); then
+  sort_unique_individual_tensors
+
+  if (( ${#INDIVIDUAL_TENSORS[@]} == 0 )); then
+    echo "❌ Error: --individual-tensors was provided, but no shard ids were parsed." >&2
+    exit 20
+  fi
+
+  for shard_id in "${INDIVIDUAL_TENSORS[@]}"; do
+    if (( shard_id < 2 || shard_id > CHUNKS_TOTAL )); then
+      echo "❌ Error: Individual shard id '$shard_id' is outside the valid range 2..$CHUNKS_TOTAL." >&2
+      exit 20
+    fi
+  done
+
+  SHARD_IDS_TO_PROCESS=("${INDIVIDUAL_TENSORS[@]}")
+else
+  count_existing_shards
+
+  if (( EXISTING_SHARD_COUNT > 0 )); then
+    if [[ -n "${HIGHEST_SHARD_ID:-}" && "$HIGHEST_SHARD_ID" -eq 1 ]]; then
+      echo "⚠️  Only shard 00001 exists in '$TARGET_DIR'."
+      if prompt_delete_latest_shard "${HIGHEST_SHARD_PATH}" "${HIGHEST_SHARD_ID}"; then
+        rm -f -- "${HIGHEST_SHARD_PATH}"
+        RESUME_START=2
+      else
+        echo "⚠️  Leaving shard 00001 in place; exiting without resuming."
+        exit 33
+      fi
     else
-      echo "⚠️  Leaving shard 00001 in place; exiting without resuming."
-      exit 33
+      RESUME_START="$HIGHEST_SHARD_ID"
+
+      echo "⚠️  Existing GGUF shards were found in: $TARGET_DIR"
+      echo "⚠️  Highest shard id found: $(printf '%05d' "$HIGHEST_SHARD_ID")"
+      echo "⚠️  Latest shard path: $HIGHEST_SHARD_PATH"
+      if prompt_delete_latest_shard "$HIGHEST_SHARD_PATH" "$HIGHEST_SHARD_ID"; then
+        rm -f -- "$HIGHEST_SHARD_PATH"
+      else
+        echo "⚠️  Delete that shard first, because it is likely corrupted."
+        echo "⚠️  Then rerun this script to resume from shard $RESUME_START."
+        exit 33
+      fi
     fi
   else
-    RESUME_START="$HIGHEST_SHARD_ID"
-
-    echo "⚠️  Existing GGUF shards were found in: $TARGET_DIR"
-    echo "⚠️  Highest shard id found: $(printf '%05d' "$HIGHEST_SHARD_ID")"
-    echo "⚠️  Latest shard path: $HIGHEST_SHARD_PATH"
-    if prompt_delete_latest_shard "$HIGHEST_SHARD_PATH" "$HIGHEST_SHARD_ID"; then
-      rm -f -- "$HIGHEST_SHARD_PATH"
-    else
-      echo "⚠️  Delete that shard first, because it is likely corrupted."
-      echo "⚠️  Then rerun this script to resume from shard $RESUME_START."
-      exit 33
-    fi
+    RESUME_START=2
   fi
-else
-  RESUME_START=2
 fi
 # -------------------------------------------------------------------
 
@@ -656,20 +714,55 @@ fi
 find_source_first_shard_and_total
 
 if (( USE_INDIVIDUAL_TENSORS )); then
-  if (( ${#INDIVIDUAL_TENSORS[@]} == 0 )); then
-    echo "❌ Error: --individual-tensors was provided, but no shard ids were parsed." >&2
-    exit 20
-  fi
+  RESUME_START="${SHARD_IDS_TO_PROCESS[0]}"
 
-  for shard_id in "${INDIVIDUAL_TENSORS[@]}"; do
-    if (( shard_id < 1 || shard_id > CHUNKS_TOTAL )); then
-      echo "❌ Error: Individual shard id '$shard_id' is outside the valid range 1..$CHUNKS_TOTAL." >&2
-      exit 20
+  local_individual_first_missing_index=-1
+  local_individual_resume_index=0
+  local_individual_shard_id=""
+  local_individual_shard_path=""
+
+  for idx in "${!SHARD_IDS_TO_PROCESS[@]}"; do
+    local_individual_shard_id="${SHARD_IDS_TO_PROCESS[$idx]}"
+    local_individual_shard_path="$TARGET_DIR/${TARGET_PREFIX}-$(printf '%05d' "$local_individual_shard_id")-of-${CHUNK_TOTAL_PADDED}.gguf"
+    if [[ ! -f "$local_individual_shard_path" ]]; then
+      local_individual_first_missing_index="$idx"
+      break
     fi
   done
 
-  SHARD_IDS_TO_PROCESS=("${INDIVIDUAL_TENSORS[@]}")
-  RESUME_START="${INDIVIDUAL_TENSORS[0]}"
+  if (( local_individual_first_missing_index < 0 )); then
+    local_individual_resume_index=$((${#SHARD_IDS_TO_PROCESS[@]} - 1))
+    RESUME_START="${SHARD_IDS_TO_PROCESS[$local_individual_resume_index]}"
+    echo "⚠️  Individual-tensors resume mode: every requested shard already exists."
+    echo "⚠️  Deleting the last requested shard and resuming from it: $(printf '%05d' "$RESUME_START")"
+  elif (( local_individual_first_missing_index == 0 )); then
+    local_individual_resume_index=0
+    RESUME_START="${SHARD_IDS_TO_PROCESS[$local_individual_resume_index]}"
+    echo "⚠️  Individual-tensors resume mode: the first requested shard is missing."
+    echo "⚠️  Resuming from requested shard $(printf '%05d' "$RESUME_START") because there is no earlier shard to delete."
+  else
+    local_individual_resume_index=$((local_individual_first_missing_index - 1))
+    RESUME_START="${SHARD_IDS_TO_PROCESS[$local_individual_resume_index]}"
+    echo "⚠️  Individual-tensors resume mode: the first missing requested shard is $(printf '%05d' "${SHARD_IDS_TO_PROCESS[$local_individual_first_missing_index]}")."
+    echo "⚠️  Deleting the previous shard $(printf '%05d' "$RESUME_START") and resuming from it."
+  fi
+
+  local_individual_resume_path="$TARGET_DIR/${TARGET_PREFIX}-$(printf '%05d' "$RESUME_START")-of-${CHUNK_TOTAL_PADDED}.gguf"
+  if [[ -f "$local_individual_resume_path" ]]; then
+    if prompt_delete_latest_shard "$local_individual_resume_path" "$RESUME_START"; then
+      rm -f -- "$local_individual_resume_path"
+    else
+      echo "⚠️  Delete that shard first, because it is likely corrupted."
+      echo "⚠️  Then rerun this script to resume from shard $RESUME_START."
+      exit 33
+    fi
+  else
+    if (( local_individual_first_missing_index > 0 )); then
+      echo "⚠️  The selected resume shard $(printf '%05d' "$RESUME_START") was already absent; resuming from it anyway."
+    fi
+  fi
+
+  SHARD_IDS_TO_PROCESS=("${SHARD_IDS_TO_PROCESS[@]:local_individual_resume_index}")
 else
   if (( RESUME_START > CHUNKS_TOTAL )); then
     echo "❌ Error: Resume start ($RESUME_START) is greater than CHUNKS_TOTAL ($CHUNKS_TOTAL)." >&2
