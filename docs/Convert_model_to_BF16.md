@@ -16,9 +16,9 @@ _I like to use Hetzner servers, you can find suitable and cheap options [here](h
 Make sure you edit and paste these variables in your terminal:
 
 ```
+WORKING_DIRECTORY='/AI' # Full path please!
 MODEL='Qwen3.5-0.8B'
 MODEL_URL='https://huggingface.co/Qwen/Qwen3.5-0.8B'
-WORKING_DIRECTORY='/AI' # Full path please!
 MAINTAINER='YOUR_NAME'
 MAINTAINER_EMAIL='your@email.com'
 IMATRIX='imatrix_ubergarm.dat' # Full path! Tutorial to obtain them will be covered separately.
@@ -86,11 +86,11 @@ cd llama.cpp && \
 ulimit -n 99999 && \
 python convert_hf_to_gguf.py \
      --outtype bf16 \
-     --outfile /"$WORKING_DIRECTORY"/"$MODEL"-"$MAINTAINER"-BF16-SPECIAL_SPLIT/model_name-THIREUS-BF16-SPECIAL_TENSOR \
+     --outfile /"$WORKING_DIRECTORY"/"$MODEL"-"$MAINTAINER"-BF16-SPECIAL_SPLIT/model_name \
      --no-tensor-first-split --split-max-tensors 1 \
      /"$WORKING_DIRECTORY"/huggingface/"$MODEL" 
 cd /"$WORKING_DIRECTORY"/"$MODEL"-"$MAINTAINER"-BF16-SPECIAL_SPLIT && \
-for f in $(ls); do mv -f $f $(echo $f | sed "s/model_name/$MODEL/g"); done
+for f in $(ls); do mv -f $f $(echo $f | sed "s/model_name/$MODEL-$MAINTAINER-BF16-SPECIAL_TENSOR/g"); done
 ```
 
 _Note: Some models will require more steps. You'll need to dig into github/reddit/hf._
@@ -122,7 +122,7 @@ monitor_and_clean.sh .
 
 ## (optional) Enrich tensors.map with imatrix hash
 
-Obtain GGUF-Tool-Suite:
+Obtain the GGUF-Tool-Suite:
 
 ```
 cd "$WORKING_DIRECTORY"
@@ -139,7 +139,6 @@ for q in $(ls -l */tensors.map | sed "s/.*-$MAINTAINER-//g" | cut -d'-' -f1); do
 | sed -nE '/-([0-9]+)-of-\1\.gguf:/q0; q1' && imatrix_tensors.py --map-file ${MODEL}-${MAINTAINER}-${q^^}-SPECIAL_SPLIT/tensors.map --output-map-file tensors.map imatrix_ubergarm.dat && mv -f tensors.map ${MODEL}-${MAINTAINER}-${q^^}-SPECIAL_SPLIT/tensors.map; done
 ```
 
-
 ## (optional) Produce GPG signatures
 
 Create a GPG signing key:
@@ -151,7 +150,7 @@ gpg --batch --pinentry-mode ask --quick-gen-key "$MAINTAINER_NAME <$MAINTAINER_E
 
 _Export your public key and send it over in an [issue](https://github.com/Thireus/GGUF-Tool-Suite/issues) if you would like it to be added to GGUF-Tool-Suite's [trusted-keys.asc](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/trusted-keys.asc). This will enable other users to use and verify your GGUF shards using the GGUF-Tool-Suite tools._
 
-Obtain GGUF-Tool-Suite:
+Obtain the GGUF-Tool-Suite:
 
 ```
 cd "$WORKING_DIRECTORY"
