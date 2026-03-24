@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-09-2026 -------------------- **#
+#** --------------- Updated: Mar-24-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -134,7 +134,7 @@ if (( ${#sha256tool[@]} > 0 )); then
   }
 fi
 
-command -v _sha256sum &>/dev/null || echo "⚠️ Warning: _sha256sum command missing - hash cannot be verified!" >&2
+command -v _sha256sum &>/dev/null || echo "⚠️  Warning: _sha256sum command missing - hash cannot be verified!" >&2
 
 # --- pure-Bash shuffle replacement for `shuf` ---
 shuf() {
@@ -447,7 +447,7 @@ if [[ "$SKIP_GPG" != "true" ]]; then
       exit 7
     fi
   else
-    echo "[$(timestamp)] ⚠️ Warning: 'gpg' command not found. GPG signature verification skipped." >&2
+    echo "[$(timestamp)] ⚠️  Warning: 'gpg' command not found. GPG signature verification skipped." >&2
   fi
 fi
 
@@ -498,7 +498,7 @@ if [[ -n "$BENCH_CSV" ]]; then
       SELECTED_TENSORS+=("$selected_name")
       SELECTED_QTYPES+=("$pat_qtype")
     else
-      echo "[$(timestamp)] ⚠️ Warning: no tensors matching pattern '$pat_regex' found in CSV; skipping." >&2
+      echo "[$(timestamp)] ⚠️  Warning: no tensors matching pattern '$pat_regex' found in CSV; skipping." >&2
     fi
   done
 
@@ -583,7 +583,7 @@ for LOCAL_QTYPE in "${_LOCAL_QTYPES[@]}"; do
       fi
     fi
   elif [[ $__LOCAL_QTYPE == "f32" ]]; then
-    echo "[$(timestamp)] ⚠️ Warning: Could not fetch BF16 tensors.map for LOCAL_QTYPE='$LOCAL_QTYPE'... will try to rely on other map files later." >&2; continue
+    echo "[$(timestamp)] ⚠️  Warning: Could not fetch BF16 tensors.map for LOCAL_QTYPE='$LOCAL_QTYPE'... will try to rely on other map files later." >&2; continue
   else
     echo "[$(timestamp)] ❌ Error: Could not fetch initial tensors.map for LOCAL_QTYPE='$LOCAL_QTYPE'." >&2; [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"; exit 1
   fi
@@ -1023,7 +1023,7 @@ if (( ${#tasks[@]} > 0 )); then
   mapfile -t _cand_files < <(find "$LOCAL_MODEL_DIR" -maxdepth 1 \( -type f -o -type l \) -print 2>/dev/null || true)
 
   if (( ${#_cand_files[@]} == 0 )); then
-    echo "[$(timestamp)] ⚠️ Warning: No candidate local model files found in $LOCAL_MODEL_DIR while seeding FILE_SHA_CACHE." >&2
+    echo "[$(timestamp)] ⚠️  Warning: No candidate local model files found in $LOCAL_MODEL_DIR while seeding FILE_SHA_CACHE." >&2
   else
     for cf in "${_cand_files[@]}"; do
       # Skip anything that lives under LOCAL_DOWNLOAD_DIR path (defensive)
@@ -1055,7 +1055,7 @@ if (( ${#tasks[@]} > 0 )); then
     if [[ $fname =~ -([0-9]{5}-of-[0-9]{5})\.gguf$ ]]; then
       suffix="${BASH_REMATCH[1]}.gguf"
     else
-      echo "[$(timestamp)] ⚠️ Warning: cannot extract suffix from task fname='$fname'; skipping." >&2
+      echo "[$(timestamp)] ⚠️  Warning: cannot extract suffix from task fname='$fname'; skipping." >&2
       continue
     fi
 
@@ -1067,7 +1067,7 @@ if (( ${#tasks[@]} > 0 )); then
 
     # Ensure the file actually exists (it should), then resolve symlink and compute meta-key
     if [[ ! -e "$local_file" ]]; then
-      echo "[$(timestamp)] ⚠️ Warning: mapped local file '$local_file' for suffix '$suffix' does not exist; skipping."
+      echo "[$(timestamp)] ⚠️  Warning: mapped local file '$local_file' for suffix '$suffix' does not exist; skipping."
       continue
     fi
 
@@ -1474,7 +1474,7 @@ run_main_loop() {
               fi
             fi
         else
-            echo "[$(timestamp)] ⚠️ Warning: Could not fetch tensors.map for qtype='$qtype'. Skipping this qtype." >&2
+            echo "[$(timestamp)] ⚠️  Warning: Could not fetch tensors.map for qtype='$qtype'. Skipping this qtype." >&2
             rm -f "$local_tensors_map"
             continue
         fi
@@ -1498,7 +1498,7 @@ run_main_loop() {
               [[ -n "$locked" ]] && continue # Skip locked tensors
               if [[ $tensor_name =~ $pat ]]; then
                 clean_qtype="${qtype%_r[0-9]}"
-                [[ "${clean_dtype,,}" != "${clean_qtype,,}" ]] && echo "[$(timestamp)] ⚠️ Warning: '$local_tensors_map' cannot be used for benchmarking because not pure '$qtype' - tensor '$tensor_name' (user-specified qtype: '$qtype') does not match dtype='$dtype' from tensor map file. Please choose another target qtype or exclude this tensor. Skipping this qtype." >&2 && break
+                [[ "${clean_dtype,,}" != "${clean_qtype,,}" ]] && echo "[$(timestamp)] ⚠️  Warning: '$local_tensors_map' cannot be used for benchmarking because not pure '$qtype' - tensor '$tensor_name' (user-specified qtype: '$qtype') does not match dtype='$dtype' from tensor map file. Please choose another target qtype or exclude this tensor. Skipping this qtype." >&2 && break
                 # Append tensor_name to shard_to_tensors["$fname"], avoiding duplicates
                 if [[ -z "${shard_to_tensors[$fname]:-}" ]]; then
                   shard_to_tensors["$fname"]="$tensor_name"
@@ -1553,7 +1553,7 @@ run_main_loop() {
               for t in "${tmp_members_group[@]}"; do PROCESSED_TENSOR["$t"]=1; done
             fi
           else
-            echo "[$(timestamp)] ⚠️ Warning: baseline requested to inject group combo but no members were found for USER_REGEX in this qtype map."
+            echo "[$(timestamp)] ⚠️  Warning: baseline requested to inject group combo but no members were found for USER_REGEX in this qtype map."
           fi
         fi
 
@@ -1763,7 +1763,7 @@ run_main_loop() {
                         if run_tensor_downloader "${qtype_local^^}" "${chunk_id}" "${LOCAL_DOWNLOAD_DIR}" "${s}"; then
                           echo "[$(timestamp)] Group #${gidx_local}: fetched $local_shard_tmp"
                         else
-                          echo "[$(timestamp)] ⚠️ Warning: Could not fetch shard '$s' from remote while processing group #${gidx_local}. Aborting fetch for this shard." >&2
+                          echo "[$(timestamp)] ⚠️  Warning: Could not fetch shard '$s' from remote while processing group #${gidx_local}. Aborting fetch for this shard." >&2
                           return 2
                         fi
 
@@ -1846,7 +1846,7 @@ run_main_loop() {
                     done
 
                     if [[ "$group_fetch_ok" != true ]]; then
-                      echo "[$(timestamp)] ⚠️ Group fetch failed; skipping group #${group_idx_for_tensor} and restoring any partial downloads." >&2
+                      echo "[$(timestamp)] ⚠️  Group fetch failed; skipping group #${group_idx_for_tensor} and restoring any partial downloads." >&2
                       for df in "${downloaded_shards[@]:-}"; do rm -f "$df"; done
                       continue
                     fi
@@ -1860,7 +1860,7 @@ run_main_loop() {
                         suffix="${BASH_REMATCH[1]}.gguf"
                         original_file=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 \( -type f -o -type l \) -name "*-${suffix}" | grep -vF "$LOCAL_DOWNLOAD_DIR/" | head -n1 || true)
                         if [[ -z "$original_file" ]]; then
-                          echo "[$(timestamp)] ⚠️ Warning: Could not find local original shard matching '*-${suffix}' in $LOCAL_MODEL_DIR. Aborting group #${group_idx_for_tensor}." >&2
+                          echo "[$(timestamp)] ⚠️  Warning: Could not find local original shard matching '*-${suffix}' in $LOCAL_MODEL_DIR. Aborting group #${group_idx_for_tensor}." >&2
                           replace_ok=false
                           break
                         fi
@@ -1875,7 +1875,7 @@ run_main_loop() {
                         mv -f "${LOCAL_DOWNLOAD_DIR}/${s}" "$original_file"
                         echo "[$(timestamp)] Replaced original shard $original_file with downloaded shard for group #${group_idx_for_tensor}."
                       else
-                        echo "[$(timestamp)] ⚠️ Warning: Could not extract suffix from shard '$s'. Aborting group #${group_idx_for_tensor}." >&2
+                        echo "[$(timestamp)] ⚠️  Warning: Could not extract suffix from shard '$s'. Aborting group #${group_idx_for_tensor}." >&2
                         replace_ok=false
                         break
                       fi
@@ -1911,7 +1911,7 @@ run_main_loop() {
                         echo "[$(timestamp)] Group #${group_idx_for_tensor} PPL$PLUS_KLD finished and saved to $group_result_file_ppl"
                         count_group_ppl_bench_success=$((count_group_ppl_bench_success + 1))
                       else
-                        echo "[$(timestamp)] ⚠️ Warning: Group #${group_idx_for_tensor} PPL$PLUS_KLD command exited non-zero. See $group_result_file_ppl for details." >&2
+                        echo "[$(timestamp)] ⚠️  Warning: Group #${group_idx_for_tensor} PPL$PLUS_KLD command exited non-zero. See $group_result_file_ppl for details." >&2
                         count_group_ppl_bench_failure=$((count_group_ppl_bench_failure + 1))
                       fi
                     fi
@@ -1924,7 +1924,7 @@ run_main_loop() {
                         echo "[$(timestamp)] Group #${group_idx_for_tensor} SWEEP finished and saved to $group_result_file_sweep"
                         count_group_sweep_bench_success=$((count_group_sweep_bench_success + 1))
                       else
-                        echo "[$(timestamp)] ⚠️ Warning: Group #${group_idx_for_tensor} SWEEP command exited non-zero. See $group_result_file_sweep for details." >&2
+                        echo "[$(timestamp)] ⚠️  Warning: Group #${group_idx_for_tensor} SWEEP command exited non-zero. See $group_result_file_sweep for details." >&2
                         count_group_sweep_bench_failure=$((count_group_sweep_bench_failure + 1))
                       fi
                     fi
@@ -1945,7 +1945,7 @@ run_main_loop() {
                       unset _tmp_qtype_remaining
                       echo "[$(timestamp)] Recorded processed combo for group #${group_idx_for_tensor} (qtype=${qtype}) => ${group_hash}"
                     else
-                      echo "[$(timestamp)] ⚠️ Warning: Not all required group result files produced; group #${group_idx_for_tensor} members will remain unmarked for re-run."
+                      echo "[$(timestamp)] ⚠️  Warning: Not all required group result files produced; group #${group_idx_for_tensor} members will remain unmarked for re-run."
                     fi
 
                     # Restore originals from backups
@@ -2025,12 +2025,12 @@ run_main_loop() {
                     # find local original file
                     original_file=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 \( -type f -o -type l \) -name "*-${suffix}" | grep -vF "$LOCAL_DOWNLOAD_DIR/" | head -n1 || true)
                     if [[ -z "$original_file" ]]; then
-                        echo "[$(timestamp)] ⚠️ Warning: Could not find local original shard matching '*-${suffix}' in $LOCAL_MODEL_DIR. Skipping this tensor." >&2
+                        echo "[$(timestamp)] ⚠️  Warning: Could not find local original shard matching '*-${suffix}' in $LOCAL_MODEL_DIR. Skipping this tensor." >&2
                         rm -f "$local_shard_tmp"
                         continue
                     fi
                 else
-                    echo "[$(timestamp)] ⚠️ Warning: Could not extract suffix from shard_fname='$shard_fname'. Skipping." >&2
+                    echo "[$(timestamp)] ⚠️  Warning: Could not extract suffix from shard_fname='$shard_fname'. Skipping." >&2
                     rm -f "$local_shard_tmp"
                     continue
                 fi
@@ -2059,7 +2059,7 @@ run_main_loop() {
                       if run_tensor_downloader "${qtype^^}" "${chunk_id}" "${LOCAL_DOWNLOAD_DIR}" "${shard_fname}"; then
                           echo "[$(timestamp)] Fetched to $local_shard_tmp"
                       else
-                          echo "[$(timestamp)] ⚠️ Warning: Could not fetch shard '$shard_fname' from remote. Skipping this tensor." >&2
+                          echo "[$(timestamp)] ⚠️  Warning: Could not fetch shard '$shard_fname' from remote. Skipping this tensor." >&2
                           break
                       fi
 
@@ -2127,7 +2127,7 @@ run_main_loop() {
                     echo "[$(timestamp)] 👀 PPL$PLUS_KLD output (stdout+stderr) saved to $result_file_ppl"
                     count_individual_ppl_bench_success=$((count_individual_ppl_bench_success + 1))
                   else
-                    echo "[$(timestamp)] ⚠️ Warning: PPL$PLUS_KLD command exited with non-zero status for tensor='$tensor_name'. See $result_file_ppl for details." >&2
+                    echo "[$(timestamp)] ⚠️  Warning: PPL$PLUS_KLD command exited with non-zero status for tensor='$tensor_name'. See $result_file_ppl for details." >&2
                     count_individual_ppl_bench_failure=$((count_individual_ppl_bench_failure + 1))
                   fi
                 fi
@@ -2140,7 +2140,7 @@ run_main_loop() {
                     echo "[$(timestamp)] 👀 SWEEP output (stdout+stderr) saved to $result_file_sweep"
                     count_individual_sweep_bench_success=$((count_individual_sweep_bench_success + 1))
                   else
-                    echo "[$(timestamp)] ⚠️ Warning: SWEEP command exited with non-zero status for tensor='$tensor_name'. See $result_file_sweep for details." >&2
+                    echo "[$(timestamp)] ⚠️  Warning: SWEEP command exited with non-zero status for tensor='$tensor_name'. See $result_file_sweep for details." >&2
                     count_individual_sweep_bench_failure=$((count_individual_sweep_bench_failure + 1))
                   fi
                 fi
@@ -2153,7 +2153,7 @@ run_main_loop() {
                 if [[ "$all_done" == "true" ]]; then
                   PROCESSED_TENSOR["$tensor_name"]=1
                 else
-                  echo "[$(timestamp)] ⚠️ Warning: Not all required result files produced for '$tensor_name'; it will remain unmarked for re-run."
+                  echo "[$(timestamp)] ⚠️  Warning: Not all required result files produced for '$tensor_name'; it will remain unmarked for re-run."
                 fi
 
                 # Restore original shard if we replaced it
@@ -2186,7 +2186,7 @@ run_main_loop() {
                     count_individual_sweep_bench_success + count_individual_sweep_bench_failure))
 
         if (( total_all == 0 )); then
-          echo "[$(timestamp)] ⚠️ Warning: No benchmarks were run for qtype='$qtype' — either everything was already benchmarked (e.g. baseline) or there was nothing to process."
+          echo "[$(timestamp)] ⚠️  Warning: No benchmarks were run for qtype='$qtype' — either everything was already benchmarked (e.g. baseline) or there was nothing to process."
         fi
 
         # Print PPL (PPL or PPL+KLD) related summary if PPL mode was enabled

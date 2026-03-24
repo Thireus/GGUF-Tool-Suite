@@ -1,16 +1,6 @@
 ---
 license: mit
 ---
-## ⚠️ Cautionary Notice
-
-The metadata of these quants has been updated and is now compatible with the latest version of `llama.cpp` (and `ik_llama.cpp`).
-
-- ⚠️ **Official support in `llama.cpp` was recently made available** – see [ggml-org/llama.cpp PR #16780](http://github.com/ggml-org/llama.cpp/pull/16780).
-- ⚠️ **Official support in `ik_llama.cpp` was recently made available** – see [ggml-org/llama.cpp PR #883](https://github.com/ikawrakow/ik_llama.cpp/pull/883).
-
-Proceed with caution and keep an eye on the upstream PRs for any additional updates that could affect compatibility or performance.
-
----
 
 # mmproj-Qwen3-VL-235B-A22B-Instruct
 

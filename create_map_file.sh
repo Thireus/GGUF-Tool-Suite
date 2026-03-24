@@ -5,7 +5,7 @@
 #** for your gguf models.                                     **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-09-2026 -------------------- **#
+#** --------------- Updated: Mar-24-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -76,7 +76,7 @@ if (( ${#sha256tool[@]} > 0 )); then
   }
 fi
 
-command -v _sha256sum &>/dev/null || echo "⚠️ Warning: _sha256sum command missing - hash cannot be computed!" >&2
+command -v _sha256sum &>/dev/null || echo "⚠️  Warning: _sha256sum command missing - hash cannot be computed!" >&2
 
 # Check that _sha256sum is available
 if ! command -v _sha256sum &>/dev/null; then
