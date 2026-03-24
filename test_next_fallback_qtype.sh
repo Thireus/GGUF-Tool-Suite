@@ -1,4 +1,28 @@
 #!/usr/bin/env bash
+#***************************************************************#
+#** This script is part of Thireus' GGUF Tool Suite.          **#
+#** test_next_fallback_qtype.sh is used to test the fallback  **#
+#** logic employed by quantize_model.sh upon quant failure.   **#
+#**                                                           **#
+#** ********************************************************* **#
+#** --------------- Updated: Mar-24-2026 -------------------- **#
+#** ********************************************************* **#
+#**                                                           **#
+#** Author: Thireus <gguf@thireus.com>                        **#
+#**                                                           **#
+#** https://gguf.thireus.com/                                 **#
+#** Thireus' GGUF Tool Suite - Quantize LLMs Like a Chef       **#
+#**                                  ·     ·       ·~°          **#
+#**     Λ,,Λ             ₚₚₗ  ·° ᵍᵍᵐˡ   · ɪᴋ_ʟʟᴀᴍᴀ.ᴄᴘᴘ°   ᴮᶠ¹⁶ ·  **#
+#**    (:·ω·)       。··°      ·   ɢɢᴜғ   ·°·  ₕᵤ𝓰𝓰ᵢₙ𝓰𝒻ₐ𝒸ₑ   ·°   **#
+#**    /    o―ヽニニフ))             · · ɪǫ3_xxs      ~·°        **#
+#**    し―-J                                                   **#
+#**                                                           **#
+#** Copyright © 2026 - Thireus.           ₒₙₑ ₛₜₑₚ 𝒸ₗₒₛₑᵣ ₜₒ ₐGᵢ **#
+#***************************************************************#
+#**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
+#***************************************************************#
+
 set -euo pipefail
 
 # Standalone test harness for next_fallback_qtype.
