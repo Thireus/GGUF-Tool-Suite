@@ -18,8 +18,10 @@ Make sure you edit and paste these variables in your terminal:
 ```
 MODEL='Qwen3.5-0.8B'
 MODEL_URL='https://huggingface.co/Qwen/Qwen3.5-0.8B'
-WORKING_DIRECTORY='/AI' # FUll path please!
-MAINTAINER='THIREUS'
+WORKING_DIRECTORY='/AI' # Full path please!
+MAINTAINER='YOUR_NAME'
+MAINTAINER_EMAIL='your@email.com'
+IMATRIX='imatrix_ubergarm.dat' # Full path! Tutorial to obtain them will be covered separately.
 ```
 
 ## Prepare the environment
@@ -27,7 +29,13 @@ MAINTAINER='THIREUS'
 We first start by obtaining the original model .safetensors and config files. I like to use git lfs for this purpose but you can also use [HuggingFace cli tool](https://huggingface.co/docs/huggingface_hub/en/guides/cli) instead. Make sure you have sufficient disk space.
 
 ```
-apt-get install screen python3-dev python3-pip python3-venv python3-wheel python3-setuptools git cmake build-essential git-lfs pipx ccache # Run as root
+apt-get install python3-dev python3-pip python3-venv python3-wheel python3-setuptools git cmake build-essential git-lfs pipx ccache gpg screen # Run as root
+```
+
+Create the working directory (where all files will be downloaded and produced):
+
+```
+mkdir -p "$WORKING_DIRECTORY"
 ```
 
 Obtain original model data:
@@ -85,6 +93,8 @@ cd /"$WORKING_DIRECTORY"/"$MODEL"-"$MAINTAINER"-BF16-SPECIAL_SPLIT && \
 for f in $(ls); do mv -f $f $(echo $f | sed "s/model_name/$MODEL/g"); done
 ```
 
+_Note: Some models will require more steps. You'll need to dig into github/reddit/hf._
+
 ## Produce tensors.map
 
 Obtain GGUF-Tool-Suite:
@@ -110,5 +120,54 @@ cd "$WORKING_DIRECTORY" && \
 monitor_and_clean.sh .
 ```
 
-## Produce GPG signatures
+## (optional) Enrich tensors.map with imatrix hash
 
+Obtain GGUF-Tool-Suite:
+
+```
+cd "$WORKING_DIRECTORY"
+GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 https://github.com/Thireus/GGUF-Tool-Suite/
+cd GGUF-Tool-Suite && git pull # Update it
+```
+
+Enrich tensors.map that are ready with imatrix hash:
+
+```
+cd "$WORKING_DIRECTORY"
+export PATH="$WORKING_DIRECTORY"/GGUF-Tool-Suite/:$PATH && \
+for q in $(ls -l */tensors.map | sed "s/.*-$MAINTAINER-//g" | cut -d'-' -f1); do cd "$WORKING_DIRECTORY" && sed -n '/:imatrix=/q1; $q0' ${MODEL}-${MAINTAINER}-${q^^}-SPECIAL_SPLIT/tensors.map && tail -n1 ${MODEL}-${MAINTAINER}-${q^^}-SPECIAL_SPLIT/tensors.map \
+| sed -nE '/-([0-9]+)-of-\1\.gguf:/q0; q1' && imatrix_tensors.py --map-file ${MODEL}-${MAINTAINER}-${q^^}-SPECIAL_SPLIT/tensors.map --output-map-file tensors.map imatrix_ubergarm.dat && mv -f tensors.map ${MODEL}-${MAINTAINER}-${q^^}-SPECIAL_SPLIT/tensors.map; done
+```
+
+
+## (optional) Produce GPG signatures
+
+Create a GPG signing key:
+
+```
+MAINTAINER_NAME="$(echo "$MAINTAINER" | awk '{for(i=1;i<=NF;i++){ $i=toupper(substr($i,1,1)) tolower(substr($i,2)) } print}')"
+gpg --batch --pinentry-mode ask --quick-gen-key "$MAINTAINER_NAME <$MAINTAINER_EMAIL>" rsa4096 sign 0
+```
+
+_Export your public key and send it over in an [issue](https://github.com/Thireus/GGUF-Tool-Suite/issues) if you would like it to be added to GGUF-Tool-Suite's [trusted-keys.asc](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/trusted-keys.asc). This will enable other users to use and verify your GGUF shards using the GGUF-Tool-Suite tools._
+
+Obtain GGUF-Tool-Suite:
+
+```
+cd "$WORKING_DIRECTORY"
+GIT_LFS_SKIP_SMUDGE=1 git clone --depth 1 https://github.com/Thireus/GGUF-Tool-Suite/
+cd GGUF-Tool-Suite && git pull # Update it
+```
+
+Produce GPG signatures:
+
+```
+cd "$WORKING_DIRECTORY"
+cd GGUF-Tool-Suite && git pull # Update it
+# Activate env
+cd "$WORKING_DIRECTORY" && \
+source venv/bin/activate && \
+export PATH="$WORKING_DIRECTORY"/GGUF-Tool-Suite/helpers/:$PATH && \
+cd "$WORKING_DIRECTORY" && \
+for q in $(ls -l */tensors.map | sed "s/.*-$MAINTAINER-//g" | cut -d'-' -f1); do cd "$WORKING_DIRECTORY" && d="${MODEL}-THIREUS-${q^^}-SPECIAL_SPLIT" && ls "$d"/*.sig >/dev/null 2>&1 && echo "Skipping $d: .sig files found — run prepare_model.sh -p $d manually to replace signatures" || prepare_model.sh -p "$d"; done
+```
