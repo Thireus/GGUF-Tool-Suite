@@ -42,6 +42,8 @@ iq1_s_r4 iq1_s iq1_bn iq1_kt iq1_m iq1_m_r4 iq2_bn iq2_bn_r4 iq2_xxs iq2_xxs_r4 
 
 A more detailed and exhaustive table is available [here](https://github.com/Thireus/GGUF-Tool-Suite/discussions/53).
 
+Important: You will notice that `q` quants end with uppercase letters such as `_K` or `_KV`. This is very important to get this right! Quant types are case-sensitive!
+
 ## Prepare the environment
 
 We first start by obtaining or creating the BF16 version of our model. I like to use git lfs for this purpose but you can also use [HuggingFace cli tool](https://huggingface.co/docs/huggingface_hub/en/guides/cli) instead. Make sure you have sufficient disk space.
