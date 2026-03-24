@@ -24,6 +24,24 @@ IMATRIX='imatrix_ubergarm.dat' # Full path! Tutorial to obtain them will be cove
 QTYPE="q2_K" # The target quantization type
 ```
 
+## Know your quants
+
+[ik_llama.cpp](https://github.com/ikawrakow/ik_llama.cpp) offers a much wider and modern range of quantization types than [llama.cpp](https://github.com/ggml-org/llama.cpp), this not only helps with CPU inference speed but also enables a more granular range quant mix combination which helps produce quantized models of higher quality. For theis reason, I can only encourage users to choose [ik_llama.cpp](https://github.com/ikawrakow/ik_llama.cpp) whenever possible.
+
+Quant types supported by [llama.cpp](https://github.com/ggml-org/llama.cpp) for this tool suite:
+
+```
+iq1_s iq1_m iq2_xxs iq2_xs iq2_s q2_K iq3_xxs iq3_s q3_K iq4_xs iq4_nl q4_0 q4_K q4_1 q5_0 q5_K q5_1 q6_K q8_0 bf16
+```
+
+Quant types supported by [ik_llama.cpp](https://github.com/ikawrakow/ik_llama.cpp) for this tool suite:
+
+```
+iq1_s_r4 iq1_s iq1_bn iq1_kt iq1_m iq1_m_r4 iq2_bn iq2_bn_r4 iq2_xxs iq2_xxs_r4 iq2_kt iq2_ks iq2_xs iq2_xs_r4 iq2_k iq2_k_r4 iq2_s q2_K q2_k_r4 iq2_kl iq3_xxs iq3_xxs_r4 iq3_kt iq3_ks iq3_k iq3_k_r4 iq3_s iq3_s_r4 q3_K q3_k_r4 iq4_kss iq4_kt iq4_ks iq4_ks_r4 iq4_xs iq4_xs_r8 iq4_k iq4_k_r4 iq4_nl iq4_nl_r4 q4_0 q4_0_r8 q4_K q4_k_r4 q4_1 iq5_ks iq5_ks_r4 iq5_k iq5_k_r4 q5_0 q5_0_r4 q5_K q5_k_r4 q5_1 q6_0 q6_0_r4 q6_K q6_k_r4 iq6_k q8_KV q8_k_r8 q8_0 q8_0_r8 bf16
+```
+
+A more detailed and exhaustive table is available [here](https://github.com/Thireus/GGUF-Tool-Suite/discussions/53).
+
 ## Prepare the environment
 
 We first start by obtaining or creating the BF16 version of our model. I like to use git lfs for this purpose but you can also use [HuggingFace cli tool](https://huggingface.co/docs/huggingface_hub/en/guides/cli) instead. Make sure you have sufficient disk space.
