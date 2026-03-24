@@ -155,4 +155,16 @@ Usage example:
 
 For more information about how to use it: https://github.com/Thireus/GGUF-Tool-Suite/issues/45
 
+You can produce your own quantized shards from Thireus' special BF16 model using `quantize_model.sh` found on https://github.com/Thireus/GGUF-Tool-Suite, for example:
+
+```
+./quantize_model.sh --model "Qwen3.5-122B-A10B" --qtype iq2_xxs
+```
+
+You can disable reasoning (thinking) when using jinja templates for supported models:
+
+```
+llama-server ... --jinja --chat-template-kwargs '{"enable_thinking": false}'
+```
+
 Enjoy optimized quantization! 🎉
