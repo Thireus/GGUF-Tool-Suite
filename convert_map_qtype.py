@@ -5,7 +5,7 @@
 #** different .map file qtype.                                **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Feb-22-2026 -------------------- **#
+#** --------------- Updated: Mar-24-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -229,7 +229,7 @@ def failed_to_transform(tensor_name: str, requested_qtype: str, reason: str):
     The caller may catch TransformFailure and either abort the script or attempt a fallback
     selection. Exits only when the caller chooses not to handle the exception.
     """
-    print(f"⚠️ Failed to transform tensor '{tensor_name}' to qtype '{requested_qtype}':", reason, file=sys.stderr)
+    print(f"⚠️  Failed to transform tensor '{tensor_name}' to qtype '{requested_qtype}':", reason, file=sys.stderr)
     raise TransformFailure(tensor_name, requested_qtype, reason)
 
 
@@ -766,7 +766,7 @@ def process_map_lines(lines,
                     # Warn the user that this specific tensor lacks the imatrix attribute and therefore
                     # it will be processed as if --with-imatrix was NOT set for this tensor only.
                     print(
-                        f"⚠️ Warning: --with-imatrix was specified but tensor '{tensor_name}' "
+                        f"⚠️  Warning: --with-imatrix was specified but tensor '{tensor_name}' "
                         "is missing an 'imatrix=' attribute in the .map file; this tensor will be "
                         "processed as if --with-imatrix was NOT set (only this tensor's imatrix checks are disabled).",
                         file=sys.stderr
@@ -803,7 +803,7 @@ def process_map_lines(lines,
                 sys.exit(6)
 
             # Otherwise, issue a warning (failed_to_transform already printed the detailed reason)
-            print(f"⚠️ Warning: attempting fallback selection for tensor '{tensor_name}' (requested {initial_qtype_upper}).", file=sys.stderr)
+            print(f"⚠️  Warning: attempting fallback selection for tensor '{tensor_name}' (requested {initial_qtype_upper}).", file=sys.stderr)
 
             # Build fallback candidate list
             candidates = build_fallback_candidates(

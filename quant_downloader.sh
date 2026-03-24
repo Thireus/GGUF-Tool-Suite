@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regex entries.       **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-15-2026 -------------------- **#
+#** --------------- Updated: Mar-24-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -974,7 +974,7 @@ for i in "${!COMP_OP_TOOL_NAMES[@]}"; do
     done
 
     if [[ "$hasD" == false ]]; then
-      echo "⚠️ Warning: compression options for tool '$tool' include a dictionary (-D ${dict_path}) but --z-decompress-opt did not include -D for this tool. Adding same -D option to decompression settings automatically so verification/decompression will use the same dictionary." >&2
+      echo "⚠️  Warning: compression options for tool '$tool' include a dictionary (-D ${dict_path}) but --z-decompress-opt did not include -D for this tool. Adding same -D option to decompression settings automatically so verification/decompression will use the same dictionary." >&2
       # append to DECOMP_OP_TOOL_NAMES/VALUES arrays
       DECOMP_OP_TOOL_NAMES+=("$tool")
       # preserve any prior decompress opts for tool as empty + add -D
@@ -1018,7 +1018,7 @@ GGUF_INFO_NOVENV="${GGUF_INFO_NOVENV:-false}"
 # GGUF_INFO_EXTRA will be used when calling _python "$gguf_info_script" with extra args.
 if [[ "$GGUF_INFO_NOVENV" == true ]]; then
   GGUF_INFO_EXTRA=()
-  echo "⚠️ Warning: --gguf-info-novenv selected: the script will NOT pass '--venv' to gguf_info.py. Ensure gguf_info.py runs correctly on your current Python environment." >&2
+  echo "⚠️  Warning: --gguf-info-novenv selected: the script will NOT pass '--venv' to gguf_info.py. Ensure gguf_info.py runs correctly on your current Python environment." >&2
   echo "   Recommended (if needed): pip install \"gguf @ git+https://github.com/ikawrakow/ik_llama.cpp.git@main#subdirectory=gguf-py\" --force; pip install sentencepiece numpy==1.26.4" >&2
 else
   GGUF_INFO_EXTRA=(--venv)
@@ -1049,17 +1049,17 @@ if [[ "$ARCHIVE_COMPRESS" != true && "$ARCHIVE_DECOMPRESS" != true && "$ARCHIVE_
 
   if (( count_gguf < count_zbst )); then
     ARCHIVE_COMPRESS=true
-    echo "⚠️ Warning: Auto-enabled -z (compression) because there are more .gguf.zbst (${count_zbst}) than .gguf (${count_gguf}) files in '$LOCAL_MODEL_DIR'!" >&2
+    echo "⚠️  Warning: Auto-enabled -z (compression) because there are more .gguf.zbst (${count_zbst}) than .gguf (${count_gguf}) files in '$LOCAL_MODEL_DIR'!" >&2
     echo "   If you prefer to keep automatic selection disabled, re-run with --z-noauto." >&2
   elif (( count_zbst > 0 )) && (( count_zbst < count_gguf )); then
     if [[ "$VERIFY" == true ]]; then
       # In verify mode, prefer verifying compressed streams; choose -z
       ARCHIVE_COMPRESS=true
-      echo "⚠️ Warning: Auto-enabled -z (verify .gguf.zbst) because --verify mode detected more .gguf (${count_gguf}) than .gguf.zbst (${count_zbst}) files in '$LOCAL_MODEL_DIR'!" >&2
+      echo "⚠️  Warning: Auto-enabled -z (verify .gguf.zbst) because --verify mode detected more .gguf (${count_gguf}) than .gguf.zbst (${count_zbst}) files in '$LOCAL_MODEL_DIR'!" >&2
       echo "   If you prefer to keep automatic selection disabled, re-run with --z-noauto." >&2
     else
       ARCHIVE_DECOMPRESS=true
-      echo "⚠️ Warning: Auto-enabled -zd (decompress) because there are more .gguf (${count_gguf}) than .gguf.zbst (${count_zbst}) files in '$LOCAL_MODEL_DIR'!" >&2
+      echo "⚠️  Warning: Auto-enabled -zd (decompress) because there are more .gguf (${count_gguf}) than .gguf.zbst (${count_zbst}) files in '$LOCAL_MODEL_DIR'!" >&2
       echo "   If you prefer to keep automatic selection disabled, re-run with --z-noauto." >&2
     fi
   fi
@@ -1109,7 +1109,7 @@ if [[ "$ARCHIVE_COMPRESS" == true || "$ARCHIVE_DECOMPRESS" == true ]]; then
     # NOTE: original behavior previously exited here. We intentionally keep the original comment
     # but change behavior to warn the user and continue, because some fallback logic exists
     # (for example lbzip2 -> bzip2 fallback for decompression). Provide actionable advice.
-    echo "⚠️ Warning: The following configured compression tools are not available on PATH: ${missing_tools[*]}" >&2
+    echo "⚠️  Warning: The following configured compression tools are not available on PATH: ${missing_tools[*]}" >&2
     echo "   When you use -z/--z-compress or -zd/--z-decompress, or if you download or verify .zbst compressed shards, compression/decompression may fail without these tools." >&2
     echo "   Please install the missing tools set by --z-custom-tools to ensure reliable compression/decompression. Example installation commands (pick the one appropriate for your OS):" >&2
     echo "     Debian/Ubuntu: sudo apt-get update && sudo apt-get install -y ${missing_tools[*]}" >&2
@@ -1341,7 +1341,7 @@ if [[ "$SKIP_HASH" == false ]] || [[ -n "$WITH_IMATRIX_FILE" && "$SKIP_IMATRIX_H
   # If no tool was found, both functions remain undefined, and the warning below will trigger.
 fi
 
-command -v _sha256sum &>/dev/null || echo "⚠️ Warning: _sha256sum command missing - hash cannot be verified!" >&2
+command -v _sha256sum &>/dev/null || echo "⚠️  Warning: _sha256sum command missing - hash cannot be verified!" >&2
 
 # -----------------------------------------------------------------
 # Compute SHA256 of --with-imatrix file (if provided) using the detected _sha256sum.
@@ -1354,7 +1354,7 @@ if [[ -n "$WITH_IMATRIX_FILE" && "$SKIP_IMATRIX_HASH" == false ]]; then
     # we will warn the user that hash-checks will be skipped.
     if ! hash_output="$(_sha256sum_imatrix "$WITH_IMATRIX_FILE" 2>/dev/null || true)"; then
       # _sha256sum_imatrix returned non-zero; treat as failure
-      echo "⚠️ Warning: failed to compute sha256 for --with-imatrix file '$WITH_IMATRIX_FILE' (hash command returned error). Imatrix hash checks will be skipped." >&2
+      echo "⚠️  Warning: failed to compute sha256 for --with-imatrix file '$WITH_IMATRIX_FILE' (hash command returned error). Imatrix hash checks will be skipped." >&2
     else
       # strip leading/trailing whitespace and any trailing filename from common tools
       hash_output="$(printf '%s' "$hash_output" | awk '{print $1}' || true)"
@@ -1366,11 +1366,11 @@ if [[ -n "$WITH_IMATRIX_FILE" && "$SKIP_IMATRIX_HASH" == false ]]; then
         echo "[Info] SKIP-HASH: the imatrix file '$WITH_IMATRIX_FILE' won't be hashed because --skip-hash is used. Imatrix hash checks will be skipped."
       else
         # empty result
-        echo "⚠️ Warning: could not compute sha256 for --with-imatrix file '$WITH_IMATRIX_FILE' (no hash produced). Imatrix hash checks will be skipped." >&2
+        echo "⚠️  Warning: could not compute sha256 for --with-imatrix file '$WITH_IMATRIX_FILE' (no hash produced). Imatrix hash checks will be skipped." >&2
       fi
     fi
   else
-    echo "⚠️ Warning: _sha256sum_imatrix command missing - imatrix hash cannot be computed!" >&2
+    echo "⚠️  Warning: _sha256sum_imatrix command missing - imatrix hash cannot be computed!" >&2
   fi
 fi
 # -----------------------------------------------------------------
@@ -1441,14 +1441,14 @@ if _detect_python_binary >/dev/null 2>&1; then
   # If we found some python, ensure it is 3.x
   if [[ "$PYTHON_MAJOR" -lt 3 ]] || ([[ "$PYTHON_MAJOR" -eq 3 ]] && [[ "$PYTHON_MINOR" -lt 8 ]]); then
     # Found python but it's Python 2.x (or weird). This is unacceptable for compute-map / gguf verification.
-    echo "⚠️ Warning: Detected Python interpreter '$PYTHON_BIN' with version ${PYTHON_MAJOR}.${PYTHON_MINOR}. A compatible Python 3.8+ is required for compute-map operations and gguf verification." >&2
+    echo "⚠️  Warning: Detected Python interpreter '$PYTHON_BIN' with version ${PYTHON_MAJOR}.${PYTHON_MINOR}. A compatible Python 3.8+ is required for compute-map operations and gguf verification." >&2
     if [[ "$COMPUTE_MISSING_MAP" == true || "$COMPUTE_ALL_MAP" == true || "$COMPUTE_QTYPES_REGEX_MAP_ENABLED" == true ]]; then
       echo "❌ Error: Compute-map options were requested but a Python 3.8+ interpreter could not be found. Please install Python 3 higher than 3.8 and re-run the script." >&2
       exit 1
     else
       # Non compute-map usage: fall back to skipping gguf verification
       if [[ "$SKIP_GGUF_VERIFICATION" != true ]]; then
-        echo "⚠️ Note: No compatible Python 3.8+ interpreter available — automatically enabling --skip-gguf-verification." >&2
+        echo "⚠️  Note: No compatible Python 3.8+ interpreter available — automatically enabling --skip-gguf-verification." >&2
         SKIP_GGUF_VERIFICATION=true
       fi
     fi
@@ -1458,13 +1458,13 @@ if _detect_python_binary >/dev/null 2>&1; then
   fi
 else
   # No python binary detected at all.
-  echo "⚠️ Warning: No compatible Python 3.8+ interpreter found on PATH. A compatible Python 3 interpreter is required for compute-map operations and for gguf verification." >&2
+  echo "⚠️  Warning: No compatible Python 3.8+ interpreter found on PATH. A compatible Python 3 interpreter is required for compute-map operations and for gguf verification." >&2
   if [[ "$COMPUTE_MISSING_MAP" == true || "$COMPUTE_ALL_MAP" == true || "$COMPUTE_QTYPES_REGEX_MAP_ENABLED" == true ]]; then
     echo "❌ Error: Compute-map options were requested but no Python 3.8+ interpreter is available. Please install Python 3 higher than 3.8 and re-run the script." >&2
     exit 1
   else
     if [[ "$SKIP_GGUF_VERIFICATION" != true ]]; then
-      echo "⚠️ Warning: No Python 3.8+ found — automatically enabling --skip-gguf-verification." >&2
+      echo "⚠️  Warning: No Python 3.8+ found — automatically enabling --skip-gguf-verification." >&2
       SKIP_GGUF_VERIFICATION=true
     fi
   fi
@@ -1482,7 +1482,7 @@ retry_exec() {
     if [[ $attempt -ge $RETRY_ATTEMPTS ]]; then
       return 1
     fi
-    echo "⚠️ Warning: command failed (attempt $attempt/${RETRY_ATTEMPTS}): $*" >&2
+    echo "⚠️  Warning: command failed (attempt $attempt/${RETRY_ATTEMPTS}): $*" >&2
     attempt=$((attempt + 1))
     sleep "$RETRY_DELAY"
   done
@@ -1500,7 +1500,7 @@ retry_capture() {
     if [[ $attempt -ge $RETRY_ATTEMPTS ]]; then
       return 1
     fi
-    echo "⚠️ Warning: command failed (attempt $attempt/${RETRY_ATTEMPTS}): $*" >&2
+    echo "⚠️  Warning: command failed (attempt $attempt/${RETRY_ATTEMPTS}): $*" >&2
     attempt=$((attempt + 1))
     sleep "$RETRY_DELAY"
   done
@@ -1524,7 +1524,7 @@ ensure_path_available() {
     if [[ $attempt -ge $RETRY_ATTEMPTS ]]; then
       return 1
     fi
-    echo "⚠️ Warning: path not available (attempt $attempt/${RETRY_ATTEMPTS}): $path" >&2
+    echo "⚠️  Warning: path not available (attempt $attempt/${RETRY_ATTEMPTS}): $path" >&2
     attempt=$((attempt + 1))
     sleep "$RETRY_DELAY"
   done
@@ -1610,7 +1610,7 @@ safe_stream_sha256_from_z() {
       if [[ "$tool" == "lbzip2" ]] && ! command -v lbzip2 >/dev/null 2>&1 && command -v bzip2 >/dev/null 2>&1; then
         actual_tool="bzip2"
         #actual_opts="$(get_decompress_opts_for_tool "$actual_tool")"
-        echo "[$(timestamp)] ⚠️ Notice: 'lbzip2' not found — falling back to 'bzip2' for decompression. Consider installing 'lbzip2' for better performance." >&2
+        echo "[$(timestamp)] ⚠️  Notice: 'lbzip2' not found — falling back to 'bzip2' for decompression. Consider installing 'lbzip2' for better performance." >&2
       fi
 
       # Run pipeline in a subshell with pipefail so any failure (including tool decoding) sets non-zero exit code.
@@ -1693,7 +1693,7 @@ check_quantized_gguf() {
   done
 
   if [[ -z "$expected_tensor" ]]; then
-    echo "⚠️ Warning: could not determine expected tensor name for shard id ${shard_id_raw}; skipping detailed tensor-name check." >&2
+    echo "⚠️  Warning: could not determine expected tensor name for shard id ${shard_id_raw}; skipping detailed tensor-name check." >&2
     # still proceed to dtype check if possible
   fi
 
@@ -1712,7 +1712,7 @@ check_quantized_gguf() {
   fi
 
   if [[ -z "$match_line" ]]; then
-    echo "⚠️ Warning: gguf_info.py output did not contain a matching tensor line for shard id ${shard_id_raw}." >&2
+    echo "⚠️  Warning: gguf_info.py output did not contain a matching tensor line for shard id ${shard_id_raw}." >&2
     if [[ "$STRICT_GGUF_VERIFICATION" == true ]]; then
       return 1
     else
@@ -1735,22 +1735,22 @@ check_quantized_gguf() {
   # dtype comparison
   if [[ -n "$gguf_dtype" ]]; then
     if [[ "${gguf_dtype,,}" != "${qtype,,}" ]] && ([[ "$QUANTIZE_F32_WARN_VERIFICATION" == true ]] || [[ "${gguf_dtype,,}" != "f32" ]]); then
-      echo "⚠️ Warning: dtype mismatch from gguf_info for shard ${shard_file} (got='${gguf_dtype,,}' expected='${qtype,,}')." >&2
+      echo "⚠️  Warning: dtype mismatch from gguf_info for shard ${shard_file} (got='${gguf_dtype,,}' expected='${qtype,,}')." >&2
       warnings=$((warnings + 1))
     fi
   else
-    echo "⚠️ Warning: could not determine dtype from gguf_info output for shard ${shard_file}." >&2
+    echo "⚠️  Warning: could not determine dtype from gguf_info output for shard ${shard_file}." >&2
     warnings=$((warnings + 1))
   fi
 
   # tensor name comparison
   if [[ -n "$expected_tensor" ]]; then
     if [[ "${gguf_name,,}" != "${expected_tensor,,}" ]]; then
-      echo "⚠️ Warning: tensor name mismatch for shard ${shard_file} (gguf_info: '${gguf_name}' expected: '${expected_tensor}')." >&2
+      echo "⚠️  Warning: tensor name mismatch for shard ${shard_file} (gguf_info: '${gguf_name}' expected: '${expected_tensor}')." >&2
       warnings=$((warnings + 1))
     fi
   else
-    echo "⚠️ Warning: tensor name is missing for ${shard_file}!"
+    echo "⚠️  Warning: tensor name is missing for ${shard_file}!"
   fi
 
   # compare elements/bytes/shape with map if available
@@ -1770,44 +1770,44 @@ check_quantized_gguf() {
 
   if [[ -n "$map_dtype" && -n "$gguf_dtype" ]]; then
     if [[ "$map_dtype" != "$gguf_dtype" ]] && ([[ "$QUANTIZE_F32_WARN_VERIFICATION" == true ]] || [[ "$gguf_dtype" != "f32" ]]); then
-      echo "⚠️ Warning: dtype (map vs gguf) mismatch for ${shard_file}: map='${map_dtype}' gguf='${gguf_dtype}'" >&2
+      echo "⚠️  Warning: dtype (map vs gguf) mismatch for ${shard_file}: map='${map_dtype}' gguf='${gguf_dtype}'" >&2
       warnings=$((warnings + 1))
     fi
   else
-    echo "⚠️ Warning: dtype (map or gguf) is missing for ${shard_file}!" >&2
+    echo "⚠️  Warning: dtype (map or gguf) is missing for ${shard_file}!" >&2
   fi
 
   if [[ -n "$map_elements" && -n "$gguf_elements" ]]; then
     if [[ "$map_elements" != "$gguf_elements" ]]; then
-      echo "⚠️ Warning: elements mismatch for ${shard_file}: map='${map_elements}' gguf='${gguf_elements}'" >&2
+      echo "⚠️  Warning: elements mismatch for ${shard_file}: map='${map_elements}' gguf='${gguf_elements}'" >&2
       warnings=$((warnings + 1))
     fi
   else
-    echo "⚠️ Warning: elements (map or gguf) is missing for ${shard_file}!" >&2
+    echo "⚠️  Warning: elements (map or gguf) is missing for ${shard_file}!" >&2
   fi
 
   if [[ -n "$map_bytes" && -n "$gguf_bytes" ]]; then
     if [[ "$map_bytes" != "$gguf_bytes" ]]; then
-      echo "⚠️ Warning: bytes mismatch for ${shard_file}: map='${map_bytes}' gguf='${gguf_bytes}'" >&2
+      echo "⚠️  Warning: bytes mismatch for ${shard_file}: map='${map_bytes}' gguf='${gguf_bytes}'" >&2
       warnings=$((warnings + 1))
     fi
   else
-    echo "⚠️ Warning: bytes (map or gguf) is missing for ${shard_file}!" >&2
+    echo "⚠️  Warning: bytes (map or gguf) is missing for ${shard_file}!" >&2
   fi
 
   if [[ -n "$map_shape" && -n "$gguf_shape" ]]; then
     if [[ "$map_shape" != "$gguf_shape" ]]; then
-      echo "⚠️ Warning: shape mismatch for ${shard_file}: map='${map_shape}' gguf='${gguf_shape}'" >&2
+      echo "⚠️  Warning: shape mismatch for ${shard_file}: map='${map_shape}' gguf='${gguf_shape}'" >&2
       warnings=$((warnings + 1))
     fi
   else
-    echo "⚠️ Warning: shape (map or gguf) is missing for ${shard_file}!" >&2
+    echo "⚠️  Warning: shape (map or gguf) is missing for ${shard_file}!" >&2
   fi
 
   # imatrix verification logic
   if [[ -n "$IMATRIX_HASH_COMPUTED" && -n "$map_imatrix" ]]; then
     if [[ "${map_imatrix,,}" != "${IMATRIX_HASH_COMPUTED,,}" && "$SKIP_IMATRIX_HASH" == false ]]; then
-      echo "⚠️ Warning: imatrix hash mismatch for tensor '${expected_tensor}' in ${shard_file}: map='${map_imatrix,,}' provided='${IMATRIX_HASH_COMPUTED,,}'" >&2
+      echo "⚠️  Warning: imatrix hash mismatch for tensor '${expected_tensor}' in ${shard_file}: map='${map_imatrix,,}' provided='${IMATRIX_HASH_COMPUTED,,}'" >&2
       warnings=$((warnings + 1))
     fi
   fi
@@ -1817,7 +1817,7 @@ check_quantized_gguf() {
       echo "❌ Strict quantized file verification enabled: failing due to ${warnings} warning(s) for ${shard_file}." >&2
       return 1
     else
-      echo "⚠️ ${warnings} warning(s) observed during quantized file verification for ${shard_file}; continuing (non-strict mode)." >&2
+      echo "⚠️  ${warnings} warning(s) observed during quantized file verification for ${shard_file}; continuing (non-strict mode)." >&2
       return 0
     fi
   else
@@ -1885,7 +1885,7 @@ safe_stream_check_quantized_gguf_from_z() {
       if [[ "$tool" == "lbzip2" ]] && ! command -v lbzip2 >/dev/null 2>&1 && command -v bzip2 >/dev/null 2>&1; then
         actual_tool="bzip2"
         #actual_opts="$(get_decompress_opts_for_tool "$actual_tool")"
-        echo "[$(timestamp)] ⚠️ Notice: 'lbzip2' not found — falling back to 'bzip2' for decompression. Consider installing 'lbzip2' for better performance (can be installed while this script is running)." >&2
+        echo "[$(timestamp)] ⚠️  Notice: 'lbzip2' not found — falling back to 'bzip2' for decompression. Consider installing 'lbzip2' for better performance (can be installed while this script is running)." >&2
       fi
 
       # The pipeline: tool -d -c "$z" 2>/dev/null | python3 gguf_info.py -
@@ -1907,7 +1907,7 @@ safe_stream_check_quantized_gguf_from_z() {
 
   if [[ $rc -ne 0 ]]; then
     # If streaming to gguf_info failed, try fallback: decompress to a temp file and run gguf_info.py on that file.
-    echo "⚠️ Warning: streaming decompression to gguf_info.py failed (rc=${rc}). Trying fallback via temporary file..." >&2
+    echo "⚠️  Warning: streaming decompression to gguf_info.py failed (rc=${rc}). Trying fallback via temporary file..." >&2
     tmpf="$(mktemp "${TMPDIR:-/tmp}/ggufinfo.XXXXXX.gguf")"
     if ! decompress_archive_to_file "$z" "$tmpf"; then
       rm -f "$tmpf" || true
@@ -1944,7 +1944,7 @@ safe_stream_check_quantized_gguf_from_z() {
   done
 
   if [[ -z "$expected_tensor" ]]; then
-    echo "⚠️ Warning: could not determine expected tensor name for shard id ${shard_id_raw}; skipping detailed tensor-name check." >&2
+    echo "⚠️  Warning: could not determine expected tensor name for shard id ${shard_id_raw}; skipping detailed tensor-name check." >&2
   fi
 
   # find matching line
@@ -1959,7 +1959,7 @@ safe_stream_check_quantized_gguf_from_z() {
   fi
 
   if [[ -z "$match_line" ]]; then
-    echo "⚠️ Warning: gguf_info.py (stream) output did not contain a matching tensor line for shard id ${shard_id_raw}." >&2
+    echo "⚠️  Warning: gguf_info.py (stream) output did not contain a matching tensor line for shard id ${shard_id_raw}." >&2
     if [[ "$STRICT_GGUF_VERIFICATION" == true ]]; then
       return 1
     else
@@ -1982,22 +1982,22 @@ safe_stream_check_quantized_gguf_from_z() {
   # dtype comparison
   if [[ -n "$gguf_dtype" ]]; then
     if [[ "${gguf_dtype,,}" != "${qtype,,}" ]] && ([[ "$QUANTIZE_F32_WARN_VERIFICATION" == true ]] || [[ "${gguf_dtype,,}" != "f32" ]]); then
-      echo "⚠️ Warning: dtype mismatch from gguf_info for compressed shard ${z} (got='${gguf_dtype,,}' expected='${qtype,,}')." >&2
+      echo "⚠️  Warning: dtype mismatch from gguf_info for compressed shard ${z} (got='${gguf_dtype,,}' expected='${qtype,,}')." >&2
       warnings=$((warnings + 1))
     fi
   else
-    echo "⚠️ Warning: could not determine dtype from gguf_info (stream) for shard ${z}." >&2
+    echo "⚠️  Warning: could not determine dtype from gguf_info (stream) for shard ${z}." >&2
     warnings=$((warnings + 1))
   fi
 
   # tensor name comparison
   if [[ -n "$expected_tensor" ]]; then
     if [[ "${gguf_name,,}" != "${expected_tensor,,}" ]]; then
-      echo "⚠️ Warning: tensor name mismatch for compressed shard ${z} (gguf_info: '${gguf_name}' expected: '${expected_tensor}')." >&2
+      echo "⚠️  Warning: tensor name mismatch for compressed shard ${z} (gguf_info: '${gguf_name}' expected: '${expected_tensor}')." >&2
       warnings=$((warnings + 1))
     fi
   else
-    echo "⚠️ Warning: tensor name is missing for ${z}!" >&2
+    echo "⚠️  Warning: tensor name is missing for ${z}!" >&2
   fi
 
   # compare to map
@@ -2012,41 +2012,41 @@ safe_stream_check_quantized_gguf_from_z() {
 
   if [[ -n "$map_dtype" && -n "$gguf_dtype" ]]; then
     if [[ "$map_dtype" != "$gguf_dtype" ]] && ([[ "$QUANTIZE_F32_WARN_VERIFICATION" == true ]] || [[ "$gguf_dtype" != "f32" ]]); then
-      echo "⚠️ Warning: dtype (map vs gguf) mismatch for ${z}: map='${map_dtype}' gguf='${gguf_dtype}'" >&2
+      echo "⚠️  Warning: dtype (map vs gguf) mismatch for ${z}: map='${map_dtype}' gguf='${gguf_dtype}'" >&2
       warnings=$((warnings + 1))
     fi
   else
-    echo "⚠️ Warning: dtype (map or gguf) is missing for ${z}!" >&2
+    echo "⚠️  Warning: dtype (map or gguf) is missing for ${z}!" >&2
   fi
   if [[ -n "$map_elements" && -n "$gguf_elements" ]]; then
     if [[ "$map_elements" != "$gguf_elements" ]]; then
-      echo "⚠️ Warning: elements mismatch for ${z}: map='${map_elements}' gguf='${gguf_elements}'" >&2
+      echo "⚠️  Warning: elements mismatch for ${z}: map='${map_elements}' gguf='${gguf_elements}'" >&2
       warnings=$((warnings + 1))
     fi
   else
-    echo "⚠️ Warning: elements (map or gguf) is missing for ${z}!" >&2
+    echo "⚠️  Warning: elements (map or gguf) is missing for ${z}!" >&2
   fi
   if [[ -n "$map_bytes" && -n "$gguf_bytes" ]]; then
     if [[ "$map_bytes" != "$gguf_bytes" ]]; then
-      echo "⚠️ Warning: bytes mismatch for ${z}: map='${map_bytes}' gguf='${gguf_bytes}'" >&2
+      echo "⚠️  Warning: bytes mismatch for ${z}: map='${map_bytes}' gguf='${gguf_bytes}'" >&2
       warnings=$((warnings + 1))
     fi
   else
-    echo "⚠️ Warning: bytes (map or gguf) is missing for ${z}!" >&2
+    echo "⚠️  Warning: bytes (map or gguf) is missing for ${z}!" >&2
   fi
   if [[ -n "$map_shape" && -n "$gguf_shape" ]]; then
     if [[ "$(printf '%s' "$map_shape" | tr -d '[:space:]')" != "$(printf '%s' "$gguf_shape" | tr -d '[:space:]')" ]]; then
-      echo "⚠️ Warning: shape mismatch for ${z}: map='${map_shape}' gguf='${gguf_shape}'" >&2
+      echo "⚠️  Warning: shape mismatch for ${z}: map='${map_shape}' gguf='${gguf_shape}'" >&2
       warnings=$((warnings + 1))
     fi
   else
-    echo "⚠️ Warning: shape (map or gguf) is missing for ${z}!" >&2
+    echo "⚠️  Warning: shape (map or gguf) is missing for ${z}!" >&2
   fi
 
   # imatrix verification logic
   if [[ -n "$IMATRIX_HASH_COMPUTED" && -n "$map_imatrix" ]]; then
     if [[ "${map_imatrix,,}" != "${IMATRIX_HASH_COMPUTED,,}" && "$SKIP_IMATRIX_HASH" == false ]]; then
-      echo "⚠️ Warning: imatrix mismatch for tensor '${expected_tensor}' in ${z}: map='${map_imatrix,,}' provided='${IMATRIX_HASH_COMPUTED,,}'" >&2
+      echo "⚠️  Warning: imatrix mismatch for tensor '${expected_tensor}' in ${z}: map='${map_imatrix,,}' provided='${IMATRIX_HASH_COMPUTED,,}'" >&2
       warnings=$((warnings + 1))
     fi
   fi
@@ -2056,7 +2056,7 @@ safe_stream_check_quantized_gguf_from_z() {
       echo "❌ Strict quantized file verification enabled: failing due to ${warnings} warning(s) for ${z}." >&2
       return 1
     else
-      echo "⚠️ ${warnings} warning(s) observed during quantized file verification for ${z}; continuing (non-strict mode)." >&2
+      echo "⚠️  ${warnings} warning(s) observed during quantized file verification for ${z}; continuing (non-strict mode)." >&2
       return 0
     fi
   else
@@ -2124,7 +2124,7 @@ decompress_archive_to_file() {
       if [[ "$tool" == "lbzip2" ]] && ! command -v lbzip2 >/dev/null 2>&1 && command -v bzip2 >/dev/null 2>&1; then
         actual_tool="bzip2"
         #actual_opts="$(get_decompress_opts_for_tool "$actual_tool")"
-        echo "[$(timestamp)] ⚠️ Notice: 'lbzip2' not found — falling back to 'bzip2' for decompression. Consider installing 'lbzip2' for better performance." >&2
+        echo "[$(timestamp)] ⚠️  Notice: 'lbzip2' not found — falling back to 'bzip2' for decompression. Consider installing 'lbzip2' for better performance." >&2
       fi
 
       echo "[$(timestamp)] z-decompress: ${actual_tool} ${actual_opts} -k -d -c -- \"$z\" > \"$out\"" >&2
@@ -2537,7 +2537,7 @@ if [[ "$SKIP_GPG" != true ]]; then
       exit 7
     fi
   else
-    echo "⚠️ Warning: 'gpg' command not found. Valid GPG public keys verification skipped." >&2
+    echo "⚠️  Warning: 'gpg' command not found. Valid GPG public keys verification skipped." >&2
   fi
 fi
 
@@ -2692,7 +2692,7 @@ compute_map_for_qtype() {
             exit 4
         fi
       else
-        echo "⚠️ Warning: 'gpg' command not found. Signature verification skipped." >&2
+        echo "⚠️  Warning: 'gpg' command not found. Signature verification skipped." >&2
       fi
     fi
   fi
@@ -2854,7 +2854,7 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
               rm -f "$MAP_DIR/${mapfile}.sig.bak" || true # Delete the backup because now the backup may not correspond to the $mapfile.bak
             fi
             if ! run_downloader "$_qtype" 0 "$MAP_DIR" "$mapfile"; then
-                echo "⚠️ Warning: failed to fetch map for $_qtype. Using existing map file." >&2
+                echo "⚠️  Warning: failed to fetch map for $_qtype. Using existing map file." >&2
                 mv -f "$MAP_DIR/${mapfile}.bak" "$mappath"
                 if [[ -f "$MAP_DIR/${mapfile}.sig.bak" ]]; then
                   mv -f "$MAP_DIR/${mapfile}.sig.bak" "$mapsigpath"
@@ -2866,7 +2866,7 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
                 if [[ "$SKIP_GPG" != true ]]; then
                   if ! run_downloader "$_qtype" -1 "$MAP_DIR" "$mapfile.sig"; then
                       if [[ -f "$MAP_DIR/${mapfile}.sig.bak" ]]; then
-                          echo "⚠️ Warning: failed to fetch map gpg signature for $_qtype. Using existing map gpg signature file." >&2
+                          echo "⚠️  Warning: failed to fetch map gpg signature for $_qtype. Using existing map gpg signature file." >&2
                           mv -f "$MAP_DIR/${mapfile}.sig.bak" "$mapsigpath"
                       else
                           # If map download succeeded but signature download failed and this qtype was computed, we may skip signature below.
@@ -3069,7 +3069,7 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
             exit 4
         fi
       else
-        echo "⚠️ Warning: 'gpg' command not found. Signature verification skipped." >&2
+        echo "⚠️  Warning: 'gpg' command not found. Signature verification skipped." >&2
       fi
     fi
   fi
@@ -3138,7 +3138,7 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
         TENSORS_TO_FETCH+=("$tname")
       fi
     else
-      echo "⚠️ Warning: skipping invalid filename '$fname'" >&2
+      echo "⚠️  Warning: skipping invalid filename '$fname'" >&2
     fi
   done < "$mappath"
 done
@@ -3244,7 +3244,7 @@ if [[ "$INDIVIDUAL_TENSORS_ENABLED" == true ]]; then
 
     # If shard_id couldn't be determined, warn and skip
     if [[ -z "$__chunk_id" ]]; then
-      #echo "⚠️ Warning: could not determine shard id for tensor='$__tensor' at index $__i; skipping from filtered lists." >&2
+      #echo "⚠️  Warning: could not determine shard id for tensor='$__tensor' at index $__i; skipping from filtered lists." >&2
       continue
     fi
 
@@ -3549,7 +3549,7 @@ if [[ -n "$SPECIAL_NODE_ID" ]]; then
     local hex=$(printf '%s' "$out" | grep -oE '[0-9a-fA-F]{12,}' | head -n1 || true)
 
     if [[ -z "$hex" ]]; then
-      echo "[$(timestamp)] ⚠️ Warning: failed to parse xxhsum output for chunk_id=$chunk_id; output='$out'." >&2
+      echo "[$(timestamp)] ⚠️  Warning: failed to parse xxhsum output for chunk_id=$chunk_id; output='$out'." >&2
       return 1
     fi
 
@@ -3558,7 +3558,7 @@ if [[ -n "$SPECIAL_NODE_ID" ]]; then
 
     # Convert to decimal and modulo
     if ! [[ "$hex" =~ ^[0-9a-fA-F]+$ ]]; then
-      echo "[$(timestamp)] ⚠️ Warning: invalid hex digest ('$hex') for chunk_id=$chunk_id." >&2
+      echo "[$(timestamp)] ⚠️  Warning: invalid hex digest ('$hex') for chunk_id=$chunk_id." >&2
       return 1
     fi
 
@@ -3601,11 +3601,11 @@ attempt_redownload_first() {
         if [[ "$VERIFY" == true ]]; then
           # In verify mode, prefer verifying compressed streams; choose -z
           global_compress
-          echo "⚠️ Warning: Auto-enabled -z (verify .gguf.zbst) because "$gguf_first" is only hosted in .gguf.zbst compressed format and --verify mode used!" >&2
+          echo "⚠️  Warning: Auto-enabled -z (verify .gguf.zbst) because "$gguf_first" is only hosted in .gguf.zbst compressed format and --verify mode used!" >&2
           echo "   If you prefer to keep automatic selection disabled, re-run with --z-noauto." >&2
         else
           global_decompress
-          echo "⚠️ Warning: Auto-enabled -zd (decompress) because "$gguf_first" is only hosted in .gguf.zbst compressed format!" >&2
+          echo "⚠️  Warning: Auto-enabled -zd (decompress) because "$gguf_first" is only hosted in .gguf.zbst compressed format!" >&2
           echo "   If you prefer to keep automatic selection disabled, re-run with --z-noauto." >&2
         fi
       else
@@ -3945,13 +3945,13 @@ download_shard() {
         if safe_file_exists "$local_z"; then
           echo "[$(timestamp)] z-decompress: found $local_z -> decompressing to $local_gguf (overwrite)"
           if ! decompress_archive_to_file "$local_z" "$local_gguf"; then
-            echo "[$(timestamp)] ⚠️ decompression failed for $local_z (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
+            echo "[$(timestamp)] ⚠️  decompression failed for $local_z (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
           fi
           rm -f "$local_z" || true
         elif safe_file_exists "$dl_z"; then
           echo "[$(timestamp)] z-decompress: found $dl_z in download dir -> decompressing to $local_gguf (overwrite)"
           if ! decompress_archive_to_file "$dl_z" "$local_gguf"; then
-            echo "[$(timestamp)] ⚠️ decompression failed for $dl_z in download dir (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
+            echo "[$(timestamp)] ⚠️  decompression failed for $dl_z in download dir (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
           fi
           rm -f "$dl_z" || true
         fi
@@ -4022,13 +4022,13 @@ download_shard() {
             if safe_file_exists "$local_z"; then
               echo "[$(timestamp)] z-decompress: found $local_z -> decompressing to $local_gguf (overwrite)"
               if ! decompress_archive_to_file "$local_z" "$local_gguf"; then
-                echo "[$(timestamp)] ⚠️ decompression failed for $local_z (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
+                echo "[$(timestamp)] ⚠️  decompression failed for $local_z (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
               fi
               rm -f "$local_z" || true
             elif safe_file_exists "$dl_z"; then
               echo "[$(timestamp)] z-decompress: found $dl_z in download dir -> decompressing to $local_gguf (overwrite)"
               if ! decompress_archive_to_file "$dl_z" "$local_gguf"; then
-                echo "[$(timestamp)] ⚠️ decompression failed for $dl_z (data corruption or invalid tool or tool options) in download dir — treating as corrupted and will redownload." >&2
+                echo "[$(timestamp)] ⚠️  decompression failed for $dl_z (data corruption or invalid tool or tool options) in download dir — treating as corrupted and will redownload." >&2
               fi
               rm -f "$dl_z" || true
             fi
@@ -4132,11 +4132,11 @@ download_shard() {
                 if [[ "$VERIFY" == true ]]; then
                   # In verify mode, prefer verifying compressed streams; choose -z
                   global_compress
-                  echo "⚠️ Warning: Auto-enabled -z (verify .gguf.zbst) because "$shard_file" is only hosted in .gguf.zbst compressed format and --verify mode used!" >&2
+                  echo "⚠️  Warning: Auto-enabled -z (verify .gguf.zbst) because "$shard_file" is only hosted in .gguf.zbst compressed format and --verify mode used!" >&2
                   echo "   If you prefer to keep automatic selection disabled, re-run with --z-noauto." >&2
                 else
                   global_decompress
-                  echo "⚠️ Warning: Auto-enabled -zd (decompress) because "$shard_file" is only hosted in .gguf.zbst compressed format!" >&2
+                  echo "⚠️  Warning: Auto-enabled -zd (decompress) because "$shard_file" is only hosted in .gguf.zbst compressed format!" >&2
                   echo "   If you prefer to keep automatic selection disabled, re-run with --z-noauto." >&2
                 fi
               else
@@ -4184,14 +4184,14 @@ if [[ "$VERIFY" == true ]]; then
     # Verify only .gguf.zbst
     if comp=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -name "*-${QTYPE^^}-*-of-*.gguf" -print -quit 2>/dev/null || true); then
       if [[ -n "$comp" ]]; then
-        echo "⚠️ Warning: found .gguf files in model dir while --verify + -z is used. These will be ignored; verifying only .gguf.zbst files." >&2
+        echo "⚠️  Warning: found .gguf files in model dir while --verify + -z is used. These will be ignored; verifying only .gguf.zbst files." >&2
       fi
     fi
   else
     # Verify only .gguf
     if comp=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -name "*-${QTYPE^^}-*-of-*.gguf.zbst" -print -quit 2>/dev/null || true); then
       if [[ -n "$comp" ]]; then
-        echo "⚠️ Warning: found .gguf.zbst files in model dir while --verify without -z. These will be ignored; verifying only .gguf files." >&2
+        echo "⚠️  Warning: found .gguf.zbst files in model dir while --verify without -z. These will be ignored; verifying only .gguf files." >&2
       fi
     fi
   fi
@@ -4276,7 +4276,7 @@ if [[ "$VERIFY" == true ]]; then
               fi
               rm -f "$tmpf"
             else
-              echo "⚠️ Warning: 'gpg' command not found. Signature verification skipped." >&2
+              echo "⚠️  Warning: 'gpg' command not found. Signature verification skipped." >&2
             fi
           fi
           echo "[$(timestamp)] OK: ${gguf_first}.zbst"
@@ -4302,7 +4302,7 @@ if [[ "$VERIFY" == true ]]; then
                 exit_from_subprocess 4
               fi
             else
-              echo "⚠️ Warning: 'gpg' command not found. Signature verification skipped." >&2
+              echo "⚠️  Warning: 'gpg' command not found. Signature verification skipped." >&2
             fi
           fi
           echo "[$(timestamp)] OK: $gguf_first"
@@ -4322,7 +4322,7 @@ if [[ "$VERIFY" == true ]]; then
   lenq=${#TENSORS_TO_QUANTIZE_DYNAMIC[@]}
   if [ "$lenf" -gt 0 ] && [[ "$SKIP_HASH" == true ]] || ! command -v _sha256sum &>/dev/null; then
     if [[ "$SKIP_GGUF_VERIFICATION" == true ]]; then
-      [[ "$SKIP_HASH" == true ]] && echo "[$(timestamp)] --skip-hash is enabled. Hash verifications will be skipped." >&2 || echo "⚠️ Warning: _sha256sum command missing. Hash verifications will be skipped! GGUF verification will happen instead." >&2
+      [[ "$SKIP_HASH" == true ]] && echo "[$(timestamp)] --skip-hash is enabled. Hash verifications will be skipped." >&2 || echo "⚠️  Warning: _sha256sum command missing. Hash verifications will be skipped! GGUF verification will happen instead." >&2
     else
       lenq=$((lenq + lenf))
       for (( k=${#TENSORS_TO_FETCH_DYNAMIC[@]}-1; k>=0; k-- )); do
@@ -4331,7 +4331,7 @@ if [[ "$VERIFY" == true ]]; then
         move_fetch_index_to_quantize "$k"
       done
       lenf=0
-      [[ "$SKIP_HASH" == true ]] && echo "[$(timestamp)] --skip-hash is enabled. Hash verifications will be skipped. GGUF verification will happen instead." >&2 || echo "⚠️ Warning: _sha256sum command missing. Hash verifications will be skipped!" >&2
+      [[ "$SKIP_HASH" == true ]] && echo "[$(timestamp)] --skip-hash is enabled. Hash verifications will be skipped. GGUF verification will happen instead." >&2 || echo "⚠️  Warning: _sha256sum command missing. Hash verifications will be skipped!" >&2
     fi
     turn="quantize"
     quantize_verification_only=1
@@ -4427,7 +4427,7 @@ if [[ "$VERIFY" == true ]]; then
                   fi
                 elif safe_file_exists "$local_gguf"; then
                   # Found .gguf while user requested -z verify-only: warn & treat as missing .zbst (do NOT compress/modify)
-                  echo "[$(timestamp)] ⚠️ WARNING: found ${shardfile} (.gguf) but --verify + -z expects ${shardfile}.zbst; treating as MISSING for verification purposes."
+                  echo "[$(timestamp)] ⚠️  WARNING: found ${shardfile} (.gguf) but --verify + -z expects ${shardfile}.zbst; treating as MISSING for verification purposes."
                   touch "$FAIL_MARKER"
                 else
                   echo "[$(timestamp)] ❌ MISSING: ${shardfile}.zbst"
@@ -4457,7 +4457,7 @@ if [[ "$VERIFY" == true ]]; then
                   fi
                 elif safe_file_exists "$local_z"; then
                   # Found .gguf.zbst while user requested non -z verify-only: warn & treat as missing .gguf
-                  echo "[$(timestamp)] ⚠️ WARNING: found ${shardfile}.zbst but --verify without -z expects ${shardfile} (.gguf); treating as MISSING for verification purposes."
+                  echo "[$(timestamp)] ⚠️  WARNING: found ${shardfile}.zbst but --verify without -z expects ${shardfile} (.gguf); treating as MISSING for verification purposes."
                   touch "$FAIL_MARKER"
                 else
                   echo "[$(timestamp)] ❌ MISSING: $shardfile"
@@ -4509,14 +4509,14 @@ if [[ "$VERIFY" == true ]]; then
                 # In verify-only + -z mode: verify .gguf.zbst only (do not alter .gguf files).
                 if safe_file_exists "$local_z"; then
                   if ! safe_stream_check_quantized_gguf_from_z "$local_z" "$chunk_id" "$qtype"; then
-                    echo "⚠️ INVALID GGUF SHARD (stream): ${shardfile}.zbst - tensor: '$tensor' - qtype: '$qtype'"
+                    echo "⚠️  INVALID GGUF SHARD (stream): ${shardfile}.zbst - tensor: '$tensor' - qtype: '$qtype'"
                     touch "$FAIL_MARKER"
                   else
                     echo "[$(timestamp)] GGUF-VERIFICATION OK (stream): ${shardfile}.zbst"
                   fi
                 elif safe_file_exists "$local_gguf"; then
                   # Found .gguf while user requested -z verify-only: warn & treat as missing .zbst (do NOT compress/modify)
-                  echo "[$(timestamp)] ⚠️ WARNING: found ${shardfile} (.gguf) but --verify + -z expects ${shardfile}.zbst; treating as MISSING for verification purposes."
+                  echo "[$(timestamp)] ⚠️  WARNING: found ${shardfile} (.gguf) but --verify + -z expects ${shardfile}.zbst; treating as MISSING for verification purposes."
                   touch "$FAIL_MARKER"
                 else
                   echo "[$(timestamp)] ❌ MISSING: ${shardfile}.zbst"
@@ -4526,14 +4526,14 @@ if [[ "$VERIFY" == true ]]; then
                 # normal verify-only (no -z): verify .gguf only (do not alter .zbst files)
                 if safe_file_exists "$local_gguf"; then
                   if ! check_quantized_gguf "$local_gguf" "$chunk_id" "$qtype"; then
-                    echo "⚠️ INVALID GGUF SHARD: ${shardfile} - tensor: '$tensor' - qtype: '$qtype'"
+                    echo "⚠️  INVALID GGUF SHARD: ${shardfile} - tensor: '$tensor' - qtype: '$qtype'"
                     touch "$FAIL_MARKER"
                   else
                     echo "[$(timestamp)] GGUF-VERIFICATION OK: ${shardfile}"
                   fi
                 elif safe_file_exists "$local_z"; then
                   # Found .gguf.zbst while user requested non -z verify-only: warn & treat as missing .gguf
-                  echo "[$(timestamp)] ⚠️ WARNING: found ${shardfile}.zbst but --verify without -z expects ${shardfile} (.gguf); treating as MISSING for verification purposes."
+                  echo "[$(timestamp)] ⚠️  WARNING: found ${shardfile}.zbst but --verify without -z expects ${shardfile} (.gguf); treating as MISSING for verification purposes."
                   touch "$FAIL_MARKER"
                 else
                   echo "[$(timestamp)] ❌ MISSING: $shardfile"
@@ -4786,13 +4786,13 @@ while ( ((${#TENSORS_TO_FETCH_DYNAMIC[@]} > 0)) || ( ((${#TENSORS_TO_QUANTIZE_DY
         if safe_file_exists "$local_z"; then
           echo "[$(timestamp)] z-decompress: found $local_z -> decompressing to $local_gguf (overwrite)"
           if ! decompress_archive_to_file "$local_z" "$local_gguf"; then
-            echo "[$(timestamp)] ⚠️ decompression failed for $local_z (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
+            echo "[$(timestamp)] ⚠️  decompression failed for $local_z (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
           fi
           rm -f "$local_z" || true
         elif safe_file_exists "$dl_z"; then
           echo "[$(timestamp)] z-decompress: found $dl_z in download dir -> decompressing to $local_gguf (overwrite)"
           if ! decompress_archive_to_file "$dl_z" "$local_gguf"; then
-            echo "[$(timestamp)] ⚠️ decompression failed for $dl_z in download dir (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
+            echo "[$(timestamp)] ⚠️  decompression failed for $dl_z in download dir (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
           fi
           rm -f "$dl_z" || true
         fi
@@ -4812,7 +4812,7 @@ while ( ((${#TENSORS_TO_FETCH_DYNAMIC[@]} > 0)) || ( ((${#TENSORS_TO_QUANTIZE_DY
           fi
 
           if [[ "$SKIP_GGUF_VERIFICATION" == false ]] && ! safe_stream_check_quantized_gguf_from_z "$_path" "$shard_id" "$target_q"; then
-            echo "⚠️ Warning: Compressed quantized file id '$shard_id' is already present but appears different than expected. Re-quantization is necessary!" >&2
+            echo "⚠️  Warning: Compressed quantized file id '$shard_id' is already present but appears different than expected. Re-quantization is necessary!" >&2
             rm -f "$dl_z" "$local_z" || true
             sync || true
           else
@@ -4837,13 +4837,13 @@ while ( ((${#TENSORS_TO_FETCH_DYNAMIC[@]} > 0)) || ( ((${#TENSORS_TO_QUANTIZE_DY
           if safe_file_exists "$local_z"; then
             echo "[$(timestamp)] z-decompress: found quantized $local_z -> decompressing to $local_gguf (overwrite)"
             if ! decompress_archive_to_file "$local_z" "$local_gguf"; then
-              echo "[$(timestamp)] ⚠️ decompression failed for quantized $local_z (data corruption or invalid tool or tool options) — treating as corrupted and will re-quantize." >&2
+              echo "[$(timestamp)] ⚠️  decompression failed for quantized $local_z (data corruption or invalid tool or tool options) — treating as corrupted and will re-quantize." >&2
             fi
             rm -f "$local_z" || true
           elif safe_file_exists "$dl_z"; then
             echo "[$(timestamp)] z-decompress: found quantized $dl_z in download dir -> decompressing to $local_gguf (overwrite)"
             if ! decompress_archive_to_file "$dl_z" "$local_gguf"; then
-              echo "[$(timestamp)] ⚠️ decompression failed for quantized $dl_z in download dir (data corruption or invalid tool or tool options) — treating as corrupted and will re-quantize." >&2
+              echo "[$(timestamp)] ⚠️  decompression failed for quantized $dl_z in download dir (data corruption or invalid tool or tool options) — treating as corrupted and will re-quantize." >&2
             fi
             rm -f "$dl_z" || true
           fi
@@ -4860,7 +4860,7 @@ while ( ((${#TENSORS_TO_FETCH_DYNAMIC[@]} > 0)) || ( ((${#TENSORS_TO_QUANTIZE_DY
           skip_mv=false
         fi
         if [[ "$SKIP_GGUF_VERIFICATION" == false ]] && ! check_quantized_gguf "$_path" "$shard_id" "$target_q"; then
-          echo "⚠️ Warning: Quantized file id '$shard_id' is already present but appears different than expected. Re-quantization is necessary!" >&2
+          echo "⚠️  Warning: Quantized file id '$shard_id' is already present but appears different than expected. Re-quantization is necessary!" >&2
             rm -f "$dl_gguf" "$local_gguf" || true
             sync || true
         else
@@ -5040,14 +5040,14 @@ while ( ((${#TENSORS_TO_FETCH_DYNAMIC[@]} > 0)) || ( ((${#TENSORS_TO_QUANTIZE_DY
 
         # if QUANTIZE_FAILED_DOWNLOAD is set, enforce attempt limit
         if [[ "${QUANTIZE_FAILED_DOWNLOAD}" != "" ]] && (( attempts >= QUANTIZE_FAILED_DOWNLOAD )); then
-          echo "[$(timestamp)] ⚠️ Warning: Tensor='${current_tensor}' chunk_id=${current_chunk} download failed with exit $rc (attempt $attempts, reached QUANTIZE_FAILED_DOWNLOAD=${QUANTIZE_FAILED_DOWNLOAD}). Marking for quantization." >&2
+          echo "[$(timestamp)] ⚠️  Warning: Tensor='${current_tensor}' chunk_id=${current_chunk} download failed with exit $rc (attempt $attempts, reached QUANTIZE_FAILED_DOWNLOAD=${QUANTIZE_FAILED_DOWNLOAD}). Marking for quantization." >&2
           # create failed marker so parent main loop will move this item into quantize queue
           touch "$LOCAL_DOWNLOAD_DIR/.failed_download.${current_chunk}" 2>/dev/null || true
           break
         fi
 
         # otherwise keep retrying
-        echo "[$(timestamp)] ⚠️ Warning: Tensor='${current_tensor}' chunk_id=${current_chunk} download failed with exit $rc (attempt $attempts). Retrying in 10s..." >&2
+        echo "[$(timestamp)] ⚠️  Warning: Tensor='${current_tensor}' chunk_id=${current_chunk} download failed with exit $rc (attempt $attempts). Retrying in 10s..." >&2
         sleep 10
       done
     ) &
@@ -5169,13 +5169,13 @@ if [[ "$should_verify_first" == true ]]; then
         if safe_file_exists "$local_z"; then
           echo "[$(timestamp)] z-decompress: found first shard $local_z -> decompressing to $local_gguf (overwrite)"
           if ! decompress_archive_to_file "$local_z" "$local_gguf"; then
-            echo "[$(timestamp)] ⚠️ decompression failed for first shard $local_z (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
+            echo "[$(timestamp)] ⚠️  decompression failed for first shard $local_z (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
           fi
           rm -f "$local_z" || true
         elif safe_file_exists "$dl_z"; then
           echo "[$(timestamp)] z-decompress: found first shard $dl_z in download dir -> decompressing to $local_gguf (overwrite)"
           if ! decompress_archive_to_file "$dl_z" "$local_gguf"; then
-            echo "[$(timestamp)] ⚠️ decompression failed for first shard $dl_z in download dir (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
+            echo "[$(timestamp)] ⚠️  decompression failed for first shard $dl_z in download dir (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
           fi
           rm -f "$dl_z" || true
         fi
@@ -5193,11 +5193,11 @@ if [[ "$should_verify_first" == true ]]; then
                 if [[ "$VERIFY" == true ]]; then
                   # In verify mode, prefer verifying compressed streams; choose -z
                   global_compress
-                  echo "⚠️ Warning: Auto-enabled -z (verify .gguf.zbst) because "$gguf_first" is only hosted in .gguf.zbst compressed format and --verify mode used!" >&2
+                  echo "⚠️  Warning: Auto-enabled -z (verify .gguf.zbst) because "$gguf_first" is only hosted in .gguf.zbst compressed format and --verify mode used!" >&2
                   echo "   If you prefer to keep automatic selection disabled, re-run with --z-noauto." >&2
                 else
                   global_decompress
-                  echo "⚠️ Warning: Auto-enabled -zd (decompress) because "$gguf_first" is only hosted in .gguf.zbst compressed format!" >&2
+                  echo "⚠️  Warning: Auto-enabled -zd (decompress) because "$gguf_first" is only hosted in .gguf.zbst compressed format!" >&2
                   echo "   If you prefer to keep automatic selection disabled, re-run with --z-noauto." >&2
                 fi
               else
@@ -5215,7 +5215,7 @@ if [[ "$should_verify_first" == true ]]; then
           if safe_file_exists "$dl_z"; then
             echo "[$(timestamp)] z-decompress: found first shard $dl_z -> decompressing to $dl_gguf (overwrite)"
             if ! decompress_archive_to_file "$dl_z" "$dl_gguf"; then
-              echo "[$(timestamp)] ⚠️ decompression failed for first shard $dl_z (data corruption or invalid tool or tool options) — treating as corrupted." >&2
+              echo "[$(timestamp)] ⚠️  decompression failed for first shard $dl_z (data corruption or invalid tool or tool options) — treating as corrupted." >&2
             fi
             rm -f "$dl_z" || true
           fi
@@ -5249,7 +5249,7 @@ if [[ "$should_verify_first" == true ]]; then
           if safe_file_exists "$local_z"; then
             echo "[$(timestamp)] z-decompress: found first shard $local_z -> decompressing to $local_gguf (overwrite)"
             if ! decompress_archive_to_file "$local_z" "$local_gguf"; then
-              echo "[$(timestamp)] ⚠️ decompression failed for first shard $local_z (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
+              echo "[$(timestamp)] ⚠️  decompression failed for first shard $local_z (data corruption or invalid tool or tool options) — treating as corrupted and will redownload." >&2
             fi
             rm -f "$local_z" || true
           fi
@@ -5328,7 +5328,7 @@ if [[ "$should_verify_first" == true ]]; then
                   echo "[$(timestamp)] ❗ Please raise an issue if this persists: https://github.com/Thireus/GGUF-Tool-Suite/issues" >&2
                   exit 66
                 fi
-                echo "[$(timestamp)] ⚠️ First shard GPG signature verification failed for '$gguf_first.sig' — treating as corrupted and will redownload (attempt $failed_verifications/$MAX_FAILED_VERIFICATION)." >&2
+                echo "[$(timestamp)] ⚠️  First shard GPG signature verification failed for '$gguf_first.sig' — treating as corrupted and will redownload (attempt $failed_verifications/$MAX_FAILED_VERIFICATION)." >&2
                 if attempt_redownload_first; then
                   continue
                 else
@@ -5359,7 +5359,7 @@ if [[ "$should_verify_first" == true ]]; then
                   touch "$FAIL_MARKER"
                   exit 1
                 else
-                  echo "[$(timestamp)] ⚠️ decompression failed for '$local_z' (data corruption or invalid tool or tool options) — will automatically fail GPG signature to redownload." >&2
+                  echo "[$(timestamp)] ⚠️  decompression failed for '$local_z' (data corruption or invalid tool or tool options) — will automatically fail GPG signature to redownload." >&2
                 fi
               fi
 
@@ -5390,7 +5390,7 @@ if [[ "$should_verify_first" == true ]]; then
                   echo "[$(timestamp)] ❗ Please raise an issue if this persists: https://github.com/Thireus/GGUF-Tool-Suite/issues" >&2
                   exit 67
                 fi
-                echo "[$(timestamp)] ⚠️ First shard GPG signature verification failed for '$gguf_first.sig' — treating as corrupted and will redownload (attempt $failed_verifications/$MAX_FAILED_VERIFICATION)." >&2
+                echo "[$(timestamp)] ⚠️  First shard GPG signature verification failed for '$gguf_first.sig' — treating as corrupted and will redownload (attempt $failed_verifications/$MAX_FAILED_VERIFICATION)." >&2
                 # Cleaning file because in theory didn't use to exist (although not entirely true)
                 rm -f "$local_gguf" || true
                 if attempt_redownload_first; then
@@ -5410,7 +5410,7 @@ if [[ "$should_verify_first" == true ]]; then
             exit 12
           fi
         else
-          echo "⚠️ Warning: 'gpg' command not found. Signature verification skipped." >&2
+          echo "⚠️  Warning: 'gpg' command not found. Signature verification skipped." >&2
         fi
       fi
 
@@ -5622,7 +5622,7 @@ if [[ "$SKIP_GPG" != true ]]; then
         fi
       fi
     else
-      echo "⚠️ Warning: 'gpg' command not found. Signature verification skipped." >&2
+      echo "⚠️  Warning: 'gpg' command not found. Signature verification skipped." >&2
     fi
   else
     echo "[$(timestamp)] Skipping final first-shard GPG verification due to special-node-id/xxhsum assignment (not BF16 or assigned node) or --individual-tensors selection."
@@ -5638,7 +5638,7 @@ if [[ "$QUANTIZE_KEEP_BF16" == false ]]; then
   if [[ "$BF16_DOWNLOAD_DIR" == "$LOCAL_DOWNLOAD_DIR/bf16" ]]; then
     rm -rf "$BF16_DOWNLOAD_DIR" 2>/dev/null || true
   else
-    echo "⚠️ Custom BF16 directory used for quantization not removed for safety reasons. Please consider removing it manually if needed." >&2
+    echo "⚠️  Custom BF16 directory used for quantization not removed for safety reasons. Please consider removing it manually if needed." >&2
   fi
 fi
 
