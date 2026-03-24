@@ -29,7 +29,7 @@ IMATRIX='imatrix_ubergarm.dat' # Full path! Tutorial to obtain them will be cove
 We first start by obtaining the original model .safetensors and config files. I like to use git lfs for this purpose but you can also use [HuggingFace cli tool](https://huggingface.co/docs/huggingface_hub/en/guides/cli) instead. Make sure you have sufficient disk space.
 
 ```
-apt-get install python3-dev python3-pip python3-venv python3-wheel python3-setuptools git cmake build-essential git-lfs pipx ccache gpg screen # Run as root
+apt-get install python3-dev python3-pip python3-venv python3-wheel python3-setuptools git cmake build-essential git-lfs pipx ccache gpg screen zlib1g-dev libxml2-dev libssl-dev libgmp-dev libmpfr-dev # Run as root
 ```
 
 Create the working directory (where all files will be downloaded and produced):
@@ -73,6 +73,23 @@ uv pip install -r requirements/requirements-convert_hf_to_gguf.txt --prerelease=
 uv pip install -U git+https://github.com/huggingface/transformers.git
 ```
 
+Build and install triton-cpu (might not be required) :
+
+```
+cd "$WORKING_DIRECTORY"
+# Activate env
+source venv/bin/activate && \
+uv pip install ninja cmake wheel setuptools pybind11 && \
+git clone --depth 1 https://github.com/triton-lang/triton-cpu --recursive && \
+cd triton-cpu && \
+sed -i '/CMAKE_CXX_FLAGS/s/-Werror //g' CMakeLists.txt && \
+sed -i '/^if (dnnl_FOUND)/,/^endif()/ s/^/# /' third_party/cpu/CMakeLists.txt && \
+MAX_JOBS=$(nproc) uv pip install -e python --no-build-isolation # Be patient, "Preparing Packages" downloads a lot of stuff before build begins...
+```
+
+Note: See [here](https://github.com/ikawrakow/ik_llama.cpp/issues/383#issuecomment-2865306085) for patch explanation.
+
+
 ## Convert to BF16 GGUF
 
 Convert model to BF16 GGUF:
@@ -94,6 +111,27 @@ for f in $(ls); do mv -f $f $(echo $f | sed "s/model_name/$MODEL-$MAINTAINER-BF1
 ```
 
 _Note: Some models will require more steps. You'll need to dig into github/reddit/hf._
+
+For example, DeepSeek and Kimi-K2 FP8 needs to be cast to BF16 safetensors before it can be converted to BF16 GGUF:
+
+```
+cd "$WORKING_DIRECTORY"
+# Activate env
+source venv/bin/activate
+git clone --depth 1 https://github.com/deepseek-ai/DeepSeek-V3.git && \
+cd DeepSeek-V3/inference && \
+sed -i 's/device="cuda"/device="cpu"/g' fp8_cast_bf16.py && \
+mv /"$WORKING_DIRECTORY"/huggingface/"$MODEL" /"$WORKING_DIRECTORY"/huggingface/"$MODEL"-FP8 && \
+mkdir /"$WORKING_DIRECTORY"/huggingface/"$MODEL" && \
+python fp8_cast_bf16.py \
+      --input-fp8-hf-path /"$WORKING_DIRECTORY"/huggingface/"$MODEL"-FP8/ \
+      --output-bf16-hf-path /"$WORKING_DIRECTORY"/huggingface/"$MODEL"/ 2>&1 | tee -a fp8_cast_bf16-Kimi-K2-Instruct.log
+cp /"$WORKING_DIRECTORY"/huggingface/"$MODEL"-FP8/config.json /"$WORKING_DIRECTORY"/huggingface/"$MODEL"/
+cp /"$WORKING_DIRECTORY"/huggingface/"$MODEL"-FP8/generation_config.json /"$WORKING_DIRECTORY"/huggingface/"$MODEL"/
+cp /"$WORKING_DIRECTORY"/huggingface/"$MODEL"-FP8/tokenizer_config.json /"$WORKING_DIRECTORY"/huggingface/"$MODEL"/
+cp /"$WORKING_DIRECTORY"/huggingface/"$MODEL"-FP8/*.py /"$WORKING_DIRECTORY"/huggingface/"$MODEL"/
+cp /"$WORKING_DIRECTORY"/huggingface/"$MODEL"-FP8/*.model /"$WORKING_DIRECTORY"/huggingface/"$MODEL"/
+```
 
 ## Produce tensors.map
 
