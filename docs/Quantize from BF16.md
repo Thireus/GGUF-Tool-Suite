@@ -137,6 +137,8 @@ mkdir ${MODEL}-${MAINTAINER}-${QTYPE^^}-SPECIAL_SPLIT && \
 quantize_model.sh --imatrix "$IMATRIX" --model "$MODEL" --qtype "$QTYPE" --destination-dir "${MODEL}-${MAINTAINER}-${QTYPE^^}-SPECIAL_SPLIT"
 ```
 
-Note: If you run `quantize_model.sh` again for the same qtype it will safely resume quantizing from the last quantized tensor.
+Note: Some tensors cannot always be quantized to the target `$QTYPE`. `quantize_model.sh` as well as `llama-quantize` employ special rules to fallback to the nearest and safe quantization type.
+
+Tip: If you kill `quantize_model.sh` and run it again for the same qtype, it will safely resume quantizing from the last quantized tensor.
 
 You will also need to produce the tensors.map file, enrich it with the imatrix hash and produce the GPG signatures. These steps are detailed [here](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/docs/Convert_model_to_BF16.md).
