@@ -18,10 +18,10 @@ Make sure you edit and paste these variables in your terminal:
 ```
 WORKING_DIRECTORY='/AI' # Full path please!
 MODEL='Qwen3.5-0.8B'
-BF16_URL='https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-BF16.gguf?download=true'
 MAINTAINER='THIREUS' # Or use your name!
 IMATRIX='imatrix_ubergarm.dat' # Full path! Tutorial to obtain them will be covered separately.
 QTYPE="q2_K" # The target quantization type
+BF16_URL='https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-BF16.gguf?download=true' # Optional, for Option 3
 ```
 
 ## Know your quants

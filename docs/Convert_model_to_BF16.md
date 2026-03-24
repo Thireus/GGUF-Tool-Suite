@@ -110,6 +110,8 @@ cd /"$WORKING_DIRECTORY"/"$MODEL"-"$MAINTAINER"-BF16-SPECIAL_SPLIT && \
 for f in $(ls); do mv -f $f $(echo $f | sed "s/model_name/$MODEL-$MAINTAINER-BF16-SPECIAL_TENSOR/g"); done
 ```
 
+Once conversion is done, you can safely remove the `$MODEL` from the `huggingface` directory.
+
 _Note: Some models will require more steps. You'll need to dig into github/reddit/hf._
 
 For example, DeepSeek and Kimi-K2 FP8 needs to be cast to BF16 safetensors before it can be converted to BF16 GGUF:
