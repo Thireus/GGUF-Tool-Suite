@@ -42,7 +42,7 @@ iq1_s_r4 iq1_s iq1_bn iq1_kt iq1_m iq1_m_r4 iq2_bn iq2_bn_r4 iq2_xxs iq2_xxs_r4 
 
 A more detailed and exhaustive table is available [here](https://github.com/Thireus/GGUF-Tool-Suite/discussions/53).
 
-Important: You will notice that `q` quants end with uppercase letters such as `_K` or `_KV`. This is very important to get this right! Quant types are case-sensitive!
+Important: You will notice that `q` quants end with uppercase letters such as `_K` or `_KV`. This is very important to get this right! Quant types are often case-sensitive!
 
 ## Prepare the environment
 
@@ -119,6 +119,8 @@ llama-gguf-split --split --no-tensor-first-split --split-max-tensors 1 "$MODEL"-
 cd /"$WORKING_DIRECTORY"/"$MODEL"-"$MAINTAINER"-BF16-SPECIAL_SPLIT && \
 for f in $(ls); do mv -f $f $(echo $f | sed "s/model_name/$MODEL-"$MAINTAINER"-BF16-SPECIAL_TENSOR/g"); done
 ```
+
+Note: You can also have a look at the `monitor_and_split.sh` which automates splitting models.
 
 You will also need to produce the tensors.map file, enrich it with the imatrix hash and produce the GPG signatures. These steps are detailed [here](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/docs/Convert_model_to_BF16.md).
 

@@ -160,6 +160,10 @@ cd "$WORKING_DIRECTORY" && \
 monitor_and_clean.sh .
 ```
 
+Note: There are several checks in `monitor_and_clean.sh` to ensure the repo is ready before proceeding with computing the tensors.map entries. If you observe that `monitor_and_clean.sh` doesn't start immediately, this is likely the reason... be patient.
+
+Important: If the tensors.map is corrupted or incomplete I recommend killing `monitor_and_clean.sh`, then removing the faulty tensors.map and running `monitor_and_clean.sh` again.
+
 ## (optional) Enrich tensors.map with imatrix hash
 
 Obtain the GGUF-Tool-Suite:
