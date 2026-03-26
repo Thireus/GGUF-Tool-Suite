@@ -5,7 +5,7 @@
 #** regex for troubleshooting purpose.                        **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Dec-27-2025 -------------------- **#
+#** --------------- Updated: Mar-26-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -18,7 +18,7 @@
 #**    /    o―ヽニニフ))             · · ɪǫ3_xxs      ~·°        **#
 #**    し―-J                                                   **#
 #**                                                           **#
-#** Copyright © 2025 - Thireus.             Gᵣₑₑ𝒹ᵧ ₛₜₑₐₗₜ₉₁ 𝒻ₜ𝓌 **#
+#** Copyright © 2026 - Thireus.             Gᵣₑₑ𝒹ᵧ ₛₜₑₐₗₜ₉₁ 𝒻ₜ𝓌 **#
 #***************************************************************#
 #**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
 #***************************************************************#
@@ -158,6 +158,14 @@ custom="
 ## THE END!
 "
 
+# Automatically use stdin when the script is piped or redirected.
+if [[ ! -t 0 ]]; then
+  stdin_custom="$(cat)"
+  if [[ -n "$stdin_custom" ]]; then
+    custom="$stdin_custom"
+  fi
+fi
+
 # ---------------------------------------------------------------------------------------------
 # expand_ranges(): read stdin, separate regex range entries if not supported by llama-quantize
 # ---------------------------------------------------------------------------------------------
@@ -198,4 +206,4 @@ expand_ranges() {
   done
 }
 
-echo "$custom" | grep -v '^#' | grep -v '^$' | expand_ranges
+printf '%s\n' "$custom" | grep -v '^#' | grep -v '^$' | expand_ranges
