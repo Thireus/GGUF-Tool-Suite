@@ -307,7 +307,7 @@ cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
 export PATH="$WORKING_DIRECTORY"/"$MODEL"-BENCH/:$PATH && \
 cd "$MODEL"-"$MAINTAINER"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
-collect_ppl_results.sh --qtypes "$TARGET_QTYPE" --chunks 250 --no-percentage --expand-groups --auto-baseline "$BASELINE_QTYPE"
+collect_ppl_results.sh --qtypes "$TARGET_QTYPE" --chunks 250 --no-percentage --auto-baseline "$BASELINE_QTYPE"
 ```
 
 Important: If you have used the `--group-tensors` parameter when running the `benchmark_each_tensor.sh` script, you must add to the following two additional parameters to the `collect_ppl_results.sh` script:
