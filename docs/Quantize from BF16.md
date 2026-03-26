@@ -50,7 +50,7 @@ We first start by obtaining or creating the BF16 version of our model. I like to
 
 
 ```
-apt-get install python3-dev python3-pip python3-venv python3-wheel python3-setuptools git cmake build-essential git-lfs pipx ccache gpg screen lbzip2 # Run as root
+apt-get install python3-dev python3-pip python3-venv python3-wheel python3-setuptools git cmake build-essential git-lfs pipx ccache gpg screen lbzip2 curl lbzip2 # Run as root
 ```
 
 Create the working directory (where all files will be downloaded and produced):
@@ -88,6 +88,8 @@ cd "$MODEL"-"$MAINTAINER"-BF16-SPECIAL_SPLIT && \
 echo '.*=bf16' > bf16.recipe && \
 quant_downloader.sh bf16.recipe --qtype BF16
 ```
+
+The models Thireus provides are on [HuggingFace](https://huggingface.co/Thireus/collections) and mirrored on [gguf.thireus.com](https://gguf.thireus.com).
 
 ### Option 3:
 

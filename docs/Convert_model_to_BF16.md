@@ -29,7 +29,7 @@ IMATRIX='imatrix_ubergarm.dat' # Full path! Tutorial to obtain them will be cove
 We first start by obtaining the original model .safetensors and config files. I like to use git lfs for this purpose but you can also use [HuggingFace cli tool](https://huggingface.co/docs/huggingface_hub/en/guides/cli) instead. Make sure you have sufficient disk space.
 
 ```
-apt-get install python3-dev python3-pip python3-venv python3-wheel python3-setuptools git cmake build-essential git-lfs pipx ccache gpg screen zlib1g-dev libxml2-dev libssl-dev libgmp-dev libmpfr-dev # Run as root
+apt-get install python3-dev python3-pip python3-venv python3-wheel python3-setuptools git cmake build-essential git-lfs pipx ccache gpg screen zlib1g-dev libxml2-dev libssl-dev libgmp-dev libmpfr-dev curl lbzip2 # Run as root
 ```
 
 Create the working directory (where all files will be downloaded and produced):
