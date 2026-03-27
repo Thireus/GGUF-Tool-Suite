@@ -5,7 +5,7 @@
 #** repositories from Thireus' special BF16 sharded model.    **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-24-2026 -------------------- **#
+#** --------------- Updated: Mar-27-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -740,6 +740,37 @@ SOURCE_PREFIX="${MODEL}-${MAINTAINER}-BF16-SPECIAL_TENSOR"
 TARGET_PREFIX="${MODEL}-${MAINTAINER}-${TARGET_QTYPE}-SPECIAL_TENSOR"
 # ------------------------------------------------------------------------
 
+# The GGUF shard format is: chunkid-of-chuckstotal.gguf
+# For the source-side existence check, the total is derived from the source shard filename.
+find_source_first_shard_and_total() {
+  local -a candidates=( "$SOURCE_DIR/${SOURCE_PREFIX}-00001-of-"[0-9][0-9][0-9][0-9][0-9]".gguf" )
+
+  if (( ${#candidates[@]} == 0 )); then
+    echo "❌ Error: Required source shard does not exist before looping:" >&2
+    echo "  $SOURCE_DIR/${SOURCE_PREFIX}-00001-of-#####.gguf" >&2
+    exit 27
+  fi
+
+  if (( ${#candidates[@]} > 1 )); then
+    echo "❌ Error: Multiple matching source shard candidates were found for shard 00001:" >&2
+    printf '  %s\n' "${candidates[@]}" >&2
+    exit 28
+  fi
+
+  SOURCE_FIRST_SHARD="${candidates[0]}"
+
+  if [[ "$(basename "$SOURCE_FIRST_SHARD")" =~ -00001-of-([0-9]{5})\.gguf$ ]]; then
+    CHUNK_TOTAL_PADDED="${BASH_REMATCH[1]}"
+    CHUNKS_TOTAL=$((10#$CHUNK_TOTAL_PADDED))
+  else
+    echo "❌ Error: Could not derive CHUNKS_TOTAL from source shard name:" >&2
+    echo "  $SOURCE_FIRST_SHARD" >&2
+    exit 27
+  fi
+}
+
+find_source_first_shard_and_total
+
 # ------------------ RESUME / EXISTING SHARDS CHECK ------------------
 # When --individual-tensors is used, resume detection is sequence-aware: we inspect
 # the requested ids in order, delete the last completed shard before the first
@@ -796,41 +827,10 @@ else
 fi
 # -------------------------------------------------------------------
 
-# The GGUF shard format is: chunkid-of-chuckstotal.gguf
-# For the source-side existence check, the total is derived from the source shard filename.
-find_source_first_shard_and_total() {
-  local -a candidates=( "$SOURCE_DIR/${SOURCE_PREFIX}-00001-of-"[0-9][0-9][0-9][0-9][0-9]".gguf" )
-
-  if (( ${#candidates[@]} == 0 )); then
-    echo "❌ Error: Required source shard does not exist before looping:" >&2
-    echo "  $SOURCE_DIR/${SOURCE_PREFIX}-00001-of-#####.gguf" >&2
-    exit 27
-  fi
-
-  if (( ${#candidates[@]} > 1 )); then
-    echo "❌ Error: Multiple matching source shard candidates were found for shard 00001:" >&2
-    printf '  %s\n' "${candidates[@]}" >&2
-    exit 28
-  fi
-
-  SOURCE_FIRST_SHARD="${candidates[0]}"
-
-  if [[ "$(basename "$SOURCE_FIRST_SHARD")" =~ -00001-of-([0-9]{5})\.gguf$ ]]; then
-    CHUNK_TOTAL_PADDED="${BASH_REMATCH[1]}"
-    CHUNKS_TOTAL=$((10#$CHUNK_TOTAL_PADDED))
-  else
-    echo "❌ Error: Could not derive CHUNKS_TOTAL from source shard name:" >&2
-    echo "  $SOURCE_FIRST_SHARD" >&2
-    exit 27
-  fi
-}
-
 if [[ -z "$LLAMA_QUANTIZE_BIN" ]]; then
   echo "❌ Error: --llama-quantize cannot be empty." >&2
   exit 22
 fi
-
-find_source_first_shard_and_total
 
 if (( USE_INDIVIDUAL_TENSORS )); then
   RESUME_START="${SHARD_IDS_TO_PROCESS[0]}"
