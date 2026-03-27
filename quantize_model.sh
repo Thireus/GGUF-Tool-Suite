@@ -324,29 +324,6 @@ sort_unique_individual_tensors() {
   INDIVIDUAL_TENSORS=("${sorted_unique[@]}")
 }
 
-# ------------------ LLAMA-QUANTIZE SUPPORT CHECK ------------------
-# Validate that the provided llama-quantize binary supports --individual-tensors.
-if [[ -z "$LLAMA_QUANTIZE_BIN" ]]; then
-  echo "❌ Error: --llama-quantize must be provided when quantization from bf16 is required." >&2
-  echo "Please obtain a build that includes --individual-tensors support from:" >&2
-  echo "  https://github.com/Thireus/ik_llama.cpp/tree/th/quantize_individual_tensors" >&2
-  echo "Pre-built releases are at: https://github.com/Thireus/ik_llama.cpp/releases (look for th-quantize_individual_tensors*)." >&2
-  exit 21
-fi
-
-resolve_llama_quantize_bin
-
-# Check help text for --individual-tensors
-matching_help_line="$("$LLAMA_QUANTIZE_BIN" --help 2>&1 | grep -- '--individual-tensors' | head -n1 || true)"
-if [[ -z "$matching_help_line" ]]; then
-  echo "❌ Error: The provided llama-quantize binary '$LLAMA_QUANTIZE_BIN' does not advertise the --individual-tensors option." >&2
-  echo "Please obtain a build with individual-tensors support from:" >&2
-  echo "  https://github.com/Thireus/ik_llama.cpp/tree/th/quantize_individual_tensors" >&2
-  echo "Pre-built releases are at: https://github.com/Thireus/ik_llama.cpp/releases (look for th-quantize_individual_tensors*)." >&2
-  exit 23
-fi
-# ------------------------------------------------------------------------
-
 prompt_delete_latest_shard() {
   local shard_path="$1"
   local shard_id="$2"
@@ -676,6 +653,29 @@ if (( SHOW_HELP )); then
   usage
   exit 0
 fi
+
+# ------------------ LLAMA-QUANTIZE SUPPORT CHECK ------------------
+# Validate that the provided llama-quantize binary supports --individual-tensors.
+if [[ -z "$LLAMA_QUANTIZE_BIN" ]]; then
+  echo "❌ Error: --llama-quantize must be provided when quantization from bf16 is required." >&2
+  echo "Please obtain a build that includes --individual-tensors support from:" >&2
+  echo "  https://github.com/Thireus/ik_llama.cpp/tree/th/quantize_individual_tensors" >&2
+  echo "Pre-built releases are at: https://github.com/Thireus/ik_llama.cpp/releases (look for th-quantize_individual_tensors*)." >&2
+  exit 21
+fi
+
+resolve_llama_quantize_bin
+
+# Check help text for --individual-tensors
+matching_help_line="$("$LLAMA_QUANTIZE_BIN" --help 2>&1 | grep -- '--individual-tensors' | head -n1 || true)"
+if [[ -z "$matching_help_line" ]]; then
+  echo "❌ Error: The provided llama-quantize binary '$LLAMA_QUANTIZE_BIN' does not advertise the --individual-tensors option." >&2
+  echo "Please obtain a build with individual-tensors support from:" >&2
+  echo "  https://github.com/Thireus/ik_llama.cpp/tree/th/quantize_individual_tensors" >&2
+  echo "Pre-built releases are at: https://github.com/Thireus/ik_llama.cpp/releases (look for th-quantize_individual_tensors*)." >&2
+  exit 23
+fi
+# ------------------------------------------------------------------------
 
 if [[ -z "$MODEL" ]]; then
   echo "❌ Error: --model is required." >&2
