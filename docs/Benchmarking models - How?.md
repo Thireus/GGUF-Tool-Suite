@@ -69,8 +69,8 @@ Download the `$BASELINE_QTYPE` of our model using `quant_downloader.sh`:
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
 export PATH="$WORKING_DIRECTORY"/"$MODEL"-BENCH/:$PATH && \
-mkdir "$MODEL"-"$MAINTAINER"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
-cd "$MODEL"-"$MAINTAINER"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+mkdir "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 echo ".*=$BASELINE_QTYPE" > "$BASELINE_QTYPE".recipe && \
 quant_downloader.sh "$BASELINE_QTYPE".recipe --qtype "$BASELINE_QTYPE"
 ```
@@ -84,7 +84,7 @@ First we need to list all the tensors of the model and the relevant assigned qua
 ```
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
-cd "$MODEL"-"$MAINTAINER"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 cat tensors.map | cut -d: -f 3,5 | sed 's/:dtype/$/' | sed 's/\./\\\./g' | quants_regex_merger.sh --model-name "$MODEL" --no-file > "$BASELINE_QTYPE".recipe && \
 cat "$BASELINE_QTYPE".recipe | sed 's/=f32/=f32=locked/g' | sed "s/\^.*/'&'/" > ${BASELINE_QTYPE^^}_USER_REGEX.txt && \
 sed -i '/^USER_REGEX=(/,/^[[:space:]]*)/{//!d}; /^USER_REGEX=(/r '"${BASELINE_QTYPE^^}"'_USER_REGEX.txt' "$WORKING_DIRECTORY"/"$MODEL"-BENCH/benchmark_each_tensor.sh && \
@@ -135,7 +135,7 @@ Obtain the `imatrix-calibration-corpus-v02.txt` file which is used for KLD and P
 cd "$WORKING_DIRECTORY" && \
 curl -L 'https://gist.githubusercontent.com/ubergarm/edfeb3ff9c6ec8b49e88cdf627b0711a/raw/ba5b01b6960a86874592f5913e283746ff734483/ubergarm-imatrix-calibration-corpus-v02.txt' -o imatrix-calibration-corpus-v02.txt && \
 cd "$MODEL"-BENCH && \
-cd "$MODEL"-"$MAINTAINER"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 ln -s "$WORKING_DIRECTORY"/imatrix-calibration-corpus-v02.txt .
 ```
 
@@ -150,7 +150,7 @@ Let's identify tensors that can be benchmarked together:
 ```
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
-cd "$MODEL"-"$MAINTAINER"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 python3 ../model_tensor_sizes.py --sort "$BASELINE_QTYPE".recipe tensors."$BASELINE_QTYPE".map | grep -v '=f32'
 ```
 
@@ -226,7 +226,7 @@ Run the following command to start benchmarking:
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
 export PATH="$WORKING_DIRECTORY"/"$MODEL"-BENCH/:$PATH && \
-cd "$MODEL"-"$MAINTAINER"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 benchmark_each_tensor.sh --qtypes "$TARGET_QTYPE" --chunks 250
 ```
 
@@ -268,7 +268,7 @@ Use the following command to count how many tensors/groups were benchmarked:
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
 export PATH="$WORKING_DIRECTORY"/"$MODEL"-BENCH/:$PATH && \
-cd "$MODEL"-"$MAINTAINER"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 ls bench_*result\.*.txt | wc -l
 ```
 
@@ -277,7 +277,7 @@ Use the following command to identify which benchmark files are corrupted (becau
 ```
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
-cd "$MODEL"-"$MAINTAINER"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 grep -L -E 'KL divergence statistics|Final estimate: PPL over' bench_*result\.*.txt
 ```
 
@@ -292,7 +292,7 @@ Run this command to replace the `USER_REGEX` tensors to collect in the `collect_
 ```
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
-cd "$MODEL"-"$MAINTAINER"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 sed -i '/^USER_REGEX=(/,/^[[:space:]]*)/{//!d}; /^USER_REGEX=(/r /dev/fd/3' 3< <(cat "${BASELINE_QTYPE^^}_USER_REGEX.txt" | grep -v '=locked' | sed "s/=.*'$/'/g") "$WORKING_DIRECTORY"/"$MODEL"-BENCH/collect_ppl_results.sh && sed -i '/^BASELINE_QTYPE=/c\BASELINE_QTYPE="'"$BASELINE_QTYPE"'"' "$WORKING_DIRECTORY"/"$MODEL"-BENCH/collect_ppl_results.sh
 ```
 
@@ -306,7 +306,7 @@ Collect the benchmark results using this command:
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
 export PATH="$WORKING_DIRECTORY"/"$MODEL"-BENCH/:$PATH && \
-cd "$MODEL"-"$MAINTAINER"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 collect_ppl_results.sh --qtypes "$TARGET_QTYPE" --chunks 250 --no-percentage --auto-baseline "$BASELINE_QTYPE"
 ```
 
@@ -325,7 +325,7 @@ Use the following command to identify which tensors (or groups) failed to be ben
 ```
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
-cd "$MODEL"-"$MAINTAINER"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 awk -F',' 'NR==1 {for (i=1;i<=NF;i++) h[i]=$i; next} {for (i=1;i<=NF;i++) if ($i=="" || $i=="404" || $i=="404%") print h[i]}' kld_results.csv
 ```
 
@@ -344,7 +344,7 @@ To move and backup your previous benchmark results, use the following command - 
 ```
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
-cd "$MODEL"-"$MAINTAINER"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 BACKUP_DATETIME=$(date +"%Y%m%d_%H%M%S") && \
 mkdir -p "BACKUP_$BACKUP_DATETIME" && \
 mv *.csv bench_*.txt "BACKUP_$BACKUP_DATETIME" && \
@@ -375,7 +375,7 @@ To run the group0 benchmarking, run the following command:
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
 export PATH="$WORKING_DIRECTORY"/"$MODEL"-BENCH/:$PATH && \
-cd "$MODEL"-"$MAINTAINER"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 benchmark_each_tensor.sh --qtypes "$TARGET_QTYPE" --chunks 250 --group-tensors '.*' --benchmark-groups-only --qtypes iq1_s_r4 iq1_s iq1_kt iq1_m iq2_xxs iq2_kt iq2_ks iq2_xs iq2_k iq2_s q2_K iq2_kl iq3_xxs iq3_kt iq3_ks iq3_k iq3_s q3_K iq4_kss iq4_kt iq4_ks iq4_xs iq4_k iq4_nl q4_0 q4_K q4_1 iq5_ks iq5_k q5_0 q5_K q5_1 q6_0 q6_K iq6_k q8_0 bf16
 ```
 
@@ -401,7 +401,7 @@ Use the following command to count how many tensors/groups were benchmarked:
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
 export PATH="$WORKING_DIRECTORY"/"$MODEL"-BENCH/:$PATH && \
-cd "$MODEL"-"$MAINTAINER"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 ls bench_*result\.group0\.*.txt | wc -l
 ```
 
@@ -410,7 +410,7 @@ Use the following command to identify which benchmark files are corrupted (becau
 ```
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
-cd "$MODEL"-"$MAINTAINER"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 grep -L -E 'KL divergence statistics|Final estimate: PPL over' bench_*result\.group0\.*.txt
 ```
 
@@ -426,7 +426,7 @@ Collect the benchmark results using this command:
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
 export PATH="$WORKING_DIRECTORY"/"$MODEL"-BENCH/:$PATH && \
-cd "$MODEL"-"$MAINTAINER"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 collect_ppl_results.sh --chunks 250 --group-tensors '.*' --groups-only --no-percentage --auto-baseline "$BASELINE_QTYPE"
 ```
 
@@ -437,7 +437,7 @@ Use the following command to identify which quantization types failed to be benc
 ```
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
-cd "$MODEL"-"$MAINTAINER"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 awk -F',' 'NR==1 {for (i=1;i<=NF;i++) h[i]=$i; next} {for (i=1;i<=NF;i++) if ($i=="" || $i=="404" || $i=="404%") print h[i]}' kld_results.csv
 ```
 
@@ -452,7 +452,7 @@ Let's start by renaming the group0 degradation data results:
 ```
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
-cd "$MODEL"-"$MAINTAINER"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 mv ppl_results.csv ppl_results_partial.csv && \
 mv kld_results.csv kld_results_partial.csv
 ```
@@ -462,7 +462,7 @@ Now we must find the equation of the mean curve of our kld results:
 ```
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
-cd "$MODEL"-"$MAINTAINER"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 python3 ../model_tensor_bpw_metric.py --results-csv kld_results_partial.csv --c-free --exclude-qtypes '.*_bn.*$' --transforms "identity" --ignore-outliers 50 --allow-impure-map --p-grid-max 15 --p-grid-steps 100 --d-from-lowest 1 --penalize-above 15 --resemblance-metric r2 --equation-only --plot
 ```
 
@@ -471,7 +471,7 @@ Copy-paste this equation obtained into the following command (complete the `...`
 ```
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
-cd "$MODEL"-"$MAINTAINER"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 mkdir -p group0 && \
 python3 ../group0_enricher.py --output-csv group0/kld_results.csv --target-csv kld_results_partial.csv --target-mean-equation "y = ..."
 ```
