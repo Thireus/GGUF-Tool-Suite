@@ -83,8 +83,8 @@ Download the BF16 version of a supported model:
 ```
 cd "$WORKING_DIRECTORY"
 export PATH="$WORKING_DIRECTORY"/GGUF-Tool-Suite/:$PATH
-mkdir "$MODEL"-"$MAINTAINER"-BF16-SPECIAL_SPLIT && \
-cd "$MODEL"-"$MAINTAINER"-BF16-SPECIAL_SPLIT && \
+mkdir "$MODEL"-"${MAINTAINER^^}"-BF16-SPECIAL_SPLIT && \
+cd "$MODEL"-"${MAINTAINER^^}"-BF16-SPECIAL_SPLIT && \
 echo '.*=bf16' > bf16.recipe && \
 quant_downloader.sh bf16.recipe --qtype BF16
 ```
@@ -116,10 +116,10 @@ Split the BF16 model:
 ```
 cd "$WORKING_DIRECTORY"
 export PATH="$WORKING_DIRECTORY"/llama.cpp/build/bin/:$PATH && \
-mkdir "$MODEL"-"$MAINTAINER"-BF16-SPECIAL_SPLIT && \
-llama-gguf-split --split --no-tensor-first-split --split-max-tensors 1 "$MODEL"-BF16.gguf /"$WORKING_DIRECTORY"/"$MODEL"-"$MAINTAINER"-BF16-SPECIAL_SPLIT/model_name && \
-cd /"$WORKING_DIRECTORY"/"$MODEL"-"$MAINTAINER"-BF16-SPECIAL_SPLIT && \
-for f in $(ls); do mv -f $f $(echo $f | sed "s/model_name/$MODEL-"$MAINTAINER"-BF16-SPECIAL_TENSOR/g"); done
+mkdir "$MODEL"-"${MAINTAINER^^}"-BF16-SPECIAL_SPLIT && \
+llama-gguf-split --split --no-tensor-first-split --split-max-tensors 1 "$MODEL"-BF16.gguf /"$WORKING_DIRECTORY"/"$MODEL"-"${MAINTAINER^^}"-BF16-SPECIAL_SPLIT/model_name && \
+cd /"$WORKING_DIRECTORY"/"$MODEL"-"${MAINTAINER^^}"-BF16-SPECIAL_SPLIT && \
+for f in $(ls); do mv -f $f $(echo $f | sed "s/model_name/$MODEL-"${MAINTAINER^^}"-BF16-SPECIAL_TENSOR/g"); done
 ```
 
 Note: You can also have a look at the `monitor_and_split.sh` which automates splitting models.

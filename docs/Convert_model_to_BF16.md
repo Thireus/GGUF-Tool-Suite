@@ -96,18 +96,18 @@ Convert model to BF16 GGUF:
 
 ```
 cd "$WORKING_DIRECTORY"
-mkdir -p /"$WORKING_DIRECTORY"/"$MODEL"-"$MAINTAINER"-BF16-SPECIAL_SPLIT
+mkdir -p /"$WORKING_DIRECTORY"/"$MODEL"-"${MAINTAINER^^}"-BF16-SPECIAL_SPLIT
 # Activate env
 source venv/bin/activate && \
 cd llama.cpp && \
 ulimit -n 99999 && \
 python convert_hf_to_gguf.py \
      --outtype bf16 \
-     --outfile /"$WORKING_DIRECTORY"/"$MODEL"-"$MAINTAINER"-BF16-SPECIAL_SPLIT/model_name \
+     --outfile /"$WORKING_DIRECTORY"/"$MODEL"-"${MAINTAINER^^}"-BF16-SPECIAL_SPLIT/model_name \
      --no-tensor-first-split --split-max-tensors 1 \
      /"$WORKING_DIRECTORY"/huggingface/"$MODEL" 
-cd /"$WORKING_DIRECTORY"/"$MODEL"-"$MAINTAINER"-BF16-SPECIAL_SPLIT && \
-for f in $(ls); do mv -f $f $(echo $f | sed "s/model_name/$MODEL-$MAINTAINER-BF16-SPECIAL_TENSOR/g"); done
+cd /"$WORKING_DIRECTORY"/"$MODEL"-"${MAINTAINER^^}"-BF16-SPECIAL_SPLIT && \
+for f in $(ls); do mv -f $f $(echo $f | sed "s/model_name/$MODEL-${MAINTAINER^^}-BF16-SPECIAL_TENSOR/g"); done
 ```
 
 Once conversion is done, you can safely remove the `$MODEL` from the `huggingface` directory.
@@ -179,7 +179,7 @@ Enrich tensors.map that are ready with imatrix hash:
 ```
 cd "$WORKING_DIRECTORY"
 export PATH="$WORKING_DIRECTORY"/GGUF-Tool-Suite/:$PATH && \
-for q in $(ls -l */tensors.map | sed "s/.*-$MAINTAINER-//g" | cut -d'-' -f1); do cd "$WORKING_DIRECTORY" && sed -n '/:imatrix=/q1; $q0' ${MODEL}-${MAINTAINER}-${q^^}-SPECIAL_SPLIT/tensors.map && tail -n1 ${MODEL}-${MAINTAINER}-${q^^}-SPECIAL_SPLIT/tensors.map \
+for q in $(ls -l */tensors.map | sed "s/.*-${MAINTAINER^^}-//g" | cut -d'-' -f1); do cd "$WORKING_DIRECTORY" && sed -n '/:imatrix=/q1; $q0' ${MODEL}-${MAINTAINER}-${q^^}-SPECIAL_SPLIT/tensors.map && tail -n1 ${MODEL}-${MAINTAINER}-${q^^}-SPECIAL_SPLIT/tensors.map \
 | sed -nE '/-([0-9]+)-of-\1\.gguf:/q0; q1' && imatrix_tensors.py --map-file ${MODEL}-${MAINTAINER}-${q^^}-SPECIAL_SPLIT/tensors.map --output-map-file tensors.map imatrix_ubergarm.dat && mv -f tensors.map ${MODEL}-${MAINTAINER}-${q^^}-SPECIAL_SPLIT/tensors.map; done
 ```
 
@@ -188,7 +188,7 @@ for q in $(ls -l */tensors.map | sed "s/.*-$MAINTAINER-//g" | cut -d'-' -f1); do
 Create a GPG signing key:
 
 ```
-MAINTAINER_NAME="$(echo "$MAINTAINER" | awk '{for(i=1;i<=NF;i++){ $i=toupper(substr($i,1,1)) tolower(substr($i,2)) } print}')"
+MAINTAINER_NAME="$(echo "${MAINTAINER^^}" | awk '{for(i=1;i<=NF;i++){ $i=toupper(substr($i,1,1)) tolower(substr($i,2)) } print}')"
 gpg --batch --pinentry-mode ask --quick-gen-key "$MAINTAINER_NAME <$MAINTAINER_EMAIL>" rsa4096 sign 0
 ```
 
@@ -212,5 +212,5 @@ cd "$WORKING_DIRECTORY" && \
 source venv/bin/activate && \
 export PATH="$WORKING_DIRECTORY"/GGUF-Tool-Suite/helpers/:$PATH && \
 cd "$WORKING_DIRECTORY" && \
-for q in $(ls -l */tensors.map | sed "s/.*-$MAINTAINER-//g" | cut -d'-' -f1); do cd "$WORKING_DIRECTORY" && d="${MODEL}-THIREUS-${q^^}-SPECIAL_SPLIT" && ls "$d"/*.sig >/dev/null 2>&1 && echo "Skipping $d: .sig files found — run prepare_model.sh -p $d manually to replace signatures" || prepare_model.sh -p "$d"; done
+for q in $(ls -l */tensors.map | sed "s/.*-${MAINTAINER^^}-//g" | cut -d'-' -f1); do cd "$WORKING_DIRECTORY" && d="${MODEL}-THIREUS-${q^^}-SPECIAL_SPLIT" && ls "$d"/*.sig >/dev/null 2>&1 && echo "Skipping $d: .sig files found — run prepare_model.sh -p $d manually to replace signatures" || prepare_model.sh -p "$d"; done
 ```
