@@ -120,7 +120,7 @@ ls -l "$WORKING_DIRECTORY"/"$MODEL"-BENCH/benchmark_each_tensor.sh
 Open the script with your favourite editor, locate the line that states `# 9. PPL command template:`. Underneath that line you'll find `PPL_COMMAND_TEMPLATE='...`, replace the content of that multi-line variable with your command but make sure you add at the end of it these additional parameters: `-f imatrix-calibration-corpus-v02.txt --chunks ${PPL_COMMAND_CHUNKS_TO_PROCESS}`. Also, the `$MODEL_FILE` variable set before can be replaced by `{MODEL_FILE}` which the script will automatically replace by the model's first shard. So, our example becomes:
 
 ```
-PPL_COMMAND_TEMPLATE='CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0,2,1 ~/ik_llama-main-b3833-65dd65c-bin-win-cuda-12.8-x64/llama-perplexity \
+PPL_COMMAND_TEMPLATE='CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0,2,1 llama-perplexity \
 -m {MODEL_FILE} -mla 3 -fa on -amb 1024 -ctk f16 -c 512 -ngl 99 \
 -ot "blk\.(3|4|5)\.ffn_.*=CUDA0" -ot "blk\.(6|7|8)\.ffn_.*=CUDA1" -ot "blk\.(9|10)\.ffn_.*=CUDA2" \
 -ot exps=CPU -b 512 -ub 512 --warmup-batch --no-mmap --threads 36 --main-gpu 0 --seed 1337 \
@@ -136,7 +136,7 @@ cd "$WORKING_DIRECTORY" && \
 curl -L 'https://gist.githubusercontent.com/ubergarm/edfeb3ff9c6ec8b49e88cdf627b0711a/raw/ba5b01b6960a86874592f5913e283746ff734483/ubergarm-imatrix-calibration-corpus-v02.txt' -o imatrix-calibration-corpus-v02.txt && \
 cd "$MODEL"-BENCH && \
 cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
-ln -s "$WORKING_DIRECTORY"/imatrix-calibration-corpus-v02.txt .
+cp -f "$WORKING_DIRECTORY"/imatrix-calibration-corpus-v02.txt .
 ```
 
 Important: Double check that the additional `-f imatrix-calibration-corpus-v02.txt --chunks ${PPL_COMMAND_CHUNKS_TO_PROCESS}` parameters are present at the end of your `PPL_COMMAND_TEMPLATE` variable.
@@ -232,7 +232,7 @@ benchmark_each_tensor.sh --qtypes "$TARGET_QTYPE" --chunks 250
 
 Note: If you also identified tensors that can be benchmarked together from the optional `Reduce benchmarking costs` section, make sure to append to the `benchmark_each_tensor.sh` parameters the additional `--group-tensors` parameter.
 
-Important: I strongly advise reducing the chunks to a value below `250`. This value was identified to be the minimum decent KLD/PPL that won't hurt the calibration data. However, I recommend bumping this value to towards its maximum if possible.
+Important: I strongly advise against reducing the chunks to a value below `250`. This value was [assessed](https://github.com/Thireus/GGUF-Tool-Suite/issues/34#issuecomment-3519158063) to be the general minimum decent KLD/PPL that won't hurt the calibration data. However, I recommend bumping this value to towards its maximum if possible.
 
 It will take time... and could be optimised if we had a `llama-perplexity` binary that could only swap the necessary tensors after each benchmark round instead of unloading/reloading the entire model... I have opened [an issue](https://github.com/Thireus/GGUF-Tool-Suite/issues/30) in this regard if someone is willing to create a PR.
 
