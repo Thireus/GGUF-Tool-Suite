@@ -5,7 +5,7 @@
 #** GGUF files.                                               **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-07-2026 -------------------- **#
+#** --------------- Updated: Mar-28-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -47,9 +47,10 @@ import os
 # ---------------------------------------------------------------------
 
 # New CLI flags:
-#  -v / --verbose  : show informational/bootstrap logs (when absent, script is quiet except the final "=== Tensors ..." section)
-#  --venv          : use the portable venv bootstrap behavior (install/check deps and re-exec into venv if needed)
-#  -u / --update   : force update/bootstrapping even if a .verified marker exists
+#  -v / --verbose        : show informational/bootstrap logs (when absent, script is quiet except the final "=== Tensors ..." section)
+#  --venv                : use the portable venv bootstrap behavior (install/check deps and re-exec into venv if needed)
+#  -u / --update         : force update/bootstrapping even if a .verified marker exists
+#  --tensor-nbytes       : use tensor.n_bytes for byte reporting (may be inaccurate for quantization types which rely on an additional scale per tensor row - see https://github.com/Thireus/GGUF-Tool-Suite/discussions/53)
 #
 # NOTE: we intentionally default to NOT using the venv (so the script behaves
 # like it used to historically). The user must opt-in with --venv to enable
@@ -60,6 +61,7 @@ import os
 QUIET = True
 USE_VENV = False
 FORCE_UPDATE = False
+USE_TENSOR_NBYTES = False
 
 # Parse and remove our bootstrap flags early so they don't interfere with later
 # positional argument handling. Preserve -h/--help handling further down.
@@ -71,6 +73,8 @@ for a in sys.argv:
         USE_VENV = True
     elif a in ("-u", "--update"):
         FORCE_UPDATE = True
+    elif a == "--tensor-nbytes":
+        USE_TENSOR_NBYTES = True
     else:
         _new_argv.append(a)
 sys.argv[:] = _new_argv
@@ -101,6 +105,15 @@ def _info(msg: str):
                 sys.stderr.write("\n")
         except Exception:
             pass
+
+def _warn(msg: str):
+    """Print warnings to stderr."""
+    try:
+        sys.stderr.write("[gguf_info.py] Warning: " + msg)
+        if not msg.endswith("\n"):
+            sys.stderr.write("\n")
+    except Exception:
+        pass
 
 def _error(msg: str):
     """Always print errors to stderr (we keep errors visible even in quiet mode)."""
@@ -222,7 +235,7 @@ def _get_script_path() -> str:
         return _ORIG_ARGV[0] if _ORIG_ARGV else sys.argv[0]
 
 def _reexec_with_python(python_path: str):
-    """Re‑execute the script using the given python interpreter."""
+    """Re-execute the script using the given python interpreter."""
     script = _get_script_path()
     new_argv = [python_path, script] + (_ORIG_ARGV[1:] if len(_ORIG_ARGV) > 1 else [])
 
@@ -439,13 +452,13 @@ def _release_lock(lock_path: Path) -> None:
 # Helper utilities for reading/writing a multi-entry verified marker.
 # The marker format is intentionally simple and backward-compatible:
 # - Lines of the form "<creator_python_path>:<resolved_creator_path>:<venv_python_path>"
-#   (two‑part lines from older versions are also accepted, resolved = creator)
+#   (two-part lines from older versions are also accepted, resolved = creator)
 # - Lines starting with '#' are comments and ignored
 def _parse_verified_marker(marker_path: Path):
     """
     Parse the verified marker file.
     Returns a list of tuples (creator_path, resolved_path, venv_python_path).
-    For two‑part lines, resolved_path is set equal to creator_path.
+    For two-part lines, resolved_path is set equal to creator_path.
     """
     entries = []
     try:
@@ -843,11 +856,13 @@ def print_help(prog_name: str):
 Inspect tensors in a GGUF file.
 
 Options:
-  -h, --help      Show this help message and exit.
-  -               Read GGUF bytes from stdin (explicit).
-  -v, --verbose   Show informational/bootstrap logs (default: quiet).
-  --venv          Use the portable venv bootstrap behaviour (install/check deps).
-  -u, --update    Force update/bootstrapping even if a .verified marker exists.
+  -h, --help        Show this help message and exit.
+  -                 Read GGUF bytes from stdin (explicit).
+  -v, --verbose     Show informational/bootstrap logs (default: quiet).
+  --venv            Use the portable venv bootstrap behaviour (install/check deps).
+  -u, --update      Force update/bootstrapping even if a .verified marker exists.
+  --tensor-nbytes    Use tensor.n_bytes for byte reporting (may be inaccurate for quantization types which rely on an additional scale per tensor row - see https://github.com/Thireus/GGUF-Tool-Suite/discussions/53).
+
 If no path is given and stdin is not a TTY, the program will read piped bytes from stdin.
 Examples:
   {prog_name} model.gguf
@@ -952,6 +967,39 @@ def main():
     try:
         reader = GGUFReader(gguf_path)   # loads metadata & tensor index :contentReference[oaicite:0]{index=0}
 
+        tensors = reader.tensors
+        tensor_count = len(tensors)
+
+        if USE_TENSOR_NBYTES:
+            _warn("The --tensor-nbytes option uses tensor.n_bytes, which may be inaccurate for quantization types which rely on an additional scale per tensor row - see https://github.com/Thireus/GGUF-Tool-Suite/discussions/53.")
+        else:
+            if tensor_count != 1:
+                _error(
+                    f"Error: the default byte-count mode only works for GGUF files that contain exactly one tensor, "
+                    f"but {gguf_path.name} contains {tensor_count} tensors."
+                )
+                _error(
+                    "Re-run with --tensor-nbytes to use tensor.n_bytes instead, but note that it may be inaccurate "
+                    "for quantization types which rely on an additional scale per tensor row - see https://github.com/Thireus/GGUF-Tool-Suite/discussions/53."
+                )
+                sys.exit(1)
+
+        # Pre-compute the byte count in the default mode.
+        default_byte_count = None
+        if not USE_TENSOR_NBYTES:
+            single_tensor = tensors[0]
+            try:
+                file_size = gguf_path.stat().st_size
+                data_offset = int(single_tensor.data_offset)
+                default_byte_count = int(file_size - data_offset)
+                if default_byte_count < 0:
+                    raise ValueError(
+                        f"computed negative size ({default_byte_count}) from file size {file_size} and tensor.data_offset {data_offset}"
+                    )
+            except Exception as e:
+                _error(f"Error: failed to compute tensor bytes using file size minus tensor.data_offset: {e}")
+                sys.exit(1)
+
         # If we reached this point, the script successfully imported and used GGUFReader.
         # We update the verified marker only if we actually performed an install/update
         # in this run (i.e., if FORCE_UPDATE was given or if the environment variable
@@ -999,7 +1047,7 @@ def main():
         # but the "=== Tensors in ... ===" line is the required script output.
         print(f"=== Tensors in {gguf_path.name} ===")
         # reader.tensors is a list of TensorEntry objects :contentReference[oaicite:1]{index=1}
-        for tensor in reader.tensors:
+        for tensor in tensors:
             name = tensor.name
 
             # --- Shape: convert tensor.shape (array-like) into a Python tuple of ints
@@ -1028,21 +1076,24 @@ def main():
                     elements *= dim
 
             # --- Number of bytes:
-            if hasattr(tensor, 'n_bytes'):
-                try:
-                    byte_count = int(tensor.n_bytes)
-                except Exception:
-                    # fallback to data buffer size
+            if USE_TENSOR_NBYTES:
+                # This mode is retained for compatibility, but can be inaccurate for some quantization types.
+                if hasattr(tensor, 'n_bytes'):
+                    try:
+                        byte_count = int(tensor.n_bytes)
+                    except Exception:
+                        try:
+                            byte_count = tensor.data.nbytes
+                        except Exception:
+                            byte_count = None
+                else:
                     try:
                         byte_count = tensor.data.nbytes
                     except Exception:
                         byte_count = None
             else:
-                # fallback: if tensor.data is a NumPy array or memmap:
-                try:
-                    byte_count = tensor.data.nbytes
-                except Exception:
-                    byte_count = None
+                # Default mode: single-tensor GGUF only; compute bytes from file size minus tensor.data_offset.
+                byte_count = default_byte_count
 
             # Format byte_count if None
             byte_str = str(byte_count) if byte_count is not None else "unknown"
