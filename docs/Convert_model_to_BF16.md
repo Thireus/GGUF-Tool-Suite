@@ -166,6 +166,8 @@ Important: If the tensors.map is corrupted or incomplete I recommend killing `mo
 
 ## (optional) Enrich tensors.map with imatrix hash
 
+_Some utilities of the GGUF-Tool-Suite such as `quant_downloader.sh` may require information about the imatrix being used. This is relevant went quantizing tensors that are not downloadable for example, which the `quant_downloader.sh` can do._
+
 Obtain the GGUF-Tool-Suite:
 
 ```
@@ -184,6 +186,8 @@ for q in $(ls -l */tensors.map | sed "s/.*-${MAINTAINER^^}-//g" | cut -d'-' -f1)
 ```
 
 ## (optional) Produce GPG signatures
+
+_Signing the materials produced—the `tensors.map` file as well as the first GGUF shard that contains model metadata—achives two purposes: file integrity verification as well as proof that they were issued by the `$MAINTAINER` and not a bad actor. Some papers about various ways to attack GGUFs and LLMs are available online, such as https://arxiv.org/abs/2505.23786, and there are also more classic security exploits like CVE-2024-23496 and CVE-2024-25664 through CVE-2024-25668. Only use GGUFs from reputable, trusted authors—or alternatively self-quantize—to avoid potential exploits._
 
 Create a GPG signing key:
 
