@@ -3412,7 +3412,7 @@ def main():
         print("# - '*' means fallback tensors: these tensors were present in the map(s) with a different dtype than the originally-intended qtype;")
         print("#   They have been grouped and displayed as '*<qtype>' above to show the final (map-observed) qtype and sizes separately.")
     if any_dynamic_bpw:
-        print("# - ':' means this qtype has a tensor-shape-dependent bpw in this recipe due to an additional per-row scale overhead;")
+        print("# - ':' means this qtype has a tensor-shape-dependent bpw in this recipe due to a discovered additional per-row scale overhead;")
         print("#   For more information: https://github.com/Thireus/GGUF-Tool-Suite/discussions/53")
     if len(COMPUTED_QTYPES) > 0:
         print("# - '!' means qtypes for which the tensors map file was computed instead of downloaded;")
