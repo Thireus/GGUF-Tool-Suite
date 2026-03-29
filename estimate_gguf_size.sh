@@ -5,7 +5,7 @@
 #** tensor sizes for matched regex tensors.                   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Feb-11-2026 -------------------- **#
+#** --------------- Updated: Mar-29-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -18,7 +18,7 @@
 #**    /    o―ヽニニフ))             · · ɪǫ3_xxs      ~·°        **#
 #**    し―-J                                                   **#
 #**                                                           **#
-#** Copyright © 2025 - Thireus.           ₙₒ ₚᵣₒₘₚₜ, ₛₜᵢₗₗ ₜₐₗₖᵢₙ𝓰 **#
+#** Copyright © 2026 - Thireus.           ₙₒ ₚᵣₒₘₚₜ, ₛₜᵢₗₗ ₜₐₗₖᵢₙ𝓰 **#
 #***************************************************************#
 #**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
 #***************************************************************#
@@ -46,6 +46,158 @@ run_downloader() {
   local ret=$?
   set -e
   return $ret
+}
+
+# Lookup tables for estimating tensor size adjustments.
+# BPW is bytes-per-weight; the additional scale-factor table identifies qtypes
+# whose tensors may need an extra per-row scale bump depending on the parsed shape.
+declare -A BPW_TABLE=(
+  [F32]=32
+  [F16]=16
+  [BF16]=16
+  [Q8_0_R8]=8.5
+  [Q8_0]=8.5
+  [Q8_K_R8]=8.0625
+  [Q8_KV]=8
+  [F8]=8
+  [IQ6_K]=6.625
+  [Q6_K_R4]=6.5625
+  [Q6_K]=6.5625
+  [Q6_0_R4]=6.5
+  [Q6_0]=6.5
+  [Q5_1]=6
+  [Q5_K_R4]=5.5
+  [Q5_K]=5.5
+  [Q5_0_R4]=5.5
+  [Q5_0]=5.5
+  [IQ5_K_R4]=5.5
+  [IQ5_K]=5.5
+  [IQ5_KS_R4]=5.25
+  [IQ5_KS]=5.25
+  [Q4_1]=5
+  [Q4_K_R4]=4.5
+  [Q4_K]=4.5
+  [Q4_0_R8]=4.5
+  [Q4_0]=4.5
+  [IQ4_NL_R4]=4.5
+  [IQ4_NL]=4.5
+  [IQ4_K_R4]=4.5
+  [IQ4_K]=4.5
+  [IQ4_XS_R8]=4.25
+  [IQ4_XS]=4.25
+  [IQ4_KS_R4]=4.25
+  [IQ4_KS]=4.25
+  [IQ4_KT]=4
+  [IQ4_KSS]=4
+  [IQ3_KL]=4
+  [IQ3_M]=3.66
+  [Q3_K_R4]=3.4375
+  [Q3_K]=3.4375
+  [IQ3_S_R4]=3.4375
+  [IQ3_S]=3.4375
+  [IQ3_K_R4]=3.4375
+  [IQ3_K]=3.4375
+  [IQ3_XS]=3.3
+  [IQ3_KS]=3.1875
+  [IQ3_KT]=3.125
+  [IQ3_XXS_R4]=3.0625
+  [IQ3_XXS]=3.0625
+  [IQ2_M_R4]=2.7
+  [IQ2_M]=2.7
+  [IQ2_KL]=2.6875
+  [Q2_K_R4]=2.625
+  [Q2_K]=2.625
+  [IQ2_S]=2.5625
+  [IQ2_K_R4]=2.375
+  [IQ2_K]=2.375
+  [IQ2_XS_R4]=2.3125
+  [IQ2_XS]=2.3125
+  [IQ2_KS]=2.1875
+  [IQ2_KT]=2.125
+  [IQ2_XXS_R4]=2.0625
+  [IQ2_XXS]=2.0625
+  [IQ2_BN_R4]=2
+  [IQ2_BN]=2
+  [IQ1_M_R4]=1.75
+  [IQ1_M]=1.75
+  [IQ1_KT]=1.75
+  [IQ1_BN]=1.625
+  [IQ1_S]=1.5625
+  [IQ1_S_R4]=1.5
+)
+
+declare -A ADDITIONAL_SCALE_FACTOR_TABLE=(
+  [IQ1_BN]=2
+  [IQ1_KT]=4
+  [IQ2_BN]=4
+  [IQ2_BN_R4]=4
+  [IQ2_KL]=2
+  [IQ2_KS]=2
+  [IQ2_KT]=4
+  [IQ3_KS]=2
+  [IQ3_KT]=4
+  [IQ4_KS]=4
+  [IQ4_KSS]=4
+  [IQ4_KS_R4]=4
+  [IQ4_KT]=4
+  [IQ5_KS]=4
+  [IQ5_KS_R4]=4
+  [Q8_KV]=8
+  [IQ1_S_R4]=2
+  [IQ1_M_R4]=2
+  [Q8_KV_R8]=4
+)
+
+shape_tail_product() {
+  local shape="$1"
+  local -a dims=()
+  local prod=1
+  local i d
+
+  # Accept strings such as "shape=(2560, 151936)" or "(4096,)".
+  shape="${shape#shape=}"
+  shape="${shape//[\(\)\[\]]/}"
+
+  IFS=',' read -r -a dims <<< "$shape"
+  for ((i=1; i<${#dims[@]}; i++)); do
+    d="${dims[$i]//[[:space:]]/}"
+    [[ -z "$d" ]] && continue
+    prod=$((prod * d))
+  done
+
+  echo "$prod"
+}
+
+adjust_tensor_bytes() {
+  local dtype="$1"
+  local elements="$2"
+  local bytes="$3"
+  local shape="$4"
+  local dtype_upper="${dtype^^}"
+  local bpw="${BPW_TABLE[$dtype_upper]:-}"
+  local scale_factor="${ADDITIONAL_SCALE_FACTOR_TABLE[$dtype_upper]:-}"
+
+  # If we do not know this dtype, keep the original bytes value.
+  if [[ -z "$bpw" ]]; then
+    echo "$bytes"
+    return 0
+  fi
+
+  local base_bytes
+  base_bytes="$(awk -v e="$elements" -v b="$bpw" 'BEGIN{printf "%.10f", (e*b)/8.0}')"
+
+  # If the bytes match the base equation and this dtype has an extra scale factor,
+  # add the per-row scale bump using dim2*dim3*dim4... (tail product).
+  if [[ -n "$scale_factor" ]] && awk -v a="$bytes" -v b="$base_bytes" 'BEGIN{d=a-b; if (d<0) d=-d; exit(d <= 0.0001 ? 0 : 1)}'; then
+    local tail_product bump adjusted
+    tail_product="$(shape_tail_product "$shape")"
+    bump=$(( scale_factor * tail_product ))
+    adjusted=$(( bytes + bump ))
+    echo "$adjusted"
+    return 0
+  fi
+
+  echo "$bytes"
 }
 
 # Default map (used if not piped via stdin)
@@ -175,7 +327,7 @@ for q in "${_QTYPES[@]}"; do
 done
 
 #
-# 5) Scan all USER_MAP entries via grep+awk and accumulate
+# 5) Scan all USER_MAP entries via regex matching and accumulate adjusted bytes
 #
 total_bytes=0
 for regex in "${!USER_MAP[@]}"; do
@@ -185,28 +337,61 @@ for regex in "${!USER_MAP[@]}"; do
   else
     _tag=$tag
   fi
+
+  map_file="$TMPDIR/tensors.${_tag}.map"
+  if [[ ! -f "$map_file" ]]; then
+    echo "  [Warning] map file missing for tag '$_tag': $map_file" >&2
+    continue
+  fi
+
   echo "Scanning for tensor regex='$regex' with dtype='$tag' in '$_tag' map file…"
 
-  # get matching lines (or empty), never exit
-  matched_lines=$(awk 'NR==FNR { nums[++n]=$1; next }
-                     { for(i=1;i<=n;i++) if (FNR==nums[i]) print }
-                    ' <(printf '%s\n' $(cat "$TMPDIR/tensors.${_tag}.map" | cut -d: -f 3 | grep -E "$regex" -n | cut -d: -f 1)) "$TMPDIR/tensors.${_tag}.map" 2>/dev/null || true)
+  matched_lines_num=0
+  sum_bytes=0
 
-  # get number of matching lines
-  [[ "$matched_lines" != "" ]] && matched_lines_num=$(echo "$matched_lines" | grep "^.*$" -c) || matched_lines_num=0
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
 
-  # now filter & sum: catch any pipeline errors and default to 0
-  sum_bytes=$(
-    { printf "%s\n" "$matched_lines" \
-      | grep "dtype=$tag" \
-      | grep -o 'bytes=[0-9]\+' \
-      | cut -d= -f2 \
-      | awk '{s+=$1} END{print s+0}'; } || echo 0
-  )
+    # Parse the colon-separated line into fields; the tensor name is the third field.
+    IFS=':' read -r -a parts <<< "$line"
+    [[ ${#parts[@]} -lt 4 ]] && continue
 
-  if ! [[ "$sum_bytes" =~ ^[0-9]+$ ]]; then
-    sum_bytes=0
-  fi
+    tensor_name="${parts[2]}"
+    if ! [[ "$tensor_name" =~ $regex ]]; then
+      continue
+    fi
+
+    dtype=""
+    elements=""
+    bytes=""
+    shape=""
+
+    for token in "${parts[@]:3}"; do
+      case "$token" in
+        dtype=*) dtype="${token#dtype=}" ;;
+        elements=*) elements="${token#elements=}" ;;
+        bytes=*) bytes="${token#bytes=}" ;;
+        shape=*) shape="${token#shape=}" ;;
+      esac
+    done
+
+    dtype="${dtype//[[:space:]]/}"
+    elements="${elements//[[:space:]]/}"
+    bytes="${bytes//[[:space:]]/}"
+
+    [[ -z "$dtype" || -z "$bytes" ]] && continue
+    [[ "${dtype,,}" != "${tag,,}" ]] && continue
+
+    adjusted_bytes="$(adjust_tensor_bytes "$dtype" "$elements" "$bytes" "$shape")"
+
+    if [[ "$adjusted_bytes" != "$bytes" ]]; then
+      bump=$(( adjusted_bytes - bytes ))
+      echo "  → ${tensor_name}: bytes=${bytes} -> ${adjusted_bytes} (+${bump})"
+    fi
+
+    sum_bytes=$(( sum_bytes + adjusted_bytes ))
+    matched_lines_num=$(( matched_lines_num + 1 ))
+  done < "$map_file"
 
   echo "  → tensors for this pattern: $matched_lines_num → bytes for this pattern: $sum_bytes"
   total_bytes=$(( total_bytes + sum_bytes ))

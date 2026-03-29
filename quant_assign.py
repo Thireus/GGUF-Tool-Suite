@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-21-2026 -------------------- **#
+#** --------------- Updated: Mar-29-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -77,8 +77,256 @@ DEFAULT_REDUCE = {
      1: 0.395,
 }
 
-# Cache bpw observed per qtype whenever a tensors map file is processed
+# GGML quant sizes mapping as provided (kept same capitalization as given)
+GGML_QUANT_SIZES: Dict[str, Tuple[int, int]] = {
+    "F32" : (   1,    4),
+    "F16" : (   1,    2),
+    "Q4_0" : (  32,   18),
+    "Q4_1" : (  32,   20),
+    "Q5_0" : (  32,   22),
+    "Q5_1" : (  32,   24),
+    "Q8_0" : (  32,   34),
+    "Q8_1" : (  32,   36),
+    "Q2_K" : ( 256,   84),
+    "Q3_K" : ( 256,  110),
+    "Q4_K" : ( 256,  144),
+    "Q5_K" : ( 256,  176),
+    "Q6_K" : ( 256,  210),
+    "Q8_K" : ( 256,  292),
+    "IQ2_XXS" : ( 256,   66),
+    "IQ2_XS" : ( 256,   74),
+    "IQ3_XXS" : ( 256,   98),
+    "IQ1_S" : ( 256,   50),
+    "IQ4_NL" : (  32,   18),
+    "IQ3_S" : ( 256,  110),
+    "IQ2_S" : ( 256,   82),
+    "IQ4_XS" : ( 256,  136),
+    "I8" : (   1,    1),
+    "I16" : (   1,    2),
+    "I32" : (   1,    4),
+    "I64" : (   1,    8),
+    "F64" : (   1,    8),
+    "IQ1_M" : ( 256,   56),
+    "BF16" : (   1,    2),
+    "MXFP4" : (  32,   17),
+    "Q4_0_4_4" : (  32,   18),
+    "Q4_0_4_8" : (  32,   18),
+    "Q4_0_8_8" : (  32,   18),
+    "I2_S" : (   1,    1),
+    "Q8_0_X4" : (  32,   34),
+    "Q8_1_X4" : (  32,   36),
+    "Q8_2_X4" : (  32,   36),
+    "Q6_0" : (  32,   26),
+    "IQ1_BN" : (  64,   13),
+    "IQ2_BN" : (  64,   16),
+    "Q8_K64" : (  64,   68),
+    "IQ2_K" : ( 256,   76),
+    "IQ3_K" : ( 256,  110),
+    "IQ4_K" : ( 256,  144),
+    "IQ5_K" : ( 256,  176),
+    "IQ6_K" : ( 256,  212),
+    "IQ4_KS" : ( 256,  136),
+    "IQ2_KS" : ( 256,   70),
+    "IQ4_KSS" : ( 256,  128),
+    "Q8_K16" : (  64,   64),
+    "Q8_K32" : ( 256,  292),
+    "Q8_KR8" : ( 256,  292),
+    "Q8_K128" : ( 128,  140),
+    "Q8_KV" : (  32,   32),
+    "IQ5_KS" : ( 256,  168),
+    "IQ2_KT" : ( 256,   68),
+    "IQ3_KT" : ( 256,  100),
+    "IQ4_KT" : ( 256,  128),
+    "IQ3_KS" : ( 256,  102),
+    "IQ2_KL" : ( 256,   86),
+    "IQ1_KT" : ( 256,   56),
+    "Q4_0_R8" : (  32,   18),
+    "Q5_0_R4" : (  32,   22),
+    "Q8_0_R8" : (  32,   34),
+    "Q2_K_R4" : ( 256,   84),
+    "Q3_K_R4" : ( 256,  110),
+    "Q4_K_R4" : ( 256,  144),
+    "Q5_K_R4" : ( 256,  176),
+    "Q6_K_R4" : ( 256,  210),
+    "IQ2_XXS_R4" : ( 256,   66),
+    "IQ2_XS_R4" : ( 256,   74),
+    "IQ3_XXS_R4" : ( 256,   98),
+    "IQ1_S_R4" : (  32,    6),
+    "IQ4_NL_R4" : (  32,   18),
+    "IQ3_S_R4" : ( 256,  110),
+    "IQ2_S_R4" : ( 256,   82),
+    "IQ4_XS_R8" : ( 256,  136),
+    "IQ1_M_R4" : (  32,    7),
+    "BF16_R16" : (   1,    2),
+    "Q6_0_R4" : (  32,   26),
+    "IQ2_BN_R4" : (  64,   16),
+    "IQ2_K_R4" : ( 256,   76),
+    "IQ3_K_R4" : ( 256,  110),
+    "IQ4_K_R4" : ( 256,  144),
+    "IQ5_K_R4" : ( 256,  176),
+    "IQ4_KS_R4" : ( 256,  136),
+    "IQ5_KS_R4" : ( 256,  168),
+    "Q8_KV_R8" : (  32,   32),
+    "Q8_K_R8" : ( 256,  258),
+}
+
+# --- BPW lookup table for GGUF quant dtypes ---
+BPW_TABLE = {
+    'F32': 32,
+    'F16': 16,
+    'BF16': 16,
+    'Q8_0_R8': 8.5,
+    'Q8_0': 8.5,
+    'Q8_K_R8': 8.0625,
+    'Q8_KV': 8,
+    'F8': 8,
+    'IQ6_K': 6.625,
+    'Q6_K_R4': 6.5625,
+    'Q6_K': 6.5625,
+    'Q6_0_R4': 6.5,
+    'Q6_0': 6.5,
+    'Q5_1': 6,
+    'Q5_K_R4': 5.5,
+    'Q5_K': 5.5,
+    'Q5_0_R4': 5.5,
+    'Q5_0': 5.5,
+    'IQ5_K_R4': 5.5,
+    'IQ5_K': 5.5,
+    'IQ5_KS_R4': 5.25,
+    'IQ5_KS': 5.25,
+    'Q4_1': 5,
+    'Q4_K_R4': 4.5,
+    'Q4_K': 4.5,
+    'Q4_0_R8': 4.5,
+    'Q4_0': 4.5,
+    'IQ4_NL_R4': 4.5,
+    'IQ4_NL': 4.5,
+    'IQ4_K_R4': 4.5,
+    'IQ4_K': 4.5,
+    'IQ4_XS_R8': 4.25,
+    'IQ4_XS': 4.25,
+    'IQ4_KS_R4': 4.25,
+    'IQ4_KS': 4.25,
+    'IQ4_KT': 4,
+    'IQ4_KSS': 4,
+    'IQ3_KL': 4,
+    'IQ3_M': 3.66,
+    'Q3_K_R4': 3.4375,
+    'Q3_K': 3.4375,
+    'IQ3_S_R4': 3.4375,
+    'IQ3_S': 3.4375,
+    'IQ3_K_R4': 3.4375,
+    'IQ3_K': 3.4375,
+    'IQ3_XS': 3.3,
+    'IQ3_KS': 3.1875,
+    'IQ3_KT': 3.125,
+    'IQ3_XXS_R4': 3.0625,
+    'IQ3_XXS': 3.0625,
+    'IQ2_M_R4': 2.7,
+    'IQ2_M': 2.7,
+    'IQ2_KL': 2.6875,
+    'Q2_K_R4': 2.625,
+    'Q2_K': 2.625,
+    'IQ2_S': 2.5625,
+    'IQ2_K_R4': 2.375,
+    'IQ2_K': 2.375,
+    'IQ2_XS_R4': 2.3125,
+    'IQ2_XS': 2.3125,
+    'IQ2_KS': 2.1875,
+    'IQ2_KT': 2.125,
+    'IQ2_XXS_R4': 2.0625,
+    'IQ2_XXS': 2.0625,
+    'IQ2_BN_R4': 2,
+    'IQ2_BN': 2,
+    'IQ1_M_R4': 1.75,
+    'IQ1_M': 1.75,
+    'IQ1_KT': 1.75,
+    'IQ1_BN': 1.625,
+    'IQ1_S': 1.5625,
+    'IQ1_S_R4': 1.5
+}
+
+ADDITIONAL_SCALE_FACTOR_TABLE = {
+    'IQ1_BN': 2,
+    'IQ1_KT': 4,
+    'IQ2_BN': 4,
+    'IQ2_BN_R4': 4,
+    'IQ2_KL': 2,
+    'IQ2_KS': 2,
+    'IQ2_KT': 4,
+    'IQ3_KS': 2,
+    'IQ3_KT': 4,
+    'IQ4_KS': 4,
+    'IQ4_KSS': 4,
+    'IQ4_KS_R4': 4,
+    'IQ4_KT': 4,
+    'IQ5_KS': 4,
+    'IQ5_KS_R4': 4,
+    'Q8_KV': 8,
+    'IQ1_S_R4': 2,
+    'IQ1_M_R4': 2,
+    'Q8_KV_R8': 4
+}
+
+# Cache bpw observed per qtype and per tensor name whenever a tensors map file is processed.
+# Structure:
+#   QTYPE_BPW_CACHE[qtype_upper][tensor_name] = actual bpw (after scale correction if needed)
+#   QTYPE_BPW_BASE_CACHE[qtype_upper][tensor_name] = base bpw (without scale correction)
 QTYPE_BPW_CACHE = {}
+QTYPE_BPW_BASE_CACHE = {}
+
+def _canonical_qtype_key(qtype):
+    return transform_q_suffix(str(qtype)).upper()
+
+def _product(values):
+    out = 1
+    for v in values:
+        out *= int(v)
+    return out
+
+def _parse_shape_field(shape_text):
+    """
+    Parse shape=(2560, 151936) or shape=[2560, 151936] into [2560, 151936].
+    """
+    if not shape_text:
+        return []
+    s = str(shape_text).strip()
+    nums = re.findall(r'-?\d+', s)
+    return [int(n) for n in nums]
+
+def _static_bpw_for_qtype(qtype_upper):
+    """
+    Static fallback bpw when no tensor-specific cache is available yet.
+    """
+    q = _canonical_qtype_key(qtype_upper)
+    if q in BPW_TABLE:
+        return float(BPW_TABLE[q])
+    if q in GGML_QUANT_SIZES:
+        block_size, type_size = GGML_QUANT_SIZES[q]
+        return (type_size * 8.0) / block_size
+    return float('nan')
+
+def _register_tensor_bpw(qtype_upper, tensor_name, actual_bytes, base_bytes, elements):
+    """
+    Store tensor-specific bpw values for both actual and base caches.
+    """
+    q = _canonical_qtype_key(qtype_upper)
+    QTYPE_BPW_CACHE.setdefault(q, {})[tensor_name] = (actual_bytes * 8.0 / elements) if elements else 0.0
+    QTYPE_BPW_BASE_CACHE.setdefault(q, {})[tensor_name] = (base_bytes * 8.0 / elements) if elements else 0.0
+
+def _tensor_entry_bpw(qtype, tensor_name, use_base=False):
+    """
+    Convenience accessor for a tensor-specific bpw entry.
+    """
+    q = _canonical_qtype_key(qtype)
+    cache = QTYPE_BPW_BASE_CACHE if use_base else QTYPE_BPW_CACHE
+    return cache.get(q, {}).get(tensor_name)
+
+def _quant_sort_key(q):
+    q_key = _canonical_qtype_key(q)
+    bpw = get_bpw(q)
+    scale_factor = ADDITIONAL_SCALE_FACTOR_TABLE.get(q_key, 0)
+    return (bpw, scale_factor, q_key)
 
 script_dir = os.path.dirname(os.path.realpath(__file__))
 
@@ -268,17 +516,30 @@ def _call_normalised_ppl(keys):
 
 
 @tracked_lru_cache(maxsize=None)
-def get_bpw(qtype):
+def get_bpw(qtype, tensor_name=None, use_base=False):
     """
     Return the bpw for a given qtype.
+
+    - If tensor_name is provided, return the tensor-specific bpw.
+    - If tensor_name is omitted, return the average bpw across all cached tensors for that qtype.
+    - If use_base is True, use the base cache (without scale-correction); otherwise use the actual cache.
+    - If no cache is available yet, fall back to the static table.
     """
-    # infer bits-per-weight from data instead of hardcoding
-    if qtype not in QTYPE_BPW_CACHE:
-        _, _, _ = get_map_sizes_and_elements(qtype)
-    if qtype not in QTYPE_BPW_CACHE:
-        print(f"Error: No bpw can be found for {qtype} tensors, which may indicate the tensors.{qtype}.map file is missing any tensor of this type, try running the script using the --with-imatrix with or without --ignore-imatrix-rules or remove this quantization type completely.", file=sys.stderr)
-        sys.exit(1)
-    return QTYPE_BPW_CACHE[qtype]
+    q = _canonical_qtype_key(qtype)
+    cache = QTYPE_BPW_BASE_CACHE if use_base else QTYPE_BPW_CACHE
+    entries = cache.get(q, {})
+
+    if tensor_name is not None:
+        if tensor_name in entries:
+            return entries[tensor_name]
+        if entries:
+            return float(sum(entries.values())) / len(entries)
+        return _static_bpw_for_qtype(q)
+
+    if entries:
+        return float(sum(entries.values())) / len(entries)
+
+    return _static_bpw_for_qtype(q)
 
 @tracked_lru_cache(maxsize=None)
 def get_default_factor(qtype):
@@ -685,49 +946,95 @@ def get_map_sizes_and_elements(qtype, collect_raw = False):
         _quant_maps[qtype] = parse_map_file(qtype, collect_raw)
     return _quant_maps[qtype]
 
-def parse_map_file(qtype, collect_raw = False):
+def parse_map_file(qtype, collect_raw=False):
     """
     Parse local tensors.{qtype}.map into:
       - sizes: dict tensor_name -> bytes_size
       - actual_qtypes: dict tensor_name -> dtype (e.g., 'bf16', 'f32', 'q8_0', ...)
       - elements: dict tensor_name -> elements
+
+    This version is scale-aware:
+      - it captures tensor shape dims
+      - it computes both base bpw and actual bpw per tensor
+      - it corrects bytes for qtypes that need an additional per-row scale bump when the map file
+        stored bytes still match the base equation (elements * bpw / 8)
     """
     probe = 'bf16' if qtype == 'f32' else qtype
     path = os.path.join(TMP_DIR, f"tensors.{probe}.map")
     sizes = {}
     actual_qtypes = {}
     elements = {}
+
     if not os.path.exists(path):
         return sizes, actual_qtypes, elements
 
-    with open(path) as f:
+    with open(path, 'r', encoding='utf-8') as f:
         for line in f:
             parts = line.strip().split(':')
             if len(parts) < 5:
                 continue
-            # parts example:
-            # [file, checksum, tensor_name, shape=..., dtype=f32, elements=..., bytes=...]
+
             tensor_name = parts[2]
             # find dtype, bytes, elements fields
             dtype = None
             size_bytes = None
             elems = None
-            for p in parts:
-                if p.startswith('dtype='):
-                    dtype = transform_q_suffix(p.split('=', 1)[1]) # Ensures q..K and q..KV
+            shape_dims = []
+
+            for p in parts[3:]:
+                if p.startswith('shape='):
+                    shape_dims = _parse_shape_field(p.split('=', 1)[1])
+                elif p.startswith('dtype='):
+                    dtype = transform_q_suffix(p.split('=', 1)[1]).upper()
                 elif p.startswith('bytes='):
-                    size_bytes = int(p.split('=', 1)[1])
+                    try:
+                        size_bytes = int(p.split('=', 1)[1])
+                    except Exception:
+                        size_bytes = None
                 elif p.startswith('elements='):
-                    elems = int(p.split('=', 1)[1])
-                if dtype and size_bytes and elems and dtype not in QTYPE_BPW_CACHE:
-                    QTYPE_BPW_CACHE[dtype] = size_bytes * 8 / elems
+                    try:
+                        elems = int(p.split('=', 1)[1])
+                    except Exception:
+                        elems = None
+
             if dtype is None or size_bytes is None or elems is None:
                 # skip incomplete lines
                 continue
 
-            sizes[tensor_name] = size_bytes
-            actual_qtypes[tensor_name] = dtype
+            raw_bytes = int(size_bytes)
+            base_bytes = raw_bytes
+            corrected_bytes = raw_bytes
+
+            # Detect whether this qtype needs an additional scale bump and whether the map file
+            # still only contains the base equation size (elements * bpw / 8).
+            bpw_hint = BPW_TABLE.get(dtype)
+            if bpw_hint is None and dtype in GGML_QUANT_SIZES:
+                block_size, type_size = GGML_QUANT_SIZES[dtype]
+                bpw_hint = (type_size * 8.0) / block_size
+
+            if (
+                bpw_hint is not None
+                and dtype in ADDITIONAL_SCALE_FACTOR_TABLE
+                and elems > 0
+                and shape_dims
+            ):
+                expected_base = (elems * float(bpw_hint)) / 8.0
+                if abs(raw_bytes - expected_base) < 1e-6:
+                    scale_factor = ADDITIONAL_SCALE_FACTOR_TABLE[dtype]
+                    tail_product = _product(shape_dims[1:]) if len(shape_dims) > 1 else 1
+                    corrected_bytes = raw_bytes + (scale_factor * tail_product)
+
+            sizes[tensor_name] = corrected_bytes
+            actual_qtypes[tensor_name] = transform_q_suffix(parts[3].split('=', 1)[1]) if False else actual_qtypes.get(tensor_name, None)
+            # Overwrite actual_qtypes with the parsed dtype in its original case style
+            actual_qtypes[tensor_name] = transform_q_suffix(
+                next((p.split('=', 1)[1] for p in parts[3:] if p.startswith('dtype=')), '')
+            )
+
             elements[tensor_name] = elems
+
+            # Register tensor-specific bpw values
+            _register_tensor_bpw(dtype, tensor_name, corrected_bytes, raw_bytes, elems)
 
     # If NO_FALLBACK requested, synthesize faked sizes/dtypes for mismatching tensors
     if NO_FALLBACK and not collect_raw:
@@ -736,7 +1043,7 @@ def parse_map_file(qtype, collect_raw = False):
                 if INFO:
                     print(f"[Info] --no-fallback: Enforcing {qtype} qtype for {t} instead of fallback {actual_qtypes[t]} dtype present in tensors map file.", file=sys.stderr)
                 actual_qtypes[t] = qtype
-                sizes[t] = int(round(elements[t] * (QTYPE_BPW_CACHE[qtype] / 8)))
+                sizes[t] = int(round(elements[t] * (get_bpw(qtype, tensor_name=t) / 8.0)))
 
     return sizes, actual_qtypes, elements
 
@@ -1463,14 +1770,27 @@ def assign_qtype(default_qtype, regex_assign_list, quants, names):
     - If regex_assign_list is non-empty, scan in order, first match wins.
     - Otherwise fall back to default_qtype (or highest-bpw if default_qtype is None).
     """
-    # Resolve ultimate default
-    if default_qtype:
-        base_q = default_qtype
-    else:
-        base_q = max(quants, key=get_bpw)
+    def _bpw_for_tensor(q, tensor_name):
+        try:
+            bpw = get_bpw(q, tensor_name=tensor_name)
+            if bpw is None or not math.isfinite(float(bpw)):
+                raise ValueError
+            return float(bpw)
+        except Exception:
+            try:
+                bpw = get_bpw(q)
+                return float(bpw)
+            except Exception:
+                return float('-inf')
 
     out = {}
     for name in names:
+        if default_qtype:
+            base_q = default_qtype
+        else:
+            # Since we know the tensor name here, pick the best qtype for this specific tensor.
+            base_q = max(quants, key=lambda q: (_bpw_for_tensor(q, name), q))
+
         assigned = None
         # Try regex overrides first
         for pat, qt in regex_assign_list:
@@ -1836,6 +2156,90 @@ def parse_group_argument(arg_value, arg_name: str, parser, info_flag=False):
     return groups
 
 
+def build_recipe_bpw_stats(tensor_index):
+    """
+    Aggregate actual/base bytes and bpw per qtype from the recipe tensors actually produced.
+    Returns:
+      {
+        qtype: {
+          'count': int,
+          'bytes': int,
+          'base_bytes': int,
+          'elements': int,
+          'bpw_actual': float,
+          'bpw_base': float,
+          'dynamic': bool,
+        }
+      }
+    """
+    stats = {}
+
+    for cls in ('cpu', 'gpu'):
+        for e in tensor_index.get(cls, []):
+            q = e.get('final_q')
+            if not q:
+                continue
+
+            q = str(q)
+            s = stats.setdefault(q, {
+                'count': 0,
+                'bytes': 0,
+                'base_bytes': 0,
+                'elements': 0,
+                'dynamic': False,
+            })
+
+            s['count'] += 1
+            s['bytes'] += int(e.get('size', 0) or 0)
+            s['base_bytes'] += int(e.get('base_size', e.get('size', 0)) or 0)
+            s['elements'] += int(e.get('elements', 0) or 0)
+
+            if abs(float(e.get('bpw_actual', 0.0)) - float(e.get('bpw_base', 0.0))) > 1e-9:
+                s['dynamic'] = True
+
+    for q, s in stats.items():
+        elems = s['elements']
+        if elems > 0:
+            s['bpw_actual'] = (s['bytes'] * 8.0) / elems
+            s['bpw_base'] = (s['base_bytes'] * 8.0) / elems
+        else:
+            s['bpw_actual'] = 0.0
+            s['bpw_base'] = 0.0
+
+    return stats
+
+
+def record_tensor_index_entry(tensor_index, cls, name, orig_q, final_q, size, elements, kind):
+    """
+    Record a tensor entry with both actual and base bpw/size values.
+    """
+    q_for_bpw = final_q if final_q else orig_q
+    if not q_for_bpw:
+        q_for_bpw = 'f32'
+
+    actual_bpw = get_bpw(q_for_bpw, tensor_name=name)
+    base_bpw = get_bpw(q_for_bpw, tensor_name=name, use_base=True)
+
+    if actual_bpw is None or not math.isfinite(float(actual_bpw)):
+        actual_bpw = get_bpw(q_for_bpw)
+    if base_bpw is None or not math.isfinite(float(base_bpw)):
+        base_bpw = get_bpw(q_for_bpw, use_base=True)
+
+    base_size = int(round((elements * float(base_bpw)) / 8.0)) if elements else int(size)
+
+    tensor_index[cls].append({
+        'name': name,
+        'orig_q': orig_q,
+        'final_q': final_q,
+        'size': int(size),
+        'base_size': int(base_size),
+        'elements': int(elements),
+        'bpw_actual': float(actual_bpw),
+        'bpw_base': float(base_bpw),
+        'kind': kind,
+    })
+
+
 def main():
     global DEBUG, INFO, SKIP_GPG, ALL_GPG_SIGS_VALID, NO_FALLBACK
     global COMPUTE_MISSING_MAP, COMPUTE_ALL_MAP
@@ -2054,7 +2458,7 @@ def main():
     #     cpu_quants = DEFAULT_QUANTS
     # Reorder cpu_quants from highest to lowest bpw
     try:
-        cpu_quants = sorted(cpu_quants, key=get_bpw, reverse=True)
+        cpu_quants = sorted(cpu_quants, key=_quant_sort_key, reverse=True)
         if INFO: print(f"[Info] CPU-friendly quants reordered by bpw: {cpu_quants}", file=sys.stderr)
     except Exception:
         pass
@@ -2068,7 +2472,7 @@ def main():
     #     gpu_quants = DEFAULT_QUANTS
     # Reorder gpu_quants from highest to lowest bpw
     try:
-        gpu_quants = sorted(gpu_quants, key=get_bpw, reverse=True)
+        gpu_quants = sorted(gpu_quants, key=_quant_sort_key, reverse=True)
         if INFO: print(f"[Info] GPU-friendly quants reordered by bpw: {gpu_quants}", file=sys.stderr)
     except Exception:
         pass
@@ -2469,8 +2873,8 @@ def main():
         raw_max = args.cpu_tensors_max_size if cls == 'cpu' else args.gpu_tensors_max_size
         max_arg_bytes = None
         # Precompute extremes once
-        highest_q = max(quants, key=get_bpw)
-        lowest_q = min(quants, key=get_bpw)
+        highest_q = max(quants, key=_quant_sort_key)
+        lowest_q = min(quants, key=_quant_sort_key)
         max_ref = total_size_for_quant(names_to_assign, highest_q) + f32_offset[cls] + pre_assignments_offset[cls]
         min_ref = total_size_for_quant(names_to_assign, lowest_q) + f32_offset[cls] + pre_assignments_offset[cls]
         extremes[cls] = {
@@ -2667,11 +3071,16 @@ def main():
                     pre_assignments[name] = final_q
                 else:
                     assignments.setdefault(cls, {})[name] = final_q
-                tensor_index[cls].append({
-                    'name': name, 'orig_q': orig_q, 'final_q': final_q,
-                    'size': size, 'elements': elements, 'kind': 'f32'
-                })
-
+                record_tensor_index_entry(
+                    tensor_index=tensor_index,
+                    cls=cls,
+                    name=name,
+                    orig_q=orig_q,
+                    final_q=final_q,
+                    size=size,
+                    elements=elements,
+                    kind='f32',
+                )
             # group mismatches and print warnings (same behaviour as before)
             from collections import defaultdict
             pair_to_names = defaultdict(list)
@@ -2705,10 +3114,16 @@ def main():
                 pre_entries.append((name, orig_q, final_q))
                 # writeback
                 pre_assignments[name] = final_q
-                tensor_index[cls].append({
-                    'name': name, 'orig_q': orig_q, 'final_q': final_q,
-                    'size': size, 'elements': elements, 'kind': 'pre'
-                })
+                record_tensor_index_entry(
+                    tensor_index=tensor_index,
+                    cls=cls,
+                    name=name,
+                    orig_q=orig_q,
+                    final_q=final_q,
+                    size=size,
+                    elements=elements,
+                    kind='pre',
+                )
 
             # measured entries
             val_list = sorted((n for n in full if n in values), key=lambda n: values[n], reverse=True)
@@ -2727,10 +3142,16 @@ def main():
                 val_entries.append((name, orig_q, final_q))
                 # writeback
                 assignments.setdefault(cls, {})[name] = final_q
-                tensor_index[cls].append({
-                    'name': name, 'orig_q': orig_q, 'final_q': final_q,
-                    'size': size, 'elements': elements, 'kind': 'measured'
-                })
+                record_tensor_index_entry(
+                    tensor_index=tensor_index,
+                    cls=cls,
+                    name=name,
+                    orig_q=orig_q,
+                    final_q=final_q,
+                    size=size,
+                    elements=elements,
+                    kind='measured',
+                )
 
             # grouped warnings for pre / val phase (unchanged behavior)
             from collections import defaultdict
@@ -2831,6 +3252,10 @@ def main():
             seen.add(qt)
             ordered_qtypes.append(qt)
 
+    # Build per-qtype bpw stats from the actual recipe tensors
+    recipe_bpw_stats = build_recipe_bpw_stats(tensor_index)
+    any_dynamic_bpw = any(v.get('dynamic') for v in recipe_bpw_stats.values())
+
     for cls in ['gpu', 'cpu']:
         if cls == 'cpu' and not cpu_quants:
             continue # Skip loop if empty quants
@@ -2859,8 +3284,22 @@ def main():
             print(f"[Debug] _quants_list - ", _quants_list, file=sys.stderr)
         if DEBUG:
             print(f"[Debug] ordered_qtypes - ", ordered_qtypes, file=sys.stderr)
+
         candidate_quants = list(dict.fromkeys((quants_list or []) + list(ordered_qtypes)))
-        sorted_quants = sorted(candidate_quants, key=lambda q: get_bpw(q) or 0, reverse=True)
+
+        # Use the actual recipe bpw when available; fall back to the current get_bpw lookup otherwise.
+        def _sort_bpw_for_summary(q):
+            stats = recipe_bpw_stats.get(q, {})
+            bpw = stats.get('bpw_actual', None)
+            if bpw is None or not math.isfinite(float(bpw)):
+                try:
+                    bpw = get_bpw(q)
+                except Exception:
+                    bpw = 0
+            return float(bpw)
+
+        sorted_quants = sorted(candidate_quants, key=_sort_bpw_for_summary, reverse=True)
+
         if DEBUG:
             print(f"[Debug] sorted_quants - ", sorted_quants, file=sys.stderr)
 
@@ -2871,17 +3310,28 @@ def main():
 
         # '+' section: show user pre-assigned or f32 grouped by qt
         # '*' section: show user fallback grouped by qt
+        # ':' section: show user qt with dynamic bpw
         # '!' section: show user qt computed map files
         for qt in sorted_quants:
-            # bpw for this qtype (safe fallback 0)
-            try:
-                bpw_val = get_bpw(qt)
-            except Exception:
-                bpw_val = 0
-            bpw_str = f"{bpw_val:.4f}".rstrip('0').rstrip('.')
+            stats = recipe_bpw_stats.get(qt, {})
+            dynamic_bpw = bool(stats.get('dynamic', False))
 
-            # display version of qt (prefix '!' when computed)
-            display_qt = (f"!{qt}" if qt in COMPUTED_QTYPES else qt)
+            # bpw for this qtype (actual recipe bpw if available, otherwise safe fallback)
+            bpw_val = stats.get('bpw_actual', None)
+            if bpw_val is None or not math.isfinite(float(bpw_val)):
+                try:
+                    bpw_val = get_bpw(qt)
+                except Exception:
+                    bpw_val = 0
+            bpw_str = f"{float(bpw_val):.4f}".rstrip('0').rstrip('.')
+
+            # display version of qt
+            # keep the existing computed-map marker, and mark dynamic-bpw qtypes with :
+            display_qt = qt
+            if dynamic_bpw:
+                display_qt = f":{display_qt}"
+            if qt in COMPUTED_QTYPES:
+                display_qt = f"!{display_qt}"
 
             # all entries in the canonical registry for this class that end up with final_q == qt
             group_entries = [e for e in tensor_index.get(cls, []) if e.get('final_q') == qt]
@@ -2956,7 +3406,10 @@ def main():
     print("# - '+' means user-defined pre-assigned tensors, or tensor missing from csv data or f32 tensors")
     if total_fallbacks > 0:
         print("# - '*' means fallback tensors: these tensors were present in the map(s) with a different dtype than the originally-intended qtype;")
-        print("#   they have been grouped and displayed as '*<qtype>' above to show the final (map-observed) qtype and sizes separately.")
+        print("#   They have been grouped and displayed as '*<qtype>' above to show the final (map-observed) qtype and sizes separately.")
+    if any_dynamic_bpw:
+        print("# - ':' means this qtype has a tensor-shape–dependent bpw in this recipe due to an additional per-row scale overhead;")
+        print("#   For more information: https://github.com/Thireus/GGUF-Tool-Suite/discussions/53")
     if len(COMPUTED_QTYPES) > 0:
         print("# - '!' means qtypes for which the tensors map file was computed instead of downloaded;")
         print("#   This means the tensors assigned to these '!<qtype>' will likely need to be quantized locally as download links may not be available. ")
@@ -3012,6 +3465,16 @@ def main():
         Print entries from MAP_FILE_INFO sorted by get_bpw(qtype) (desc).
         Each printed block shows BPW (if available), SHA-256 and model name.
         """
+        def _map_sort_key(item):
+            map_filename, (qtype, _, _) = item
+            q_key = _canonical_qtype_key(qtype)
+            try:
+                bpw = float(get_bpw(qtype))
+            except Exception:
+                bpw = float("-inf")
+            scale_factor = ADDITIONAL_SCALE_FACTOR_TABLE.get(q_key, 0)
+            return (bpw, scale_factor, map_filename)
+
         # Cache bpw for each qtype to avoid repeated calls
         bpw_cache: Dict[str, float] = {}
         for _, (qtype, _, _) in MAP_FILE_INFO.items():
@@ -3026,12 +3489,8 @@ def main():
                 # If get_bpw fails for any qtype, place it at the bottom
                 bpw_cache[qtype] = float("-inf")
 
-        # Sort items by bpw descending; tie-break by filename (stable deterministic)
-        sorted_items = sorted(
-            MAP_FILE_INFO.items(),
-            key=lambda kv: (bpw_cache.get(kv[1][0], float("-inf")), kv[0]),
-            reverse=True
-        )
+        # Sort items by bpw descending; tie-break by higher additional scale factor first, then filename
+        sorted_items = sorted(MAP_FILE_INFO.items(), key=_map_sort_key, reverse=True)
 
         # Print lines in the requested format, including BPW
         for map_filename, (qtype, sha256sum, model_name) in sorted_items:

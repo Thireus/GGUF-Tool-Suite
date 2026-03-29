@@ -5,7 +5,7 @@
 #** different .map file qtype.                                **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-24-2026 -------------------- **#
+#** --------------- Updated: Mar-29-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -212,6 +212,28 @@ BPW_TABLE = {
     'IQ1_S_R4': 1.5
 }
 
+ADDITIONAL_SCALE_FACTOR_TABLE = {
+    'IQ1_BN': 2,
+    'IQ1_KT': 4,
+    'IQ2_BN': 4,
+    'IQ2_BN_R4': 4,
+    'IQ2_KL': 2,
+    'IQ2_KS': 2,
+    'IQ2_KT': 4,
+    'IQ3_KS': 2,
+    'IQ3_KT': 4,
+    'IQ4_KS': 4,
+    'IQ4_KSS': 4,
+    'IQ4_KS_R4': 4,
+    'IQ4_KT': 4,
+    'IQ5_KS': 4,
+    'IQ5_KS_R4': 4,
+    'Q8_KV': 8,
+    'IQ1_S_R4': 2,
+    'IQ1_M_R4': 2,
+    'Q8_KV_R8': 4
+}
+
 
 class TransformFailure(Exception):
     """Raised when a tensor cannot be transformed to a requested qtype."""
@@ -233,19 +255,39 @@ def failed_to_transform(tensor_name: str, requested_qtype: str, reason: str):
     raise TransformFailure(tensor_name, requested_qtype, reason)
 
 
-def tensor_size(elements: int, qtype_upper: str) -> int:
+def tensor_size(elements: int, qtype_upper: str, shape: List[int] | None = None) -> int:
     """
     Compute new bytes for a tensor with `elements` elements when
     quantized to `qtype_upper` (uppercase key in GGML_QUANT_SIZES).
 
     Formula: new_bytes = elements * type_size // block_size
-    We return an integer by using integer division (floor).
+
+    If the qtype has an additional per-row scale factor, add the extra
+    bytes bump when shape information is available.
     """
-    if qtype_upper not in GGML_QUANT_SIZES:
-        raise KeyError(f"qtype '{qtype_upper}' not in GGML_QUANT_SIZES")
-    block_size, type_size = GGML_QUANT_SIZES[qtype_upper]
-    # use integer arithmetic
-    return (elements * type_size) // block_size
+    qtype_key = qtype_upper.upper()
+    if qtype_key not in GGML_QUANT_SIZES:
+        raise KeyError(f"qtype '{qtype_key}' not in GGML_QUANT_SIZES")
+
+    block_size, type_size = GGML_QUANT_SIZES[qtype_key]
+    base_bytes = (elements * type_size) // block_size
+
+    extra_bytes = 0
+    scale_factor = ADDITIONAL_SCALE_FACTOR_TABLE.get(qtype_key)
+    if scale_factor is not None:
+        # Add the per-row scale bump when we have tensor shape information.
+        # The bump is applied to dim2*dim3*... (i.e. everything after the first dimension),
+        # consistent with the existing row-oriented handling in this script.
+        if shape is not None and len(shape) > 0:
+            tail_product = 1
+            if len(shape) > 1:
+                for dim in shape[1:]:
+                    tail_product *= int(dim) if int(dim) != 0 else 0
+            else:
+                tail_product = 1
+            extra_bytes = int(scale_factor * tail_product)
+
+    return base_bytes + extra_bytes
 
 
 def parse_kv_pairs(kv_list):
@@ -571,9 +613,10 @@ def attempt_transform_line(parts: List[str],
     # End of checks
     # ---------------------------
 
-    # --- NEW: parse shape and enforce GGML_ASSERT-derived constraints ---
+    # Parse shape and enforce GGML_ASSERT-derived constraints ---
     # Extract shape if available and parse into integers
     shape_val = kv_dict.get('shape')
+    parsed_shape = None
     parsed_nrows = None
     parsed_n_per_row = None
     if shape_val:
@@ -585,8 +628,10 @@ def attempt_transform_line(parts: List[str],
             # where shape=(per_row, nrows).
             try:
                 parsed_n_per_row = int(nums[0])
+                parsed_shape = [parsed_n_per_row]
             except Exception:
                 parsed_n_per_row = None
+                parsed_shape = None
             parsed_nrows = None
         elif len(nums) >= 2:
             # IMPORTANT: The .map file's shape ordering is interpreted here as (n_per_row, nrows).
@@ -595,9 +640,11 @@ def attempt_transform_line(parts: List[str],
             try:
                 parsed_n_per_row = int(nums[0])
                 parsed_nrows = int(nums[1])
+                parsed_shape = [int(n) for n in nums]
             except Exception:
                 parsed_nrows = None
                 parsed_n_per_row = None
+                parsed_shape = None
         # otherwise leave None for missing/unknown shapes
 
     # Call the shape/blocking constraint checker which will call failed_to_transform on failure
@@ -608,7 +655,7 @@ def attempt_transform_line(parts: List[str],
 
     # Compute new bytes using tensor_size function
     try:
-        new_bytes_val = tensor_size(elements_val, new_dtype.upper())
+        new_bytes_val = tensor_size(elements_val, new_dtype.upper(), shape=parsed_shape)
     except KeyError as e:
         reason = f"Requested qtype '{new_dtype.upper()}' not supported (needed for bytes computation)."
         failed_to_transform(tensor_name, qtype_upper, reason)
@@ -646,6 +693,8 @@ def build_fallback_candidates(initial_qtype_upper: str,
     Rules:
       - If initial was row-interleaved, try its non-row variant first (if different and available).
       - Then try qtypes with BPW >= initial_bpw in ascending order of BPW.
+      - For equal BPW, qtypes without an additional scale factor are ordered before those with one.
+      - Among qtypes that have an additional scale factor, lower scale factor comes first.
       - Never select any qtype containing '_BN' unless allowed_bn is True.
       - Apply whitelist (if non-empty) and forbidden regexes.
     Returns list of candidate qtypes (uppercase).
@@ -660,8 +709,16 @@ def build_fallback_candidates(initial_qtype_upper: str,
     # Prepare whitelist set (uppercase) if provided
     whitelist_set = set([w.upper() for w in whitelist]) if whitelist else None
 
-    # Create list of (bpw, q) sorted ascending bpw
-    items = sorted(bpw_table.items(), key=lambda kv: (kv[1], kv[0]))
+    def sort_key(item):
+        q, bpw = item
+        q_upper = q.upper()
+        extra = ADDITIONAL_SCALE_FACTOR_TABLE.get(q_upper)
+        has_extra = 1 if extra is not None else 0
+        extra_val = extra if extra is not None else 0
+        return (bpw, has_extra, extra_val, q)
+
+    # Create list of (bpw, q) sorted by BPW and then by additional scale factor preference
+    items = sorted(bpw_table.items(), key=sort_key)
 
     # Start from equal or higher bpw
     candidates = [q for q, bpw in [(k, v) for k, v in items] if bpw >= initial_bpw]

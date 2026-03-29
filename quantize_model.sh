@@ -5,7 +5,7 @@
 #** repositories from Thireus' special BF16 sharded model.    **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-27-2026 -------------------- **#
+#** --------------- Updated: Mar-29-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -111,6 +111,30 @@ declare -A BPW_TABLE=(
   [IQ1_S_R4]=1.5
 )
 
+# Additional scale factor table for qtypes that carry an extra per-row scale.
+# Smaller values should be preferred when BPW is the same.
+declare -A ADDITIONAL_SCALE_FACTOR_TABLE=(
+  [IQ1_BN]=2
+  [IQ1_KT]=4
+  [IQ2_BN]=4
+  [IQ2_BN_R4]=4
+  [IQ2_KL]=2
+  [IQ2_KS]=2
+  [IQ2_KT]=4
+  [IQ3_KS]=2
+  [IQ3_KT]=4
+  [IQ4_KS]=4
+  [IQ4_KSS]=4
+  [IQ4_KS_R4]=4
+  [IQ4_KT]=4
+  [IQ5_KS]=4
+  [IQ5_KS_R4]=4
+  [Q8_KV]=8
+  [IQ1_S_R4]=2
+  [IQ1_M_R4]=2
+  [Q8_KV_R8]=4
+)
+
 FALLBACK_LLAMA_QUANTS=("iq1_s" "iq1_m" "iq2_xxs" "iq2_xs" "iq2_s" "q2_K" "iq3_xxs" "iq3_s" "q3_K" "iq4_xs" "iq4_nl" "q4_0" "q4_K" "q4_1" "q5_0" "q5_K" "q5_1" "q6_K" "q8_0" "bf16")
 FALLBACK_IK_QUANTS=("iq1_s_r4" "iq1_s" "iq1_bn" "iq1_kt" "iq1_m" "iq1_m_r4" "iq2_bn" "iq2_bn_r4" "iq2_xxs" "iq2_xxs_r4" "iq2_kt" "iq2_ks" "iq2_xs" "iq2_xs_r4" "iq2_k" "iq2_k_r4" "iq2_s" "q2_K" "q2_k_r4" "iq2_kl" "iq3_xxs" "iq3_xxs_r4" "iq3_kt" "iq3_ks" "iq3_k" "iq3_k_r4" "iq3_s" "iq3_s_r4" "q3_K" "q3_k_r4" "iq4_kss" "iq4_kt" "iq4_ks" "iq4_ks_r4" "iq4_xs" "iq4_xs_r8" "iq4_k" "iq4_k_r4" "iq4_nl" "iq4_nl_r4" "q4_0" "q4_0_r8" "q4_K" "q4_k_r4" "q4_1" "iq5_ks" "iq5_ks_r4" "iq5_k" "iq5_k_r4" "q5_0" "q5_0_r4" "q5_K" "q5_k_r4" "q5_1" "q6_0" "q6_0_r4" "q6_K" "q6_k_r4" "iq6_k" "q8_KV" "q8_k_r8" "q8_0" "q8_0_r8" "bf16")
 # ------------------------------------------------------------------------
@@ -159,6 +183,16 @@ bpw_of() {
   qtype_upper="$(normalize_qtype "$1")"
   [[ -n "${BPW_TABLE[$qtype_upper]+x}" ]] || return 1
   printf '%s' "${BPW_TABLE[$qtype_upper]}"
+}
+
+scale_factor_of() {
+  local q_upper
+  q_upper="$(normalize_qtype "$1")"
+  if [[ -n "${ADDITIONAL_SCALE_FACTOR_TABLE[$q_upper]+x}" ]]; then
+    printf '%s' "${ADDITIONAL_SCALE_FACTOR_TABLE[$q_upper]}"
+  else
+    printf '%s' 0
+  fi
 }
 
 qtype_in_list() {
@@ -385,25 +419,24 @@ cleanup_partial_output() {
 }
 
 next_fallback_qtype() {
-  local current_upper="$1"
+  local current_qtype="$1"
   shift
 
-  local current_bpw candidate_upper candidate_bpw candidate_key
-  current_upper="$(normalize_qtype "$current_upper")"
+  local current_upper current_bpw current_base current_is_variant
+  current_upper="$(normalize_qtype "$current_qtype")"
   current_bpw="$(bpw_of "$current_upper")" || return 1
 
-  local current_base current_variant
   current_base="$(qtype_base_without_r4_r8 "$current_upper")"
-  current_variant=0
-  if qtype_is_r4_or_r8 "$current_upper"; then
-    current_variant=1
-  fi
+  current_is_variant=0
+  qtype_is_r4_or_r8 "$current_upper" && current_is_variant=1
 
-  local -a tested_qtypes=("$@")
   local -a candidates=()
-  local idx
-  for idx in "${!FALLBACK_QTYPES[@]}"; do
-    candidate_upper="$(normalize_qtype "${FALLBACK_QTYPES[$idx]}")"
+  local idx candidate_raw candidate_upper candidate_bpw candidate_base candidate_is_variant
+  local same_bpw_rank same_stem_rank stem_variant_rank scale_rank i_rank suffix_group_rank suffix_rank sort_key
+
+  for idx in "$@"; do
+    candidate_raw="$idx"
+    candidate_upper="$(normalize_qtype "$candidate_raw")"
 
     [[ "$candidate_upper" == "BF16" ]] && continue
     [[ "$candidate_upper" == "$current_upper" ]] && continue
@@ -413,58 +446,83 @@ next_fallback_qtype() {
     candidate_bpw="$(bpw_of "$candidate_upper")" || continue
     is_float_greater_or_equal "$candidate_bpw" "$current_bpw" || continue
 
-    local candidate_base candidate_variant same_bpw_priority same_stem_priority same_stem_relation i_priority suffix_priority suffix_rank
     candidate_base="$(qtype_base_without_r4_r8 "$candidate_upper")"
-    candidate_variant=0
-    if qtype_is_r4_or_r8 "$candidate_upper"; then
-      candidate_variant=1
+    candidate_is_variant=0
+    qtype_is_r4_or_r8 "$candidate_upper" && candidate_is_variant=1
+
+    # Same BPW first; higher BPW only after same BPW candidates are exhausted.
+    if [[ "$candidate_bpw" == "$current_bpw" ]]; then
+      same_bpw_rank=0
+    else
+      same_bpw_rank=1
     fi
 
-    same_bpw_priority=1
-    [[ "$candidate_bpw" == "$current_bpw" ]] && same_bpw_priority=0
-
-    same_stem_priority=1
-    same_stem_relation=2
+    # Same stem (base <-> _R4/_R8) is always preferred before other candidates of the same BPW.
     if [[ "$candidate_base" == "$current_base" ]]; then
-      same_stem_priority=0
-      if (( candidate_variant != current_variant )); then
-        same_stem_relation=0
+      same_stem_rank=0
+      if (( current_is_variant )); then
+        # Current is *_R4 or *_R8: try base first, then other variants.
+        if (( candidate_is_variant == 0 )); then
+          stem_variant_rank=0
+        else
+          stem_variant_rank=$((1 + $(qtype_suffix_rank "$candidate_upper")))
+        fi
       else
-        same_stem_relation=1
+        # Current is base: try suffix variants first, then base-like candidates.
+        if (( candidate_is_variant )); then
+          stem_variant_rank="$(qtype_suffix_rank "$candidate_upper")"
+        else
+          stem_variant_rank=99
+        fi
       fi
+    else
+      same_stem_rank=1
+      stem_variant_rank=0
     fi
 
-    i_priority=1
-    [[ "$candidate_upper" == I* ]] && i_priority=0
+    # Smaller additional scale factor first for qtypes with the same BPW.
+    # Qtypes without an additional scale factor are treated as scale factor 0.
+    scale_rank="$(scale_factor_of "$candidate_upper")"
 
-    suffix_priority=0
-    if qtype_is_r4_or_r8 "$candidate_upper"; then
-      suffix_priority=1
+    # Within the same BPW, prioritize i* quants over non-i quants.
+    if [[ "$candidate_upper" == I* ]]; then
+      i_rank=0
+    else
+      i_rank=1
     fi
 
-    suffix_rank="$(qtype_suffix_rank "$candidate_upper")"
+    # Within the same BPW, prefer non-_R4/_R8 before _R4/_R8, unless same-stem rules above take precedence.
+    if (( candidate_is_variant )); then
+      suffix_group_rank=1
+      suffix_rank="$(qtype_suffix_rank "$candidate_upper")"
+    else
+      suffix_group_rank=0
+      suffix_rank=0
+    fi
 
-    candidate_key="$(printf '%d|%s|%d|%d|%d|%d|%s' \
-      "$same_bpw_priority" \
-      "$candidate_bpw" \
-      "$same_stem_priority" \
-      "$same_stem_relation" \
-      "$i_priority" \
-      "$suffix_priority" \
-      "$suffix_rank|$candidate_upper")"
+    sort_key="$(printf '%d|%d|%d|%d|%d|%d|%d|%s' \
+      "$same_bpw_rank" \
+      "$same_stem_rank" \
+      "$stem_variant_rank" \
+      "$scale_rank" \
+      "$i_rank" \
+      "$suffix_group_rank" \
+      "$suffix_rank" \
+      "$candidate_upper")"
 
-    candidates+=("$candidate_key")
+    candidates+=("$sort_key")
   done
 
   ((${#candidates[@]} > 0)) || return 1
 
-  candidate_key="$(
+  local chosen
+  chosen="$(
     printf '%s\n' "${candidates[@]}" \
-      | sort -t'|' -k1,1n -k2,2g -k3,3n -k4,4n -k5,5n -k6,6n -k7,7 \
+      | sort -t'|' -k1,1n -k2,2n -k3,3n -k4,4n -k5,5n -k6,6n -k7,7n -k8,8 \
       | head -n1
   )"
 
-  printf '%s' "${candidate_key##*|}"
+  printf '%s' "${chosen##*|}"
 }
 
 print_summary() {
