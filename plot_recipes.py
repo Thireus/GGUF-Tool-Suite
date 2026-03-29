@@ -5,7 +5,7 @@
 #** results on a graph and saves them as svg and csv files.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jan-16-2026 -------------------- **#
+#** --------------- Updated: Mar-29-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -18,7 +18,7 @@
 #**    /    o―ヽニニフ))             · · ɪǫ3_xxs      ~·°        **#
 #**    し―-J                                                   **#
 #**                                                           **#
-#** Copyright © 2025 - Thireus.         Fₐ𝒸ₜ₋𝒸ₕₑ𝒸ₖₛ? Wₕₐₜ’ₛ ₜₕₐₜ? **#
+#** Copyright © 2026 - Thireus.         Fₐ𝒸ₜ₋𝒸ₕₑ𝒸ₖₛ? Wₕₐₜ’ₛ ₜₕₐₜ? **#
 #***************************************************************#
 #**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
 #***************************************************************#
@@ -105,6 +105,28 @@ BPW_TABLE = {
     'IQ1_BN': 1.625,
     'IQ1_S': 1.5625,
     'IQ1_S_R4': 1.5
+}
+
+ADDITIONAL_SCALE_FACTOR_TABLE = {
+    'IQ1_BN': 2,
+    'IQ1_KT': 4,
+    'IQ2_BN': 4,
+    'IQ2_BN_R4': 4,
+    'IQ2_KL': 2,
+    'IQ2_KS': 2,
+    'IQ2_KT': 4,
+    'IQ3_KS': 2,
+    'IQ3_KT': 4,
+    'IQ4_KS': 4,
+    'IQ4_KSS': 4,
+    'IQ4_KS_R4': 4,
+    'IQ4_KT': 4,
+    'IQ5_KS': 4,
+    'IQ5_KS_R4': 4,
+    'Q8_KV': 8,
+    'IQ1_S_R4': 2,
+    'IQ1_M_R4': 2,
+    'Q8_KV_R8': 4
 }
 
 def extract_model_name(base: str) -> str:
@@ -216,6 +238,9 @@ def map_bpw_to_qtype(bpw):
     - Filter out keys that begin with f (case-insensitive).
     - Filter out keys that end with _bn, _kv or _r<digit> (case-insensitive).
     - Prefer non-IQ variants over IQ when distances are equal.
+    - When several candidates share the same base bpw, prefer:
+      * no additional scale factor first when the target bpw is at or below that base bpw
+      * the highest additional scale factor first when the target bpw is above that base bpw
     - Return the selected nearest QTYPE formatted in lower case, except:
       * if it begins with 'q' and ends with '_k' -> format as e.g. 'q4_K'
       * if it begins with 'q' and ends with '_kv' -> format as e.g. 'q8_KV'
@@ -228,9 +253,13 @@ def map_bpw_to_qtype(bpw):
     # prepare regex for filtering suffixes (_bn, _kv, _r[0-9]+)
     suffix_filter_re = re.compile(r'_(bn|kv|r\d+)$', re.IGNORECASE)
 
-    best_candidates = []
-    best_diff = None
+    def candidate_extra_scale_factor(qtype_key: str) -> float:
+        return float(ADDITIONAL_SCALE_FACTOR_TABLE.get(qtype_key.upper(), 0.0))
 
+    def candidate_has_extra_scale_factor(qtype_key: str) -> bool:
+        return qtype_key.upper() in ADDITIONAL_SCALE_FACTOR_TABLE
+
+    candidates = []
     for key, val in BPW_TABLE.items():
         # skip filtered keys
         if prefix_filter_re.search(key):
@@ -238,31 +267,57 @@ def map_bpw_to_qtype(bpw):
         if suffix_filter_re.search(key):
             continue
         diff = abs(bpw - float(val))
-        if (best_diff is None) or (diff < best_diff - 1e-9):
-            best_diff = diff
-            best_candidates = [key]
-        elif abs(diff - best_diff) <= 1e-9:
-            best_candidates.append(key)
+        candidates.append((diff, key, float(val)))
 
-    if not best_candidates:
+    if not candidates:
         # If nothing remains after filtering, fall back to all keys (no filter)
         for key, val in BPW_TABLE.items():
             diff = abs(bpw - float(val))
-            if (best_diff is None) or (diff < best_diff - 1e-9):
-                best_diff = diff
-                best_candidates = [key]
-            elif abs(diff - best_diff) <= 1e-9:
-                best_candidates.append(key)
+            candidates.append((diff, key, float(val)))
 
-    # If multiple candidates, prefer non-IQ over IQ
-    if len(best_candidates) > 1:
-        non_iq = [k for k in best_candidates if not k.upper().startswith('IQ')]
-        if non_iq:
-            chosen = sorted(non_iq)[0]
+    if not candidates:
+        return ''
+
+    # Find the smallest distance first
+    best_diff = min(diff for diff, _, _ in candidates)
+    best_candidates = [(key, val) for diff, key, val in candidates if abs(diff - best_diff) <= 1e-9]
+
+    # If all best candidates share the same base bpw, use the additional-scale tie-break logic.
+    base_values = {val for _, val in best_candidates}
+    if len(best_candidates) > 1 and len(base_values) == 1:
+        base_val = next(iter(base_values))
+        # For bpw above the base, prefer candidates with the highest additional scale factor.
+        # For bpw below or equal to the base, prefer candidates with the lowest additional scale factor.
+        if bpw > base_val:
+            best_candidates = sorted(
+                best_candidates,
+                key=lambda kv: (
+                    -candidate_extra_scale_factor(kv[0]),
+                    0 if not candidate_has_extra_scale_factor(kv[0]) else 1,
+                    kv[0]
+                )
+            )
         else:
-            chosen = sorted(best_candidates)[0]
+            best_candidates = sorted(
+                best_candidates,
+                key=lambda kv: (
+                    candidate_extra_scale_factor(kv[0]),
+                    0 if not candidate_has_extra_scale_factor(kv[0]) else 1,
+                    kv[0]
+                )
+            )
     else:
-        chosen = best_candidates[0]
+        # Keep prior preference: non-IQ over IQ when equal distance, then lexicographic.
+        if len(best_candidates) > 1:
+            non_iq = [k for k, _ in best_candidates if not k.upper().startswith('IQ')]
+            if non_iq:
+                chosen = sorted(non_iq)[0]
+                chosen_val = next(val for k, val in best_candidates if k == chosen)
+                best_candidates = [(chosen, chosen_val)]
+            else:
+                best_candidates = sorted(best_candidates, key=lambda kv: kv[0])
+
+    chosen = best_candidates[0][0]
 
     # format chosen according to rules: lower case, but special _K/_KV uppercase if begins with q
     chosen_lower = chosen.lower()

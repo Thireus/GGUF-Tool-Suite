@@ -5,7 +5,7 @@
 #** quantized model bpw versus reported metrics such as KLD.  **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-22-2026 -------------------- **#
+#** --------------- Updated: Mar-29-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -49,13 +49,160 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 RE_DTYPE = re.compile(r"\bdtype=([^:]+)", flags=re.IGNORECASE)
 RE_ELEMENTS = re.compile(r"\belements=(\d+)", flags=re.IGNORECASE)
 RE_BYTES = re.compile(r"\bbytes=(\d+)", flags=re.IGNORECASE)
+RE_SHAPE = re.compile(r"\bshape=\(([^)]*)\)", flags=re.IGNORECASE)
 
 ACCEPT_F32 = {"f32"}  # only accept 'f32' (not 'fp32' or 'float32')
+
+# BPW lookup table (used to detect the base bytes before additional scale bumps)
+BPW_TABLE = {
+    "F32": 32,
+    "F16": 16,
+    "BF16": 16,
+    "Q8_KV": 8,
+    "Q8_KV_R8": 4,
+    "Q8_K_R8": 8.0625,
+    "IQ6_K": 6.625,
+    "Q6_K_R4": 6.5625,
+    "Q6_K": 6.5625,
+    "Q6_0_R4": 6.5,
+    "Q6_0": 6.5,
+    "Q5_1": 6,
+    "Q5_K_R4": 5.5,
+    "Q5_K": 5.5,
+    "Q5_0_R4": 5.5,
+    "Q5_0": 5.5,
+    "IQ5_K_R4": 5.5,
+    "IQ5_K": 5.5,
+    "IQ5_KS_R4": 5.25,
+    "IQ5_KS": 5.25,
+    "Q4_1": 5,
+    "Q4_K_R4": 4.5,
+    "Q4_K": 4.5,
+    "Q4_0_R8": 4.5,
+    "Q4_0": 4.5,
+    "IQ4_NL_R4": 4.5,
+    "IQ4_NL": 4.5,
+    "IQ4_K_R4": 4.5,
+    "IQ4_K": 4.5,
+    "IQ4_XS_R8": 4.25,
+    "IQ4_XS": 4.25,
+    "IQ4_KS_R4": 4.25,
+    "IQ4_KS": 4.25,
+    "IQ4_KT": 4,
+    "IQ4_KSS": 4,
+    "IQ3_KL": 4,
+    "IQ3_M": 3.66,
+    "Q3_K_R4": 3.4375,
+    "Q3_K": 3.4375,
+    "IQ3_S_R4": 3.4375,
+    "IQ3_S": 3.4375,
+    "IQ3_K_R4": 3.4375,
+    "IQ3_K": 3.4375,
+    "IQ3_XS": 3.3,
+    "IQ3_KS": 3.1875,
+    "IQ3_KT": 3.125,
+    "IQ3_XXS_R4": 3.0625,
+    "IQ3_XXS": 3.0625,
+    "IQ2_M_R4": 2.7,
+    "IQ2_M": 2.7,
+    "IQ2_KL": 2.6875,
+    "Q2_K_R4": 2.625,
+    "Q2_K": 2.625,
+    "IQ2_S": 2.5625,
+    "IQ2_K_R4": 2.375,
+    "IQ2_K": 2.375,
+    "IQ2_XS_R4": 2.3125,
+    "IQ2_XS": 2.3125,
+    "IQ2_KS": 2.1875,
+    "IQ2_KT": 2.125,
+    "IQ2_XXS_R4": 2.0625,
+    "IQ2_XXS": 2.0625,
+    "IQ2_BN_R4": 2,
+    "IQ2_BN": 2,
+    "IQ1_M_R4": 1.75,
+    "IQ1_M": 1.75,
+    "IQ1_KT": 1.75,
+    "IQ1_BN": 1.625,
+    "IQ1_S": 1.5625,
+    "IQ1_S_R4": 1.5,
+}
+
+# Additional scale factor table: these dtypes need an extra per-row scale bump
+# when the stored bytes still match the base elements*bpw/8 formula.
+ADDITIONAL_SCALE_FACTOR_TABLE = {
+    "IQ1_BN": 2,
+    "IQ1_KT": 4,
+    "IQ2_BN": 4,
+    "IQ2_BN_R4": 4,
+    "IQ2_KL": 2,
+    "IQ2_KS": 2,
+    "IQ2_KT": 4,
+    "IQ3_KS": 2,
+    "IQ3_KT": 4,
+    "IQ4_KS": 4,
+    "IQ4_KSS": 4,
+    "IQ4_KS_R4": 4,
+    "IQ4_KT": 4,
+    "IQ5_KS": 4,
+    "IQ5_KS_R4": 4,
+    "Q8_KV": 8,
+    "IQ1_S_R4": 2,
+    "IQ1_M_R4": 2,
+    "Q8_KV_R8": 4,
+}
 
 
 # --------------------------
 # utilities & map parsing
 # --------------------------
+
+def parse_shape_from_line(line: str) -> Optional[List[int]]:
+    m = RE_SHAPE.search(line)
+    if not m:
+        return None
+    raw = m.group(1).strip()
+    if raw == "":
+        return []
+    dims: List[int] = []
+    for tok in raw.split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        try:
+            dims.append(int(tok))
+        except Exception:
+            dims.append(0)
+    return dims
+
+
+def adjust_reported_bytes_for_extra_scale(dtype: Optional[str],
+                                          elements: Optional[int],
+                                          bytes_: Optional[int],
+                                          shape: Optional[List[int]]) -> Optional[int]:
+    """
+    If dtype is one of the additional-scale types and the reported bytes still match
+    the base elements*bpw/8 equation, add the extra per-row scale bump.
+    """
+    if dtype is None or elements is None or bytes_ is None or not shape:
+        return bytes_
+
+    qtype_upper = dtype.upper()
+    scale_factor = ADDITIONAL_SCALE_FACTOR_TABLE.get(qtype_upper)
+    bpw = BPW_TABLE.get(qtype_upper)
+    if scale_factor is None or bpw is None:
+        return bytes_
+
+    expected_base_bytes = (elements * bpw) / 8.0
+    if not math.isclose(float(bytes_), expected_base_bytes, rel_tol=0.0, abs_tol=1e-9):
+        return bytes_
+
+    tail_product = 1
+    if len(shape) > 1:
+        for dim in shape[1:]:
+            tail_product *= int(dim)
+
+    return int(bytes_ + (scale_factor * tail_product))
+
 
 def parse_map_line(line: str) -> Optional[Tuple[Optional[str], Optional[int], Optional[int], str]]:
     if not line or not line.strip():
@@ -113,7 +260,21 @@ def load_parsed_entries_from_mapfile(path: str) -> Tuple[Optional[str], List[Dic
         if p is None:
             continue
         dtype, elements, bytes_, name = p
-        parsed.append({"dtype": dtype, "elements": elements, "bytes": bytes_, "name": name, "line": ln})
+        shape = parse_shape_from_line(ln)
+
+        # If the reported bytes still match the base elements*bpw/8 formula, and this dtype
+        # needs an additional per-row scale bump, add that bump before storing bytes.
+        adjusted_bytes = adjust_reported_bytes_for_extra_scale(dtype, elements, bytes_, shape)
+
+        parsed.append({
+            "dtype": dtype,
+            "elements": elements,
+            "bytes": adjusted_bytes,
+            "raw_bytes": bytes_,
+            "shape": shape,
+            "name": name,
+            "line": ln
+        })
     return qtype, parsed
 
 
@@ -817,10 +978,10 @@ def _predict_from_params(params: Dict[str, Any], xarr: np.ndarray) -> np.ndarray
         if transform == "logn":
             base = float(log_base) if log_base is not None else 10.0
             with np.errstate(divide="ignore", invalid="ignore"):
-                T = apply_transform(vals, "logn", log_base=base)
+                T = apply_transform(np.array([vals], dtype=float), "logn", log_base=base)[0]
         else:
             with np.errstate(divide="ignore", invalid="ignore"):
-                T = apply_transform(vals, transform)
+                T = apply_transform(np.array([vals], dtype=float), transform)[0]
     except Exception:
         # return all NaNs on failure
         return np.full_like(x, np.nan, dtype=float)
@@ -881,7 +1042,7 @@ def _fit_pair_process_worker(xarr_shared, yarr_shared,
                              penalize_below_local: float = 1.0):
     """
     Worker run in separate process. xarr_shared, yarr_shared are numpy arrays (pickled to worker).
-    Limit BLAS threads inside worker to avoid oversubscription.
+    Limit BLAS threads inside worker to 1 to avoid oversubscription.
     """
     # Limit BLAS / native threaded libs inside each worker to 1 to avoid contention.
     os.environ.setdefault("OMP_NUM_THREADS", "1")
@@ -1804,7 +1965,7 @@ def write_bpw_results_csv_from_rows_and_maybe_plot(input_csv_path: str,
                                          metric_name=metric_name,
                                          predict_bpw_values=predict_bpw_values,
                                          transforms=transforms,
-                                         suppress_plot=suppress_plot,
+                                         suppress_plot=(not plot),
                                          equation_only=equation_only,
                                          identity_s_min=identity_s_min,
                                          identity_s_max=identity_s_max,
@@ -1845,7 +2006,7 @@ def write_bpw_results_csv_from_rows_and_maybe_plot(input_csv_path: str,
                                          metric_name=metric_name,
                                          predict_bpw_values=predict_bpw_values,
                                          transforms=transforms,
-                                         suppress_plot=suppress_plot,
+                                         suppress_plot=(not plot),
                                          equation_only=equation_only,
                                          identity_s_min=identity_s_min,
                                          identity_s_max=identity_s_max,

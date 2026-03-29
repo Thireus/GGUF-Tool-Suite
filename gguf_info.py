@@ -5,7 +5,7 @@
 #** GGUF files.                                               **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-28-2026 -------------------- **#
+#** --------------- Updated: Mar-29-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -88,6 +88,7 @@ import platform
 import time
 import traceback
 import errno
+from fractions import Fraction
 
 # Packages we need. Keep these in sync with the README/requirements.
 _BOOTSTRAP_PACKAGES = [
@@ -850,6 +851,108 @@ except Exception as e:
             traceback.print_exc()
         sys.exit(1)
 
+# ---------------------------------------------------------------------
+# Formula-based tensor byte computation tables
+# ---------------------------------------------------------------------
+
+# --- BPW lookup table for GGUF quant dtypes ---
+BPW_TABLE = {
+    'F32': 32,
+    'F16': 16,
+    'BF16': 16,
+    'Q8_0_R8': 8.5,
+    'Q8_0': 8.5,
+    'Q8_K_R8': 8.0625,
+    'Q8_KV': 8,
+    'F8': 8,
+    'IQ6_K': 6.625,
+    'Q6_K_R4': 6.5625,
+    'Q6_K': 6.5625,
+    'Q6_0_R4': 6.5,
+    'Q6_0': 6.5,
+    'Q5_1': 6,
+    'Q5_K_R4': 5.5,
+    'Q5_K': 5.5,
+    'Q5_0_R4': 5.5,
+    'Q5_0': 5.5,
+    'IQ5_K_R4': 5.5,
+    'IQ5_K': 5.5,
+    'IQ5_KS_R4': 5.25,
+    'IQ5_KS': 5.25,
+    'Q4_1': 5,
+    'Q4_K_R4': 4.5,
+    'Q4_K': 4.5,
+    'Q4_0_R8': 4.5,
+    'Q4_0': 4.5,
+    'IQ4_NL_R4': 4.5,
+    'IQ4_NL': 4.5,
+    'IQ4_K_R4': 4.5,
+    'IQ4_K': 4.5,
+    'IQ4_XS_R8': 4.25,
+    'IQ4_XS': 4.25,
+    'IQ4_KS_R4': 4.25,
+    'IQ4_KS': 4.25,
+    'IQ4_KT': 4,
+    'IQ4_KSS': 4,
+    'IQ3_KL': 4,
+    'IQ3_M': 3.66,
+    'Q3_K_R4': 3.4375,
+    'Q3_K': 3.4375,
+    'IQ3_S_R4': 3.4375,
+    'IQ3_S': 3.4375,
+    'IQ3_K_R4': 3.4375,
+    'IQ3_K': 3.4375,
+    'IQ3_XS': 3.3,
+    'IQ3_KS': 3.1875,
+    'IQ3_KT': 3.125,
+    'IQ3_XXS_R4': 3.0625,
+    'IQ3_XXS': 3.0625,
+    'IQ2_M_R4': 2.7,
+    'IQ2_M': 2.7,
+    'IQ2_KL': 2.6875,
+    'Q2_K_R4': 2.625,
+    'Q2_K': 2.625,
+    'IQ2_S': 2.5625,
+    'IQ2_K_R4': 2.375,
+    'IQ2_K': 2.375,
+    'IQ2_XS_R4': 2.3125,
+    'IQ2_XS': 2.3125,
+    'IQ2_KS': 2.1875,
+    'IQ2_KT': 2.125,
+    'IQ2_XXS_R4': 2.0625,
+    'IQ2_XXS': 2.0625,
+    'IQ2_BN_R4': 2,
+    'IQ2_BN': 2,
+    'IQ1_M_R4': 1.75,
+    'IQ1_M': 1.75,
+    'IQ1_KT': 1.75,
+    'IQ1_BN': 1.625,
+    'IQ1_S': 1.5625,
+    'IQ1_S_R4': 1.5
+}
+
+ADDITIONAL_SCALE_FACTOR_TABLE = {
+    'IQ1_BN': 2,
+    'IQ1_KT': 4,
+    'IQ2_BN': 4,
+    'IQ2_BN_R4': 4,
+    'IQ2_KL': 2,
+    'IQ2_KS': 2,
+    'IQ2_KT': 4,
+    'IQ3_KS': 2,
+    'IQ3_KT': 4,
+    'IQ4_KS': 4,
+    'IQ4_KSS': 4,
+    'IQ4_KS_R4': 4,
+    'IQ4_KT': 4,
+    'IQ5_KS': 4,
+    'IQ5_KS_R4': 4,
+    'Q8_KV': 8,
+    'IQ1_S_R4': 2,
+    'IQ1_M_R4': 2,
+    'Q8_KV_R8': 4
+}
+
 def print_help(prog_name: str):
     """Print help / usage information."""
     help_text = f"""Usage: {prog_name} [OPTIONS] [path/to/model.gguf]
@@ -861,7 +964,7 @@ Options:
   -v, --verbose     Show informational/bootstrap logs (default: quiet).
   --venv            Use the portable venv bootstrap behaviour (install/check deps).
   -u, --update      Force update/bootstrapping even if a .verified marker exists.
-  --tensor-nbytes    Use tensor.n_bytes for byte reporting (may be inaccurate for quantization types which rely on an additional scale per tensor row - see https://github.com/Thireus/GGUF-Tool-Suite/discussions/53).
+  --tensor-nbytes   Use tensor.n_bytes for byte reporting (may be inaccurate for quantization types which rely on an additional scale per tensor row - see https://github.com/Thireus/GGUF-Tool-Suite/discussions/53). When not set, single-tensor GGUFs use file_size - tensor.data_offset, and multi-tensor GGUFs use the formula/table-based byte calculation.
 
 If no path is given and stdin is not a TTY, the program will read piped bytes from stdin.
 Examples:
@@ -871,6 +974,78 @@ Examples:
   {prog_name} --venv model.gguf     # let the script ensure dependencies in a portable venv
 """
     print(help_text, file=sys.stdout)
+
+def _tensor_type_name_upper(tensor) -> str:
+    """Return tensor type name in uppercase, or an empty string on failure."""
+    try:
+        return str(tensor.tensor_type.name).upper()
+    except Exception:
+        try:
+            return str(tensor.tensor_type).upper()
+        except Exception:
+            return ""
+
+def _tensor_shape_list(tensor):
+    """Return tensor shape as a list of ints, or [] on failure."""
+    try:
+        return [int(dim) for dim in tensor.shape]
+    except Exception:
+        try:
+            return [int(dim) for dim in list(tensor.shape)]
+        except Exception:
+            return []
+
+def _tensor_elements_from_shape(shape_list):
+    """Compute the tensor element count from a shape list."""
+    elements = 1
+    for dim in shape_list:
+        elements *= int(dim)
+    return elements
+
+def _tensor_bytes_from_formula(tensor) -> int:
+    """
+    Compute tensor bytes using the BPW table and additional scale factor table.
+
+    Base bytes are computed as:
+      elements * BPW / 8
+
+    If the dtype has an additional per-row scale factor, add:
+      scale_factor * dim2 * dim3 * ...
+
+    The shape interpretation follows the same convention used elsewhere in this tool:
+    the first dimension is the per-row width, and the remaining dimensions contribute
+    to the additional scale bump when present.
+    """
+    dtype = _tensor_type_name_upper(tensor)
+    if not dtype:
+        raise ValueError("unable to determine tensor dtype")
+
+    bpw = BPW_TABLE.get(dtype)
+    if bpw is None:
+        raise KeyError(f"unsupported tensor dtype for formula-based bytes: {dtype}")
+
+    shape_list = _tensor_shape_list(tensor)
+    if hasattr(tensor, "n_elements"):
+        try:
+            elements = int(tensor.n_elements)
+        except Exception:
+            elements = _tensor_elements_from_shape(shape_list)
+    else:
+        elements = _tensor_elements_from_shape(shape_list)
+
+    # Exact arithmetic using fractions so we don't lose precision with values like 8.0625.
+    base_bytes = (Fraction(elements) * Fraction(str(bpw))) / 8
+    byte_count = int(base_bytes)
+
+    scale_factor = ADDITIONAL_SCALE_FACTOR_TABLE.get(dtype)
+    if scale_factor is not None:
+        tail_product = 1
+        if len(shape_list) > 1:
+            for dim in shape_list[1:]:
+                tail_product *= int(dim)
+        byte_count += int(scale_factor * tail_product)
+
+    return byte_count
 
 def main():
     # This script now accepts either:
@@ -972,21 +1147,15 @@ def main():
 
         if USE_TENSOR_NBYTES:
             _warn("The --tensor-nbytes option uses tensor.n_bytes, which may be inaccurate for quantization types which rely on an additional scale per tensor row - see https://github.com/Thireus/GGUF-Tool-Suite/discussions/53.")
+        elif tensor_count > 1:
+            _info("Using formula/table-based byte reporting for multi-tensor GGUF.")
         else:
-            if tensor_count != 1:
-                _error(
-                    f"Error: the default byte-count mode only works for GGUF files that contain exactly one tensor, "
-                    f"but {gguf_path.name} contains {tensor_count} tensors."
-                )
-                _error(
-                    "Re-run with --tensor-nbytes to use tensor.n_bytes instead, but note that it may be inaccurate "
-                    "for quantization types which rely on an additional scale per tensor row - see https://github.com/Thireus/GGUF-Tool-Suite/discussions/53."
-                )
-                sys.exit(1)
+            # Single tensor mode retains the exact file size minus the tensor data offset.
+            pass
 
-        # Pre-compute the byte count in the default mode.
+        # Pre-compute the byte count in the default mode for the single-tensor case.
         default_byte_count = None
-        if not USE_TENSOR_NBYTES:
+        if not USE_TENSOR_NBYTES and tensor_count == 1:
             single_tensor = tensors[0]
             try:
                 file_size = gguf_path.stat().st_size
@@ -1091,9 +1260,30 @@ def main():
                         byte_count = tensor.data.nbytes
                     except Exception:
                         byte_count = None
-            else:
+            elif tensor_count == 1:
                 # Default mode: single-tensor GGUF only; compute bytes from file size minus tensor.data_offset.
                 byte_count = default_byte_count
+            else:
+                # Multi-tensor GGUF: use the formula/table-based computation.
+                try:
+                    byte_count = _tensor_bytes_from_formula(tensor)
+                except Exception as e:
+                    _warn(
+                        f"Formula-based byte calculation failed for tensor '{name}' ({dtype}); falling back to tensor.n_bytes: {e}"
+                    )
+                    if hasattr(tensor, 'n_bytes'):
+                        try:
+                            byte_count = int(tensor.n_bytes)
+                        except Exception:
+                            try:
+                                byte_count = tensor.data.nbytes
+                            except Exception:
+                                byte_count = None
+                    else:
+                        try:
+                            byte_count = tensor.data.nbytes
+                        except Exception:
+                            byte_count = None
 
             # Format byte_count if None
             byte_str = str(byte_count) if byte_count is not None else "unknown"

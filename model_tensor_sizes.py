@@ -5,7 +5,7 @@
 #** tensors are the heaviest, thus to be benchmarked.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Feb-11-2026 -------------------- **#
+#** --------------- Updated: Mar-29-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -18,7 +18,7 @@
 #**    /    o―ヽニニフ))             · · ɪǫ3_xxs      ~·°        **#
 #**    し―-J                                                   **#
 #**                                                           **#
-#** Copyright © 2025 - Thireus.                 ₖₗD ₐₗₗ ₜₕₑ 𝓌ₐᵧ! **#
+#** Copyright © 2026 - Thireus.                 ₖₗD ₐₗₗ ₜₕₑ 𝓌ₐᵧ! **#
 #***************************************************************#
 #**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
 #***************************************************************#
@@ -43,8 +43,111 @@ from __future__ import annotations
 import sys
 import re
 import argparse
+import math
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
+
+# Base bytes-per-weight table used to detect when tensors.map bytes are only the
+# base quantized size and need the additional per-row scale bump applied.
+BPW_TABLE: Dict[str, float] = {
+    "F32": 32,
+    "F16": 16,
+    "BF16": 16,
+    "Q8_0_R8": 8.5,
+    "Q8_0": 8.5,
+    "Q8_K_R8": 8.0625,
+    "Q8_KV": 8,
+    "F8": 8,
+    "IQ6_K": 6.625,
+    "Q6_K_R4": 6.5625,
+    "Q6_K": 6.5625,
+    "Q6_0_R4": 6.5,
+    "Q6_0": 6.5,
+    "Q5_1": 6,
+    "Q5_K_R4": 5.5,
+    "Q5_K": 5.5,
+    "Q5_0_R4": 5.5,
+    "Q5_0": 5.5,
+    "IQ5_K_R4": 5.5,
+    "IQ5_K": 5.5,
+    "IQ5_KS_R4": 5.25,
+    "IQ5_KS": 5.25,
+    "Q4_1": 5,
+    "Q4_K_R4": 4.5,
+    "Q4_K": 4.5,
+    "Q4_0_R8": 4.5,
+    "Q4_0": 4.5,
+    "IQ4_NL_R4": 4.5,
+    "IQ4_NL": 4.5,
+    "IQ4_K_R4": 4.5,
+    "IQ4_K": 4.5,
+    "IQ4_XS_R8": 4.25,
+    "IQ4_XS": 4.25,
+    "IQ4_KS_R4": 4.25,
+    "IQ4_KS": 4.25,
+    "IQ4_KT": 4,
+    "IQ4_KSS": 4,
+    "IQ3_KL": 4,
+    "IQ3_M": 3.66,
+    "Q3_K_R4": 3.4375,
+    "Q3_K": 3.4375,
+    "IQ3_S_R4": 3.4375,
+    "IQ3_S": 3.4375,
+    "IQ3_K_R4": 3.4375,
+    "IQ3_K": 3.4375,
+    "IQ3_XS": 3.3,
+    "IQ3_KS": 3.1875,
+    "IQ3_KT": 3.125,
+    "IQ3_XXS_R4": 3.0625,
+    "IQ3_XXS": 3.0625,
+    "IQ2_M_R4": 2.7,
+    "IQ2_M": 2.7,
+    "IQ2_KL": 2.6875,
+    "Q2_K_R4": 2.625,
+    "Q2_K": 2.625,
+    "IQ2_S": 2.5625,
+    "IQ2_K_R4": 2.375,
+    "IQ2_K": 2.375,
+    "IQ2_XS_R4": 2.3125,
+    "IQ2_XS": 2.3125,
+    "IQ2_KS": 2.1875,
+    "IQ2_KT": 2.125,
+    "IQ2_XXS_R4": 2.0625,
+    "IQ2_XXS": 2.0625,
+    "IQ2_BN_R4": 2,
+    "IQ2_BN": 2,
+    "IQ1_M_R4": 1.75,
+    "IQ1_M": 1.75,
+    "IQ1_KT": 1.75,
+    "IQ1_BN": 1.625,
+    "IQ1_S": 1.5625,
+    "IQ1_S_R4": 1.5,
+}
+
+# Additional per-row scale bump table. When a tensor dtype belongs here and the
+# tensors.map bytes still equal the base elements*bpw/8 size, we add the scale
+# overhead computed from the trailing dimensions.
+ADDITIONAL_SCALE_FACTOR_TABLE: Dict[str, int] = {
+    "IQ1_BN": 2,
+    "IQ1_KT": 4,
+    "IQ2_BN": 4,
+    "IQ2_BN_R4": 4,
+    "IQ2_KL": 2,
+    "IQ2_KS": 2,
+    "IQ2_KT": 4,
+    "IQ3_KS": 2,
+    "IQ3_KT": 4,
+    "IQ4_KS": 4,
+    "IQ4_KSS": 4,
+    "IQ4_KS_R4": 4,
+    "IQ4_KT": 4,
+    "IQ5_KS": 4,
+    "IQ5_KS_R4": 4,
+    "Q8_KV": 8,
+    "IQ1_S_R4": 2,
+    "IQ1_M_R4": 2,
+    "Q8_KV_R8": 4,
+}
 
 def parse_args():
     p = argparse.ArgumentParser(
@@ -68,6 +171,57 @@ def human_readable(nbytes: int) -> str:
             return f"{size:.2f} {unit}"
     return f"{nbytes}B"
 
+def parse_shape_from_line(line: str) -> Optional[List[int]]:
+    """
+    Parse shape=(...) from a tensors.map line.
+    Returns a list of ints or None if no shape is present.
+    """
+    m = re.search(r"\bshape=\(([^)]*)\)", line, flags=re.IGNORECASE)
+    if not m:
+        return None
+    raw = m.group(1).strip()
+    if raw == "":
+        return []
+    dims: List[int] = []
+    for tok in raw.split(","):
+        tok = tok.strip()
+        if not tok:
+            continue
+        try:
+            dims.append(int(tok))
+        except ValueError:
+            dims.append(0)
+    return dims
+
+def adjusted_bytes_for_tensor(dtype: Optional[str],
+                              elements: Optional[int],
+                              bytes_: Optional[int],
+                              shape: Optional[List[int]]) -> Optional[int]:
+    """
+    If the dtype is one that can carry an additional per-row scale bump, and the
+    reported bytes still match the base elements*bpw/8 value, add the bump.
+    """
+    if dtype is None or elements is None or bytes_ is None:
+        return bytes_
+
+    qtype_upper = dtype.upper()
+    scale_factor = ADDITIONAL_SCALE_FACTOR_TABLE.get(qtype_upper)
+    bpw = BPW_TABLE.get(qtype_upper)
+
+    if scale_factor is None or bpw is None:
+        return bytes_
+
+    base_bytes = (elements * bpw) / 8.0
+    if not math.isclose(float(bytes_), base_bytes, rel_tol=0.0, abs_tol=1e-9):
+        return bytes_
+
+    tail_product = 1
+    if shape and len(shape) > 1:
+        for dim in shape[1:]:
+            tail_product *= int(dim)
+
+    return int(bytes_ + (scale_factor * tail_product))
+
 def parse_map_file(map_path: Path) -> Dict[str, int]:
     """Parse the .map file returning dict: tensor_name -> bytes."""
     tensors: Dict[str, int] = {}
@@ -80,13 +234,18 @@ def parse_map_file(map_path: Path) -> Dict[str, int]:
         if len(parts) < 3:
             continue
         name = parts[2].strip()
-        m = re.search(r"bytes=(\d+)", line)
-        if m:
-            try:
-                tensors[name] = int(m.group(1))
-            except ValueError:
-                # skip malformed numbers
-                continue
+        dtype_m = re.search(r"\bdtype=([^:]+)", line, flags=re.IGNORECASE)
+        elems_m = re.search(r"\belements=(\d+)", line, flags=re.IGNORECASE)
+        bytes_m = re.search(r"\bbytes=(\d+)", line, flags=re.IGNORECASE)
+        shape = parse_shape_from_line(line)
+
+        dtype = dtype_m.group(1).strip() if dtype_m else None
+        elements = int(elems_m.group(1)) if elems_m else None
+        bytes_ = int(bytes_m.group(1)) if bytes_m else None
+
+        adjusted = adjusted_bytes_for_tensor(dtype, elements, bytes_, shape)
+        if adjusted is not None:
+            tensors[name] = adjusted
     return tensors
 
 def compile_regex(pattern: str):
