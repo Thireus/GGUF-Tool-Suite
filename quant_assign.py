@@ -1012,13 +1012,18 @@ def parse_map_file(qtype, collect_raw=False):
                 block_size, type_size = GGML_QUANT_SIZES[dtype]
                 bpw_hint = (type_size * 8.0) / block_size
 
+            if bpw_hint is not None:
+                expected_base = (elems * float(bpw_hint)) / 8.0
+            else:
+                expected_base = None
+
             if (
                 bpw_hint is not None
+                and expected_base is not None
                 and dtype in ADDITIONAL_SCALE_FACTOR_TABLE
                 and elems > 0
                 and shape_dims
             ):
-                expected_base = (elems * float(bpw_hint)) / 8.0
                 if abs(raw_bytes - expected_base) < 1e-6:
                     scale_factor = ADDITIONAL_SCALE_FACTOR_TABLE[dtype]
                     tail_product = _product(shape_dims[1:]) if len(shape_dims) > 1 else 1
@@ -1034,7 +1039,7 @@ def parse_map_file(qtype, collect_raw=False):
             elements[tensor_name] = elems
 
             # Register tensor-specific bpw values
-            _register_tensor_bpw(dtype, tensor_name, corrected_bytes, raw_bytes, elems)
+            _register_tensor_bpw(dtype, tensor_name, corrected_bytes, expected_base, elems)
 
     # If NO_FALLBACK requested, synthesize faked sizes/dtypes for mismatching tensors
     if NO_FALLBACK and not collect_raw:
@@ -3408,7 +3413,7 @@ def main():
         print("# - '*' means fallback tensors: these tensors were present in the map(s) with a different dtype than the originally-intended qtype;")
         print("#   They have been grouped and displayed as '*<qtype>' above to show the final (map-observed) qtype and sizes separately.")
     if any_dynamic_bpw:
-        print("# - ':' means this qtype has a tensor-shape–dependent bpw in this recipe due to an additional per-row scale overhead;")
+        print("# - ':' means this qtype has a tensor-shape-dependent bpw in this recipe due to an additional per-row scale overhead;")
         print("#   For more information: https://github.com/Thireus/GGUF-Tool-Suite/discussions/53")
     if len(COMPUTED_QTYPES) > 0:
         print("# - '!' means qtypes for which the tensors map file was computed instead of downloaded;")
