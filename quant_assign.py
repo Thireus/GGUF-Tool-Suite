@@ -1004,6 +1004,7 @@ def parse_map_file(qtype, collect_raw=False):
             raw_bytes = int(size_bytes)
             base_bytes = raw_bytes
             corrected_bytes = raw_bytes
+            expected_base = raw_bytes
 
             # Detect whether this qtype needs an additional scale bump and whether the map file
             # still only contains the base equation size (elements * bpw / 8).
@@ -1014,8 +1015,6 @@ def parse_map_file(qtype, collect_raw=False):
 
             if bpw_hint is not None:
                 expected_base = (elems * float(bpw_hint)) / 8.0
-            else:
-                expected_base = None
 
             if (
                 bpw_hint is not None
