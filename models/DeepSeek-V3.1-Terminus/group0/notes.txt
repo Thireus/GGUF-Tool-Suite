@@ -2,6 +2,6 @@ cd models/DeepSeek-V3.1-Terminus/group0
 
 ../../../model_tensor_bpw_metric.py --results-csv kld_results_partial.csv --c-free --exclude-qtypes '.*_bn.*$' --transforms "identity" --ignore-outliers 50 --allow-impure-map --p-grid-max 15 --p-grid-steps 100 --d-from-lowest 1 --penalize-above 15 --drift-below 15 --resemblance-metric r2 --equation-only --plot 2> /dev/null
 
-y = 0 + 2.48169966712e+20 * ( x + 10.2135539266 )^(-19.1803508772)
+y = 0 + 2.51414708247e+20 * ( x + 10.2135539266 )^(-19.1803508772)
 
-./group0_enricher.py --target-csv models/DeepSeek-V3.1-Terminus/group0/kld_results_partial.csv --output-csv models/DeepSeek-V3.1-Terminus/group0/kld_results.csv --target-mean-equation "y = 0 + 2.48169966712e+20 * ( x + 10.2135539266 )^(-19.1803508772)"
+./group0_enricher.py --target-csv models/DeepSeek-V3.1-Terminus/group0/kld_results_partial.csv --output-csv models/DeepSeek-V3.1-Terminus/group0/kld_results.csv --target-mean-equation "y = 0 + 2.51414708247e+20 * ( x + 10.2135539266 )^(-19.1803508772)"
