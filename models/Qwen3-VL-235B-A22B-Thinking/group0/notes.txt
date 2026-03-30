@@ -2,6 +2,6 @@ cd models/Qwen3-VL-235B-A22B-Thinking/group0
 
 ../../../model_tensor_bpw_metric.py --results-csv kld_results_partial.csv --c-free --exclude-qtypes '.*_bn.*$' --transforms "identity" --ignore-outliers 50 --allow-impure-map --p-grid-max 15 --p-grid-steps 100 --d-from-lowest 1 --penalize-above 15 --resemblance-metric r2 --equation-only --plot 2> /dev/null
 
-y = 0 + 9.65322707262e+20 * ( x + 12.5266388135 )^(-18.3494736842)
+y = 0 + 1.70502823105e+21 * ( x + 12.5266388135 )^(-18.5571929825)
 
-./group0_enricher.py --target-csv models/Qwen3-VL-235B-A22B-Thinking/group0/kld_results_partial.csv --output-csv models/Qwen3-VL-235B-A22B-Thinking/group0/kld_results.csv --target-mean-equation "y = 0 + 9.65322707262e+20 * ( x + 12.5266388135 )^(-18.3494736842)"
+./group0_enricher.py --target-csv models/Qwen3-VL-235B-A22B-Thinking/group0/kld_results_partial.csv --output-csv models/Qwen3-VL-235B-A22B-Thinking/group0/kld_results.csv --target-mean-equation "y = 0 + 1.70502823105e+21 * ( x + 12.5266388135 )^(-18.5571929825)"

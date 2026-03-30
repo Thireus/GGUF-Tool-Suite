@@ -5,7 +5,7 @@
 #** group0/kld_results_partial.csv degradation data.          **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-22-2026 -------------------- **#
+#** --------------- Updated: Mar-30-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -336,7 +336,7 @@ DEFAULT_REFERENCE_VALUES = {'bf16': 0.0, 'iq1_bn': 14.758228, 'iq1_kt': 2.692801
 # This default equation was obtained by running:
 # cd models/Qwen3-4B-Thinking-2507/group0 && ../../../model_tensor_bpw_metric.py --results-csv kld_results.csv --c-free --exclude-qtypes '.*_bn.*$' --transforms "identity" --ignore-outliers 50 --allow-impure-map --plot --p-grid-max 15 --p-grid-steps 100 --d-from-lowest 1 --penalize-above 15 --resemblance-metric r2
 # against the Qwen3-4B-Thinking-2507's kld_results.csv found in the models/Qwen3-4B-Thinking-2507/group0 directory.
-DEFAULT_REFERENCE_MEAN = "y = 0 + 3.07123144682e+17 * ( x + 6.95719165416 )^(-18.0541201489)"
+DEFAULT_REFERENCE_MEAN = "y = 0 + 3.09340197611e+17 * ( x + 6.95719165416 )^(-18.0541201489)"
 
 
 def read_csv_rows(path: str) -> Tuple[List[str], List[Dict[str, str]]]:

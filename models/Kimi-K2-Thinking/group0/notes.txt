@@ -2,6 +2,6 @@ cd models/Kimi-K2-Thinking/group0
 
 ../../../model_tensor_bpw_metric.py --results-csv kld_results_partial.csv --c-free --exclude-qtypes '.*_bn.*$' --transforms "identity" --ignore-outliers 25 --allow-impure-map --p-grid-max 15 --p-grid-steps 100 --d-from-lowest 1 --penalize-above 15 --resemblance-metric r2 --equation-only --plot 2> /dev/null
 
-y = 0 + 0.38220516618 * ( x - 1.35409945934 )^(-1.27270600744)
+y = 0 + 0.37968728629 * ( x - 1.3368155694 )^(-1.35187666135)
 
-./group0_enricher.py --target-csv models/Kimi-K2-Thinking/group0/kld_results_partial.csv --output-csv models/Kimi-K2-Thinking/group0/kld_results.csv --target-mean-equation "y = 0 + 0.38220516618 * ( x - 1.35409945934 )^(-1.27270600744)"
+./group0_enricher.py --target-csv models/Kimi-K2-Thinking/group0/kld_results_partial.csv --output-csv models/Kimi-K2-Thinking/group0/kld_results.csv --target-mean-equation "y = 0 + 0.37968728629 * ( x - 1.3368155694 )^(-1.35187666135)"
