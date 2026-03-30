@@ -5,7 +5,7 @@
 #** tensor sizes for matched regex tensors.                   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-29-2026 -------------------- **#
+#** --------------- Updated: Mar-30-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -200,6 +200,48 @@ adjust_tensor_bytes() {
   echo "$bytes"
 }
 
+format_bpw_summary() {
+  local bpw="$1"
+  awk -v v="$bpw" 'BEGIN{
+    if (v == "" || v < 0) {
+      print "n/a"
+      exit
+    }
+    if (v == int(v)) {
+      printf "%.1f", v
+      exit
+    }
+    s = sprintf("%.4f", v)
+    sub(/0+$/, "", s)
+    sub(/\.$/, "", s)
+    print s
+  }'
+}
+
+format_gib_precision() {
+  local bytes="$1"
+  local precision="$2"
+  awk -v b="$bytes" -v p="$precision" 'BEGIN{printf "%.*f", p, b/1024/1024/1024}'
+}
+
+format_gb_precision() {
+  local bytes="$1"
+  local precision="$2"
+  awk -v b="$bytes" -v p="$precision" 'BEGIN{printf "%.*f", p, b/1000000000}'
+}
+
+actual_bpw_from_bytes_and_elements() {
+  local bytes="$1"
+  local elements="$2"
+  awk -v b="$bytes" -v e="$elements" 'BEGIN{
+    if (e <= 0) {
+      print ""
+      exit
+    }
+    printf "%.10f", (b*8.0)/e
+  }'
+}
+
 # Default map (used if not piped via stdin)
 DEFAULT_MAP=$(cat <<'EOF'
 # Low - Resistant to quant
@@ -274,14 +316,24 @@ echo "Loaded ${#USER_MAP[@]} USER_MAP entries."
 
 # Build unique list of quant types
 declare -A SEEN=()
+declare -A SUMMARY_SEEN=()
 declare -a QTYPES=()
+declare -a SUMMARY_QTYPES=()
 for q in "${USER_MAP[@]}"; do
-  if [[ -z "${SEEN[$q]:-}" ]]; then
-    if [[ "$q" == "f32" ]]; then
-      continue
-    fi
-    SEEN[$q]=1
-    QTYPES+=("$q")
+  q_lc="${q,,}"
+
+  if [[ -z "${SUMMARY_SEEN[$q_lc]:-}" ]]; then
+    SUMMARY_SEEN["$q_lc"]=1
+    SUMMARY_QTYPES+=("$q_lc")
+  fi
+
+  if [[ "$q_lc" == "f32" ]]; then
+    continue
+  fi
+
+  if [[ -z "${SEEN[$q_lc]:-}" ]]; then
+    SEEN["$q_lc"]=1
+    QTYPES+=("$q_lc")
   fi
 done
 
@@ -330,12 +382,21 @@ done
 # 5) Scan all USER_MAP entries via regex matching and accumulate adjusted bytes
 #
 total_bytes=0
+total_elements=0
+total_nonf32_bytes=0
+
+declare -A QTYPE_COUNT=()
+declare -A QTYPE_BYTES=()
+declare -A QTYPE_ELEMENTS=()
+
 for regex in "${!USER_MAP[@]}"; do
   tag=${USER_MAP[$regex]}
-  if [ "$tag" == "f32" ]; then
+  tag_lc="${tag,,}"
+
+  if [ "$tag_lc" == "f32" ]; then
     _tag="${_QTYPES[0]}"
   else
-    _tag=$tag
+    _tag=$tag_lc
   fi
 
   map_file="$TMPDIR/tensors.${_tag}.map"
@@ -348,6 +409,7 @@ for regex in "${!USER_MAP[@]}"; do
 
   matched_lines_num=0
   sum_bytes=0
+  sum_elements=0
 
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
@@ -380,7 +442,9 @@ for regex in "${!USER_MAP[@]}"; do
     bytes="${bytes//[[:space:]]/}"
 
     [[ -z "$dtype" || -z "$bytes" ]] && continue
-    [[ "${dtype,,}" != "${tag,,}" ]] && continue
+    [[ "${dtype,,}" != "${tag_lc}" ]] && continue
+
+    [[ -z "$elements" ]] && elements=0
 
     adjusted_bytes="$(adjust_tensor_bytes "$dtype" "$elements" "$bytes" "$shape")"
 
@@ -390,22 +454,133 @@ for regex in "${!USER_MAP[@]}"; do
     fi
 
     sum_bytes=$(( sum_bytes + adjusted_bytes ))
+    sum_elements=$(( sum_elements + elements ))
     matched_lines_num=$(( matched_lines_num + 1 ))
   done < "$map_file"
 
   echo "  → tensors for this pattern: $matched_lines_num → bytes for this pattern: $sum_bytes"
   total_bytes=$(( total_bytes + sum_bytes ))
+  total_elements=$(( total_elements + sum_elements ))
+
+  QTYPE_COUNT["$tag_lc"]=$(( ${QTYPE_COUNT["$tag_lc"]:-0} + matched_lines_num ))
+  QTYPE_BYTES["$tag_lc"]=$(( ${QTYPE_BYTES["$tag_lc"]:-0} + sum_bytes ))
+  QTYPE_ELEMENTS["$tag_lc"]=$(( ${QTYPE_ELEMENTS["$tag_lc"]:-0} + sum_elements ))
+
+  if [[ "$tag_lc" != "f32" ]]; then
+    total_nonf32_bytes=$(( total_nonf32_bytes + sum_bytes ))
+  fi
 done
 
 #
-# 6) Convert to GiB and report
+# 6) Convert to GB/GiB and report
 #
 echo
-total_gib=$(awk -v b="$total_bytes" 'BEGIN{printf "%.2f", b/1024/1024/1024}')
+total_gb="$(format_gb_precision "$total_bytes" 3)"
+total_gib="$(format_gib_precision "$total_bytes" 3)"
+
+if [[ "$total_elements" -gt 0 ]]; then
+  avg_bpw="$(awk -v b="$total_bytes" -v e="$total_elements" 'BEGIN{printf "%.4f", (b*8.0)/e}')"
+else
+  avg_bpw="n/a"
+fi
+
 echo "Total bytes matched: $total_bytes"
+echo "≈ $total_gb GB"
 echo "≈ $total_gib GiB"
+echo "Total elements matched: $total_elements"
+echo "Average bpw: $avg_bpw"
 
 echo "Cleaning up..."
 [ -n "$TMPDIR" ] && rm -rf "$TMPDIR"
 [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
 echo "Done."
+
+#
+# 7) Final summary
+#
+echo
+echo "## Summary of tensor sizes"
+
+declare -a SUMMARY_LINES=()
+for q in "${SUMMARY_QTYPES[@]}"; do
+  count="${QTYPE_COUNT[$q]:-0}"
+  bytes="${QTYPE_BYTES[$q]:-0}"
+  elements="${QTYPE_ELEMENTS[$q]:-0}"
+
+  if [[ "$count" -gt 0 && "$elements" -gt 0 ]]; then
+    bpw_actual="$(actual_bpw_from_bytes_and_elements "$bytes" "$elements")"
+    sort_key="$bpw_actual"
+  else
+    bpw_actual=""
+    sort_key="-1"
+  fi
+
+  SUMMARY_LINES+=("$sort_key"$'\t'"$q"$'\t'"$count"$'\t'"$bytes"$'\t'"$elements")
+done
+
+mapfile -t SORTED_SUMMARY_LINES < <(printf '%s\n' "${SUMMARY_LINES[@]}" | sort -t $'\t' -k1,1nr -k2,2)
+
+highest_qtype=""
+lowest_qtype=""
+highest_bpw=""
+lowest_bpw=""
+
+for line in "${SORTED_SUMMARY_LINES[@]}"; do
+  IFS=$'\t' read -r sort_key q count bytes elements <<< "$line"
+  if [[ "$q" != "f32" && "$count" -gt 0 && "$elements" -gt 0 && "$sort_key" != "-1" ]]; then
+    if [[ -z "$highest_qtype" ]]; then
+      highest_qtype="$q"
+      highest_bpw="$sort_key"
+    fi
+    lowest_qtype="$q"
+    lowest_bpw="$sort_key"
+  fi
+done
+
+if [[ -n "$highest_qtype" && -n "$lowest_qtype" && "$total_elements" -gt 0 ]]; then
+  total_max_gib="$(awk -v e="$total_elements" -v b="$highest_bpw" 'BEGIN{printf "%.2f", (e*b/8.0)/1024/1024/1024}')"
+  total_min_gib="$(awk -v e="$total_elements" -v b="$lowest_bpw" 'BEGIN{printf "%.2f", (e*b/8.0)/1024/1024/1024}')"
+  total_pct_of_max="$(awk -v tb="$total_bytes" -v e="$total_elements" -v b="$highest_bpw" 'BEGIN{
+    ref = (e*b/8.0)
+    if (ref > 0) printf "%.1f", (tb/ref)*100
+    else printf "n/a"
+  }')"
+  echo "# Total: ${total_gib} GiB (${total_pct_of_max}%) | ${total_max_gib} GiB max, if all were ${highest_qtype} | ${total_min_gib} GiB min, if all were ${lowest_qtype}"
+else
+  echo "# Total: ${total_gib} GiB"
+fi
+
+echo
+echo "## Summary of tensor counts and bpw per qtype"
+echo "#"
+echo "# QTYPE		Count	BPW	Assigned GiB	% Assigned	Max GiB (all)"
+
+for line in "${SORTED_SUMMARY_LINES[@]}"; do
+  IFS=$'\t' read -r sort_key q count bytes elements <<< "$line"
+
+  if [[ "$count" -gt 0 && "$elements" -gt 0 && "$sort_key" != "-1" ]]; then
+    bpw_display="$(format_bpw_summary "$sort_key")"
+  else
+    bpw_display="n/a"
+  fi
+
+  assigned_gib="$(format_gib_precision "$bytes" 2)"
+
+  if [[ "$q" == "f32" || "$total_nonf32_bytes" -le 0 ]]; then
+    pct_assigned="-"
+  else
+    pct_assigned="$(awk -v b="$bytes" -v t="$total_nonf32_bytes" 'BEGIN{printf "%.1f%%", (b/t)*100}')"
+  fi
+
+  if [[ "$q" != "f32" && "$count" -gt 0 && "$elements" -gt 0 && "$total_elements" -gt 0 && "$sort_key" != "-1" ]]; then
+    max_gib_all="$(awk -v e="$total_elements" -v b="$sort_key" 'BEGIN{printf "%.2f", (e*b/8.0)/1024/1024/1024}')"
+  else
+    max_gib_all="-"
+  fi
+
+  printf "# %-12s\t%5d\t%-6s\t%7s GiB\t%-8s\t%7s\n" \
+    "$q" "$count" "$bpw_display" "$assigned_gib" "$pct_assigned" "$max_gib_all"
+done
+
+echo "#"
+echo "# -Average BPW: $avg_bpw"
