@@ -5,7 +5,7 @@
 #** repositories from Thireus' special BF16 sharded model.    **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-29-2026 -------------------- **#
+#** --------------- Updated: Mar-30-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -172,6 +172,7 @@ SHARD_IDS_TO_PROCESS=()
 declare -A QTYPE_ATTEMPTS=()
 declare -A QTYPE_SUCCESSES=()
 declare -A QTYPE_FAILED_ATTEMPTS=()
+declare -a tested_qtypes=()
 # --------------------------------------------------------
 
 normalize_qtype() {
@@ -1064,8 +1065,9 @@ for i in "${SHARD_IDS_TO_PROCESS[@]}"; do
     cleanup_partial_output "$output_actual_shard"
 
     shard_tested_qtypes+=("$current_qtype")
+    tested_qtypes=("${shard_tested_qtypes[@]}")
 
-    next_qtype="$(next_fallback_qtype "$current_qtype" "${shard_tested_qtypes[@]}" || true)"
+    next_qtype="$(next_fallback_qtype "$current_qtype" "${FALLBACK_QTYPES[@]}" || true)"
     if [[ -z "$next_qtype" ]]; then
       echo "❌ Error: No higher-BPW fallback remains for ${current_qtype}." >&2
       echo "The fallback pool is exhausted before BF16, so this shard cannot continue." >&2
