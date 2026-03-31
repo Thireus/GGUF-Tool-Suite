@@ -39,6 +39,7 @@ cd GGUF-Tool-Suite
 rm -f download.conf # Make sure to copy the relevant download.conf for the model before running quant_assign.py
 cp -f models/Qwen3-4B-Thinking-2507/download.conf . # Use the download.conf of the chosen model
 mkdir -p kitchen && cd kitchen
+# Obtain a recipe example for the chosen model from ../recipe_examples/
 ../quant_downloader.sh ../recipe_examples/ik_llama.cpp_recipes/Qwen3-4B-Thinking-2507.ROOT-4.2498bpw-10.9335ppl.1GB-GGUF_0GB-GPU_1GB-CPU.9888e4b_9193781.recipe
 
 # Other recipe examples can be found at https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples

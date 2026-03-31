@@ -252,6 +252,7 @@ rm -f download.conf
 # Use the download.conf of the chosen model
 cp -f models/DeepSeek-R1-0528/download.conf .
 mkdir -p kitchen && cd kitchen
+# Obtain a recipe example for the chosen model from ../recipe_examples/
 ../quant_downloader.sh ../recipe_examples/ik_harmonized_recipes/DeepSeek-R1-0528.THIREUS-1.9413bpw-4.3624ppl.151GB-GGUF_11GB-GPU_140GB-CPU.569b7f6_bb4f3c8.recipe
 ```
 

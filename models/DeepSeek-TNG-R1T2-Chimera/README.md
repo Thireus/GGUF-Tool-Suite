@@ -39,6 +39,7 @@ cd GGUF-Tool-Suite
 rm -f download.conf # Make sure to copy the relevant download.conf for the model before running quant_assign.py
 cp -f models/DeepSeek-TNG-R1T2-Chimera/download.conf . # Use the download.conf of the chosen model
 mkdir -p kitchen && cd kitchen
+# Obtain a recipe example for the chosen model from ../recipe_examples/
 ../quant_downloader.sh ../recipe_examples/ik_llama.cpp_recipes/DeepSeek-TNG-R1T2-Chimera.ROOT-3.0624bpw-3.3657ppl.238GB-GGUF_11GB-GPU_227GB-CPU.13549e6_1ac857a.recipe
 
 # Launch ik_llama's llama-cli:
