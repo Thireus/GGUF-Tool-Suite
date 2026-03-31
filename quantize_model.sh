@@ -5,7 +5,7 @@
 #** repositories from Thireus' special BF16 sharded model.    **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-30-2026 -------------------- **#
+#** --------------- Updated: Mar-31-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -172,7 +172,7 @@ SHARD_IDS_TO_PROCESS=()
 declare -A QTYPE_ATTEMPTS=()
 declare -A QTYPE_SUCCESSES=()
 declare -A QTYPE_FAILED_ATTEMPTS=()
-declare -a tested_qtypes=()
+declare -a QTYPE_TESTED=()
 # --------------------------------------------------------
 
 normalize_qtype() {
@@ -442,7 +442,7 @@ next_fallback_qtype() {
     [[ "$candidate_upper" == "BF16" ]] && continue
     [[ "$candidate_upper" == "$current_upper" ]] && continue
     qtype_is_forbidden_fallback "$candidate_upper" && continue
-    qtype_in_array "$candidate_upper" "${tested_qtypes[@]}" && continue
+    qtype_in_array "$candidate_upper" "${QTYPE_TESTED[@]}" && continue
 
     candidate_bpw="$(bpw_of "$candidate_upper")" || continue
     is_float_greater_or_equal "$candidate_bpw" "$current_bpw" || continue
@@ -1065,7 +1065,7 @@ for i in "${SHARD_IDS_TO_PROCESS[@]}"; do
     cleanup_partial_output "$output_actual_shard"
 
     shard_tested_qtypes+=("$current_qtype")
-    tested_qtypes=("${shard_tested_qtypes[@]}")
+    QTYPE_TESTED=("${shard_tested_qtypes[@]}")
 
     next_qtype="$(next_fallback_qtype "$current_qtype" "${FALLBACK_QTYPES[@]}" || true)"
     if [[ -z "$next_qtype" ]]; then
