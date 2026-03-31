@@ -5,7 +5,7 @@
 #** tensor sizes for matched regex tensors.                   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-30-2026 -------------------- **#
+#** --------------- Updated: Mar-31-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -168,36 +168,42 @@ shape_tail_product() {
   echo "$prod"
 }
 
+# Compute target bytes from the source tensor bytes and source dtype bpw.
+# For qtypes present in BPW_TABLE, this applies:
+#   target_bytes = source_bytes * target_bpw / source_bpw
+# and then adds the optional per-row bump for qtypes in ADDITIONAL_SCALE_FACTOR_TABLE.
 adjust_tensor_bytes() {
-  local dtype="$1"
-  local elements="$2"
-  local bytes="$3"
+  local target_qtype="$1"
+  local source_dtype="$2"
+  local source_bytes="$3"
   local shape="$4"
-  local dtype_upper="${dtype^^}"
-  local bpw="${BPW_TABLE[$dtype_upper]:-}"
-  local scale_factor="${ADDITIONAL_SCALE_FACTOR_TABLE[$dtype_upper]:-}"
 
-  # If we do not know this dtype, keep the original bytes value.
-  if [[ -z "$bpw" ]]; then
-    echo "$bytes"
+  local target_qtype_upper="${target_qtype^^}"
+  local source_dtype_upper="${source_dtype^^}"
+
+  local target_bpw="${BPW_TABLE[$target_qtype_upper]:-}"
+  local source_bpw="${BPW_TABLE[$source_dtype_upper]:-}"
+  local scale_factor="${ADDITIONAL_SCALE_FACTOR_TABLE[$target_qtype_upper]:-}"
+
+  # If we do not know this target dtype or source dtype, keep the original bytes value.
+  if [[ -z "$target_bpw" || -z "$source_bpw" ]]; then
+    echo "$source_bytes"
     return 0
   fi
 
-  local base_bytes
-  base_bytes="$(awk -v e="$elements" -v b="$bpw" 'BEGIN{printf "%.10f", (e*b)/8.0}')"
+  local target_bytes
+  target_bytes="$(awk -v sb="$source_bytes" -v t="$target_bpw" -v s="$source_bpw" 'BEGIN{printf "%.0f", (sb * t) / s}')"
 
-  # If the bytes match the base equation and this dtype has an extra scale factor,
-  # add the per-row scale bump using dim2*dim3*dim4... (tail product).
-  if [[ -n "$scale_factor" ]] && awk -v a="$bytes" -v b="$base_bytes" 'BEGIN{d=a-b; if (d<0) d=-d; exit(d <= 0.0001 ? 0 : 1)}'; then
+  if [[ -n "$scale_factor" ]]; then
     local tail_product bump adjusted
     tail_product="$(shape_tail_product "$shape")"
     bump=$(( scale_factor * tail_product ))
-    adjusted=$(( bytes + bump ))
+    adjusted=$(( target_bytes + bump ))
     echo "$adjusted"
     return 0
   fi
 
-  echo "$bytes"
+  echo "$target_bytes"
 }
 
 format_bpw_summary() {
@@ -315,48 +321,78 @@ done <<< "$RAW_MAP"
 echo "Loaded ${#USER_MAP[@]} USER_MAP entries."
 
 # Build unique list of quant types
-declare -A SEEN=()
 declare -A SUMMARY_SEEN=()
-declare -a QTYPES=()
+declare -A DOWNLOAD_SEEN=()
 declare -a SUMMARY_QTYPES=()
+declare -a DOWNLOAD_QTYPES=()
 for q in "${USER_MAP[@]}"; do
   q_lc="${q,,}"
+  q_uc="${q_lc^^}"
 
   if [[ -z "${SUMMARY_SEEN[$q_lc]:-}" ]]; then
     SUMMARY_SEEN["$q_lc"]=1
     SUMMARY_QTYPES+=("$q_lc")
   fi
 
-  if [[ "$q_lc" == "f32" ]]; then
-    continue
-  fi
-
-  if [[ -z "${SEEN[$q_lc]:-}" ]]; then
-    SEEN["$q_lc"]=1
-    QTYPES+=("$q_lc")
+  # Only qtypes that are not covered by the BPW table need their own map download.
+  if [[ -z "${BPW_TABLE[$q_uc]:-}" ]]; then
+    if [[ -z "${DOWNLOAD_SEEN[$q_lc]:-}" ]]; then
+      DOWNLOAD_SEEN["$q_lc"]=1
+      DOWNLOAD_QTYPES+=("$q_lc")
+    fi
   fi
 done
 
-# Display qtypes to fetch
-echo "QTYPEs to fetch: ${QTYPES[*]}"
-
-# Fetch map files into temp dir
+# Fetch bf16 first, always.
 TMPDIR=$(mktemp -d)
 echo "Using temp dir: $TMPDIR"
-# Add bf16 if we are processing f32 only
-if [ ${#QTYPES[@]} -eq 0 ]; then
-  _QTYPES=("bf16")
+
+BF16_AVAILABLE=false
+BF16_MAP_FILE="$TMPDIR/tensors.bf16.map"
+
+echo "Fetching tensors.bf16.map..."
+if run_downloader "BF16" "0" "$TMPDIR" "tensors.bf16.map"; then
+  echo "  -> saved to $BF16_MAP_FILE"
+  BF16_AVAILABLE=true
+  # Download the signature
+  if [[ "$SKIP_GPG" != "true" ]]; then
+    if ! run_downloader "BF16" -1 "$TMPDIR" "tensors.bf16.map.sig"; then
+      echo "  [Error] failed to fetch map gpg signature for BF16" >&2
+      [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+      [ -n "$TMPDIR" ] && rm -rf "$TMPDIR"
+      exit 2
+    else
+      if gpg --homedir "$GNUPG_TMPDIR" --no-default-keyring --verify "$BF16_MAP_FILE.sig" "$BF16_MAP_FILE" > /dev/null 2>&1; then
+        echo "  ✓ GPG signature verification successful."
+      else
+        echo "  [Error] GPG signature verification failed for '$BF16_MAP_FILE.sig'."
+        [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
+        [ -n "$TMPDIR" ] && rm -rf "$TMPDIR"
+        exit 3
+      fi
+    fi
+  fi
 else
-  _QTYPES=("${QTYPES[@]}")
+  echo "  [Warning] failed to fetch bf16 tensors.map" >&2
+  rm -f "$BF16_MAP_FILE"
 fi
-for q in "${_QTYPES[@]}"; do
+
+# If bf16 is available, we can derive all qtypes covered by the BPW table from it.
+# Only qtypes that are not covered by the BPW table need their own map download.
+if [[ ${#DOWNLOAD_QTYPES[@]} -gt 0 ]]; then
+  echo "QTYPEs to fetch: ${DOWNLOAD_QTYPES[*]}"
+else
+  echo "QTYPEs to fetch: (none)"
+fi
+
+for q in "${DOWNLOAD_QTYPES[@]}"; do
   local_map="$TMPDIR/tensors.${q}.map"
   echo "Fetching tensors.${q}.map..."
-  if run_downloader "${q^^}" "0" "${TMPDIR}" "tensors.${q}.map"; then
+  if run_downloader "${q^^}" "0" "$TMPDIR" "tensors.${q}.map"; then
     echo "  -> saved to $local_map"
     # Download the signature
     if [[ "$SKIP_GPG" != "true" ]]; then
-      if ! run_downloader "${q^^}" -1 "${TMPDIR}" "tensors.${q}.map.sig"; then
+      if ! run_downloader "${q^^}" -1 "$TMPDIR" "tensors.${q}.map.sig"; then
           echo "  [Error] failed to fetch map gpg signature for ${q^^}" >&2
           [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"
           [ -n "$TMPDIR" ] && rm -rf "$TMPDIR"
@@ -392,20 +428,23 @@ declare -A QTYPE_ELEMENTS=()
 for regex in "${!USER_MAP[@]}"; do
   tag=${USER_MAP[$regex]}
   tag_lc="${tag,,}"
+  tag_uc="${tag_lc^^}"
 
-  if [ "$tag_lc" == "f32" ]; then
-    _tag="${_QTYPES[0]}"
+  if [[ -n "${BPW_TABLE[$tag_uc]:-}" ]]; then
+    source_tag="bf16"
+    target_known=true
   else
-    _tag=$tag_lc
+    source_tag="$tag_lc"
+    target_known=false
   fi
 
-  map_file="$TMPDIR/tensors.${_tag}.map"
+  map_file="$TMPDIR/tensors.${source_tag}.map"
   if [[ ! -f "$map_file" ]]; then
-    echo "  [Warning] map file missing for tag '$_tag': $map_file" >&2
+    echo "  [Warning] map file missing for tag '$source_tag': $map_file" >&2
     continue
   fi
 
-  echo "Scanning for tensor regex='$regex' with dtype='$tag' in '$_tag' map file…"
+  echo "Scanning for tensor regex='$regex' with dtype='$tag' in '$source_tag' map file…"
 
   matched_lines_num=0
   sum_bytes=0
@@ -442,15 +481,18 @@ for regex in "${!USER_MAP[@]}"; do
     bytes="${bytes//[[:space:]]/}"
 
     [[ -z "$dtype" || -z "$bytes" ]] && continue
-    [[ "${dtype,,}" != "${tag_lc}" ]] && continue
 
     [[ -z "$elements" ]] && elements=0
 
-    adjusted_bytes="$(adjust_tensor_bytes "$dtype" "$elements" "$bytes" "$shape")"
+    if [[ "$target_known" == "true" ]]; then
+      adjusted_bytes="$(adjust_tensor_bytes "$tag_lc" "$dtype" "$bytes" "$shape")"
+    else
+      adjusted_bytes="$bytes"
+    fi
 
     if [[ "$adjusted_bytes" != "$bytes" ]]; then
       bump=$(( adjusted_bytes - bytes ))
-      echo "  → ${tensor_name}: bytes=${bytes} -> ${adjusted_bytes} (+${bump})"
+      printf "  → %s: bytes=%s -> %s (%+d)\n" "$tensor_name" "$bytes" "$adjusted_bytes" "$bump"
     fi
 
     sum_bytes=$(( sum_bytes + adjusted_bytes ))
@@ -555,6 +597,7 @@ echo "## Summary of tensor counts and bpw per qtype"
 echo "#"
 echo "# QTYPE		Count	BPW	Assigned GiB	% Assigned	Max GiB (all)"
 
+WARN_NA=false
 for line in "${SORTED_SUMMARY_LINES[@]}"; do
   IFS=$'\t' read -r sort_key q count bytes elements <<< "$line"
 
@@ -562,6 +605,7 @@ for line in "${SORTED_SUMMARY_LINES[@]}"; do
     bpw_display="$(format_bpw_summary "$sort_key")"
   else
     bpw_display="n/a"
+    WARN_NA=true
   fi
 
   assigned_gib="$(format_gib_precision "$bytes" 2)"
@@ -584,3 +628,10 @@ done
 
 echo "#"
 echo "# -Average BPW: $avg_bpw"
+
+if [[ "$WARN_NA" == "true" ]]; then
+  echo
+  echo "Warning: n/a was produced in the summary."
+  echo "This may mean you are not downloading the right artifacts for the model of the recipe."
+  echo "Make sure the download.conf file present in your working directory corresponds to the model download.conf." >&2
+fi
