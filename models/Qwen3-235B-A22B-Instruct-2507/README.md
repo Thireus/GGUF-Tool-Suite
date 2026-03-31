@@ -39,7 +39,8 @@ cd GGUF-Tool-Suite
 rm -f download.conf # Make sure to copy the relevant download.conf for the model before running quant_assign.py
 cp -f models/DeepSeek-R1-0528/download.conf . # Use the download.conf of the chosen model
 mkdir -p kitchen && cd kitchen
-../quant_downloader.sh ../recipe_examples/ik_harmonized_recipes/DeepSeek-R1-0528.ROOT-2.7921bpw-3.4451ppl.218GB-GGUF_14GB-GPU_204GB-CPU.90e3c2f_6f5170d.recipe
+# Obtain a recipe example for the chosen model from ../recipe_examples/
+../quant_downloader.sh ../recipe_examples/ik_harmonized_recipes/DeepSeek-R1-0528.THIREUS-2.7944bpw-3.4451ppl.218GB-GGUF_14GB-GPU_204GB-CPU.569b7f6_6f5170d.recipe
 
 # Other recipe examples can be found at https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples
 

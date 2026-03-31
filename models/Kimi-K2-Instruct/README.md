@@ -39,6 +39,7 @@ cd GGUF-Tool-Suite
 rm -f download.conf # Make sure to copy the relevant download.conf for the model before running quant_assign.py
 cp -f models/Kimi-K2-Instruct/download.conf . # Use the download.conf of the chosen model
 mkdir -p kitchen && cd kitchen
+# Obtain a recipe example for the chosen model from ../recipe_examples/
 ../quant_downloader.sh ../recipe_examples/ik_harmonized_recipes/Kimi-K2-Instruct.ROOT-1.9968bpw-3.8128ppl.238GB-GGUF_10GB-GPU_228GB-CPU.90e3c2f_4766d51.recipe
 
 # Other recipe examples can be found at https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples
