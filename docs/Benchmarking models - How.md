@@ -439,7 +439,7 @@ Use the following command to identify which quantization types failed to be benc
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
 cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
-awk -F',' 'NR==1 {for (i=1;i<=NF;i++) h[i]=$i; next} {for (i=1;i<=NF;i++) if ($i=="" || $i=="404" || $i=="404%") print h[i]}' kld_results.csv
+awk -F',' 'NR==1 {for (i=1;i<=NF;i++) h[i]=$i; next} {for (i=2;i<=NF;i++) if ($i=="" || $i=="404" || $i=="404%") print $1}' kld_results.csv
 ```
 
 If this command doesn't return anything, then you have successfully produced `kld_results.csv` and `ppl_results.csv` calibration data files. If not, then you must run the same `benchmark_each_tensor.sh` with the exact same parameters to resume benchmarking these remaining quantization types.
