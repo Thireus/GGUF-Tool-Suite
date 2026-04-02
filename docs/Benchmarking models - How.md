@@ -367,7 +367,7 @@ iq1_s_r4 iq1_s iq1_kt iq1_m iq2_xxs iq2_kt iq2_ks iq2_xs iq2_k iq2_s q2_K iq2_kl
 
 Note: I could also recommend to further refine this list and select only quantization types that are not "hard-impure" - You can use [gguf.thireus.com](https://gguf.thireus.com/) to identify which quants are hard-impure (they are highlighted in red), alternatively you can identify this yourself via the tensors.map files produced that record if tensor quantization fallback to other quant types (that aren't base or row-interleaved, which are fine) have occured.
 
-From there, you will need to assess how far in this list you can go while still being able to load models quantized to these types. For example, if your `BASELINE_QTYPE` is `q5_K` then you probably won't be able to load and benchmark `q5_1` and beyond since their bpw is higher than your baseline quantization type (which is already the max your hardware supports). 
+From there, you will need to assess how far in this list you can go while still being able to load models quantized to these types. For example, if your `BASELINE_QTYPE` is `q5_K` then you probably won't be able to load and benchmark `q5_1` and beyond since their bpw is higher than your baseline quantization type (which is already the max your hardware supports). If you decide to change your `BASELINE_QTYPE` for this benchmark, remember you will also need to edit the `BASELINE_QTYPE` found under the "# 8. Baseline QTYPE for baseline PPL+KLD computation" section of the `benchmark_each_tensor.sh` script.
 
 To run the group0 benchmarking, run the following command:
 
@@ -376,7 +376,7 @@ cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
 export PATH="$WORKING_DIRECTORY"/"$MODEL"-BENCH/:$PATH && \
 cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
-benchmark_each_tensor.sh --qtypes "$TARGET_QTYPE" --chunks 250 --group-tensors '.*' --benchmark-groups-only --qtypes iq1_s_r4 iq1_s iq1_kt iq1_m iq2_xxs iq2_kt iq2_ks iq2_xs iq2_k iq2_s q2_K iq2_kl iq3_xxs iq3_kt iq3_ks iq3_k iq3_s q3_K iq4_kss iq4_kt iq4_ks iq4_xs iq4_k iq4_nl q4_0 q4_K q4_1 iq5_ks iq5_k q5_0 q5_K q5_1 q6_0 q6_K iq6_k q8_0 bf16
+benchmark_each_tensor.sh --chunks 250 --group-tensors '.*' --benchmark-groups-only --qtypes iq1_s_r4 iq1_s iq1_kt iq1_m iq2_xxs iq2_kt iq2_ks iq2_xs iq2_k iq2_s q2_K iq2_kl iq3_xxs iq3_kt iq3_ks iq3_k iq3_s q3_K iq4_kss iq4_kt iq4_ks iq4_xs iq4_k iq4_nl q4_0 q4_K q4_1 iq5_ks iq5_k q5_0 q5_K q5_1 q6_0 q6_K iq6_k q8_0 bf16
 ```
 
 Note: Trim the list of qtypes to the qtypes your hardware can handle, otherwise you will end up with empty benchmark results for these qtypes.
