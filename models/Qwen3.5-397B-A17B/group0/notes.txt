@@ -1,0 +1,15 @@
+Enrichment notes:
+
+cd models/Qwen3.5-4B/group0/
+
+../../../model_tensor_bpw_metric.py --results-csv kld_results.csv --c-free --exclude-qtypes '.*_bn.*$' --transforms "identity" --ignore-outliers 50 --allow-impure-map --p-grid-max 15 --p-grid-steps 100 --d-from-lowest 1 --penalize-above 15 --resemblance-metric r2 --equation-only 2> /dev/null
+
+y = 0 + 5.77261777687e+22 * ( x + 10.2181080113 )^(-20.8421052632)
+
+cd models/Qwen3.5-397B-A17B/group0
+
+../../../model_tensor_bpw_metric.py --results-csv kld_results_partial.csv --c-free --exclude-qtypes '.*_bn.*$' --transforms "identity" --ignore-outliers 50 --allow-impure-map --p-grid-max 15 --p-grid-steps 100 --d-from-lowest 1 --penalize-above 15 --resemblance-metric r2 --equation-only --plot 2> /dev/null
+
+y = 0 + 0.53797670515 * ( x - 0.958903783586 )^(-2.34120148857)
+
+./group0_enricher.py --reference-csv models/Qwen3.5-4B/group0/kld_results.csv --reference-mean-equation "y = 0 + 5.77261777687e+22 * ( x + 10.2181080113 )^(-20.8421052632)" --target-csv models/Qwen3.5-397B-A17B/group0/kld_results_partial.csv --output-csv models/Qwen3.5-397B-A17B/group0/kld_results.csv --target-mean-equation "y = 0 + 0.53797670515 * ( x - 0.958903783586 )^(-2.34120148857)"
