@@ -100,7 +100,8 @@ MODEL_FILE=$(ls "$MODEL"-*-SPECIAL_TENSOR-00001-of-*.gguf) && \
 CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0,2,1 llama-perplexity \
 -m $MODEL_FILE -mla 3 -fa on -amb 1024 -ctk f16 -c 512 -ngl 99 \
 -ot "blk\.(3|4|5)\.ffn_.*=CUDA0" -ot "blk\.(6|7|8)\.ffn_.*=CUDA1" -ot "blk\.(9|10)\.ffn_.*=CUDA2" \
--ot exps=CPU -b 512 -ub 512 --warmup-batch --no-mmap --threads $(nproc) --main-gpu 0
+-ot exps=CPU -b 512 -ub 512 --warmup-batch --no-mmap --threads $(nproc) --main-gpu 0 --seed 1337 \
+-f imatrix-calibration-corpus-v02.txt --chunks 250
 ```
 
 You will see in the logs the ETA, the aim being to reduce that ETA as much as possible:
