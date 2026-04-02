@@ -95,6 +95,12 @@ Qwen3.5-4B/ppl_results.csv
 Qwen3.5-4B/kld_results.csv
 Qwen3.5-4B/group0/ppl_results.csv
 Qwen3.5-4B/group0/kld_results.csv
+Qwen3.5-397B-A17B/ppl_results.csv
+Qwen3.5-397B-A17B/kld_results.csv
+Qwen3.5-397B-A17B/group0/bpw_kld_results_partial.csv
+Qwen3.5-397B-A17B/group0/kld_results_partial.csv
+Qwen3.5-397B-A17B/group0/kld_results.csv
+Qwen3.5-397B-A17B/group0/ppl_results_partial.csv
 Kimi-K2-Instruct-0905/ppl_results.csv
 Qwen3-Coder-480B-A35B-Instruct/ppl_results.csv
 Qwen3.5-27B/ppl_results.csv
