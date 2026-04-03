@@ -332,6 +332,8 @@ awk -F',' 'NR==1 {for (i=1;i<=NF;i++) h[i]=$i; next} {for (i=1;i<=NF;i++) if ($i
 
 If this command doesn't return anything, then you have successfully produced `kld_results.csv` and `ppl_results.csv` calibration data files. If not, then you must run the same `benchmark_each_tensor.sh` with the exact same parameters to resume benchmarking these remaining tensors/groups.
 
+You can find the calibration data of models that have already been benchmarked in the https://github.com/Thireus/GGUF-Tool-Suite/tree/main/models directories.
+
 ## (optional) Run the degradation data benchmark
 
 _The `quant_assign.py` methodology that produces the best recipe with minimal user input is the one called `greedy` which is enabled with the `--use-greedy-quant-assign` parameter. However, this technique relies on a secondary benchmark data (called group0 degradation data) which is used to identify how wide or narrow the range of quant assignments for a given target size has to be and which quantization types to priotise over others due to better quality/size ratio. Without this degradation data, `quant_assign.py` uses the degradation data of `Qwen3-4B-Thinking-2507`, which is already a fine degradation data for most model, but often requires guessing the ideal `--exponential-factor` to bend the metrics to best fit an hypothetical degradation of the target model. For this reason, while this is an optional step, I still recommend producing such data. We will assume here that you have already configured both `quant_assign.py` and `collect_ppl_results.sh` as instructed in the previous steps - no new configuration is necessary._
