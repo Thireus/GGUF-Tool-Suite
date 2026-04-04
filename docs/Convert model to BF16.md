@@ -102,7 +102,7 @@ mkdir -p /"$WORKING_DIRECTORY"/"$MODEL"-"${MAINTAINER^^}"-BF16-SPECIAL_SPLIT
 # Activate env
 source venv/bin/activate && \
 cd llama.cpp && \
-ulimit -n 99999 && \
+ulimit -n 9999 || sudo ulimit -n 9999 || echo "Warning: Could not increase file descriptor limit (ulimit -n). The model may fail to load on Linux/macOS." && \
 python convert_hf_to_gguf.py \
      --outtype bf16 \
      --outfile /"$WORKING_DIRECTORY"/"$MODEL"-"${MAINTAINER^^}"-BF16-SPECIAL_SPLIT/model_name \
@@ -156,7 +156,7 @@ cd GGUF-Tool-Suite && git pull # Update it
 # Activate env
 cd "$WORKING_DIRECTORY" && \
 source venv/bin/activate && \
-ulimit -n 99999 && \
+ulimit -n 9999 || sudo ulimit -n 9999 || echo "Warning: Could not increase file descriptor limit (ulimit -n). The model may fail to load on Linux/macOS." && \
 export PATH="$WORKING_DIRECTORY"/GGUF-Tool-Suite/:$PATH && \
 cd "$WORKING_DIRECTORY" && \
 monitor_and_clean.sh .
