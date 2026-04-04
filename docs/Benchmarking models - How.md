@@ -149,7 +149,19 @@ Important: Double check that the additional `-f imatrix-calibration-corpus-v02.t
 
 _We'll assume you've already made sure all your VRAM has been maxed out, since GPU VRAM speed is superor to CPU RAM speed. So, we're not going to touch the `PPL_COMMAND_TEMPLATE` at this point._
 
-Let's identify tensors that can be benchmarked together:
+Let's get an idea about how long benchmarking will take... This command returns how many tensors (benchmarking rounds) the `benchmark_each_tensor.sh` script will benchmark:
+
+```
+cd "$WORKING_DIRECTORY" && \
+cd "$MODEL"-BENCH && \
+export PATH="$WORKING_DIRECTORY"/"$MODEL"-BENCH/:$PATH && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+cat ${BASELINE_QTYPE^^}_USER_REGEX.txt | grep -v locked  | quants_regex_expander.sh | wc -l
+```
+
+Multiply that number with your optimum ETA and you'll get an approximate total ETA (excluding model loading time).
+
+Let's optimise this and identify tensors that can be benchmarked together:
 
 ```
 cd "$WORKING_DIRECTORY" && \
