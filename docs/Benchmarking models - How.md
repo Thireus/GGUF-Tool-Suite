@@ -93,11 +93,22 @@ sed -i '/^USER_REGEX=(/,/^[[:space:]]*)/{//!d}; /^USER_REGEX=(/r '"${BASELINE_QT
 sed -i '/^BASELINE_QTYPE=/c\BASELINE_QTYPE="'"$BASELINE_QTYPE"'"' "$WORKING_DIRECTORY"/"$MODEL"-BENCH/benchmark_each_tensor.sh
 ```
 
-Then, you will need ik_llama.cpp's `llama-perplexity` binary which can be found pre-compiled at [Thireus' fork of ik_llama.cpp](https://github.com/Thireus/ik_llama.cpp/tags) - look for the `main*` tags. Alternatively, compile it yourself as instructed [here](https://github.com/ikawrakow/ik_llama.cpp/blob/main/docs/build.md), but make sure you use the `-DGGML_MAX_CONTEXTS=2048` cmake option which lifts the limit of the number of .gguf shards ik_llama.cpp can load at once - not using this compilation option (combined with `ulimit -n 9999`) will result in sharded models failing to load.
+Then, obtain the `imatrix-calibration-corpus-v02.txt` file which is used for KLD and PPL calibration data benchmarking (see why [here](https://github.com/Thireus/GGUF-Tool-Suite/discussions/23#discussioncomment-14764941)):
+
+```
+cd "$WORKING_DIRECTORY" && \
+curl -L 'https://gist.githubusercontent.com/ubergarm/edfeb3ff9c6ec8b49e88cdf627b0711a/raw/ba5b01b6960a86874592f5913e283746ff734483/ubergarm-imatrix-calibration-corpus-v02.txt' -o imatrix-calibration-corpus-v02.txt && \
+cd "$MODEL"-BENCH && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+cp -f "$WORKING_DIRECTORY"/imatrix-calibration-corpus-v02.txt .
+```
+
+You will also need ik_llama.cpp's `llama-perplexity` binary which can be found pre-compiled at [Thireus' fork of ik_llama.cpp](https://github.com/Thireus/ik_llama.cpp/tags) - look for the `main*` tags. Alternatively, compile it yourself as instructed [here](https://github.com/ikawrakow/ik_llama.cpp/blob/main/docs/build.md), but make sure you use the `-DGGML_MAX_CONTEXTS=2048` cmake option which lifts the limit of the number of .gguf shards ik_llama.cpp can load at once - not using this compilation option (combined with `ulimit -n 9999`) will result in sharded models failing to load.
 
 Finally, we need to edit the `PPL_COMMAND_TEMPLATE` found in the `benchmark_each_tensor.sh` script. This template is what the script will use to execute `llama-perplexity` and compute the [KLD](https://en.wikipedia.org/wiki/Kullback%E2%80%93Leibler_divergence) and [PPL](https://en.wikipedia.org/wiki/Perplexity) metrics of the model after each tensor quantization gets dropped from `BASELINE_QTYPE` to `TARGET_QTYPE`. To find the best template to use you must identify which `llama-perplexity` parameters give you the fastest benchmarking speed. I recommend to play around with the parameters of ik_llama.cpp's `llama-perplexity` and the curent `$MODEL` you've downloaded. For example, with trial and error I found that the best benchmarking speed for my hardware for the `$MODEL` were achieved when using the following `llama-perplexity` parameters (with both GPU and CPU offloading):
 
 ```
+ulimit -n 9999 || sudo ulimit -n 9999 || echo "Warning: Could not increase file descriptor limit (ulimit -n). The model may fail to load on Linux/macOS." && \
 MODEL_FILE=$(ls "$MODEL"-*-SPECIAL_TENSOR-00001-of-*.gguf) && \
 CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0,2,1 llama-perplexity \
 -m $MODEL_FILE -mla 3 -fa on -amb 1024 -ctk f16 -c 512 -ngl 99 \
@@ -131,16 +142,6 @@ PPL_COMMAND_TEMPLATE='CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0,2,1 ll
 ```
 
 Make sure you get this `PPL_COMMAND_TEMPLATE` right. If you plan on tweaking it later in the middle of a benchmarking session, you will likely have to redo benchmarking from the beginning because different parameters likely lead to slightly different metrics - which is going to corrupt the calibration data.
-
-Obtain the `imatrix-calibration-corpus-v02.txt` file which is used for KLD and PPL calibration data benchmarking (see why [here](https://github.com/Thireus/GGUF-Tool-Suite/discussions/23#discussioncomment-14764941)):
-
-```
-cd "$WORKING_DIRECTORY" && \
-curl -L 'https://gist.githubusercontent.com/ubergarm/edfeb3ff9c6ec8b49e88cdf627b0711a/raw/ba5b01b6960a86874592f5913e283746ff734483/ubergarm-imatrix-calibration-corpus-v02.txt' -o imatrix-calibration-corpus-v02.txt && \
-cd "$MODEL"-BENCH && \
-cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
-cp -f "$WORKING_DIRECTORY"/imatrix-calibration-corpus-v02.txt .
-```
 
 Important: Double check that the additional `-f imatrix-calibration-corpus-v02.txt --chunks ${PPL_COMMAND_CHUNKS_TO_PROCESS}` parameters are present at the end of your `PPL_COMMAND_TEMPLATE` variable.
 
@@ -226,6 +227,7 @@ I recommend running the benchmarking script into a screen because this is a task
 Run the following command to start benchmarking:
 
 ```
+ulimit -n 9999 || sudo ulimit -n 9999 || echo "Warning: Could not increase file descriptor limit (ulimit -n). The model may fail to load on Linux/macOS." && \
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
 export PATH="$WORKING_DIRECTORY"/"$MODEL"-BENCH/:$PATH && \
@@ -377,6 +379,7 @@ From there, you will need to assess how far in this list you can go while still 
 To run the group0 benchmarking, run the following command:
 
 ```
+ulimit -n 9999 || sudo ulimit -n 9999 || echo "Warning: Could not increase file descriptor limit (ulimit -n). The model may fail to load on Linux/macOS." && \
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
 export PATH="$WORKING_DIRECTORY"/"$MODEL"-BENCH/:$PATH && \
