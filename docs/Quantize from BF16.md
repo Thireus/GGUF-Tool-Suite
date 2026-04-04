@@ -4,6 +4,8 @@ _In this section I will explain how to quantize a [BF16 model](https://github.co
 
 ## Requirements
 
+**_IMPORTANT:_ FOLLOW THIS GUIDE STEP-BY-STEP. DO NOT SKIP ANY NON-OPTIONAL PART. DO NOT TAKE SHORTCUTS. READ CAREFULLY WHAT IS WRITTEN AT ANY STEP.**
+
 Hardware:
 
 ```
@@ -13,7 +15,7 @@ GPU: NO
 
 _I like to use Hetzner servers, you can find suitable and cheap options [here](https://www.hetzner.com/sb/#search=5950X&drives_size_from=3500&drives_size_to=22000&cpuType=AMD). I recommend using RAID0 and Debian 13._
 
-Make sure you edit and paste these variables in your terminal:
+Make sure you edit and paste these env variables in any terminal session you'll be using:
 
 ```
 WORKING_DIRECTORY='/AI' # Full path please!
