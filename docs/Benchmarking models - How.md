@@ -14,6 +14,8 @@ Before we get started I feel it's important to explain a few points:
 
 ## Requirements
 
+**IMPORTANT: FOLLOW THIS GUIDE STEP-BY-STEP. DO NOT SKIP ANY NON-OPTIONAL PART. DO NOT TAKE SHORTCUTS. READ CAREFULLY WHAT IS WRITTEN AT ANY STEP.**
+
 Hardware:
 
 ```
@@ -26,7 +28,7 @@ Note: I personally own 3xRTX6000Pro + 1xRTX5090 and a i9-7980xe with 256GB of du
 If you own a GPU with 16GB of VRAM and 32GB of DDR4, this should be plenty to benchmark models that can already fit your hardware when quantized to a decent quant type - considering that benchmarking only requires a tiny context window of 512 tokens. For example, 
 [Qwen3.5-27B](https://huggingface.co/Thireus/Qwen3.5-27B-THIREUS-BF16-SPECIAL_SPLIT/tree/main) which has a BF16 size of 53GB can be benchmarked on a 16GB VRAM + 32GB RAM - the way this is done is: number one, offload layers to the CPU and number two choose a `BASELINE_QTYPE` that isn't BF16, for example [IQ5_KS](https://huggingface.co/Thireus/Qwen3.5-27B-THIREUS-IQ5_KS-SPECIAL_SPLIT/tree/main).
 
-Let's get into it... Make sure you edit and paste these variables in your terminal:
+Let's get into it... Make sure you edit and paste these env variables in any terminal session you'll be using:
 
 ```
 WORKING_DIRECTORY='/AI' # Full path please!
