@@ -5,7 +5,7 @@
 #** tensors are the heaviest, thus to be benchmarked.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jan-02-2026 -------------------- **#
+#** --------------- Updated: Apr-07-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -18,7 +18,7 @@
 #**    /    o―ヽニニフ))             · · ɪǫ3_xxs      ~·°        **#
 #**    し―-J                                                   **#
 #**                                                           **#
-#** Copyright © 2025 - Thireus.              Bₒₒₜₛₜᵣₐₚₚᵢₙ𝓰 ₛₖᵧₙₑₜ **#
+#** Copyright © 2026 - Thireus.              Bₒₒₜₛₜᵣₐₚₚᵢₙ𝓰 ₛₖᵧₙₑₜ **#
 #***************************************************************#
 #**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
 #***************************************************************#
@@ -160,6 +160,51 @@ def build_range_regex(S: int, E: int) -> str:
     joined = "|".join(parts)
     _debug("    build_range_regex returns %s", joined)
     return joined
+
+# --------------------------------------------------------------------------------
+# Normalize bare numeric ranges only when they are not already surrounded by ().
+# --------------------------------------------------------------------------------
+def normalize_bare_ranges(text: str) -> str:
+    out_chars: List[str] = []
+    i = 0
+    depth = 0
+
+    while i < len(text):
+        ch = text[i]
+
+        if ch == "\\" and i + 1 < len(text):
+            out_chars.append(text[i:i + 2])
+            i += 2
+            continue
+
+        if ch == "(":
+            depth += 1
+            out_chars.append(ch)
+            i += 1
+            continue
+
+        if ch == ")":
+            if depth > 0:
+                depth -= 1
+            out_chars.append(ch)
+            i += 1
+            continue
+
+        if ch == "[":
+            m = re.match(r"\[([0-9]+-[0-9]+)\]", text[i:])
+            if m:
+                token = m.group(0)
+                if depth == 0:
+                    out_chars.append(f"({token})")
+                else:
+                    out_chars.append(token)
+                i += len(token)
+                continue
+
+        out_chars.append(ch)
+        i += 1
+
+    return "".join(out_chars)
 
 # --------------------------------------------------------------------------------
 # shorten_regex_list(): collapse consecutive blk.N (and similar) lines
@@ -431,6 +476,9 @@ def expand_ranges(lines: List[str]) -> List[str]:
         input_line = input_line.rstrip()
         if not input_line:
             continue
+
+        # Normalize bare numeric ranges only when they are not already surrounded by ().
+        input_line = normalize_bare_ranges(input_line)
 
         if "(" in input_line and ")" in input_line:
             # prefix: before first '('
