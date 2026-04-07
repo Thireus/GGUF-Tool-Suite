@@ -93,6 +93,8 @@ sed -i '/^USER_REGEX=(/,/^[[:space:]]*)/{//!d}; /^USER_REGEX=(/r '"${BASELINE_QT
 sed -i '/^BASELINE_QTYPE=/c\BASELINE_QTYPE="'"$BASELINE_QTYPE"'"' "$WORKING_DIRECTORY"/"$MODEL"-BENCH/benchmark_each_tensor.sh
 ```
 
+Note: To distribute the workload across multiple machines, see the optional `Splitting the workload across nodes` section at the bottom of this page.
+
 Then, obtain the `imatrix-calibration-corpus-v02.txt` file which is used for KLD and PPL calibration data benchmarking (see why [here](https://github.com/Thireus/GGUF-Tool-Suite/discussions/23#discussioncomment-14764941)):
 
 ```
@@ -501,3 +503,71 @@ Note: By default the `group0_enricher.py` script uses the degradation data and m
 You will usually find how Thireus' degradation data has been enriched in the `notes.txt` file present in the `group0` folder of each model, for example [here](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/models/Qwen3.5-35B-A3B/group0/notes.txt).
 
 Congratulations, if you've made it thus far it means you have successfully produced a `group0/kld_results.csv` file which is to be used with the `quant_assign.py` script and is loaded via the `--quant-degradation-csv group0/kld_results.csv` parameter.
+
+## (optional) Splitting the workload across nodes
+
+_If you own multiple machines (nodes) you might be interested in splitting the benchmark workload. To achieve this we will be splitting the `USER_REGEX` section of the `benchmark_each_tensor.sh` script, so that each node benchmarks a unique portion of the tensors. At the same time, we will be excluding any potential tensor already benchmarked by our master node._
+
+First of all, make sure that you follow this guide down until the `Configure the benchmark script` section on each machine and that all environment variables used are the same on all machines (except `WORKING_DIRECTORY` which can differ).
+
+### Additional environment variables
+
+On each machine terminal session define the following environment variables:
+
+```
+NODE_ID=1 # Modify this to correspond to the current node id of the machine, 1 being the master node
+TOTAL_NODES=3 # Must match the total number of machines
+CHUNKS=250 # Do not change this unless you know what it corresponds to
+```
+
+### Split the USER_REGEX for multiple nodes
+
+Run this command on the master node which will split and exclude the tensors that have already been benchmarked (if any):
+
+```
+cd "$WORKING_DIRECTORY" && \
+cd "$MODEL"-BENCH && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+for NODE_ID in $(seq 1 $TOTAL_NODES); do shopt -s nullglob; cat ${BASELINE_QTYPE^^}_USER_REGEX.txt | quants_regex_expander.sh | cut -d\' -f2 | awk -v qt="$TARGET_QTYPE" -v ch="$CHUNKS" -v nid="$NODE_ID" -v tot="$TOTAL_NODES" 'BEGIN{nid--;suf="."qt"."ch".txt";for(i=1;i<ARGC;i++){n=ARGV[i];sub(/^bench_.*_result\./,"",n);sub(suf"$","",n);have[n]=1;delete ARGV[i]}}{orig=$0;n=$0;sub(/^\^/,"",n);sub(/\$.*/,"",n);gsub(/\\\./,".",n);if(!(n in have)){cmd="printf \"%s\" \""orig"\" | cksum";cmd|getline c;close(cmd);split(c,a," ");if((a[1]%tot)==nid) print orig}}' bench_*_result.*."$TARGET_QTYPE"."$CHUNKS".txt | quants_regex_merger.sh --model-name "$MODEL" --no-file | sed "s/\^.*/'&'/" > "${BASELINE_QTYPE^^}_USER_REGEX-${NODE_ID}-of-${TOTAL_NODES}.txt"; done
+```
+
+Verify that the files produced lead to a valid `USER_REGEX` list of tensor regex when merged, comparable to `${BASELINE_QTYPE^^}_USER_REGEX.txt` (minus tensors potentially already benchmarked):
+
+```
+cat "${BASELINE_QTYPE^^}_USER_REGEX-"*"-of-${TOTAL_NODES}.txt" | quants_regex_expander.sh | cut -d\' -f2 | quants_regex_merger.sh --model-name "$MODEL" --no-file | sed "s/\^.*/'&'/"
+```
+
+Verify that the combined split `USER_REGEX` files match the expected complete regex (remember, this is minus the tensors that have already been benchmarked if any):
+
+```
+diff <(grep -v '^#' ${BASELINE_QTYPE^^}_USER_REGEX.txt | sort) <(cat "${BASELINE_QTYPE^^}_USER_REGEX-"*"-of-${TOTAL_NODES}.txt" | quants_regex_expander.sh | cut -d\' -f2 | quants_regex_merger.sh --model-name "$MODEL" --no-file | sed "s/\^.*/'&'/" | grep -v '^#' | sort)
+```
+
+If the verification is successful, then you can manually send he corresponding `"${BASELINE_QTYPE^^}_USER_REGEX-${TARGET_NODE_ID}-of-${TOTAL_NODES}.txt"` file the master node has produced to the corresponding `TARGET_NODE_ID` node. For example, `BF16_USER_REGEX-2-of-3.txt` would be sent to our second machine and `BF16_USER_REGEX-3-of-3.txt` would be sent to our third machine, while `BF16_USER_REGEX-1-of-3.txt` would remain on our master machine.
+
+### Configure the benchmark script of each node
+
+Execute the following command on each node (including the master node), while making sure the same environment variables are used on each node (with the exception of `WORKING_DIRECTORY` which can be different and `NODE_ID` corresponding to the current node id):
+
+```
+cd "$WORKING_DIRECTORY" && \
+cd "$MODEL"-BENCH && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+sed -i '/^USER_REGEX=(/,/^[[:space:]]*)/{//!d}; /^USER_REGEX=(/r '"${BASELINE_QTYPE^^}_USER_REGEX-${NODE_ID}-of-${TOTAL_NODES}.txt" "$WORKING_DIRECTORY"/"$MODEL"-BENCH/benchmark_each_tensor.sh && \
+sed -i '/^BASELINE_QTYPE=/c\BASELINE_QTYPE="'"$BASELINE_QTYPE"'"' "$WORKING_DIRECTORY"/"$MODEL"-BENCH/benchmark_each_tensor.sh
+```
+
+Once this is done, you can resume following the guide on each machine from `Note: To distribute the workload across multiple machines ...` after reading the following important notes.
+
+Very important: You must use the same `-b`, `-ub` and `-amb` parameters for the `PPL_COMMAND_TEMPLATE` on all nodes! Otherwise, the produced benchmark results by each node will be inconsistent and will definitely result in an invalid calibration (and degradation) data!
+
+I also recommend you to validate that the nodes produce the same baseline PPL estimate measurement:
+
+```
+cd "$WORKING_DIRECTORY" && \
+cd "$MODEL"-BENCH && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+cat bench_*_result.baseline."$TARGET_QTYPE"."$CHUNKS".txt | grep "^Final estimate: "
+```
+
+Once benchmarking is completed on all nodes, the `bench_*_result.*."$TARGET_QTYPE"."$CHUNKS".txt` files must be sent to the master node `"$WORKING_DIRECTORY"/"$MODEL"-BENCH/"$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT` directory so that the `collect_ppl_results.sh` can combine them all and produce the calibration (or degradation) csv files.
