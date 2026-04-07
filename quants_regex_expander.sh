@@ -5,7 +5,7 @@
 #** regex for troubleshooting purpose.                        **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-26-2026 -------------------- **#
+#** --------------- Updated: Apr-07-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -29,6 +29,52 @@ set -euo pipefail
 _debug() {
   [[ "${DEBUG:-0}" -ne 1 ]] && return
   printf '[DEBUG] %s\n' "$*" >&2
+}
+
+normalize_bare_ranges() {
+  local input="$1"
+  local out=""
+  local i=0
+  local len="${#input}"
+  local depth=0
+  local rest
+
+  while (( i < len )); do
+    case "${input:i:1}" in
+      '(')
+        out+='('
+        ((depth++))
+        ((i++))
+        ;;
+      ')')
+        out+=')'
+        if (( depth > 0 )); then
+          ((depth--))
+        fi
+        ((i++))
+        ;;
+      '[')
+        rest="${input:i}"
+        if [[ "$rest" =~ ^\[([0-9]+)-([0-9]+)\] ]]; then
+          if (( depth == 0 )); then
+            out+="([${BASH_REMATCH[1]}-${BASH_REMATCH[2]}])"
+          else
+            out+="[${BASH_REMATCH[1]}-${BASH_REMATCH[2]}]"
+          fi
+          ((i += ${#BASH_REMATCH[0]}))
+        else
+          out+='['
+          ((i++))
+        fi
+        ;;
+      *)
+        out+="${input:i:1}"
+        ((i++))
+        ;;
+    esac
+  done
+
+  printf '%s' "$out"
 }
 
 # echo "$(for f in `ls DeepSeek-R1-0528-DQ4_K_R4-*.gguf`; do gguf_info.py "$f"; done)" | grep 'dtype=' | awk -F $'\t' '{print $1 "=" $3}' | sed 's/=dtype=/=/g' | sed 's/\./\\./g'
@@ -172,6 +218,9 @@ fi
 expand_ranges() {
   while IFS= read -r input; do
     local prefix body suffix
+
+    # Normalize bare numeric ranges into a grouped form so the existing parentheses handling applies.
+    input="$(normalize_bare_ranges "$input")"
 
     # Check for parentheses
     if [[ "$input" =~ \(.*\) ]]; then

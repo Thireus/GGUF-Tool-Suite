@@ -5,7 +5,7 @@
 #** regex for llama-quantize consumption.                     **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-24-2026 -------------------- **#
+#** --------------- Updated: Apr-07-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -30,6 +30,69 @@ shopt -s lastpipe
 _debug() {
   [[ "${DEBUG:-0}" -ne 1 ]] && return
   printf '[DEBUG] %s\n' "$*" >&2
+}
+
+normalize_bare_ranges() {
+  local input="$1"
+  local out=""
+  local i=0
+  local len="${#input}"
+  local depth=0
+  local escaped=0
+  local rest
+
+  while (( i < len )); do
+    local ch="${input:i:1}"
+
+    if (( escaped )); then
+      out+="$ch"
+      escaped=0
+      ((i++))
+      continue
+    fi
+
+    if [[ "$ch" == '\' ]]; then
+      out+="$ch"
+      escaped=1
+      ((i++))
+      continue
+    fi
+
+    case "$ch" in
+      '(')
+        out+='('
+        ((depth++))
+        ((i++))
+        ;;
+      ')')
+        out+=')'
+        if (( depth > 0 )); then
+          ((depth--))
+        fi
+        ((i++))
+        ;;
+      '[')
+        rest="${input:i}"
+        if [[ "$rest" =~ ^\[([0-9]+)-([0-9]+)\] ]]; then
+          if (( depth == 0 )); then
+            out+="([${BASH_REMATCH[1]}-${BASH_REMATCH[2]}])"
+          else
+            out+="[${BASH_REMATCH[1]}-${BASH_REMATCH[2]}]"
+          fi
+          ((i += ${#BASH_REMATCH[0]}))
+        else
+          out+='['
+          ((i++))
+        fi
+        ;;
+      *)
+        out+="$ch"
+        ((i++))
+        ;;
+    esac
+  done
+
+  printf '%s' "$out"
 }
 
 # Initialize array before any use
@@ -102,7 +165,7 @@ if [ ! -t 0 ]; then
   _debug "Reading custom from stdin"
   custom="$(cat)"
 else
-  # …otherwise use the built‑in default
+  # …otherwise use the built-in default
   custom="
 ^blk\.15\.attn_norm\.weight$=f32
 ^blk\.15\.exp_probs_b\.bias$=f32
@@ -1673,6 +1736,8 @@ expand_ranges() {
   while IFS= read -r input; do
     local prefix body suffix
 
+    input="$(normalize_bare_ranges "$input")"
+
     # Check for parentheses
     if [[ "$input" =~ \(.*\) ]]; then
       prefix="${input%%(*}"
@@ -1916,9 +1981,9 @@ reorder_and_group() {
     gpu_down=() gpu_up=() gpu_gate=()
     for l in "${gpu_shexp[@]}"; do
       case "$l" in
-        *ffn_down_*) gpu_down+=("$l") ;; 
-        *ffn_up_*)   gpu_up+=("$l")   ;; 
-        *ffn_gate_*) gpu_gate+=("$l") ;; 
+        *ffn_down_*) gpu_down+=("$l") ;;
+        *ffn_up_*)   gpu_up+=("$l")   ;;
+        *ffn_gate_*) gpu_gate+=("$l") ;;
       esac
     done
     (( ${#gpu_down[@]} )) && echo "# ffn_down_shexp — down-projection (shared experts) — qbits: $(list_bits gpu_down)" && bucket_by_bit gpu_down && echo
@@ -1932,9 +1997,9 @@ reorder_and_group() {
     cpu_down=() cpu_up=() cpu_gate=()
     for l in "${cpu_exps[@]}"; do
       case "$l" in
-        *ffn_down_*) cpu_down+=("$l") ;; 
-        *ffn_up_*)   cpu_up+=("$l")   ;; 
-        *ffn_gate_*) cpu_gate+=("$l") ;; 
+        *ffn_down_*) cpu_down+=("$l") ;;
+        *ffn_up_*)   cpu_up+=("$l")   ;;
+        *ffn_gate_*) cpu_gate+=("$l") ;;
       esac
     done
     (( ${#cpu_down[@]} )) && echo "# ffn_down_exps — down-projection (per-expert) — qbits: $(list_bits cpu_down)" && bucket_by_bit cpu_down && echo
@@ -2049,5 +2114,5 @@ if [[ "$NO_FILE" -eq 0 ]]; then
   printf "%s\n" "${OUTPUTS[@]:-}" > "$filename"
   echo "# Saved recipe to file: $filename"
 else
-  echo "# --no-file: would have written to $filename"
+  echo "# --no-file: would have written to $filename"
 fi
