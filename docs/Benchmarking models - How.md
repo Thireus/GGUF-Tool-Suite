@@ -534,12 +534,18 @@ for NODE_ID in $(seq 1 $TOTAL_NODES); do shopt -s nullglob; cat ${BASELINE_QTYPE
 Verify that the files produced lead to a valid `USER_REGEX` list of tensor regex when merged, comparable to `${BASELINE_QTYPE^^}_USER_REGEX.txt` (minus tensors potentially already benchmarked):
 
 ```
+cd "$WORKING_DIRECTORY" && \
+cd "$MODEL"-BENCH && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 cat "${BASELINE_QTYPE^^}_USER_REGEX-"*"-of-${TOTAL_NODES}.txt" | quants_regex_expander.sh | cut -d\' -f2 | quants_regex_merger.sh --model-name "$MODEL" --no-file | sed "s/\^.*/'&'/"
 ```
 
 Verify that the combined split `USER_REGEX` files match the expected complete regex (remember, this is minus the tensors that have already been benchmarked if any):
 
 ```
+cd "$WORKING_DIRECTORY" && \
+cd "$MODEL"-BENCH && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 diff <(grep -v '^#' ${BASELINE_QTYPE^^}_USER_REGEX.txt | sort) <(cat "${BASELINE_QTYPE^^}_USER_REGEX-"*"-of-${TOTAL_NODES}.txt" | quants_regex_expander.sh | cut -d\' -f2 | quants_regex_merger.sh --model-name "$MODEL" --no-file | sed "s/\^.*/'&'/" | grep -v '^#' | sort)
 ```
 
