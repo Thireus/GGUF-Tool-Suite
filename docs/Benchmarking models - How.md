@@ -567,7 +567,7 @@ sed -i '/^BASELINE_QTYPE=/c\BASELINE_QTYPE="'"$BASELINE_QTYPE"'"' "$WORKING_DIRE
 
 Once this is done, you can resume following the guide on each node from `Note: To distribute the workload across multiple machines or GPUs ...` after reading the following important notes.
 
-Very important: You must use the same `-b`, `-ub` and `-amb` parameters for the `PPL_COMMAND_TEMPLATE` on all nodes! Otherwise, the produced benchmark results by each node will be inconsistent and will definitely result in an invalid calibration (and degradation) data!
+Very important: You must use the same `-b`, `-ub` and `-amb` parameters for the `PPL_COMMAND_TEMPLATE` on all nodes! Otherwise, the produced benchmark results by each node will be inconsistent and will definitely result in an invalid calibration (and degradation) data! You should also use the same version of ik_llama.cpp's `llama-perplexity`.
 
 I also recommend you to validate that the nodes produce the same baseline PPL estimate measurement:
 
