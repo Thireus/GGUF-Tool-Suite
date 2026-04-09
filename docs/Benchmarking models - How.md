@@ -93,7 +93,7 @@ sed -i '/^USER_REGEX=(/,/^[[:space:]]*)/{//!d}; /^USER_REGEX=(/r '"${BASELINE_QT
 sed -i '/^BASELINE_QTYPE=/c\BASELINE_QTYPE="'"$BASELINE_QTYPE"'"' "$WORKING_DIRECTORY"/"$MODEL"-BENCH/benchmark_each_tensor.sh
 ```
 
-Note: To distribute the workload across multiple machines, see the optional `Splitting the workload across nodes` section at the bottom of this page.
+Note: To distribute the workload across multiple machines or GPUs, see the optional `Splitting the workload across nodes` section at the bottom of this page.
 
 Then, obtain the `imatrix-calibration-corpus-v02.txt` file which is used for KLD and PPL calibration data benchmarking (see why [here](https://github.com/Thireus/GGUF-Tool-Suite/discussions/23#discussioncomment-14764941)):
 
@@ -506,18 +506,20 @@ Congratulations, if you've made it thus far it means you have successfully produ
 
 ## (optional) Splitting the workload across nodes
 
-_If you own multiple machines (nodes) you might be interested in splitting the benchmark workload. To achieve this we will be splitting the `USER_REGEX` section of the `benchmark_each_tensor.sh` script, so that each node benchmarks a unique portion of the tensors. At the same time, we will be excluding any potential tensor already benchmarked by our master node._
+_If you own multiple machines or GPUs (nodes) and they have the capacity to benchmark from the same baseline, you might be interested in splitting the benchmark workload. To achieve this we will be splitting the `USER_REGEX` section of the `benchmark_each_tensor.sh` script, so that each node benchmarks a unique portion of the tensors. At the same time, we will be excluding any potential tensor already benchmarked by our master node._
 
-First of all, make sure that you follow this guide down until the `Configure the benchmark script` section on each machine and that all environment variables used are the same on all machines (except `WORKING_DIRECTORY` which can differ).
+First of all, make sure that you follow the documentation steps of the `Requirements` and `Prepare the environment` sections and stop at the `Configure the benchmark script` section for each node, and that all environment variables used are the same on all nodes, except `WORKING_DIRECTORY` which can differ. This is especially relevant if the node is the same machine but uses a different GPU than your master node, in which case the `WORKING_DIRECTORY` must be different.
+
+Note: You can usually safely copy the master node's `WORKING_DIRECTORY` to your other nodes to ensure the same `GGUF-Tool-Suite` cloned repository is used and to speed up the `$BASELINE_QTYPE` download process from the `Prepare the environment` section.
 
 ### Additional environment variables
 
-On each machine terminal session define the following environment variables:
+On each node terminal session define the following environment variables:
 
 ```
-NODE_ID=1 # Modify this to correspond to the current node id of the machine, 1 being the master node
-TOTAL_NODES=3 # Must match the total number of machines
-CHUNKS=250 # Do not change this unless you know what it corresponds to
+NODE_ID=1 # Modify this to correspond to the current node id, 1 being the master node
+TOTAL_NODES=3 # Must match the total number of nodes
+CHUNKS=250 # Do not change this unless you know what it corresponds to, this must remain the same value accross all nodes
 ```
 
 ### Split the USER_REGEX for multiple nodes
@@ -549,7 +551,7 @@ cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 diff <(grep -v '^#' ${BASELINE_QTYPE^^}_USER_REGEX.txt | sort) <(cat "${BASELINE_QTYPE^^}_USER_REGEX-"*"-of-${TOTAL_NODES}.txt" | quants_regex_expander.sh | cut -d\' -f2 | quants_regex_merger.sh --model-name "$MODEL" --no-file | sed "s/\^.*/'&'/" | grep -v '^#' | sort)
 ```
 
-If the verification is successful, then you can manually send he corresponding `"${BASELINE_QTYPE^^}_USER_REGEX-${TARGET_NODE_ID}-of-${TOTAL_NODES}.txt"` file the master node has produced to the corresponding `TARGET_NODE_ID` node. For example, `BF16_USER_REGEX-2-of-3.txt` would be sent to our second machine and `BF16_USER_REGEX-3-of-3.txt` would be sent to our third machine, while `BF16_USER_REGEX-1-of-3.txt` would remain on our master machine.
+If the verification is successful, then you can manually send he corresponding `"${BASELINE_QTYPE^^}_USER_REGEX-${TARGET_NODE_ID}-of-${TOTAL_NODES}.txt"` file the master node has produced to the corresponding `TARGET_NODE_ID` node. For example, `BF16_USER_REGEX-2-of-3.txt` would be sent to our second node and `BF16_USER_REGEX-3-of-3.txt` would be sent to our third node, while `BF16_USER_REGEX-1-of-3.txt` would remain on our master node.
 
 ### Configure the benchmark script of each node
 
@@ -563,7 +565,7 @@ sed -i '/^USER_REGEX=(/,/^[[:space:]]*)/{//!d}; /^USER_REGEX=(/r '"${BASELINE_QT
 sed -i '/^BASELINE_QTYPE=/c\BASELINE_QTYPE="'"$BASELINE_QTYPE"'"' "$WORKING_DIRECTORY"/"$MODEL"-BENCH/benchmark_each_tensor.sh
 ```
 
-Once this is done, you can resume following the guide on each machine from `Note: To distribute the workload across multiple machines ...` after reading the following important notes.
+Once this is done, you can resume following the guide on each node from `Note: To distribute the workload across multiple machines or GPUs ...` after reading the following important notes.
 
 Very important: You must use the same `-b`, `-ub` and `-amb` parameters for the `PPL_COMMAND_TEMPLATE` on all nodes! Otherwise, the produced benchmark results by each node will be inconsistent and will definitely result in an invalid calibration (and degradation) data!
 
