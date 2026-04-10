@@ -2,80 +2,94 @@
 # Model name: Qwen3.5-4B
 # Link to the original model: https://huggingface.co/Qwen/Qwen3.5-4B
 
-## Model head & embeddings — qbits: 32 6
+## Model head & embeddings — qbits: 32 2
 ^output_norm\.weight$=f32
-^token_embd\.weight$=q6_K
+^token_embd\.weight$=iq2_xs
 
-## Multi-headed attention parameters — qbits: 32 8 6
-^blk\.(6|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.attn_gate\.weight$=q6_K
-^blk\.([0-2]|[4-5])\.attn_gate\.weight$=q8_0
-^blk\.(3|7|11|15|19|23|27|31)\.attn_k\.weight$=q8_0
+## Multi-headed attention parameters — qbits: 32 3 2 1
+^blk\.(13|1[6-7])\.attn_gate\.weight$=iq1_s
+^blk\.([1-2]|[4-6]|8|24)\.attn_gate\.weight$=iq2_xs
+^blk\.(9|10|12|14|18|2[0-2]|2[5-6]|2[8-9]|30)\.attn_gate\.weight$=iq2_xxs
+^blk\.0\.attn_gate\.weight$=iq3_xxs
+^blk\.(15|23)\.attn_k\.weight$=iq2_s
+^blk\.31\.attn_k\.weight$=iq2_xs
+^blk\.(3|7|11|19|27)\.attn_k\.weight$=iq3_xxs
 ^blk\.(3|7|11|15|19|23|27|31)\.attn_k_norm\.weight$=f32
 ^blk\.([0-9]|[1-2][0-9]|3[0-1])\.attn_norm\.weight$=f32
-^blk\.(23|27)\.attn_output\.weight$=q6_K
-^blk\.(3|7|11|15|19|31)\.attn_output\.weight$=q8_0
-^blk\.(7|11|15|19|23|27|31)\.attn_q\.weight$=q6_K
-^blk\.3\.attn_q\.weight$=q8_0
+^blk\.(3|7|11|15|19|23|27|31)\.attn_output\.weight$=iq2_xs
+^blk\.(23|27)\.attn_q\.weight$=iq1_s
+^blk\.3\.attn_q\.weight$=iq2_xs
+^blk\.(7|11|15|19|31)\.attn_q\.weight$=iq2_xxs
 ^blk\.(3|7|11|15|19|23|27|31)\.attn_q_norm\.weight$=f32
-^blk\.([1-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.attn_qkv\.weight$=q6_K
-^blk\.0\.attn_qkv\.weight$=q8_0
-^blk\.(3|7|11|15|19|23|27|31)\.attn_v\.weight$=q8_0
+^blk\.(1[2-3]|16|2[0-1]|2[4-6]|2[8-9]|30)\.attn_qkv\.weight$=iq1_s
+^blk\.([0-2]|[4-6])\.attn_qkv\.weight$=iq2_xs
+^blk\.([8-9]|10|14|1[7-8]|22)\.attn_qkv\.weight$=iq2_xxs
+^blk\.(3|19)\.attn_v\.weight$=iq3_s
+^blk\.(7|11|15|23|27|31)\.attn_v\.weight$=iq3_xxs
 
-## Dense Feed-Forward Network weights — qbits: 8 6
-^blk\.([4-5]|[7-9]|[1-2][0-9]|30)\.ffn_down\.weight$=q6_K
-^blk\.([0-3]|6|31)\.ffn_down\.weight$=q8_0
-^blk\.([0-2]|[5-9]|[1-2][0-9]|30)\.ffn_up\.weight$=q6_K
-^blk\.([3-4]|31)\.ffn_up\.weight$=q8_0
+## Dense Feed-Forward Network weights — qbits: 3 2 1
+^blk\.1[4-6]\.ffn_down\.weight$=iq1_s
+^blk\.31\.ffn_down\.weight$=iq2_s
+^blk\.([0-8]|19|2[2-4])\.ffn_down\.weight$=iq2_xs
+^blk\.(9|1[0-3]|1[7-8]|2[0-1]|2[5-9]|30)\.ffn_down\.weight$=iq2_xxs
+^blk\.(14|16)\.ffn_up\.weight$=iq1_s
+^blk\.([1-7]|30)\.ffn_up\.weight$=iq2_xs
+^blk\.(0|[8-9]|1[0-3]|15|1[7-9]|2[0-9])\.ffn_up\.weight$=iq2_xxs
+^blk\.31\.ffn_up\.weight$=iq3_xxs
 
-## Gating network — qbits: 8 6
-^blk\.([0-9]|[1-2][0-9]|30)\.ffn_gate\.weight$=q6_K
-^blk\.31\.ffn_gate\.weight$=q8_0
+## Gating network — qbits: 2 1
+^blk\.1[1-8]\.ffn_gate\.weight$=iq1_s
+^blk\.([1-4]|31)\.ffn_gate\.weight$=iq2_xs
+^blk\.(0|[5-9]|10|19|2[0-9]|30)\.ffn_gate\.weight$=iq2_xxs
 
-## Misc / Other tensors — qbits: 32 8 6
+## Misc / Other tensors — qbits: 32 5 4 3 2
 ^blk\.([0-9]|[1-2][0-9]|3[0-1])\.post_attention_norm\.weight$=f32
 ^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.ssm_a$=f32
-^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.ssm_alpha\.weight$=q8_0
-^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.ssm_beta\.weight$=q8_0
+^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.ssm_alpha\.weight$=iq4_xs
+^blk\.(0|2|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.ssm_beta\.weight$=iq4_xs
+^blk\.1\.ssm_beta\.weight$=q5_K
 ^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.ssm_conv1d\.weight$=f32
 ^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.ssm_dt\.bias$=f32
 ^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.ssm_norm\.weight$=f32
-^blk\.([8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30)\.ssm_out\.weight$=q6_K
-^blk\.([0-2]|[4-6])\.ssm_out\.weight$=q8_0
+^blk\.2\.ssm_out\.weight$=iq2_s
+^blk\.([4-6]|[8-9]|10|12|14|18|2[0-2]|2[4-5])\.ssm_out\.weight$=iq2_xs
+^blk\.(13|1[6-7]|26|2[8-9]|30)\.ssm_out\.weight$=iq2_xxs
+^blk\.[0-1]\.ssm_out\.weight$=iq3_xxs
 
 ## Summary of tensor sizes per class
-# GPU Total: 3.33 GiB (79.9%) | 4.16 GiB max, if all were q8_0 | 0.78 GiB min, if all were iq1_s
+# GPU Total: 1.04 GiB (25.0%) | 4.16 GiB max, if all were q8_0 | 0.78 GiB min, if all were iq1_s
 
 ## Summary of tensor counts and bpw per qtype
 #
 # GPU-loaded quants:
 # QTYPE		Count	BPW	Assigned GiB	% Assigned	Max GiB (all)
 # +f32       	177	32    	  0.00 GiB	-		-
-# q8_0      	93 	8.5   	  0.50 GiB	11.9%		4.16
-# q6_K      	156	6.5625	  2.83 GiB	88.1%		3.21
+# q8_0      	0  	8.5   	  0.00 GiB	0.0%		4.16
+# q6_K      	0  	6.5625	  0.00 GiB	0.0%		3.21
 # q5_1      	0  	6     	  0.00 GiB	0.0%		2.94
+# q5_K      	1  	5.5   	  0.00 GiB	0.0%		2.69
 # q5_0      	0  	5.5   	  0.00 GiB	0.0%		2.69
-# q5_K      	0  	5.5   	  0.00 GiB	0.0%		2.69
 # q4_1      	0  	5     	  0.00 GiB	0.0%		2.45
-# iq4_nl    	0  	4.5   	  0.00 GiB	0.0%		2.20
-# q4_0      	0  	4.5   	  0.00 GiB	0.0%		2.20
 # q4_K      	0  	4.5   	  0.00 GiB	0.0%		2.20
-# iq4_xs    	0  	4.25  	  0.00 GiB	0.0%		2.08
-# iq3_s     	0  	3.4375	  0.00 GiB	0.0%		1.68
+# q4_0      	0  	4.5   	  0.00 GiB	0.0%		2.20
+# iq4_nl    	0  	4.5   	  0.00 GiB	0.0%		2.20
+# iq4_xs    	47 	4.25  	  0.00 GiB	0.1%		2.08
 # q3_K      	0  	3.4375	  0.00 GiB	0.0%		1.68
-# iq3_xxs   	0  	3.0625	  0.00 GiB	0.0%		1.50
+# iq3_s     	2  	3.4375	  0.00 GiB	0.1%		1.68
+# iq3_xxs   	15 	3.0625	  0.03 GiB	2.0%		1.50
 # q2_K      	0  	2.625 	  0.00 GiB	0.0%		1.28
-# iq2_s     	0  	2.5625	  0.00 GiB	0.0%		1.25
-# iq2_xs    	0  	2.3125	  0.00 GiB	0.0%		1.13
-# iq2_xxs   	0  	2.0625	  0.00 GiB	0.0%		1.01
+# iq2_s     	4  	2.5625	  0.01 GiB	0.9%		1.25
+# iq2_xs    	64 	2.3125	  0.46 GiB	40.5%		1.13
+# iq2_xxs   	87 	2.0625	  0.42 GiB	41.8%		1.01
 # iq1_m     	0  	1.75  	  0.00 GiB	0.0%		0.86
-# iq1_s     	0  	1.5625	  0.00 GiB	0.0%		0.78
+# iq1_s     	29 	1.5625	  0.11 GiB	14.3%		0.78
 #
-# -Average BPW: 6.7996
+# -Average BPW: 2.1263
 #
 # -Notes:
 # - '+' means user-defined pre-assigned tensors, or tensor missing from csv data or f32 tensors
-# - Recipe produced on the 2026-03-21 12:29:07 UTC-0000+0000 using Thireus' GGUF tools (https://gguf.thireus.com/)
-# - Script SHA-256: cf907a06b29b95dc7a7669d11c7e19dccd3dbee564b37491db3eaf61b33cc459/A
+# - Recipe produced on the 2026-04-10 20:09:31 UTC+0100+0100 using Thireus' GGUF tools (https://gguf.thireus.com/)
+# - Script SHA-256: e56c257a6366b4a6255eb967e55e7609472a7fc945d9ceffaf47401bf0de31d0/A
 # - Calibration dataset 'kld_results.csv' SHA-256: e4d8929b79002f58c9649ebc42baae58afa48f5242633eb12c16bfa70be694b6
 # - Degradation dataset 'group0/kld_results.csv' SHA-256: 486de64f1e86ef84f643c6f2c0d03763094d6b46ebc5de1fe699c786b04b949b
 # - tensors.bf16.map SHA-256: 1aed15071725389696ce3b2d5978abd074deb13809e3bf20ad712b3ccf5a5fbf
@@ -96,7 +110,7 @@
 # - tensors.q5_0.map model name: Qwen3.5-4B-THIREUS-Q5_0-SPECIAL_TENSOR-00427-of-00427
 # - tensors.iq5_k.map SHA-256: 5cb5e739c286551de6aa8f6c07e08525a25fb358fec1568ed733790165eaab5c
 # - tensors.iq5_k.map model name: Qwen3.5-4B-THIREUS-IQ5_K-SPECIAL_TENSOR-00427-of-00427
-# - tensors.iq5_ks.map SHA-256: 5901afff2424eb5c1a0854e06bd7d6d681de9f98f579ff22b6266233eccf5046
+# - tensors.iq5_ks.map SHA-256: 24f4169edadf19e4d1d3c87638169dcc5a8455f8613fcf16f29e41450242e59b
 # - tensors.iq5_ks.map model name: Qwen3.5-4B-THIREUS-IQ5_KS-SPECIAL_TENSOR-00427-of-00427
 # - tensors.q4_1.map SHA-256: 5ae9e5a602d954663aa3f0bc7066b4314bf472d766c456331e16731dffbbdbb3
 # - tensors.q4_1.map model name: Qwen3.5-4B-THIREUS-Q4_1-SPECIAL_TENSOR-00427-of-00427
@@ -108,13 +122,13 @@
 # - tensors.iq4_nl.map model name: Qwen3.5-4B-THIREUS-IQ4_NL-SPECIAL_TENSOR-00427-of-00427
 # - tensors.iq4_k.map SHA-256: 0d80d73cb78feb63753482ed98666d09f60e4f1815f6890f5be11a19db631b98
 # - tensors.iq4_k.map model name: Qwen3.5-4B-THIREUS-IQ4_K-SPECIAL_TENSOR-00427-of-00427
+# - tensors.iq4_ks.map SHA-256: 558488bf041d7a8335deea2a59cabd5a4e070bee4a59dbcf1f06127c98a93aed
+# - tensors.iq4_ks.map model name: Qwen3.5-4B-THIREUS-IQ4_KS-SPECIAL_TENSOR-00427-of-00427
 # - tensors.iq4_xs.map SHA-256: b28cddf66081e0731d4851a1198d91d333f4f5ad04e2d49dda89d3c131248b29
 # - tensors.iq4_xs.map model name: Qwen3.5-4B-THIREUS-IQ4_XS-SPECIAL_TENSOR-00427-of-00427
-# - tensors.iq4_ks.map SHA-256: 1f011db1a204d0ae94b60ad5343b0373d81c507d7a1fee1df719e34e0b2c26c7
-# - tensors.iq4_ks.map model name: Qwen3.5-4B-THIREUS-IQ4_KS-SPECIAL_TENSOR-00427-of-00427
-# - tensors.iq4_kt.map SHA-256: 424e1da711803e5b73332cfb6538f0ced9e15ed5fbb9d50f73b6a872b2f3d430
+# - tensors.iq4_kt.map SHA-256: 65f6cbc3c5b4bb85d0e2244569f716e87325509dc936c271cec9c6c57436663f
 # - tensors.iq4_kt.map model name: Qwen3.5-4B-THIREUS-IQ4_KT-SPECIAL_TENSOR-00427-of-00427
-# - tensors.iq4_kss.map SHA-256: ad549246d41a2df68806f1327697f6b40f14fe69d14a76586d8194d493a15255
+# - tensors.iq4_kss.map SHA-256: f4c08a7ca06e27f3f7ab1ab2f319aa58fa7c9f5d97bf3eb02e843c8bf9d65962
 # - tensors.iq4_kss.map model name: Qwen3.5-4B-THIREUS-IQ4_KSS-SPECIAL_TENSOR-00427-of-00427
 # - tensors.q3_K.map SHA-256: 9b83db6945519d3ceffaa58feda769d39c299b77fbca85580f9bbabdbf91a0fe
 # - tensors.q3_K.map model name: Qwen3.5-4B-THIREUS-Q3_K-SPECIAL_TENSOR-00427-of-00427
@@ -122,51 +136,42 @@
 # - tensors.iq3_s.map model name: Qwen3.5-4B-THIREUS-IQ3_S-SPECIAL_TENSOR-00427-of-00427
 # - tensors.iq3_k.map SHA-256: d16bdd642d659c922b45c795ac140fb0e370c3ca59218956d7f6851f2a3a8a68
 # - tensors.iq3_k.map model name: Qwen3.5-4B-THIREUS-IQ3_K-SPECIAL_TENSOR-00427-of-00427
-# - tensors.iq3_ks.map SHA-256: 8ceac3a179f218ca7e3a131984a86909ecd3ce3f76b3ac75bb5eb54998a8fe93
+# - tensors.iq3_ks.map SHA-256: eb2c2bcc7da0de88caffc858b74f265d1f9f897f4b7c7c0122916d77652d0bd2
 # - tensors.iq3_ks.map model name: Qwen3.5-4B-THIREUS-IQ3_KS-SPECIAL_TENSOR-00427-of-00427
-# - tensors.iq3_kt.map SHA-256: eb62d75775043dd208d61fcc2373fb5bc820beafb4c60afd232a855edcacc1f5
+# - tensors.iq3_kt.map SHA-256: ff20faa12e2b0300637cf8d36eef722838f0f94131a2b5a5735510c5532eff39
 # - tensors.iq3_kt.map model name: Qwen3.5-4B-THIREUS-IQ3_KT-SPECIAL_TENSOR-00427-of-00427
 # - tensors.iq3_xxs.map SHA-256: 606ceeb2e5a61fe312872574ebad0973626f2ae8dfcecfc085b76c2ff77e859e
 # - tensors.iq3_xxs.map model name: Qwen3.5-4B-THIREUS-IQ3_XXS-SPECIAL_TENSOR-00427-of-00427
-# - tensors.iq2_kl.map SHA-256: d906b942935797827d03287678cccc809fd8adb2015d6d014498810f3248294c
+# - tensors.iq2_kl.map SHA-256: 195a2e21f41c99a4fd8ee22ba4066d70993f24342a38c5f9d6f0887ed7ad1a40
 # - tensors.iq2_kl.map model name: Qwen3.5-4B-THIREUS-IQ2_KL-SPECIAL_TENSOR-00427-of-00427
-# - tensors.q2_k_r4.map SHA-256: 000dc96fb71047b8fecdb32ffa8373bbf38ab88f6a48f3c5a73451a200cf9ada
-# - tensors.q2_k_r4.map model name: Qwen3.5-4B-THIREUS-Q2_K_R4-SPECIAL_TENSOR-00427-of-00427
 # - tensors.q2_K.map SHA-256: 077c440a45e282f7040b6d7087a0fa56c0587dc2fd2be6bf082db7b94a746088
 # - tensors.q2_K.map model name: Qwen3.5-4B-THIREUS-Q2_K-SPECIAL_TENSOR-00427-of-00427
 # - tensors.iq2_s.map SHA-256: 5880a53f05305065037f08e2d4ebf5d979c7152ba3a718132156dd41aaa5f4a1
 # - tensors.iq2_s.map model name: Qwen3.5-4B-THIREUS-IQ2_S-SPECIAL_TENSOR-00427-of-00427
-# - tensors.iq2_k_r4.map SHA-256: f12924cc8d35cb821abe8a5de40827d5339cef4d3271823075c5e6acd1e004ef
-# - tensors.iq2_k_r4.map model name: Qwen3.5-4B-THIREUS-IQ2_K_R4-SPECIAL_TENSOR-00427-of-00427
 # - tensors.iq2_k.map SHA-256: 2d394c31dcee1fd1c443a6a330ed797177d7165daa21eb320f53b8c132d088be
 # - tensors.iq2_k.map model name: Qwen3.5-4B-THIREUS-IQ2_K-SPECIAL_TENSOR-00427-of-00427
-# - tensors.iq2_xs_r4.map SHA-256: a36d5062ec09aa05dc0f715732b0ac9e378611ae0562bbcf42f1d604324020e8
-# - tensors.iq2_xs_r4.map model name: Qwen3.5-4B-THIREUS-IQ2_XS_R4-SPECIAL_TENSOR-00427-of-00427
 # - tensors.iq2_xs.map SHA-256: 632556804303695ecb8ae9eec5b96660bfcd74a6430af7dea6ca7c90bcbc68ac
 # - tensors.iq2_xs.map model name: Qwen3.5-4B-THIREUS-IQ2_XS-SPECIAL_TENSOR-00427-of-00427
-# - tensors.iq2_ks.map SHA-256: 179a912e69471fc3891b9e1dd4cd310565892bb86f3f5670f6624834dea78527
+# - tensors.iq2_ks.map SHA-256: b9b21b54c68680427f03a63bfe627494a696b336a6fb35c41875b0c5b52ca25a
 # - tensors.iq2_ks.map model name: Qwen3.5-4B-THIREUS-IQ2_KS-SPECIAL_TENSOR-00427-of-00427
-# - tensors.iq2_kt.map SHA-256: 4fa564ab5ed09012dce9c18749e18a687e9c44cee2411c5cfd3ebfd238297005
+# - tensors.iq2_kt.map SHA-256: 98c0edbbe57c4b1fceb9397d2ee3a71df60b6b7fb735f587336b8af26da2c7f3
 # - tensors.iq2_kt.map model name: Qwen3.5-4B-THIREUS-IQ2_KT-SPECIAL_TENSOR-00427-of-00427
-# - tensors.iq2_xxs_r4.map SHA-256: b013229014056ce9e5097aae60bae9503c54af868100bc5e620b12b7018c3f17
-# - tensors.iq2_xxs_r4.map model name: Qwen3.5-4B-THIREUS-IQ2_XXS_R4-SPECIAL_TENSOR-00427-of-00427
 # - tensors.iq2_xxs.map SHA-256: 9154bbebcfb49a7851e3cfc02f5de2bb3b33a2375fd2a6d1d7f18141cf8b4c71
 # - tensors.iq2_xxs.map model name: Qwen3.5-4B-THIREUS-IQ2_XXS-SPECIAL_TENSOR-00427-of-00427
+# - tensors.iq1_kt.map SHA-256: deb08e89c638dad2ce8116e9312868be1d7efde2d940f381b0d764d89d72bf82
+# - tensors.iq1_kt.map model name: Qwen3.5-4B-THIREUS-IQ1_KT-SPECIAL_TENSOR-00427-of-00427
 # - tensors.iq1_m.map SHA-256: 240fa236dae820814a36bcf1273ba1ab8087a3508f27976d05e3fbd622b6b222
 # - tensors.iq1_m.map model name: Qwen3.5-4B-THIREUS-IQ1_M-SPECIAL_TENSOR-00427-of-00427
-# - tensors.iq1_kt.map SHA-256: 392eb526f8fada44ea3859e66fc94e9e1f9e2295cdeeaf702e29c112b7cd74c3
-# - tensors.iq1_kt.map model name: Qwen3.5-4B-THIREUS-IQ1_KT-SPECIAL_TENSOR-00427-of-00427
 # - tensors.iq1_s.map SHA-256: 1cf483082b28a230634186d825d76c9665c03d761aaa9cdd0860e34fdd03f30c
 # - tensors.iq1_s.map model name: Qwen3.5-4B-THIREUS-IQ1_S-SPECIAL_TENSOR-00427-of-00427
-# - tensors.iq1_s_r4.map SHA-256: 432bd9c5e8a92775fd92f01d4c5443ff83af0ceb5ae25461ea39d4e5fc046701
+# - tensors.iq1_s_r4.map SHA-256: 672e3115021154dc66e5e6885771487e4ef5040455853d6b5319cf84f2f40a36
 # - tensors.iq1_s_r4.map model name: Qwen3.5-4B-THIREUS-IQ1_S_R4-SPECIAL_TENSOR-00427-of-00427
 # - GPG signatures: PASSED
 # - Hidden parameters (not passed as CLI args):
 #   Exponential factor: 1
-#   Quant degradation eq: y = 0 + 3.07123144682e+17 * ( x + 6.95719165416 )^(-18.0541201489)
 # - Command used:
 # quant_assign.py kld_results.csv --gpu-tensors '.*' --gpu-quants iq1_s iq1_m iq2_xxs iq2_xs iq2_s q2_K iq3_xxs iq3_s \
-# q3_K iq4_xs iq4_nl q4_0 q4_K q4_1 q5_0 q5_K q5_1 q6_K q8_0 --gpu-tensors-max-size 80.00% --tolerance 0.01 \
+# q3_K iq4_xs iq4_nl q4_0 q4_K q4_1 q5_0 q5_K q5_1 q6_K q8_0 --gpu-tensors-max-size 25.00% --tolerance 0.01 \
 # --gpu-assign-qtype q6_K --harmonize-tensors '^blk\..*\.ffn_up_exps.*,blk\..*\.ffn_gate_exps.*' \
 # --harmonization-technique 3 --use-greedy-quant-assign --quant-degradation-csv group0/kld_results.csv \
 # --compute-missing-map --ignore-imatrix-rules --with-imatrix
