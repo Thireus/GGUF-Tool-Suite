@@ -1,6 +1,6 @@
 # Convert model to BF16
 
-_In this section I will explain how to convert an original model made of .safetensors to a BF16 gguf model split into chunks: with one tensor per gguf, and first gguf only containing model's metadata - useful when the model needs to be updated as only the relevant files will be altered. Any script in the GGUF Tool Suite assumes the repositories of sharded GGUF are in such format and with specific filename._
+_In this section I will explain how to convert an original model made of .safetensors to a BF16 GGUF model split into chunks: with one tensor per GGUF, and first GGUF only containing model's metadata - useful when the model needs to be updated as only the relevant files will be altered. Any script in the GGUF Tool Suite assumes the repositories of sharded GGUF are in such format and with specific filename._
 
 ## Requirements
 

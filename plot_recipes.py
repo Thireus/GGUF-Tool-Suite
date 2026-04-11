@@ -5,7 +5,7 @@
 #** results on a graph and saves them as svg and csv files.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-29-2026 -------------------- **#
+#** --------------- Updated: Apr-11-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -28,6 +28,7 @@
 import os
 import re
 import argparse
+from pathlib import Path
 import matplotlib
 import csv
 
@@ -148,6 +149,53 @@ def extract_model_name(base: str) -> str:
     model = head.rsplit('.', 1)[0]
     return model
 
+
+def extract_recipe_author(base: str, recipe_path: str) -> str:
+    """Extract the author field used by the DB export."""
+    normalized = os.path.normpath(recipe_path).replace(os.sep, '/')
+    if '/recipe_examples/' in f'/{normalized}':
+        return 'GGUF-Tool-Suite'
+
+    stem = re.sub(r'\.recipe(?:\.txt)?$', '', base, flags=re.IGNORECASE)
+    m_bpw = re.search(r'([0-9]+\.?[0-9]*)bpw', stem, flags=re.IGNORECASE)
+    if not m_bpw:
+        return ''
+
+    left = stem[:m_bpw.start()]
+    if '.' not in left:
+        return ''
+
+    author_part = left.rsplit('.', 1)[1]
+    author_part = re.sub(r'-\d+$', '', author_part)
+    return author_part
+
+
+def extract_recipe_quant(base: str) -> str:
+    """Extract the quant tag used by the DB export."""
+    stem = re.sub(r'\.recipe(?:\.txt)?$', '', base, flags=re.IGNORECASE)
+    parts = stem.split('.')
+    if parts:
+        candidate = parts[-1]
+        if re.fullmatch(r'[0-9a-fA-F]+_[0-9a-fA-F]+', candidate):
+            return candidate
+    m = re.search(r'([0-9a-fA-F]+_[0-9a-fA-F]+)(?=\.recipe(?:\.txt)?$)', base, re.IGNORECASE)
+    return m.group(1) if m else ''
+
+
+def build_recipe_url(recipe_path: str) -> str:
+    """Build the URL field used by the DB export."""
+    normalized = os.path.normpath(recipe_path).replace(os.sep, '/')
+    marker = 'recipe_examples/'
+    idx = normalized.find(marker)
+    if idx != -1:
+        rel = normalized[idx:]
+        return f'https://github.com/Thireus/GGUF-Tool-Suite/blob/main/{rel}'
+    try:
+        return Path(recipe_path).resolve().as_uri()
+    except Exception:
+        return recipe_path
+
+
 def parse_filename(filename):
     # Extract model name, bpw, ppl from recipe filename
     base = os.path.basename(filename)
@@ -158,6 +206,7 @@ def parse_filename(filename):
     ppl = float(m_ppl.group(1)) if m_ppl else None
     return model_name, bpw, ppl
 
+
 def collect_recipe_data(recipe_dir):
     """
     Collect recipe data from recipe_dir and its immediate subdirectories.
@@ -166,8 +215,10 @@ def collect_recipe_data(recipe_dir):
       data: dict mapping model -> dict mapping source_label -> list of (bpw, ppl)
         - source_label is '' (empty string) for recipes directly under recipe_dir (root series)
           or '<subdir>' for recipes inside an immediate subdirectory.
+      rows: list of (MODEL_NAME, AUTHOR, QUANT, BPW, PPL, URL)
     """
     data = {}
+    rows = []
     dir_name = os.path.basename(os.path.normpath(recipe_dir))
 
     # 1) Collect files directly in recipe_dir (root series labeled by empty string)
@@ -180,9 +231,17 @@ def collect_recipe_data(recipe_dir):
                         continue
                     # root-level series: use empty string as source label
                     data.setdefault(model, {}).setdefault('', []).append((bpw, ppl))
+                    rows.append((
+                        model,
+                        extract_recipe_author(entry.name, entry.path),
+                        extract_recipe_quant(entry.name),
+                        bpw,
+                        ppl,
+                        build_recipe_url(entry.path),
+                    ))
     except FileNotFoundError:
         # If the provided recipe_dir does not exist, return empty data
-        return data
+        return data, rows
 
     # 2) Collect files in immediate subdirectories (each subdir becomes its own series labeled by subdir name)
     try:
@@ -198,18 +257,28 @@ def collect_recipe_data(recipe_dir):
                     if None in (bpw, ppl):
                         continue
                     data.setdefault(model, {}).setdefault(label, []).append((bpw, ppl))
+                    full_path = os.path.join(subpath, fname)
+                    rows.append((
+                        model,
+                        extract_recipe_author(fname, full_path),
+                        extract_recipe_quant(fname),
+                        bpw,
+                        ppl,
+                        build_recipe_url(full_path),
+                    ))
                 # If subdir had no recipes, nothing was added — that's handled by above logic
     except FileNotFoundError:
         # already handled; no further action
         pass
 
-    return data
+    return data, rows
+
 
 def collect_imported_data(import_file):
     # Parse additional series from pipe-delimited DB
     # Format: model_name|author|recipe_name|bpw|ppl|model_link
     imported = {}
-    markers = []
+    rows = []
     with open(import_file, 'r') as f:
         for line in f:
             line = line.strip()
@@ -219,7 +288,9 @@ def collect_imported_data(import_file):
             if len(parts) < 5:
                 continue
             model_name, author = parts[0], parts[1]
+            recipe_name = parts[2] if len(parts) > 2 else ''
             bpw_str, ppl_str = parts[3], parts[4]
+            model_link = parts[5] if len(parts) > 5 else ''
             try:
                 bpw = float(bpw_str)
                 ppl = float(ppl_str)
@@ -227,7 +298,8 @@ def collect_imported_data(import_file):
                 continue
             # Group by model and author
             imported.setdefault(model_name, {}).setdefault(author, []).append((bpw, ppl))
-    return imported
+            rows.append((model_name, author, recipe_name, bpw, ppl, model_link))
+    return imported, rows
 
 # Helper: map a numeric bpw to the nearest QTYPE from BPW_TABLE with filtering and tie-break rules.
 def map_bpw_to_qtype(bpw):
@@ -331,7 +403,8 @@ def map_bpw_to_qtype(bpw):
     # default: lower case
     return chosen_lower
 
-def plot_data(recipe_data, recipe_dir, imported_data=None, export=False, out_dir=None, export_csv=False):
+
+def plot_data(recipe_data, recipe_rows, recipe_dir, imported_data=None, imported_rows=None, export=False, out_dir=None, export_csv=False, export_db=False):
     # Use non-interactive backend if exporting
     if export:
         matplotlib.use('Agg')
@@ -348,6 +421,12 @@ def plot_data(recipe_data, recipe_dir, imported_data=None, export=False, out_dir
         plt.ion()
 
     # recipe_data is expected to be: { model: { source_label: [(bpw,ppl), ...], ... }, ... }
+    db_rows = []
+    if imported_rows:
+        db_rows.extend(imported_rows)
+    if recipe_rows:
+        db_rows.extend(recipe_rows)
+
     for model, sources in recipe_data.items():
         # If a model has no sources (shouldn't happen), skip
         if not sources:
@@ -497,7 +576,7 @@ def plot_data(recipe_data, recipe_dir, imported_data=None, export=False, out_dir
         plt.legend(handles, labels, fontsize='small')
 
         # Ensure out_dir exists if we will export files
-        if (export or export_csv) and out_dir:
+        if (export or export_csv or export_db) and out_dir:
             try:
                 os.makedirs(out_dir, exist_ok=True)
             except Exception:
@@ -526,10 +605,22 @@ def plot_data(recipe_data, recipe_dir, imported_data=None, export=False, out_dir
                 # If writing fails, print a warning but continue
                 print(f"Warning: failed to write CSV {csv_path}: {e}")
 
+    if export_db:
+        db_filename = 'all_ppl.db'
+        db_path = os.path.join(out_dir or '.', db_filename)
+        try:
+            with open(db_path, 'w', newline='') as dbfile:
+                writer = csv.writer(dbfile, delimiter='|', lineterminator='\n')
+                for row in db_rows:
+                    writer.writerow([row[0], row[1], row[2], row[3], row[4], row[5]])
+        except Exception as e:
+            print(f"Warning: failed to write DB {db_path}: {e}")
+
     if not export:
         print("Plots are displayed in separate windows. Close them manually when done.")
         input("Press Enter to exit and close all plots...")
         plt.close('all')
+
 
 def main():
     parser = argparse.ArgumentParser(
@@ -538,21 +629,26 @@ def main():
     parser.add_argument('--import', dest='import_file', help='Import additional series from DB file')
     parser.add_argument('--export', action='store_true', help='Export plots as SVG without rendering')
     parser.add_argument('--export-csv', action='store_true', help='Export CSV files with plotted points for each model (same base name as SVG)')
+    parser.add_argument('--export-db', action='store_true', help='Export a combined all_ppl.db file with all plotted entries')
     parser.add_argument('--out-dir', default='.', help='Output directory for exported SVG and CSV files')
     args = parser.parse_args()
 
-    recipe_data = collect_recipe_data(args.recipe_dir)
+    recipe_data, recipe_rows = collect_recipe_data(args.recipe_dir)
     imported_data = None
+    imported_rows = None
     if args.import_file:
-        imported_data = collect_imported_data(args.import_file)
+        imported_data, imported_rows = collect_imported_data(args.import_file)
 
     plot_data(
         recipe_data,
+        recipe_rows,
         args.recipe_dir,
         imported_data=imported_data,
+        imported_rows=imported_rows,
         export=args.export,
         out_dir=args.out_dir,
-        export_csv=args.export_csv
+        export_csv=args.export_csv,
+        export_db=args.export_db
     )
 
 if __name__ == '__main__':
