@@ -5,7 +5,7 @@
 #** tensors.map files and optionally deletes unused shards.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-12-2026 -------------------- **#
+#** --------------- Updated: Apr-11-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -80,8 +80,8 @@ if [[ ! -d "$BASE_DIR" ]]; then
     exit 1
 fi
 
-# Regex for shard filenames: -NNNNN-of-NNNNN.gguf
-_pattern='^.*-([0-9]{5})-of-\1\.gguf$'
+# Regex for shard filenames: -MMMMM-of-NNNNN.gguf
+_pattern='^.*-([0-9]{5})-of-([0-9]{5})\.gguf$'
 
 # Startup logs
 cat <<-EOF
@@ -109,7 +109,15 @@ while true; do
         [[ ${#ggufs[@]} -eq 0 ]] && continue
         # skip if no matching pattern shards
         match=false
-        for f in "${ggufs[@]}"; do [[ $(basename "$f") =~ $_pattern ]] && match=true && break; done
+        for f in "${ggufs[@]}"; do
+            name=$(basename "$f")
+            if [[ $name =~ $_pattern ]]; then
+                if [[ "${BASH_REMATCH[1]}" == "${BASH_REMATCH[2]}" ]]; then
+                match=true
+                break
+                fi
+            fi
+        done
         [[ "$match" != true ]] && continue
 
         echo "[$(date '+%Y-%m-%d %H:%M:%S')] Processing directory: $split_dir"
@@ -120,7 +128,13 @@ while true; do
                 echo "[$(date '+%Y-%m-%d %H:%M:%S')] Empty tensors.map; processing all shards."
             else
                 # Get only the user (owner) permission bits (first digit)
-                user_perms=$(stat -c "%a" "$map_file" | cut -c1)
+                if stat -c "%a" "$map_file" >/dev/null 2>&1; then
+                    # GNU stat (Linux)
+                    user_perms=$(stat -c "%a" "$map_file" | cut -c1)
+                else
+                    # BSD stat (macOS)
+                    user_perms=$(stat -f "%A" "$map_file" | cut -c1)
+                fi
                 # Check if user permission is read-only (i.e., 4)
                 if [ "$user_perms" -eq 4 ]; then
                     echo "[$(date '+%Y-%m-%d %H:%M:%S')] tensors.map already produced, skipping directory: $split_dir"
@@ -134,7 +148,13 @@ while true; do
                     last_file=${last_line%%:*}
                     echo "[$(date '+%Y-%m-%d %H:%M:%S')] Resuming from shard: $last_file"
                     # drop last line
-                    sed -i '$d' "$map_file"
+                    if sed --version >/dev/null 2>&1; then
+                        # GNU sed (Linux)
+                        sed -i '$d' "$map_file"
+                    else
+                        # BSD sed (macOS)
+                        sed -i '' '$d' "$map_file"
+                    fi
                     # find index in ggufs
                     for i in "${!ggufs[@]}"; do
                         if [[ "$(basename "${ggufs[i]}")" == "$last_file" ]]; then
