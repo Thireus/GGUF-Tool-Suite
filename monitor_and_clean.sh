@@ -103,7 +103,7 @@ while true; do
     while IFS= read -r -d '' split_dir; do
         # Skip if no matching shard files
         shopt -s nullglob
-        ggufs=("$split_dir"/*.gguf)
+        ggufs=("$split_dir"/*-SPECIAL-*-of-*.gguf)
         shopt -u nullglob
         # skip empty
         [[ ${#ggufs[@]} -eq 0 ]] && continue
