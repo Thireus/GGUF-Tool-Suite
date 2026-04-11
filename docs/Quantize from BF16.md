@@ -1,6 +1,6 @@
 # Quantize from BF16
 
-_In this section I will explain how to quantize a [BF16 model](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/docs/Convert_model_to_BF16.md) to produce 'pure' (or as pure as possible) quants for this GGUF-Tool-Suite: with one tensor per gguf, and first gguf only containing model's metadata - useful when the model needs to be updated as only the relevant files will be altered. Any script in the GGUF Tool Suite assumes the repositories of sharded GGUF are in such format and with specific filename. This section is not about quantizing a model from a mixture of quants or from a recipe file!_
+_In this section I will explain how to quantize a [BF16 model](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/docs/Convert%20model%20to%20BF16.md) to produce 'pure' (or as pure as possible) quants for this GGUF-Tool-Suite: with one tensor per gguf, and first gguf only containing model's metadata - useful when the model needs to be updated as only the relevant files will be altered. Any script in the GGUF Tool Suite assumes the repositories of sharded GGUF are in such format and with specific filename. This section is not about quantizing a model from a mixture of quants or from a recipe file!_
 
 ## Requirements
 
@@ -65,7 +65,7 @@ You have 3 options to get a BF16 version that works with the GGUF-Tool-Suite. Ch
 
 ### Option 1:
 
-To create the BF16 version of the model, please follow the steps [here](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/docs/Convert_model_to_BF16.md).
+To create the BF16 version of the model, please follow the steps [here](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/docs/Convert%20model%20to%20BF16.md).
 
 ### Option 2:
 
@@ -126,7 +126,7 @@ for f in $(ls); do mv -f $f $(echo $f | sed "s/model_name/$MODEL-"${MAINTAINER^^
 
 Note: You can also have a look at the `monitor_and_split.sh` which automates splitting models.
 
-You will also need to produce the tensors.map file, enrich it with the imatrix hash and produce the GPG signatures. These steps are detailed [here](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/docs/Convert_model_to_BF16.md).
+You will also need to produce the tensors.map file, enrich it with the imatrix hash and produce the GPG signatures. These steps are detailed [here](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/docs/Convert%20model%20to%20BF16.md).
 
 ## Quantize from BF16
 
@@ -168,4 +168,4 @@ Note: Some tensors cannot always be quantized to the target `$QTYPE`. `quantize_
 
 Tip: If you kill `quantize_model.sh` and run it again for the same qtype, it will safely resume quantizing from the last quantized tensor.
 
-You will also need to produce the tensors.map file, enrich it with the imatrix hash and produce the GPG signatures. These steps are detailed [here](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/docs/Convert_model_to_BF16.md).
+You will also need to produce the tensors.map file, enrich it with the imatrix hash and produce the GPG signatures. These steps are detailed [here](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/docs/Convert%20model%20to%20BF16.md).
