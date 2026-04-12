@@ -5,7 +5,7 @@
 #** results on a graph and saves them as svg and csv files.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Apr-11-2026 -------------------- **#
+#** --------------- Updated: Apr-13-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -404,7 +404,7 @@ def map_bpw_to_qtype(bpw):
     return chosen_lower
 
 
-def plot_data(recipe_data, recipe_rows, recipe_dir, imported_data=None, imported_rows=None, export=False, out_dir=None, export_csv=False, export_db=False):
+def plot_data(recipe_data, recipe_rows, recipe_dir, imported_data=None, imported_rows=None, export=False, out_dir=None, export_csv=False, export_db=False, export_csv_exclude_others=False):
     # Use non-interactive backend if exporting
     if export:
         matplotlib.use('Agg')
@@ -525,6 +525,7 @@ def plot_data(recipe_data, recipe_rows, recipe_dir, imported_data=None, imported
 
         # collect CSV rows for this model if requested
         csv_rows = []  # list of (QTYPE, bpw, ppl)
+        csv_no_others_rows = []  # list of (QTYPE, bpw, ppl) excluding imported series, except when author is "pure"
 
         # Plot any imported series for this model FIRST so they appear behind recipe series
         if imported_data and model in imported_data:
@@ -543,6 +544,8 @@ def plot_data(recipe_data, recipe_rows, recipe_dir, imported_data=None, imported
                 for x, y in zip(xs_imp, ys_imp):
                     qtype = map_bpw_to_qtype(x)
                     csv_rows.append((qtype, x, y))
+                    if author == "pure":
+                        csv_no_others_rows.append((qtype, x, y))
 
         # plot each source series (root and each subdir) for this model (drawn after imported -> on top)
         for idx, (source_label, vals) in enumerate(sorted(sources.items())):
@@ -566,6 +569,7 @@ def plot_data(recipe_data, recipe_rows, recipe_dir, imported_data=None, imported
             for x, y in zip(xs, ys):
                 qtype = map_bpw_to_qtype(x)
                 csv_rows.append((qtype, x, y))
+                csv_no_others_rows.append((qtype, x, y))
 
         plt.xlabel('Bits per weight (bpw)')
         plt.ylabel('Perplexity (ppl)')
@@ -576,7 +580,7 @@ def plot_data(recipe_data, recipe_rows, recipe_dir, imported_data=None, imported
         plt.legend(handles, labels, fontsize='small')
 
         # Ensure out_dir exists if we will export files
-        if (export or export_csv or export_db) and out_dir:
+        if (export or export_csv or export_db or export_csv_exclude_others) and out_dir:
             try:
                 os.makedirs(out_dir, exist_ok=True)
             except Exception:
@@ -599,6 +603,21 @@ def plot_data(recipe_data, recipe_rows, recipe_dir, imported_data=None, imported
                     writer = csv.writer(csvfile)
                     writer.writerow(['QTYPE', 'bpw', 'ppl'])
                     for row in sorted(csv_rows, key=lambda r: r[1], reverse=True):
+                        # row is (QTYPE, bpw, ppl)
+                        writer.writerow([row[0], row[1], row[2]])
+            except Exception as e:
+                # If writing fails, print a warning but continue
+                print(f"Warning: failed to write CSV {csv_path}: {e}")
+
+        # Write CSV for this model excluding imported entries if requested
+        if export_csv_exclude_others and csv_no_others_rows:
+            csv_filename = f"{model}_no-others.csv"
+            csv_path = os.path.join(out_dir or '.', csv_filename)
+            try:
+                with open(csv_path, 'w', newline='') as csvfile:
+                    writer = csv.writer(csvfile)
+                    writer.writerow(['QTYPE', 'bpw', 'ppl'])
+                    for row in sorted(csv_no_others_rows, key=lambda r: r[1], reverse=True):
                         # row is (QTYPE, bpw, ppl)
                         writer.writerow([row[0], row[1], row[2]])
             except Exception as e:
@@ -629,6 +648,7 @@ def main():
     parser.add_argument('--import', dest='import_file', help='Import additional series from DB file')
     parser.add_argument('--export', action='store_true', help='Export plots as SVG without rendering')
     parser.add_argument('--export-csv', action='store_true', help='Export CSV files with plotted points for each model (same base name as SVG)')
+    parser.add_argument('--export-csv-exclude-others', action='store_true', help='Export CSV files with plotted points for each model excluding imported entries (same base name as SVG but with _no-others.csv)')
     parser.add_argument('--export-db', action='store_true', help='Export a combined all_ppl.db file with all plotted entries')
     parser.add_argument('--out-dir', default='.', help='Output directory for exported SVG and CSV files')
     args = parser.parse_args()
@@ -648,7 +668,8 @@ def main():
         export=args.export,
         out_dir=args.out_dir,
         export_csv=args.export_csv,
-        export_db=args.export_db
+        export_db=args.export_db,
+        export_csv_exclude_others=args.export_csv_exclude_others
     )
 
 if __name__ == '__main__':

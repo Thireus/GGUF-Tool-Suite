@@ -5,7 +5,7 @@
 #** quantized model bpw versus reported metrics such as KLD.  **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-29-2026 -------------------- **#
+#** --------------- Updated: Apr-12-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -1121,7 +1121,11 @@ def compute_and_plot_from_csv(csv_path: str,
                               penalize_above: float = 2.0,
                               penalize_below: float = 1.0,
                               drift_below: float = 0.0,
-                              drift_above: float = 0.0) -> Optional[List[float]]:
+                              drift_above: float = 0.0,
+                              ignore_bpw_below: Optional[float] = None,
+                              ignore_bpw_above: Optional[float] = None,
+                              ignore_ppl_below: Optional[float] = None,
+                              ignore_ppl_above: Optional[float] = None) -> Optional[List[float]]:
     """
     Read the produced bpw CSV (bpw_<input>.csv), plot metric (y) vs bpw (x).
     ycol_identifier can be a column name or integer index (defaults to index 2).
@@ -1211,11 +1215,37 @@ def compute_and_plot_from_csv(csv_path: str,
         else:
             print(f"[info] No outliers detected at threshold {ignore_outliers_threshold}.", file=sys.stderr)
 
-    # prepare arrays used for fitting (after outlier exclusion)
+    # Apply bpw/ppl range filters (similar to --ignore-outliers, these exclude points from fitting)
+    if ignore_bpw_below is not None:
+        range_mask = xarr_full >= ignore_bpw_below
+        num_excluded = int(np.sum(~range_mask & filtered_mask))
+        if num_excluded > 0:
+            print(f"[info] Ignoring {num_excluded} point(s) with bpw < {ignore_bpw_below} for fitting.", file=sys.stderr)
+        filtered_mask &= range_mask
+    if ignore_bpw_above is not None:
+        range_mask = xarr_full <= ignore_bpw_above
+        num_excluded = int(np.sum(~range_mask & filtered_mask))
+        if num_excluded > 0:
+            print(f"[info] Ignoring {num_excluded} point(s) with bpw > {ignore_bpw_above} for fitting.", file=sys.stderr)
+        filtered_mask &= range_mask
+    if ignore_ppl_below is not None:
+        range_mask = yarr_full >= ignore_ppl_below
+        num_excluded = int(np.sum(~range_mask & filtered_mask))
+        if num_excluded > 0:
+            print(f"[info] Ignoring {num_excluded} point(s) with {metric_name} < {ignore_ppl_below} for fitting.", file=sys.stderr)
+        filtered_mask &= range_mask
+    if ignore_ppl_above is not None:
+        range_mask = yarr_full <= ignore_ppl_above
+        num_excluded = int(np.sum(~range_mask & filtered_mask))
+        if num_excluded > 0:
+            print(f"[info] Ignoring {num_excluded} point(s) with {metric_name} > {ignore_ppl_above} for fitting.", file=sys.stderr)
+        filtered_mask &= range_mask
+
+    # prepare arrays used for fitting (after outlier and range exclusion)
     xarr = xarr_full[filtered_mask]
     yarr = yarr_full[filtered_mask]
     if len(xarr) < 4:
-        raise ValueError("Not enough valid rows remain after outlier removal to plot/fit. Need at least 4 valid numeric rows.")
+        raise ValueError("Not enough valid rows remain after outlier/range removal to plot/fit. Need at least 4 valid numeric rows.")
 
     # The scatter plot should show all points (including outliers) so user can inspect.
     # Only create plotting objects if plotting is not suppressed.
@@ -1945,7 +1975,11 @@ def write_bpw_results_csv_from_rows_and_maybe_plot(input_csv_path: str,
                                                    penalize_above: float = 2.0,
                                                    penalize_below: float = 1.0,
                                                    drift_below: float = 0.0,
-                                                   drift_above: float = 0.0) -> Optional[List[float]]:
+                                                   drift_above: float = 0.0,
+                                                   ignore_bpw_below: Optional[float] = None,
+                                                   ignore_bpw_above: Optional[float] = None,
+                                                   ignore_ppl_below: Optional[float] = None,
+                                                   ignore_ppl_above: Optional[float] = None) -> Optional[List[float]]:
     write_bpw_results_csv_from_rows(input_csv_path, out_csv_path, parsed_mapfiles,
                                     qtypes_to_consider, allow_impure_map, fail_on_missing_bytes, hide_empty)
     # If the caller explicitly requested plotting, do the previous behavior.
@@ -1988,7 +2022,11 @@ def write_bpw_results_csv_from_rows_and_maybe_plot(input_csv_path: str,
                                          penalize_above=penalize_above,
                                          penalize_below=penalize_below,
                                          drift_below=drift_below,
-                                         drift_above=drift_above)
+                                         drift_above=drift_above,
+                                         ignore_bpw_below=ignore_bpw_below,
+                                         ignore_bpw_above=ignore_bpw_above,
+                                         ignore_ppl_below=ignore_ppl_below,
+                                         ignore_ppl_above=ignore_ppl_above)
     # If plotting was not requested but predictions were requested, still run the fitter (with plotting suppressed if requested)
     if predict_bpw_values or equation_only:
         return compute_and_plot_from_csv(out_csv_path,
@@ -2029,7 +2067,11 @@ def write_bpw_results_csv_from_rows_and_maybe_plot(input_csv_path: str,
                                          penalize_above=penalize_above,
                                          penalize_below=penalize_below,
                                          drift_below=drift_below,
-                                         drift_above=drift_above)
+                                         drift_above=drift_above,
+                                         ignore_bpw_below=ignore_bpw_below,
+                                         ignore_bpw_above=ignore_bpw_above,
+                                         ignore_ppl_below=ignore_ppl_below,
+                                         ignore_ppl_above=ignore_ppl_above)
     return None
 
 
@@ -2143,6 +2185,15 @@ def main():
     # New: recipe results csv - preprocessed CSV with QTYPE, bpw, <metric> (skip mapping & purity checks)
     ap.add_argument("--recipe-results-csv", type=str, default=None,
                     help="Provide a pre-processed CSV containing QTYPE, bpw and a metric column (e.g. ppl or kld). This skips map parsing and purity checks and moves directly to plotting/fitting.")
+    # New: ignore entries with bpw or metric values outside specified ranges (similar to --ignore-outliers)
+    ap.add_argument("--ignore-bpw-below", type=float, default=None,
+                    help="Ignore entries with bpw below this value when computing the equation. Default: None (no filtering).")
+    ap.add_argument("--ignore-bpw-above", type=float, default=None,
+                    help="Ignore entries with bpw above this value when computing the equation. Default: None (no filtering).")
+    ap.add_argument("--ignore-ppl-below", type=float, default=None,
+                    help="Ignore entries with metric (ppl) below this value when computing the equation. Default: None (no filtering).")
+    ap.add_argument("--ignore-ppl-above", type=float, default=None,
+                    help="Ignore entries with metric (ppl) above this value when computing the equation. Default: None (no filtering).")
     args = ap.parse_args()
 
     if args.map_files and args.qtypes:
@@ -2291,7 +2342,11 @@ def main():
                 penalize_above=args.penalize_above,
                 penalize_below=args.penalize_below,
                 drift_below=args.drift_below,
-                drift_above=args.drift_above
+                drift_above=args.drift_above,
+                ignore_bpw_below=args.ignore_bpw_below,
+                ignore_bpw_above=args.ignore_bpw_above,
+                ignore_ppl_below=args.ignore_ppl_below,
+                ignore_ppl_above=args.ignore_ppl_above
             )
             # If compute_and_plot_from_csv returned predictions (machine mode), the function already printed them.
             # We print a diagnostics message to stderr.
@@ -2426,7 +2481,11 @@ def main():
                                                                            penalize_above=args.penalize_above,
                                                                            penalize_below=args.penalize_below,
                                                                            drift_below=args.drift_below,
-                                                                           drift_above=args.drift_above)
+                                                                           drift_above=args.drift_above,
+                                                                           ignore_bpw_below=args.ignore_bpw_below,
+                                                                           ignore_bpw_above=args.ignore_bpw_above,
+                                                                           ignore_ppl_below=args.ignore_ppl_below,
+                                                                           ignore_ppl_above=args.ignore_ppl_above)
                     # If the compute function printed predictions to stdout, we're done. Still print CSV path to stderr for diagnostics.
                     print(f"Wrote BPW CSV: {out_csv}", file=sys.stderr)
                 except Exception as ex:
@@ -2480,7 +2539,11 @@ def main():
                                                                penalize_above=args.penalize_above,
                                                                penalize_below=args.penalize_below,
                                                                drift_below=args.drift_below,
-                                                               drift_above=args.drift_above)
+                                                               drift_above=args.drift_above,
+                                                               ignore_bpw_below=args.ignore_bpw_below,
+                                                               ignore_bpw_above=args.ignore_bpw_above,
+                                                               ignore_ppl_below=args.ignore_ppl_below,
+                                                               ignore_ppl_above=args.ignore_ppl_above)
                 print(f"Wrote BPW CSV: {out_csv}", file=sys.stderr)
         except Exception as ex:
             print(f"ERROR: failed to produce {out_csv}: {ex}", file=sys.stderr)
