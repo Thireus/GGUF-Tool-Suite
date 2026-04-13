@@ -162,11 +162,30 @@ for f in "${files[@]}"; do
 
     echo "Processing '$cur_f' ($rows rows)..."
 
-    # run command, capture stdout (suppress stderr). continue on non-zero exit.
-    output=$("$CMD" --recipe-results-csv "$cur_f" --metric-name "perplexity" --d-from-lowest 1 --c-free --transforms "identity" --ignore-outliers 35 --p-grid-max 15 --p-grid-steps 100 --penalize-above 15 --drift-below 15 --resemblance-metric "abs_mean" --ignore-bpw-below 1.8 --equation-only 2>/dev/null) || true
+    # Try with progressively fewer filters if no equation is found
+    # Attempt 1: original flags (--ignore-bpw-below 1.8 --ignore-ppl-above 20)
+    # Attempt 2: without --ignore-ppl-above
+    # Attempt 3: without --ignore-bpw-below and --ignore-ppl-above
+    equation=""
+    for attempt in 1 2 3; do
+      case $attempt in
+        1) extra_flags="--ignore-bpw-below 1.8 --ignore-ppl-above 20" ;;
+        2) extra_flags="--ignore-bpw-below 1.8" ;;
+        3) extra_flags="" ;;
+      esac
 
-    # extract first line that looks like "y = ..."
-    equation=$(printf '%s\n' "$output" | grep -m1 -E '^\s*y\s*=' | sed 's/^[[:space:]]*//')
+      # run command, capture stdout (suppress stderr). continue on non-zero exit.
+      output=$("$CMD" --recipe-results-csv "$cur_f" --metric-name "perplexity" --d-from-lowest 1 --c-free --transforms "identity" --ignore-outliers 35 --p-grid-max 15 --p-grid-steps 100 --penalize-above 15 --drift-below 15 --resemblance-metric "abs_mean" $extra_flags --equation-only 2>/dev/null) || true
+
+      # extract first line that looks like "y = ..."
+      equation=$(printf '%s\n' "$output" | grep -m1 -E '^\s*y\s*=' | sed 's/^[[:space:]]*//')
+
+      if [ -n "$equation" ]; then
+        break
+      fi
+
+      echo "No equation found for '$cur_f' (attempt $attempt/3)"
+    done
 
     if [ -n "$equation" ]; then
       printf '%s:%s\n' "$model_name" "$equation" >> "$OUTFILE"
