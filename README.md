@@ -29,9 +29,10 @@
 #### Step 3 - 🚀 Run anywhere - Use **llama.cpp**, **ik_llama.cpp**, or any GGUF-compatible framework.
 
 <br>
-📚 Useful Resources:
+🗂️ Useful Resources:
 
 - **🔍 Recipe Examples:** [GitHub](https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples)
+- **📚 Documentation:** [Docs](https://github.com/Thireus/GGUF-Tool-Suite/tree/main/docs)
 - **📂 Model Browser:** [gguf.thireus.com](https://gguf.thireus.com)
 
 <br>
