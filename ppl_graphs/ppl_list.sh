@@ -180,6 +180,69 @@ for f in "${files[@]}"; do
       # extract first line that looks like "y = ..."
       equation=$(printf '%s\n' "$output" | grep -m1 -E '^\s*y\s*=' | sed 's/^[[:space:]]*//')
 
+      # If attempt 1 yields an equation, check that the lowest bpw data point is not below the curve
+      if [ -n "$equation" ] && [ "$attempt" -eq 1 ]; then
+        # find perplexity column index (0-based) from header
+        ppl_idx=-1
+        for i in "${!header_cols[@]}"; do
+          col=$(printf '%s' "${header_cols[$i]}" | tr -d '[:space:]' | tr -d '"')
+          if [ "$col" = "perplexity" ] || [ "$col" = "ppl" ]; then
+            ppl_idx=$i
+            break
+          fi
+        done
+
+        if [ "$ppl_idx" -ge 0 ]; then
+          attempt_failed=0
+          rhs="${equation#*=}"
+          # Adjust common math syntax for Python compatibility
+          rhs=$(printf '%s' "$rhs" | sed 's/\^/**/g')
+          
+          min_x=""
+          min_y=""
+          while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            IFS=',' read -r -a fields <<< "$line"
+            x_val=${fields[$bpw_idx]:-}
+            y_val=${fields[$ppl_idx]:-}
+            # strip quotes and whitespace
+            x_val=$(printf '%s' "$x_val" | tr -d '"' | tr -d '[:space:]')
+            y_val=$(printf '%s' "$y_val" | tr -d '"' | tr -d '[:space:]')
+            [ -z "$x_val" ] || [ -z "$y_val" ] && continue
+
+            if [ -z "$min_x" ]; then
+              min_x="$x_val"
+              min_y="$y_val"
+            else
+              # compare x_val < min_x
+              cmp=$(echo "$x_val < $min_x" | bc -l 2>/dev/null || echo 0)
+              if [ "$cmp" = "1" ]; then
+                min_x="$x_val"
+                min_y="$y_val"
+              fi
+            fi
+          done < <(tail -n +2 -- "$cur_f")
+
+          if [ -n "$min_x" ] && [ -n "$min_y" ]; then
+            # Evaluate equation at min_x
+            y_eq=$(python3 -c "from math import *; x=${min_x}; print(${rhs})" 2>/dev/null)
+
+            if [ -n "$y_eq" ]; then
+              # Compare min_y < y_eq
+              cmp=$(echo "$min_y < $y_eq" | bc -l 2>/dev/null || echo 0)
+              if [ "$cmp" = "1" ]; then
+                attempt_failed=1
+                echo "Attempt 1 failed: lowest bpw data point (bpw=$min_x, ppl=$min_y) is below equation (y=$y_eq)"
+              fi
+            fi
+          fi
+
+          if [ "$attempt_failed" -eq 1 ]; then
+            equation=""
+          fi
+        fi
+      fi
+
       if [ -n "$equation" ]; then
         break
       fi
