@@ -163,7 +163,7 @@ for f in "${files[@]}"; do
     echo "Processing '$cur_f' ($rows rows)..."
 
     # run command, capture stdout (suppress stderr). continue on non-zero exit.
-    output=$("$CMD" --recipe-results-csv "$cur_f" --metric-name "perplexity" --d-from-lowest 1 --c-free --transforms "identity" --ignore-outliers 25 --p-grid-max 15 --p-grid-steps 100 --penalize-above 15 --drift-below 15 --resemblance-metric "abs_mean" --ignore-bpw-below 1.8 --equation-only 2>/dev/null) || true
+    output=$("$CMD" --recipe-results-csv "$cur_f" --metric-name "perplexity" --d-from-lowest 1 --c-free --transforms "identity" --ignore-outliers 35 --p-grid-max 15 --p-grid-steps 100 --penalize-above 15 --drift-below 15 --resemblance-metric "abs_mean" --ignore-bpw-below 1.8 --equation-only 2>/dev/null) || true
 
     # extract first line that looks like "y = ..."
     equation=$(printf '%s\n' "$output" | grep -m1 -E '^\s*y\s*=' | sed 's/^[[:space:]]*//')
