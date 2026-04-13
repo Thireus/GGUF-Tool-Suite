@@ -169,7 +169,7 @@ for f in "${files[@]}"; do
     equation=""
     for attempt in 1 2 3; do
       case $attempt in
-        1) extra_flags="--ignore-bpw-below 1.8 --ignore-ppl-above 20" ;;
+        1) extra_flags="--ignore-bpw-below 1.8 --ignore-ppl-above 20.5" ;;
         2) extra_flags="--ignore-bpw-below 1.8" ;;
         3) extra_flags="" ;;
       esac
