@@ -5,7 +5,7 @@
 #** ppl equations of models using model_tensor_bpw_metric.py  **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Apr-13-2026 -------------------- **#
+#** --------------- Updated: Apr-14-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -180,8 +180,8 @@ for f in "${files[@]}"; do
       # extract first line that looks like "y = ..."
       equation=$(printf '%s\n' "$output" | grep -m1 -E '^\s*y\s*=' | sed 's/^[[:space:]]*//')
 
-      # If attempt 1 yields an equation, check that the lowest bpw data point is not below the curve
-      if [ -n "$equation" ] && [ "$attempt" -eq 1 ]; then
+      # If attempt 1 or 2 yields an equation, check that the lowest bpw data point is not below the curve
+      if [ -n "$equation" ] && [ "$attempt" -le 2 ]; then
         # find perplexity column index (0-based) from header
         ppl_idx=-1
         for i in "${!header_cols[@]}"; do
@@ -232,7 +232,7 @@ for f in "${files[@]}"; do
               cmp=$(echo "$min_y < $y_eq" | bc -l 2>/dev/null || echo 0)
               if [ "$cmp" = "1" ]; then
                 attempt_failed=1
-                echo "Attempt 1 failed: lowest bpw data point (bpw=$min_x, ppl=$min_y) is below equation (y=$y_eq)"
+                echo "Attempt $attempt failed: lowest bpw data point (bpw=$min_x, ppl=$min_y) is below equation (y=$y_eq)"
               fi
             fi
           fi
