@@ -2,26 +2,36 @@
 # Model name: Qwen3.5-397B-A17B
 # Link to the original model: https://huggingface.co/Qwen/Qwen3.5-397B-A17B
 
-## Model head & embeddings — qbits: 32 8
+## Model head & embeddings — qbits: 32 5 4
 ^output_norm\.weight$=f32
-^output\.weight$=q8_0
-^token_embd\.weight$=q8_0
+^output\.weight$=iq5_k
+^token_embd\.weight$=iq4_k
 
-## Multi-headed attention parameters — qbits: 32 8
-^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30|3[2-4]|3[6-8]|4[0-2]|4[4-6]|4[8-9]|50|5[2-4]|5[6-8])\.attn_gate\.weight$=q8_0
+## Multi-headed attention parameters — qbits: 32 8 6 5 4
+^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|3[2-4]|38|4[0-2]|4[5-6])\.attn_gate\.weight$=iq5_k
+^blk\.(44|4[8-9]|50|5[2-4]|5[6-7])\.attn_gate\.weight$=iq5_ks
+^blk\.(2[8-9]|30|3[6-7])\.attn_gate\.weight$=iq6_k
+^blk\.58\.attn_gate\.weight$=q8_0
 ^blk\.(3|7|11|15|19|23|27|31|35|39|43|47|51|55|59)\.attn_k\.weight$=q8_0
 ^blk\.(3|7|11|15|19|23|27|31|35|39|43|47|51|55|59)\.attn_k_norm\.weight$=f32
 ^blk\.([0-9]|[1-5][0-9])\.attn_norm\.weight$=f32
-^blk\.(3|7|11|15|19|23|27|31|35|39|43|47|51|55|59)\.attn_output\.weight$=q8_0
-^blk\.(3|7|11|15|19|23|27|31|35|39|43|47|51|55|59)\.attn_q\.weight$=q8_0
+^blk\.(3|7|11|23|27|31|47)\.attn_output\.weight$=iq5_k
+^blk\.(15|19|51|55)\.attn_output\.weight$=iq5_ks
+^blk\.(35|39|43)\.attn_output\.weight$=iq6_k
+^blk\.59\.attn_output\.weight$=q8_0
+^blk\.(11|23|27|31|35|39|43)\.attn_q\.weight$=iq5_k
+^blk\.(3|7|15|19|47|51|55)\.attn_q\.weight$=iq5_ks
+^blk\.59\.attn_q\.weight$=q8_0
 ^blk\.(3|7|11|15|19|23|27|31|35|39|43|47|51|55|59)\.attn_q_norm\.weight$=f32
-^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30|3[2-4]|3[6-8]|4[0-2]|4[4-6]|4[8-9]|50|5[2-4]|5[6-8])\.attn_qkv\.weight$=q8_0
+^blk\.(2[1-2]|2[4-6]|2[8-9]|30|3[2-4]|3[6-8]|40|42|46|58)\.attn_qkv\.weight$=iq5_k
+^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|20|41|4[4-5]|4[8-9]|50|5[6-7])\.attn_qkv\.weight$=iq5_ks
+^blk\.5[2-4]\.attn_qkv\.weight$=q4_K
 ^blk\.(3|7|11|15|19|23|27|31|35|39|43|47|51|55|59)\.attn_v\.weight$=q8_0
 
 ## MoE Gating & Routing — qbits: 32
 ^blk\.([0-9]|[1-5][0-9])\.ffn_gate_inp\.weight$=f32
 
-## Misc / Other tensors — qbits: 32 8
+## Misc / Other tensors — qbits: 32 8 5
 ^blk\.([0-9]|[1-5][0-9])\.post_attention_norm\.weight$=f32
 ^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30|3[2-4]|3[6-8]|4[0-2]|4[4-6]|4[8-9]|50|5[2-4]|5[6-8])\.ssm_a$=f32
 ^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30|3[2-4]|3[6-8]|4[0-2]|4[4-6]|4[8-9]|50|5[2-4]|5[6-8])\.ssm_alpha\.weight$=q8_0
@@ -29,94 +39,92 @@
 ^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30|3[2-4]|3[6-8]|4[0-2]|4[4-6]|4[8-9]|50|5[2-4]|5[6-8])\.ssm_conv1d\.weight$=f32
 ^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30|3[2-4]|3[6-8]|4[0-2]|4[4-6]|4[8-9]|50|5[2-4]|5[6-8])\.ssm_dt\.bias$=f32
 ^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30|3[2-4]|3[6-8]|4[0-2]|4[4-6]|4[8-9]|50|5[2-4]|5[6-8])\.ssm_norm\.weight$=f32
-^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30|3[2-4]|3[6-8]|4[0-2]|4[4-6]|4[8-9]|50|5[2-4]|5[6-8])\.ssm_out\.weight$=q8_0
+^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30|3[2-4]|3[6-8]|4[0-2]|4[4-6]|58)\.ssm_out\.weight$=iq5_k
+^blk\.(4[8-9]|50|5[2-4]|5[6-7])\.ssm_out\.weight$=iq5_ks
 
 ## GPU-loaded - MoE Shared Experts Feed-Forward Network - ffn_*_shexp
-# ffn_down_shexp — down-projection (shared experts) — qbits: 8
-^blk\.([0-9]|[1-5][0-9])\.ffn_down_shexp\.weight$=q8_0
+# ffn_down_shexp — down-projection (shared experts) — qbits: 8 6
+^blk\.([0-9]|[1-3][0-9]|4[0-6]|5[1-9])\.ffn_down_shexp\.weight$=q8_0
+^blk\.(4[7-9]|50)\.ffn_down_shexp\.weight$=iq6_k
 
-# ffn_up_shexp — up-projection (shared experts) — qbits: 8
-^blk\.([0-9]|[1-5][0-9])\.ffn_up_shexp\.weight$=q8_0
+# ffn_up_shexp — up-projection (shared experts) — qbits: 8 6
+^blk\.([0-9]|[1-3][0-9]|4[0-7]|5[1-9])\.ffn_up_shexp\.weight$=q8_0
+^blk\.(4[8-9]|50)\.ffn_up_shexp\.weight$=iq6_k
 
-# ffn_gate_shexp — gating network (shared experts) — qbits: 32 8
-^blk\.([0-9]|[1-5][0-9])\.ffn_gate_shexp\.weight$=q8_0
+# ffn_gate_shexp — gating network (shared experts) — qbits: 32 8 6
+^blk\.([0-9]|[1-3][0-9]|4[0-6]|5[1-9])\.ffn_gate_shexp\.weight$=q8_0
+^blk\.(4[7-9]|50)\.ffn_gate_shexp\.weight$=iq6_k
 ^blk\.([0-9]|[1-5][0-9])\.ffn_gate_inp_shexp\.weight$=f32
 
 ## CPU-friendly - MoE Per-expert Feed-Forward Network - ffn_*_exps
-# ffn_down_exps — down-projection (per-expert) — qbits: 4
-^blk\.(19|2[2-3]|2[5-6]|2[8-9]|3[1-2]|3[4-5]|3[7-8]|4[0-1]|4[3-4])\.ffn_down_exps\.weight$=q4_K
-^blk\.(27|30|33|42|45)\.ffn_down_exps\.weight$=iq4_k
-^blk\.([0-9]|1[0-2]|1[5-8]|2[0-1]|24|36|39|4[6-9]|5[0-9])\.ffn_down_exps\.weight$=iq4_kt
-^blk\.1[3-4]\.ffn_down_exps\.weight$=q4_0
+# ffn_down_exps — down-projection (per-expert) — qbits: 3 2
+^blk\.(2[3-9]|3[0-9]|4[0-5])\.ffn_down_exps\.weight$=iq3_kt
+^blk\.([0-9]|1[0-9]|2[0-2]|4[6-9]|5[0-2])\.ffn_down_exps\.weight$=iq2_kl
+^blk\.5[3-4]\.ffn_down_exps\.weight$=iq2_k
+^blk\.5[5-9]\.ffn_down_exps\.weight$=iq2_kt
 
-# ffn_up_exps — up-projection (per-expert) — qbits: 4
-^blk\.(2[6-9]|30|4[0-5])\.ffn_up_exps\.weight$=q4_K
-^blk\.([0-9]|1[0-9]|2[0-5]|3[1-9]|4[6-9]|5[0-9])\.ffn_up_exps\.weight$=iq4_kt
+# ffn_up_exps — up-projection (per-expert) — qbits: 2
+^blk\.(1[1-4]|21|23|2[5-9]|[3-4][0-5]|38)\.ffn_up_exps\.weight$=q2_K
+^blk\.([0-9]|10|1[5-9]|20|22|24|3[6-7]|39|4[6-9]|5[0-9])\.ffn_up_exps\.weight$=iq2_xxs
 
-# ffn_gate_exps — gating network (per-expert) — qbits: 4
-^blk\.(2[6-9]|30|4[0-5])\.ffn_gate_exps\.weight$=q4_K
-^blk\.([0-9]|1[0-9]|2[0-5]|3[1-9]|4[6-9]|5[0-9])\.ffn_gate_exps\.weight$=iq4_kt
+# ffn_gate_exps — gating network (per-expert) — qbits: 2
+^blk\.(1[1-4]|21|23|2[5-9]|[3-4][0-5]|38)\.ffn_gate_exps\.weight$=q2_K
+^blk\.([0-9]|10|1[5-9]|20|22|24|3[6-7]|39|4[6-9]|5[0-9])\.ffn_gate_exps\.weight$=iq2_xxs
 
 ## Summary of tensor sizes per class
-# GPU Total: 196.27 GiB (50.0%) | 392.55 GiB max, if all were q8_0 | 70.05 GiB min, if all were iq1_s_r4
+# GPU Total: 117.76 GiB (30.0%) | 392.55 GiB max, if all were q8_0 | 70.05 GiB min, if all were iq1_s_r4
 
 ## Summary of tensor counts and bpw per qtype
 #
 # GPU-loaded quants:
 # QTYPE		Count	BPW	Assigned GiB	% Assigned	Max GiB (all)
 # +f32       	451	32    	  0.48 GiB	-		-
-# q8_0      	467	8.5   	  9.57 GiB	2.4%		392.07
-# iq6_k     	0  	6.625 	  0.00 GiB	0.0%		305.58
+# q8_0      	292	8.5   	  0.92 GiB	0.2%		392.07
+# iq6_k     	19 	6.625 	  0.24 GiB	0.1%		305.58
 # q6_K      	0  	6.5625	  0.00 GiB	0.0%		302.70
 # q6_0      	0  	6.5   	  0.00 GiB	0.0%		299.82
 # q5_1      	0  	6     	  0.00 GiB	0.0%		276.75
 # q5_K      	0  	5.5   	  0.00 GiB	0.0%		261.95
 # q5_0      	0  	5.5   	  0.00 GiB	0.0%		253.69
-# iq5_k     	0  	5.5   	  0.00 GiB	0.0%		253.69
-# iq5_ks    	0  	5.2618	  0.00 GiB	0.0%		242.87
+# iq5_k     	100	5.5   	  3.12 GiB	1.2%		253.69
+# :iq5_ks   	52 	5.2572	  1.46 GiB	0.6%		242.87
 # q4_1      	0  	5     	  0.00 GiB	0.0%		230.63
-# q4_K      	39 	4.5   	 43.88 GiB	19.6%		223.64
-# *q4_0     	2  	4.5   	  2.25 GiB	1.1%		207.57
+# q4_K      	3  	4.5   	  0.08 GiB	0.0%		223.64
 # q4_0      	0  	4.5   	  0.00 GiB	0.0%		207.57
 # iq4_nl    	0  	4.5   	  0.00 GiB	0.0%		209.02
-# iq4_k     	5  	4.5   	  5.62 GiB	2.7%		207.57
+# iq4_k     	1  	4.5   	  0.53 GiB	0.3%		207.57
 # iq4_ks    	0  	4.2618	  0.00 GiB	0.0%		196.75
 # iq4_xs    	0  	4.25  	  0.00 GiB	0.0%		196.03
-# :iq4_kt   	134	4.0141	134.47 GiB	72.6%		185.21
+# iq4_kt    	0  	4.0118	  0.00 GiB	0.0%		185.21
 # iq4_kss   	0  	4.0118	  0.00 GiB	0.0%		185.21
 # q3_K      	0  	3.4375	  0.00 GiB	0.0%		158.56
 # iq3_s     	0  	3.4375	  0.00 GiB	0.0%		158.56
 # iq3_k     	0  	3.4375	  0.00 GiB	0.0%		158.56
 # iq3_ks    	0  	3.1934	  0.00 GiB	0.0%		147.38
-# iq3_kt    	0  	3.1368	  0.00 GiB	0.0%		144.85
+# :iq3_kt   	23 	3.1562	 18.15 GiB	12.5%		144.85
 # iq3_xxs   	0  	3.0625	  0.00 GiB	0.0%		141.26
-# iq2_kl    	0  	2.6934	  0.00 GiB	0.0%		124.32
-# q2_K      	0  	2.625 	  0.00 GiB	0.0%		134.44
+# :iq2_kl   	30 	2.7031	 20.27 GiB	16.3%		124.32
+# q2_K      	48 	2.625 	 31.50 GiB	23.4%		134.44
 # iq2_s     	0  	2.5625	  0.00 GiB	0.0%		118.20
-# iq2_k     	0  	2.375 	  0.00 GiB	0.0%		109.55
+# iq2_k     	2  	2.375 	  1.19 GiB	1.1%		109.55
 # iq2_xs    	0  	2.3125	  0.00 GiB	0.0%		106.67
 # iq2_ks    	0  	2.1934	  0.00 GiB	0.0%		101.26
-# iq2_kt    	0  	2.1368	  0.00 GiB	0.0%		98.73
-# iq2_xxs   	0  	2.0625	  0.00 GiB	0.0%		109.29
+# :iq2_kt   	5  	2.1562	  2.70 GiB	2.7%		98.73
+# iq2_xxs   	72 	2.0625	 37.12 GiB	34.0%		109.29
 # iq1_kt    	0  	1.7618	  0.00 GiB	0.0%		81.43
 # iq1_s     	0  	1.5625	  0.00 GiB	0.0%		98.41
 # iq1_s_r4  	0  	1.5059	  0.00 GiB	0.0%		69.57
 #
-# -Average BPW: 4.2538
+# -Average BPW: 2.5523
 #
 # -Notes:
 # - '+' means user-defined pre-assigned tensors, or tensor missing from csv data or f32 tensors
-# - '*' means fallback tensors: these tensors were present in the map(s) with a different dtype than the originally-intended qtype;
-#   They have been grouped and displayed as '*<qtype>' above to show the final (map-observed) qtype and sizes separately.
 # - ':' means this qtype has a tensor-shape-dependent bpw in this recipe due to a discovered additional per-row scale overhead;
 #   For more information: https://github.com/Thireus/GGUF-Tool-Suite/discussions/53
-# - WARNING: 2 tensor assignments were substituted to the dtype actually present in their tensor map files. 
-#   This may change the final size relative to the expected thresholds and chosen quants. 
-#   To disable automatic map-based fallbacks and preserve the script's original assigned qtypes exactly, re-run with --no-fallback.
-# - Recipe produced on the 2026-04-02 17:35:08 UTC+0100+0100 using Thireus' GGUF tools (https://gguf.thireus.com/)
+# - Recipe produced on the 2026-04-14 17:39:08 UTC+0100+0100 using Thireus' GGUF tools (https://gguf.thireus.com/)
 # - Script SHA-256: e56c257a6366b4a6255eb967e55e7609472a7fc945d9ceffaf47401bf0de31d0/A
 # - Calibration dataset 'kld_results.csv' SHA-256: e2638b76592e6cd88a2f9fbfa4703bc253cef2db51d4b4ba0f20b406b8595b00
-# - Degradation dataset 'group0/kld_results.csv' SHA-256: ac3f2e7262753a456c27e1d03b6485b34dbe414333ee45c0ed5b42b55db2d143
+# - Degradation dataset 'group0/kld_results.csv' SHA-256: 5634ae88168adc82b492389bf8190845f1ea4dc8d158546b862c0bdbc6add91d
 # - tensors.bf16.map SHA-256: 3d86c6ce42a087c80c84cf44f913aef7dec30b0191a352a278e5e78a00a6d900
 # - tensors.bf16.map model name: Qwen3.5-397B-A17B-THIREUS-BF16-SPECIAL_TENSOR-01099-of-01099
 # - tensors.q8_0.map SHA-256: 8f15e3cacbbfc4bacef1ec3efec8a1525f603d919f3aa873cf8f5feca0718c6c
@@ -194,8 +202,8 @@
 #   Exponential factor: 1
 # - Command used:
 # quant_assign.py kld_results.csv --gpu-tensors '.*' --gpu-quants iq1_s iq1_s_r4 iq1_kt iq2_xxs iq2_kt iq2_ks iq2_xs \
-# iq2_k iq2_s q2_K iq2_kl iq3_xxs iq3_kt iq3_ks iq3_k iq3_s q3_K iq4_kss iq4_kt iq4_ks iq4_xs iq4_k iq4_nl q4_0 q4_K \
-# q4_1 iq5_ks iq5_k q5_0 q5_K q5_1 q6_0 q6_K iq6_k q8_0 --gpu-tensors-max-size 50.00% --tolerance 0.01 \
+# iq2_k iq2_s q2_K iq2_kl iq3_xxs iq3_kt iq3_ks iq3_k iq3_s q3_K iq4_kss iq4_kt iq4_xs iq4_ks iq4_k iq4_nl q4_0 q4_K \
+# q4_1 iq5_ks iq5_k q5_0 q5_K q5_1 q6_0 q6_K iq6_k q8_0 --gpu-tensors-max-size 30.00% --tolerance 0.01 \
 # --gpu-assign-qtype q6_K --harmonize-tensors '^blk\..*\.ffn_up_exps.*,blk\..*\.ffn_gate_exps.*' \
 # --harmonization-technique 3 --use-greedy-quant-assign --quant-degradation-csv group0/kld_results.csv \
 # --compute-missing-map --ignore-imatrix-rules --with-imatrix
