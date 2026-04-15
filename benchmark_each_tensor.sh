@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-24-2026 -------------------- **#
+#** --------------- Updated: Apr-15-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -85,6 +85,10 @@ Options:
   --context N                                  Max context for SWEEP (default is 8192)
   --infinite-loop                              Run continuously (useful when some bench files need to be removed because invalid)
   --no-kld                                     Do not benchmark KLD
+  --allow-impure-quant                         Allow benchmarking even when some tensors have a different dtype than the
+                                               target qtype (use only if you really know what you are doing, as it may affect
+                                               calibration data quality — it suggests you are using a low baseline for which
+                                               not all tensors were quantized to the target quantization type)
   --quant-downloader-options OPTS              Options passed to quant_downloader.sh (default: '-zd')
   -h, --help                                   Show this help and exit
 
@@ -186,6 +190,9 @@ INFINITE_LOOP=false
 # Defines if Kullback–Leibler divergence (KLD) must not be computed (defaults to false)
 NO_KLD=false
 
+# If true, allow benchmarking even when some tensors have a different dtype than the target qtype
+ALLOW_IMPURE_QUANT=false
+
 # Options forwarded to quant_downloader (default '-zd')
 QUANT_DOWNLOADER_OPTIONS='-zd'
 
@@ -233,6 +240,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-kld)
       NO_KLD=true
+      shift
+      ;;
+    --allow-impure-quant)
+      ALLOW_IMPURE_QUANT=true
       shift
       ;;
     --quant-downloader-options)
@@ -364,7 +375,7 @@ for entry in "${USER_REGEX[@]}"; do
   PATTERN_QTYPES+=("$qtype")
 done
 # Derive unique LOCAL_QTYPES sorted, except f32
-# Build your LOCAL_QTYPES, removing any “f32”
+# Build your LOCAL_QTYPES, removing any "f32"
 _LOCAL_QTYPES=( $(printf "%s\n" "${PATTERN_QTYPES[@]}" | sort -u) )
 LOCAL_QTYPES=( $(printf "%s\n" "${_LOCAL_QTYPES[@]}" | grep -v '^f32$') )
 
@@ -595,7 +606,14 @@ for LOCAL_QTYPE in "${_LOCAL_QTYPES[@]}"; do
     for idx in "${!PATTERNS[@]}"; do
       if [[ "${PATTERN_QTYPES[$idx]}" == "$__LOCAL_QTYPE" ]] && [[ $tensor_name =~ ${PATTERNS[$idx]} ]]; then
         clean___LOCAL_QTYPE="${__LOCAL_QTYPE%_r[0-9]}"
-        [[ "${clean_dtype,,}" != "${clean___LOCAL_QTYPE,,}" ]] && echo "[$(timestamp)] ❌ Error: '$local_tensors_map' cannot be used for benchmarking because not pure '$__LOCAL_QTYPE' - tensor '$tensor_name' (user-specified qtype: '$__LOCAL_QTYPE') does not match dtype='$dtype' from tensor map file. Please choose another base qtype." >&2 && exit 9
+        if [[ "${clean_dtype,,}" != "${clean___LOCAL_QTYPE,,}" ]]; then
+          if [[ "$ALLOW_IMPURE_QUANT" == "true" ]]; then
+            echo "[$(timestamp)] ⚠️  Warning: '$local_tensors_map' is not pure '$__LOCAL_QTYPE' - tensor '$tensor_name' (user-specified qtype: '$__LOCAL_QTYPE') does not match dtype='$dtype' from tensor map file. Proceeding anyway (--allow-impure-quant enabled)." >&2
+          else
+            echo "[$(timestamp)] ❌ Error: '$local_tensors_map' cannot be used for benchmarking because not pure '$__LOCAL_QTYPE' - tensor '$tensor_name' (user-specified qtype: '$__LOCAL_QTYPE') does not match dtype='$dtype' from tensor map file. Please choose another base qtype, or use --allow-impure-quant to proceed anyway (only if you really know what you are doing, as it may affect calibration data quality — it suggests you are using a low baseline for which not all tensors were quantized to the target quantization type)." >&2
+            exit 9
+          fi
+        fi
         tasks+=("$fname:$expected_hash:$__LOCAL_QTYPE")
         break
       fi
@@ -1151,6 +1169,7 @@ else
 fi
 echo "Sweep context (-c): $BENCH_COMMAND_CONTEXT_TO_PROCESS"
 echo "Quant downloader options: ${QUANT_DOWNLOADER_OPTIONS:-'(empty)'}"
+echo "Allow impure quant: $ALLOW_IMPURE_QUANT"
 ALL_GROUP_IDS=()
 if [[ "$GROUP_TENSORS_DISABLED" == "true" ]]; then
   echo "Group tensors: DISABLED"
@@ -1289,7 +1308,7 @@ shuffle_shards_by_tensor_patterns() {
   (( ${#non_num[@]} )) && __result+=("${non_num[@]}")
   (( ${#ordered_num[@]} )) && __result+=("${ordered_num[@]}")
 
-  # write back to caller’s array
+  # write back to caller's array
   eval "${out_name}=(\"\${__result[@]}\")"
 }
 
@@ -1362,7 +1381,7 @@ shuffle_tensors_by_pattern() {
   (( ${#shuffled_non_num[@]} )) && __result+=("${shuffled_non_num[@]}")
   (( ${#ordered_num[@]}    )) && __result+=("${ordered_num[@]}")
 
-  # write back to caller’s array
+  # write back to caller's array
   eval "${out_name}=(\"\${__result[@]}\")"
 }
 
@@ -1493,12 +1512,19 @@ run_main_loop() {
             clean_dtype="${dtype%_r[0-9]}"
             # If tensor_name matches any USER_REGEX, record it under shard fname
             for entry in "${USER_REGEX[@]}"; do
-              # split on “=”: LHS is the actual regex, RHS is the qtype (which we ignore here)
+              # split on "=": LHS is the actual regex, RHS is the qtype (which we ignore here)
               IFS='=' read -r pat _qtype locked <<< "$entry"
               [[ -n "$locked" ]] && continue # Skip locked tensors
               if [[ $tensor_name =~ $pat ]]; then
                 clean_qtype="${qtype%_r[0-9]}"
-                [[ "${clean_dtype,,}" != "${clean_qtype,,}" ]] && echo "[$(timestamp)] ⚠️  Warning: '$local_tensors_map' cannot be used for benchmarking because not pure '$qtype' - tensor '$tensor_name' (user-specified qtype: '$qtype') does not match dtype='$dtype' from tensor map file. Please choose another target qtype or exclude this tensor. Skipping this qtype." >&2 && break
+                if [[ "${clean_dtype,,}" != "${clean_qtype,,}" ]]; then
+                  if [[ "$ALLOW_IMPURE_QUANT" == "true" ]]; then
+                    echo "[$(timestamp)] ⚠️  Warning: '$local_tensors_map' is not pure '$qtype' - tensor '$tensor_name' (user-specified qtype: '$qtype') does not match dtype='$dtype' from tensor map file. Proceeding anyway (--allow-impure-quant enabled)." >&2
+                  else
+                    echo "[$(timestamp)] ❌ Error: '$local_tensors_map' cannot be used for benchmarking because not pure '$qtype' - tensor '$tensor_name' (user-specified qtype: '$qtype') does not match dtype='$dtype' from tensor map file. Please choose another target qtype or exclude this tensor, or use --allow-impure-quant to proceed anyway (only if you really know what you are doing, as it may affect calibration data quality — it suggests you are using a low baseline for which not all tensors were quantized to the target quantization type)." >&2
+                    break
+                  fi
+                fi
                 # Append tensor_name to shard_to_tensors["$fname"], avoiding duplicates
                 if [[ -z "${shard_to_tensors[$fname]:-}" ]]; then
                   shard_to_tensors["$fname"]="$tensor_name"
