@@ -1522,7 +1522,7 @@ run_main_loop() {
                   if [[ "$ALLOW_IMPURE_QUANT" == "true" ]]; then
                     echo "[$(timestamp)] ⚠️  Warning: '$local_tensors_map' is not pure '$qtype' - tensor '$tensor_name' (user-specified qtype: '$qtype') does not match dtype='$dtype' from tensor map file. Proceeding anyway (--allow-impure-quant enabled)." >&2
                   else
-                    echo "[$(timestamp)] ❌ Error: '$local_tensors_map' cannot be used for benchmarking because not pure '$qtype' - tensor '$tensor_name' (user-specified qtype: '$qtype') does not match dtype='$dtype' from tensor map file. Please choose another target qtype or exclude this tensor, or use --allow-impure-quant to proceed anyway (only if you really know what you are doing, as it may affect calibration data quality — it suggests you are using a low baseline for which not all tensors were quantized to the target quantization type)." >&2
+                    echo "[$(timestamp)] ⚠️  Warning: '$local_tensors_map' cannot be used for benchmarking because not pure '$qtype' - tensor '$tensor_name' (user-specified qtype: '$qtype') does not match dtype='$dtype' from tensor map file. Please choose another target qtype or exclude this tensor, or use --allow-impure-quant to proceed anyway. Skipping this qtype." >&2
                     break
                   fi
                 fi
