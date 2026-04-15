@@ -86,9 +86,10 @@ Options:
   --infinite-loop                              Run continuously (useful when some bench files need to be removed because invalid)
   --no-kld                                     Do not benchmark KLD
   --allow-impure-quant                         Allow benchmarking even when some tensors have a different dtype than the
-                                               target qtype (use only if you really know what you are doing, as it may affect
-                                               calibration data quality — it suggests you are using a low baseline for which
-                                               not all tensors were quantized to the target quantization type)
+                                               target qtype or that the fallback qtype is again a mismatch (use only if
+                                               you really know what you are doing, as it may affect calibration data
+                                               quality — it suggests you are using a low baseline for which not all tensors
+                                               were quantized to the target quantization type)
   --quant-downloader-options OPTS              Options passed to quant_downloader.sh (default: '-zd')
   -h, --help                                   Show this help and exit
 
