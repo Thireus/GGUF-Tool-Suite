@@ -378,12 +378,12 @@ Quant types supported by [ik_llama.cpp](https://github.com/ikawrakow/ik_llama.cp
 iq1_s_r4 iq1_s iq1_bn iq1_kt iq1_m iq1_m_r4 iq2_bn iq2_bn_r4 iq2_xxs iq2_xxs_r4 iq2_kt iq2_ks iq2_xs iq2_xs_r4 iq2_k iq2_k_r4 iq2_s q2_K q2_k_r4 iq2_kl iq3_xxs iq3_xxs_r4 iq3_kt iq3_ks iq3_k iq3_k_r4 iq3_s iq3_s_r4 q3_K q3_k_r4 iq4_kss iq4_kt iq4_ks iq4_ks_r4 iq4_xs iq4_xs_r8 iq4_k iq4_k_r4 iq4_nl iq4_nl_r4 q4_0 q4_0_r8 q4_K q4_k_r4 q4_1 iq5_ks iq5_ks_r4 iq5_k iq5_k_r4 q5_0 q5_0_r4 q5_K q5_k_r4 q5_1 q6_0 q6_0_r4 q6_K q6_k_r4 iq6_k q8_KV q8_k_r8 q8_0 q8_0_r8 bf16
 ```
 
-Ideally we'd want to obtain the group0 metrics for all possible quantization types (which is often what I do for small models as the cost is relatively low). However, we can take a few shortcuts to save on costs. First of all, apart from the `iq1_s/iq1_s_r4` pair, every other row-interleaved quants observe the same bpw and theoretical KLD/PPL results - which means we can safely exclude every `_r4` and `_r8` quants, providing the base quant exists - it is also a good strategy are in most cases these row-interleaved quants can be very slow. Other quants that can be excluded are the less-used ones such as `_KV` (very slow too) and `_BN` quants.
+Ideally we'd want to obtain the group0 metrics for all possible quantization types (which is often what I do for small models as the cost is relatively low). However, we can take a few shortcuts to save on costs. First of all, apart from the `iq1_s/iq1_s_r4` pair, every other row-interleaved quants observe the same bpw and theoretical KLD/PPL results - which means we can safely exclude every `_r4` and `_r8` quants, providing the base quant exists - it is also a good strategy are in most cases these row-interleaved quants can be very slow. However, sometimes it can be hepful to benchmark the `_r4` version of the quants when their non row-interleaved has trouble being benchmarked, this could be the case for `iq1_m` for example. Other quants that can be excluded are the less-used ones such as `_KV` (very slow too) and `_BN` quants.
 
 That leaves us with the following list:
 
 ```
-iq1_s_r4 iq1_s iq1_kt iq1_m iq2_xxs iq2_kt iq2_ks iq2_xs iq2_k iq2_s q2_K iq2_kl iq3_xxs iq3_kt iq3_ks iq3_k iq3_s q3_K iq4_kss iq4_kt iq4_ks iq4_xs iq4_k iq4_nl q4_0 q4_K q4_1 iq5_ks iq5_k q5_0 q5_K q5_1 q6_0 q6_K iq6_k q8_0 bf16
+iq1_s_r4 iq1_s iq1_kt iq1_m iq1_m_r4 iq2_xxs iq2_kt iq2_ks iq2_xs iq2_k iq2_s q2_K iq2_kl iq3_xxs iq3_kt iq3_ks iq3_k iq3_s q3_K iq4_kss iq4_kt iq4_ks iq4_xs iq4_k iq4_nl q4_0 q4_K q4_1 iq5_ks iq5_k q5_0 q5_K q5_1 q6_0 q6_K iq6_k q8_0 bf16
 ```
 
 Note: I could also recommend to further refine this list and select only quantization types that are not "hard-impure" - You can use [gguf.thireus.com](https://gguf.thireus.com/) to identify which quants are hard-impure (they are highlighted in red), alternatively you can identify this yourself via the tensors.map files produced that record if tensor quantization fallback to other quant types (that aren't base or row-interleaved, which are fine) have occured.
@@ -398,7 +398,7 @@ cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
 export PATH="$WORKING_DIRECTORY"/"$MODEL"-BENCH/:$PATH && \
 cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
-benchmark_each_tensor.sh --chunks 250 --group-tensors '.*' --benchmark-groups-only --qtypes iq1_s_r4 iq1_s iq1_kt iq1_m iq2_xxs iq2_kt iq2_ks iq2_xs iq2_k iq2_s q2_K iq2_kl iq3_xxs iq3_kt iq3_ks iq3_k iq3_s q3_K iq4_kss iq4_kt iq4_ks iq4_xs iq4_k iq4_nl q4_0 q4_K q4_1 iq5_ks iq5_k q5_0 q5_K q5_1 q6_0 q6_K iq6_k q8_0 bf16
+benchmark_each_tensor.sh --chunks 250 --group-tensors '.*' --benchmark-groups-only --qtypes iq1_s_r4 iq1_s iq1_kt iq1_m iq1_m_r4 iq2_xxs iq2_kt iq2_ks iq2_xs iq2_k iq2_s q2_K iq2_kl iq3_xxs iq3_kt iq3_ks iq3_k iq3_s q3_K iq4_kss iq4_kt iq4_ks iq4_xs iq4_k iq4_nl q4_0 q4_K q4_1 iq5_ks iq5_k q5_0 q5_K q5_1 q6_0 q6_K iq6_k q8_0 bf16
 ```
 
 Note: Trim the list of qtypes to the qtypes your hardware can handle, otherwise you will end up with empty benchmark results for these qtypes.
