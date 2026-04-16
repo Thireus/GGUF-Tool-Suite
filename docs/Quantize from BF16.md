@@ -21,10 +21,12 @@ Make sure you edit and paste these env variables in any terminal session you'll 
 WORKING_DIRECTORY='/AI' # Full path please!
 MODEL='Qwen3.5-0.8B'
 MAINTAINER='THIREUS' # Or use your name!
-IMATRIX='imatrix_ubergarm.dat' # Full path! Tutorial to obtain them will be covered separately.
+IMATRIX='imatrix_ubergarm.dat' # Full path!
 QTYPE="q2_K" # The target quantization type
 BF16_URL='https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-0.8B-BF16.gguf?download=true' # Optional, for Option 3
 ```
+
+Note: You can [follow this guide](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/docs/Produce%20imatrix.md) to produce your own imatrix file.
 
 ## Know your quants
 

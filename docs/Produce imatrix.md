@@ -20,7 +20,7 @@ Make sure you edit and paste these env variables in any terminal session you'll 
 ```
 WORKING_DIRECTORY='/AI' # Full path please!
 MODEL_GGUF="$WORKING_DIRECTORY/Qwen3.5-0.8B-THIREUS-BF16-SPECIAL_SPLIT/Qwen3.5-0.8B-THIREUS-BF16-SPECIAL_TENSOR-00001-of-00321.gguf" # Full path
-IMATRIX='imatrix_ubergarm.dat' # Full path where the imatrix file will be written to! Tutorial to obtain them will be covered separately.
+IMATRIX='imatrix_ubergarm.dat' # Full path where the imatrix file will be written to!
 ```
 
 ## Prepare the environment
