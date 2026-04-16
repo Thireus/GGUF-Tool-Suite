@@ -23,8 +23,10 @@ MODEL='Qwen3.5-0.8B'
 MODEL_URL='https://huggingface.co/Qwen/Qwen3.5-0.8B'
 MAINTAINER='YOUR_NAME'
 MAINTAINER_EMAIL='your@email.com'
-IMATRIX='imatrix_ubergarm.dat' # Full path! Tutorial to obtain them will be covered separately.
+IMATRIX='imatrix_ubergarm.dat' # Full path!
 ```
+
+Note: You can [follow this guide](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/docs/Produce%20imatrix.md) to produce your own imatrix file.
 
 ## Prepare the environment
 
