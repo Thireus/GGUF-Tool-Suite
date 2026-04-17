@@ -60,7 +60,7 @@ To produce an imatrix of reasonable quality we will assume you are either using 
 ```
 cd "$WORKING_DIRECTORY" && \
 export PATH="$WORKING_DIRECTORY"/ik_llama.cpp/build/bin/:$PATH && \
-llama-imatrix --verbosity 1 -m ${MODEL_GGUF} -f ubergarm-imatrix-calibration-corpus-v02.txt -o ${IMATRIX} -ngl 99 --layer-similarity --ctx-size 512 --threads $(nproc)
+llama-imatrix --verbosity 1 -m ${MODEL_GGUF} -f imatrix-calibration-corpus-v02.txt -o ${IMATRIX} -ngl 99 --layer-similarity --ctx-size 512 --threads $(nproc)
 ```
 
 Important: Adjust the `-ngl` option and related `ik_llama.cpp` parameters to take advantage of your GPU(s) if you are using any.
