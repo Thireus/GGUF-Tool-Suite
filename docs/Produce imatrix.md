@@ -10,7 +10,7 @@ Hardware:
 
 ```
 CPU: YES
-GPU: NO (but suggested)
+GPU: NO (but recommended)
 ```
 
 _I like to use Hetzner servers, you can find suitable and cheap options [here](https://www.hetzner.com/sb/#search=5950X&drives_size_from=3500&drives_size_to=22000&cpuType=AMD). I recommend using RAID0 and Debian 13._
@@ -38,11 +38,11 @@ cd "$WORKING_DIRECTORY"
 git clone --depth 1 https://github.com/Thireus/ik_llama.cpp --recursive ik_llama.cpp && \
 cd ik_llama.cpp && \
 git pull # Update if required
-cmake -B build -DGGML_MAX_CONTEXTS=2048 # -DGGML_AVX=ON -DGGML_AVX2=ON && \
+cmake -B build -DGGML_MAX_CONTEXTS=2048 && \
 cmake --build build --config Release -j$(nproc) --target llama-imatrix
 ```
 
-Important: If you are using GPU(s), ensure your compilation options take advantage of it. See: https://github.com/ikawrakow/ik_llama.cpp/blob/main/docs/build.md.
+Important: If you are using GPU(s), ensure your compilation options take advantage of it. See: https://github.com/ikawrakow/ik_llama.cpp/blob/main/docs/build.md. You should also use `-DGGML_AVX=ON -DGGML_AVX2=ON` and similar AVX options if your CPU supports them.
 
 Note: Thireus' fork is used for convenience, but you can use the official https://github.com/ikawrakow/ik_llama.cpp instead.
 
@@ -60,6 +60,7 @@ To produce an imatrix of reasonable quality we will assume you are either using 
 ```
 cd "$WORKING_DIRECTORY" && \
 export PATH="$WORKING_DIRECTORY"/ik_llama.cpp/build/bin/:$PATH && \
+ulimit -n 9999 || sudo ulimit -n 9999 || echo "Warning: Could not increase file descriptor limit (ulimit -n). The model may fail to load on Linux/macOS." && \
 llama-imatrix --verbosity 1 -m ${MODEL_GGUF} -f imatrix-calibration-corpus-v02.txt -o ${IMATRIX} -ngl 99 --layer-similarity --ctx-size 512 --threads $(nproc)
 ```
 
