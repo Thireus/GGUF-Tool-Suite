@@ -350,6 +350,8 @@ awk -F',' 'NR==1 {for (i=1;i<=NF;i++) h[i]=$i; next} {for (i=1;i<=NF;i++) if ($i
 
 If this command doesn't return anything, then you have successfully produced `kld_results.csv` and `ppl_results.csv` calibration data files. If not, then you must run the same `benchmark_each_tensor.sh` with the exact same parameters to resume benchmarking these remaining tensors/groups.
 
+Note: If after running the `benchmark_each_tensor.sh` script a second time on the remaining tensors the result files are still missing, it could be because these tensors quantized to your `TARGET_QTYPE` don't exist, you'll need to inspect the corresponding tensors.map of that quantization type and if that is indeed the case you could make the decision to run the `benchmark_each_tensor.sh` script again with the `--allow-impure-quant` option. You should be able to see warning messages about it in the `benchmark_each_tensor.sh` script stdout logs when these tensors are skipped.
+
 You can find the calibration data of models that have already been benchmarked in the https://github.com/Thireus/GGUF-Tool-Suite/tree/main/models directories.
 
 ## (optional) Run the degradation data benchmark
