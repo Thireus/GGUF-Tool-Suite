@@ -5,7 +5,7 @@
 #** tensors.map files and optionally deletes unused shards.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Apr-11-2026 -------------------- **#
+#** --------------- Updated: Apr-19-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -103,7 +103,7 @@ while true; do
     while IFS= read -r -d '' split_dir; do
         # Skip if no matching shard files
         shopt -s nullglob
-        ggufs=("$split_dir"/*-SPECIAL-*-of-*.gguf)
+        ggufs=("$split_dir"/*-SPECIAL_TENSOR-*-of-*.gguf)
         shopt -u nullglob
         # skip empty
         [[ ${#ggufs[@]} -eq 0 ]] && continue
