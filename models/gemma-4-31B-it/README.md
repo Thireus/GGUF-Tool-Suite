@@ -1,11 +1,11 @@
 ---
 license: mit
 ---
-# Qwen3-4B-Thinking-2507
+# gemma-4-31B-it
 
-## 🤔 What is this [HuggingFace repository](https://huggingface.co/Thireus/Qwen3-4B-Thinking-2507-THIREUS-BF16-SPECIAL_SPLIT/) about?
+## 🤔 What is this [HuggingFace repository](https://huggingface.co/Thireus/gemma-4-31B-it-THIREUS-BF16-SPECIAL_SPLIT/) about?
 
-This repository provides **GGUF-quantized tensors** for the Qwen3-4B-Thinking-2507 model (official repo: https://huggingface.co/Qwen/Qwen3-4B-Thinking-2507). These GGUF shards are designed to be used with **Thireus’ GGUF Tool Suite** (https://github.com/Thireus/GGUF-Tool-Suite), a collection of tools that automatically finds the perplexity-optimal mix of quantizations for any given a model size target. With this GGUF Tool Suite, you can produce your own Dynamic 3.0 Quants recipes and achieve optimum accuracy & SOTA quantization performance. Give it a try here: https://gguf.thireus.com/quant_assign.html  
+This repository provides **GGUF-quantized tensors** for the gemma-4-31B-it model (official repo: https://huggingface.co/google/gemma-4-31B-it). These GGUF shards are designed to be used with **Thireus’ GGUF Tool Suite** (https://github.com/Thireus/GGUF-Tool-Suite), a collection of tools that automatically finds the perplexity-optimal mix of quantizations for any given a model size target. With this GGUF Tool Suite, you can produce your own Dynamic 3.0 Quants recipes and achieve optimum accuracy & SOTA quantization performance. Give it a try here: https://gguf.thireus.com/quant_assign.html  
 
 - 📖 Documentation: https://github.com/Thireus/GGUF-Tool-Suite/tree/main/docs
 - 🔍 Example of GGUF recipes: https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples  
@@ -37,17 +37,17 @@ GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/Thireus/GGUF-Tool-Suite
 # Download model quant mix from recipe file - you can also try the web version: https://gguf.thireus.com/quant_downloader.html
 cd GGUF-Tool-Suite
 rm -f download.conf # Make sure to copy the relevant download.conf for the model before running quant_assign.py
-cp -f models/Qwen3-4B-Thinking-2507/download.conf . # Use the download.conf of the chosen model
+cp -f models/gemma-4-31B-it/download.conf . # Use the download.conf of the chosen model
 mkdir -p kitchen && cd kitchen
 # Obtain a recipe example for the chosen model from ../recipe_examples/
-../quant_downloader.sh ../recipe_examples/ik_llama.cpp_recipes/Qwen3-4B-Thinking-2507.ROOT-4.2498bpw-10.9335ppl.1GB-GGUF_0GB-GPU_1GB-CPU.9888e4b_9193781.recipe
+../quant_downloader.sh ../recipe_examples/ik_llama.cpp_recipes/gemma-4-31B-it.ROOT-3.5993bpw-11.3565ppl.1GB-GGUF_0GB-GPU_0GB-CPU.9888e4b_831ff04.recipe
 
 # Other recipe examples can be found at https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples
 
 # Launch ik_llama's llama-cli:
 ulimit -n 9999 # Lifts "too many open files" limitation on Linux
 ~/ik_llama.cpp/build/bin/llama-server \
-  -m Qwen3-4B-Thinking-2507-THIREUS-BF16-SPECIAL_TENSOR-00001-of-00399.gguf \
+  -m gemma-4-31B-it-THIREUS-BF16-SPECIAL_TENSOR-00001-of-00399.gguf \
   -fa auto -amb 1024 -ctk q8_0 -c 32768 -ngl 99 \
   -b 4096 -ub 4096 --warmup-batch --no-mmap --threads 1 \
   --main-gpu 0
@@ -67,15 +67,13 @@ ulimit -n 9999 # Lifts "too many open files" limitation on Linux
 
 ## 📊 How does it compare to other GGUFs?
 
-Here’s how Qwen3-4B-Thinking-2507 quantized with **Thireus’ GGUF Tool Suite** stacks up against other quantizers (lower perplexity = better at equal or lower bpw):
+Here’s how gemma-4-31B-it quantized with **Thireus’ GGUF Tool Suite** stacks up against other quantizers (lower perplexity = better at equal or lower bpw):
 
-![PPLs Compared With Others](https://github.com/Thireus/GGUF-Tool-Suite/raw/main/ppl_graphs/Qwen3-4B-Thinking-2507.svg)
+![PPLs Compared With Others](https://github.com/Thireus/GGUF-Tool-Suite/raw/main/ppl_graphs/gemma-4-31B-it.svg)
 
 > _Note: The `recipe_examples` files illustrate good recipes. The Tool Suite computes the optimal ppl/bpw curve for you — just specify your target RAM, VRAM, and quant types, and `quant_assign.py` finds the best mix._  
 
-More perplexity/bpw graphs for other supported models: https://github.com/Thireus/GGUF-Tool-Suite/tree/main/ppl_graphs  
-
-*All PPL benchmarks are computed with the parameters `-ctk f16 -c 512 -b 4096 -ub 4096`. Changing any of these parameters will alter the PPL. In particular, reducing `-b 4096 -ub 4096` increases the PPL, while increasing them decreases the PPL.*
+More perplexity/bpw graphs for other supported models: https://github.com/Thireus/GGUF-Tool-Suite/tree/main/ppl_graphs
 
 ---
 
@@ -145,7 +143,7 @@ For more information about how to use it: https://github.com/Thireus/GGUF-Tool-S
 You can produce your own quantized shards from Thireus' special BF16 model using `quantize_model.sh` found on https://github.com/Thireus/GGUF-Tool-Suite, for example:
 
 ```
-./quantize_model.sh --model "Qwen3.5-122B-A10B" --qtype iq2_xxs
+./quantize_model.sh --model "gemma-4-31B-it" --qtype iq2_xxs
 ```
 
 You can disable reasoning (thinking) when using jinja templates for supported models:
