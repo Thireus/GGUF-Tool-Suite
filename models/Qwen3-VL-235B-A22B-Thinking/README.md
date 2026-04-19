@@ -6,13 +6,13 @@ license: mit
 
 ## 🤔 What is this [HuggingFace repository](https://huggingface.co/Thireus/Qwen3-VL-235B-A22B-Thinking-THIREUS-BF16-SPECIAL_SPLIT/) about?
 
-This repository provides **GGUF-quantized tensors** for the Qwen3-VL-235B-A22B-Thinking model (official repo: https://huggingface.co/Qwen/Qwen3-VL-235B-A22B-Thinking). These GGUF shards are designed to be used with **Thireus’ GGUF Tool Suite** (https://gguf.thireus.com), a collection of tools that automatically finds the perplexity-optimal mix of quantizations for any given VRAM and RAM target. With this GGUF Tool Suite, you can produce your own Dynamic 3.0 Quants recipes and achieve optimum accuracy & SOTA quantization performance.
+This repository provides **GGUF-quantized tensors** for the Qwen3-VL-235B-A22B-Thinking model (official repo: https://huggingface.co/Qwen/Qwen3-VL-235B-A22B-Thinking). These GGUF shards are designed to be used with **Thireus’ GGUF Tool Suite** (https://github.com/Thireus/GGUF-Tool-Suite), a collection of tools that automatically finds the perplexity-optimal mix of quantizations for any given a model size target. With this GGUF Tool Suite, you can produce your own Dynamic 3.0 Quants recipes and achieve optimum accuracy & SOTA quantization performance. Give it a try here: https://gguf.thireus.com/quant_assign.html  
 
-- 📖 Read more: https://github.com/Thireus/GGUF-Tool-Suite  
+- 📖 Documentation: https://github.com/Thireus/GGUF-Tool-Suite/tree/main/docs
 - 🔍 Example of GGUF recipes: https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples  
 - 🍳 Cook your own recipe files: https://gguf.thireus.com/quant_assign.html  
 - ☁️ Download GGUF models from recipe files: https://gguf.thireus.com/quant_downloader.html  
-- 📂 Browse available models: https://gguf.thireus.com  
+- 📂 Browse available models: https://huggingface.co/Thireus/collections and https://gguf.thireus.com  
 
 *tl;dr: Expand the details section below*
 <details>
