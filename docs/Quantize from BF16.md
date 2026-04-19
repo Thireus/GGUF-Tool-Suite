@@ -28,6 +28,8 @@ BF16_URL='https://huggingface.co/unsloth/Qwen3.5-0.8B-GGUF/resolve/main/Qwen3.5-
 
 Note: You can [follow this guide](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/docs/Produce%20imatrix.md) to produce your own imatrix file.
 
+The imatrix files used by Thireus for the shards he produces can be obtained from https://huggingface.co/ubergarm/ repositories or https://huggingface.co/datasets/Thireus/imatrix - you can find the corresponding imatrix file hash in every tensors.map file (see `imatrix=` attribute).
+
 ## Know your quants
 
 [ik_llama.cpp](https://github.com/ikawrakow/ik_llama.cpp) offers a much wider and modern range of quantization types than [llama.cpp](https://github.com/ggml-org/llama.cpp), this not only helps with CPU inference speed but also enables a more granular range quant mix combination which helps produce quantized models of higher quality. For theis reason, I can only encourage users to choose [ik_llama.cpp](https://github.com/ikawrakow/ik_llama.cpp) whenever possible.

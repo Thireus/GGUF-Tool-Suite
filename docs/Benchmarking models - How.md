@@ -369,6 +369,7 @@ cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 BACKUP_DATETIME=$(date +"%Y%m%d_%H%M%S") && \
 mkdir -p "BACKUP_$BACKUP_DATETIME" && \
 mv *.csv bench_*.txt "BACKUP_$BACKUP_DATETIME" && \
+cp *.bin ../benchmark_each_tensor.sh ../collect_ppl_results.sh "BACKUP_$BACKUP_DATETIME" && \
 cp "BACKUP_$BACKUP_DATETIME"/bench_*result.baseline.*.txt .
 ```
 

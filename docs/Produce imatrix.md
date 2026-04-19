@@ -2,6 +2,8 @@
 
 _In this section I will explain how produce the imatrix file. I will assume that you have already followed the documentation to produce a [BF16 GGUF of your model](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/docs/Convert%20model%20to%20BF16.md) or that, due to hardware constrains, you are limited to use another high quality quantization type [obtained from BF16](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/docs/Quantize%20from%20BF16.md) such as Q8\_0 (please, ensure no imatrix file was used during quantization)._
 
+The imatrix files used by Thireus for the shards he produces can be obtained from https://huggingface.co/ubergarm/ repositories or https://huggingface.co/datasets/Thireus/imatrix - you can find the corresponding imatrix file hash in every tensors.map file (see `imatrix=` attribute).
+
 ## Requirements
 
 **IMPORTANT: FOLLOW THIS GUIDE STEP-BY-STEP. DO NOT SKIP ANY NON-OPTIONAL PART. DO NOT TAKE SHORTCUTS. READ CAREFULLY WHAT IS WRITTEN AT ANY STEP.**
