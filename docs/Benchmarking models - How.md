@@ -246,7 +246,7 @@ cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
 export PATH="$WORKING_DIRECTORY"/"$MODEL"-BENCH/:$PATH && \
 cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
-benchmark_each_tensor.sh --qtypes "$TARGET_QTYPE" --chunks 250
+benchmark_each_tensor.sh --allow-impure-quant --qtypes "$TARGET_QTYPE" --chunks 250
 ```
 
 Note: If you also identified tensors that can be benchmarked together from the optional `Reduce benchmarking costs` section, make sure to append to the `benchmark_each_tensor.sh` parameters the additional `--group-tensors` parameter.
@@ -350,8 +350,6 @@ awk -F',' 'NR==1 {for (i=1;i<=NF;i++) h[i]=$i; next} {for (i=1;i<=NF;i++) if ($i
 
 If this command doesn't return anything, then you have successfully produced `kld_results.csv` and `ppl_results.csv` calibration data files. If not, then you must run the same `benchmark_each_tensor.sh` with the exact same parameters to resume benchmarking these remaining tensors/groups.
 
-Note: If your `BASELINE_QTYPE` isn't bf16 or q8_0 and after running the `benchmark_each_tensor.sh` script a second time on the remaining tensors the result files are still missing, it could be because these tensors quantized to your `TARGET_QTYPE` don't exist, you'll need to inspect the corresponding tensors.map of that quantization type and if that is indeed the case you could make the decision to run the `benchmark_each_tensor.sh` script again with the `--allow-impure-quant` option. You should be able to see warning messages about it in the `benchmark_each_tensor.sh` script stdout logs when these tensors are skipped.
-
 You can find the calibration data of models that have already been benchmarked in the https://github.com/Thireus/GGUF-Tool-Suite/tree/main/models directories.
 
 ## (optional) Run the degradation data benchmark
@@ -401,7 +399,7 @@ cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
 export PATH="$WORKING_DIRECTORY"/"$MODEL"-BENCH/:$PATH && \
 cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
-benchmark_each_tensor.sh --chunks 250 --group-tensors '.*' --benchmark-groups-only --qtypes iq1_s_r4 iq1_s iq1_kt iq1_m iq1_m_r4 iq2_xxs iq2_kt iq2_ks iq2_xs iq2_k iq2_s q2_K iq2_kl iq3_xxs iq3_kt iq3_ks iq3_k iq3_s q3_K iq4_kss iq4_kt iq4_ks iq4_xs iq4_k iq4_nl q4_0 q4_K q4_1 iq5_ks iq5_k q5_0 q5_K q5_1 q6_0 q6_K iq6_k q8_0 bf16
+benchmark_each_tensor.sh --allow-impure-quant --chunks 250 --group-tensors '.*' --benchmark-groups-only --qtypes iq1_s_r4 iq1_s iq1_kt iq1_m iq1_m_r4 iq2_xxs iq2_kt iq2_ks iq2_xs iq2_k iq2_s q2_K iq2_kl iq3_xxs iq3_kt iq3_ks iq3_k iq3_s q3_K iq4_kss iq4_kt iq4_ks iq4_xs iq4_k iq4_nl q4_0 q4_K q4_1 iq5_ks iq5_k q5_0 q5_K q5_1 q6_0 q6_K iq6_k q8_0 bf16
 ```
 
 Note: Trim the list of qtypes to the qtypes your hardware can handle, otherwise you will end up with empty benchmark results for these qtypes.
