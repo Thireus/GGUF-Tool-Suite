@@ -91,6 +91,12 @@ Qwen3.5-9B/group0/kld_results_partial.csv
 Qwen3.5-9B/group0/kld_results.csv
 Qwen3.5-9B/group0/ppl_results_partial.csv
 DeepSeek-V3.1/ppl_results.csv
+GLM-5.1/ppl_results.csv
+GLM-5.1/kld_results.csv
+GLM-5.1/group0/bpw_kld_results_partial.csv
+GLM-5.1/group0/kld_results_partial.csv
+GLM-5.1/group0/kld_results.csv
+GLM-5.1/group0/ppl_results_partial.csv
 Qwen3.5-4B/ppl_results.csv
 Qwen3.5-4B/kld_results.csv
 Qwen3.5-4B/group0/ppl_results.csv

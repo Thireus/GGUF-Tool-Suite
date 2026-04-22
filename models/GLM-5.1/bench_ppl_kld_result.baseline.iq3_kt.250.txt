@@ -1,0 +1,500 @@
+main: build = 1 (a6d1958)
+main: built with MSVC 19.44.35225.0 for 
+main: seed  = 1337
+ggml_cuda_init: GGML_CUDA_FORCE_MMQ:    no
+ggml_cuda_init: GGML_CUDA_FORCE_CUBLAS: no
+ggml_cuda_init: found 4 CUDA devices:
+  Device 0: NVIDIA RTX PRO 6000 Blackwell Workstation Edition, compute capability 12.0, VMM: yes, VRAM: 97886 MiB
+  Device 1: NVIDIA RTX PRO 6000 Blackwell Workstation Edition, compute capability 12.0, VMM: yes, VRAM: 97886 MiB
+  Device 2: NVIDIA RTX PRO 6000 Blackwell Workstation Edition, compute capability 12.0, VMM: yes, VRAM: 97886 MiB
+  Device 3: NVIDIA GeForce RTX 5090, compute capability 12.0, VMM: yes, VRAM: 32606 MiB
+CUDA0: using device CUDA0 - 95346 MiB free
+CUDA1: using device CUDA1 - 95346 MiB free
+CUDA2: using device CUDA2 - 95346 MiB free
+CUDA3: using device CUDA3 - 30991 MiB free
+llama_model_loader: max stdio successfully set to 2048
+llama_model_loader: additional 1809 GGUFs metadata loaded.
+llama_model_loader: loaded meta data with 62 key-value pairs and 1809 tensors from ./GLM-5.1-THIREUS-IQ3_KT-SPECIAL_TENSOR-00001-of-01810.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = glm-dsa
+llama_model_loader: - kv   1:                               general.type str              = model
+llama_model_loader: - kv   2:                     general.sampling.top_p f32              = 0.950000
+llama_model_loader: - kv   3:                      general.sampling.temp f32              = 1.000000
+llama_model_loader: - kv   4:                               general.name str              = GLM 5.1
+llama_model_loader: - kv   5:                            general.version str              = 5.1
+llama_model_loader: - kv   6:                           general.basename str              = GLM
+llama_model_loader: - kv   7:                         general.size_label str              = 256x22B
+llama_model_loader: - kv   8:                            general.license str              = mit
+llama_model_loader: - kv   9:                               general.tags arr[str,1]       = ["text-generation"]
+llama_model_loader: - kv  10:                          general.languages arr[str,2]       = ["en", "zh"]
+llama_model_loader: - kv  11:                        glm-dsa.block_count u32              = 79
+llama_model_loader: - kv  12:                     glm-dsa.context_length u32              = 202752
+llama_model_loader: - kv  13:                   glm-dsa.embedding_length u32              = 6144
+llama_model_loader: - kv  14:                glm-dsa.feed_forward_length u32              = 12288
+llama_model_loader: - kv  15:               glm-dsa.attention.head_count u32              = 64
+llama_model_loader: - kv  16:            glm-dsa.attention.head_count_kv u32              = 1
+llama_model_loader: - kv  17:                     glm-dsa.rope.freq_base f32              = 1000000.000000
+llama_model_loader: - kv  18:   glm-dsa.attention.layer_norm_rms_epsilon f32              = 0.000010
+llama_model_loader: - kv  19:                  glm-dsa.expert_used_count u32              = 8
+llama_model_loader: - kv  20:                 glm-dsa.expert_group_count u32              = 1
+llama_model_loader: - kv  21:            glm-dsa.expert_group_used_count u32              = 1
+llama_model_loader: - kv  22:                 glm-dsa.expert_gating_func u32              = 2
+llama_model_loader: - kv  23:                          general.file_type u32              = 152
+llama_model_loader: - kv  24:          glm-dsa.leading_dense_block_count u32              = 3
+llama_model_loader: - kv  25:                         glm-dsa.vocab_size u32              = 154880
+llama_model_loader: - kv  26:              glm-dsa.attention.q_lora_rank u32              = 2048
+llama_model_loader: - kv  27:             glm-dsa.attention.kv_lora_rank u32              = 512
+llama_model_loader: - kv  28:               glm-dsa.attention.key_length u32              = 576
+llama_model_loader: - kv  29:             glm-dsa.attention.value_length u32              = 512
+llama_model_loader: - kv  30:           glm-dsa.attention.key_length_mla u32              = 256
+llama_model_loader: - kv  31:         glm-dsa.attention.value_length_mla u32              = 256
+llama_model_loader: - kv  32:         glm-dsa.expert_feed_forward_length u32              = 2048
+llama_model_loader: - kv  33:                       glm-dsa.expert_count u32              = 256
+llama_model_loader: - kv  34:                glm-dsa.expert_shared_count u32              = 1
+llama_model_loader: - kv  35:               glm-dsa.expert_weights_scale f32              = 2.500000
+llama_model_loader: - kv  36:                glm-dsa.expert_weights_norm bool             = true
+llama_model_loader: - kv  37:               glm-dsa.rope.dimension_count u32              = 64
+llama_model_loader: - kv  38:               glm-dsa.nextn_predict_layers u32              = 1
+llama_model_loader: - kv  39:       glm-dsa.attention.indexer.head_count u32              = 32
+llama_model_loader: - kv  40:       glm-dsa.attention.indexer.key_length u32              = 128
+llama_model_loader: - kv  41:            glm-dsa.attention.indexer.top_k u32              = 2048
+llama_model_loader: - kv  42:               general.quantization_version u32              = 2
+llama_model_loader: - kv  43:                       tokenizer.ggml.model str              = gpt2
+llama_model_loader: - kv  44:                         tokenizer.ggml.pre str              = glm4
+llama_model_loader: - kv  45:                      tokenizer.ggml.tokens arr[str,154880]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+llama_model_loader: - kv  46:                  tokenizer.ggml.token_type arr[i32,154880]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  47:                      tokenizer.ggml.merges arr[str,321649]  = ["Ġ Ġ", "Ġ ĠĠĠ", "ĠĠ ĠĠ", "...
+llama_model_loader: - kv  48:                tokenizer.ggml.eos_token_id u32              = 154820
+llama_model_loader: - kv  49:            tokenizer.ggml.padding_token_id u32              = 154820
+llama_model_loader: - kv  50:                tokenizer.ggml.bos_token_id u32              = 154822
+llama_model_loader: - kv  51:                tokenizer.ggml.eot_token_id u32              = 154827
+llama_model_loader: - kv  52:            tokenizer.ggml.unknown_token_id u32              = 154820
+llama_model_loader: - kv  53:                tokenizer.ggml.eom_token_id u32              = 154829
+llama_model_loader: - kv  54:                    tokenizer.chat_template str              = [gMASK]<sop>\n{%- if tools -%}\n{%- mac...
+llama_model_loader: - kv  55:                      quantize.imatrix.file str              = imatrix_ubergarm.dat
+llama_model_loader: - kv  56:                   quantize.imatrix.dataset str              = ubergarm-imatrix-calibration-corpus-v...
+llama_model_loader: - kv  57:             quantize.imatrix.entries_count i32              = 1003
+llama_model_loader: - kv  58:              quantize.imatrix.chunks_count i32              = 813
+llama_model_loader: - kv  59:                                   split.no u16              = 0
+llama_model_loader: - kv  60:                                split.count u16              = 1810
+llama_model_loader: - kv  61:                        split.tensors.count i32              = 1809
+llama_model_loader: - type  f32:  630 tensors
+llama_model_loader: - type q8_0:  318 tensors
+llama_model_loader: - type iq3_kt:  861 tensors
+load: 0 unused tokens
+load: special_eot_id is not in special_eog_ids - the tokenizer config may be incorrect
+load: special_eom_id is not in special_eog_ids - the tokenizer config may be incorrect
+load: printing all EOG tokens:
+load:   - 154820 ('<|endoftext|>')
+load:   - 154827 ('<|user|>')
+load:   - 154829 ('<|observation|>')
+load: special tokens cache size = 36
+load: token to piece cache size = 0.9811 MB
+llm_load_print_meta: format           = GGUF V3 (latest)
+llm_load_print_meta: arch             = glm-dsa
+llm_load_print_meta: n_ctx_train      = 202752
+llm_load_print_meta: n_embd           = 6144
+llm_load_print_meta: n_layer          = 79
+llm_load_print_meta: n_head           = 64
+llm_load_print_meta: n_head_kv        = 64
+llm_load_print_meta: n_rot            = 64
+llm_load_print_meta: n_swa            = 0
+llm_load_print_meta: n_swa_pattern    = 1
+llm_load_print_meta: n_embd_head_k    = 256
+llm_load_print_meta: n_embd_head_v    = 256
+llm_load_print_meta: n_gqa            = 1
+llm_load_print_meta: n_embd_k_gqa     = 16384
+llm_load_print_meta: n_embd_v_gqa     = 16384
+llm_load_print_meta: f_norm_eps       = 0.0e+00
+llm_load_print_meta: f_norm_rms_eps   = 1.0e-05
+llm_load_print_meta: f_clamp_kqv      = 0.0e+00
+llm_load_print_meta: f_max_alibi_bias = 0.0e+00
+llm_load_print_meta: f_logit_scale    = 0.0e+00
+llm_load_print_meta: n_ff             = 12288
+llm_load_print_meta: n_expert         = 256
+llm_load_print_meta: n_expert_used    = 8
+llm_load_print_meta: causal attn      = 1
+llm_load_print_meta: pooling type     = 0
+llm_load_print_meta: rope type        = 0
+llm_load_print_meta: rope scaling     = linear
+llm_load_print_meta: freq_base_train  = 1000000.0
+llm_load_print_meta: freq_scale_train = 1
+llm_load_print_meta: n_ctx_orig_yarn  = 202752
+llm_load_print_meta: rope_finetuned   = unknown
+llm_load_print_meta: ssm_d_conv       = 0
+llm_load_print_meta: ssm_d_inner      = 0
+llm_load_print_meta: ssm_d_state      = 0
+llm_load_print_meta: ssm_dt_rank      = 0
+llm_load_print_meta: ssm_n_group      = 0
+llm_load_print_meta: model type       = 744B.A40B
+llm_load_print_meta: model ftype      = IQ3_KT - 3.125 bpw
+llm_load_print_meta: model params     = 753.864 B
+llm_load_print_meta: model size       = 282.109 GiB (3.215 BPW) 
+llm_load_print_meta: repeating layers = 280.226 GiB (3.201 BPW, 751.961 B parameters)
+llm_load_print_meta: general.name     = GLM 5.1
+llm_load_print_meta: n_layer_dense_lead   = 3
+llm_load_print_meta: n_lora_q             = 2048
+llm_load_print_meta: n_lora_kv            = 512
+llm_load_print_meta: n_ff_exp             = 2048
+llm_load_print_meta: n_expert_shared      = 1
+llm_load_print_meta: expert_weights_scale = 2.5
+llm_load_print_meta: expert_weights_norm  = 1
+llm_load_print_meta: expert_gating_func   = sigmoid
+llm_load_print_meta: rope_yarn_log_mul    = 0.0000
+print_info: vocab type            = BPE
+print_info: n_vocab               = 154880
+print_info: n_merges              = 321649
+print_info: BOS token             = 154822 '[gMASK]'
+print_info: EOS token             = 154820 '<|endoftext|>'
+print_info: EOT token             = 154827 '<|user|>'
+print_info: EOM token             = 154829 '<|observation|>'
+print_info: UNK token             = 154820 '<|endoftext|>'
+print_info: PAD token             = 154820 '<|endoftext|>'
+print_info: LF token              = 198 'Ċ'
+print_info: FIM PRE token         = 154838 '<|code_prefix|>'
+print_info: FIM SUF token         = 154840 '<|code_suffix|>'
+print_info: FIM MID token         = 154839 '<|code_middle|>'
+print_info: EOG token             = 154820 '<|endoftext|>'
+print_info: EOG token             = 154827 '<|user|>'
+print_info: EOG token             = 154829 '<|observation|>'
+print_info: max token length      = 1024
+======================================= HAVE_FANCY_SIMD is NOT defined
+------------------- Layer sizes:
+Layer  0:    271.97,      0.56,    272.53       84.00  MiB
+Layer  1:    271.97,      0.56,    272.53       84.00  MiB
+Layer  2:    271.97,      0.56,    272.53       84.00  MiB
+Layer  3:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer  4:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer  5:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer  6:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer  7:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer  8:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer  9:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 10:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 11:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 12:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 13:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 14:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 15:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 16:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 17:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 18:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 19:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 20:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 21:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 22:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 23:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 24:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 25:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 26:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 27:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 28:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 29:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 30:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 31:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 32:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 33:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 34:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 35:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 36:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 37:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 38:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 39:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 40:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 41:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 42:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 43:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 44:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 45:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 46:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 47:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 48:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 49:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 50:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 51:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 52:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 53:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 54:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 55:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 56:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 57:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 58:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 59:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 60:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 61:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 62:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 63:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 64:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 65:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 66:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 67:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 68:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 69:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 70:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 71:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 72:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 73:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 74:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 75:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 76:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 77:   3817.58,      0.56,   3818.14       64.00  MiB
+Layer 78:      0.00,      0.56,      0.56       12.00  MiB
+Layer 79:    964.22,    218.50,   1182.72 MiB (output layer)
+--------------------------------------------------------------------------
+Total   : 287134.20,    262.94, 287397.13 MiB
+Memory required for model tensors + cache: 288361 MiB
+Memory available on all devices - compute: 312597 MiB
+Setting default device in layer  0 to 0
+Setting default device in layer  1 to 0
+Setting default device in layer  2 to 0
+Setting default device in layer  3 to 0
+Setting default device in layer  4 to 0
+Setting default device in layer  5 to 0
+Setting default device in layer  6 to 0
+Setting default device in layer  7 to 0
+Setting default device in layer  8 to 0
+Setting default device in layer  9 to 0
+Setting default device in layer 10 to 0
+Setting default device in layer 11 to 0
+Setting default device in layer 12 to 0
+Setting default device in layer 13 to 0
+Setting default device in layer 14 to 0
+Setting default device in layer 15 to 0
+Setting default device in layer 16 to 0
+Setting default device in layer 17 to 0
+Setting default device in layer 18 to 0
+Setting default device in layer 19 to 0
+Setting default device in layer 20 to 0
+Setting default device in layer 21 to 0
+Setting default device in layer 22 to 0
+Setting default device in layer 23 to 0
+Setting default device in layer 24 to 0
+Setting default device in layer 25 to 0
+Setting default device in layer 26 to 1
+Setting default device in layer 27 to 1
+Setting default device in layer 28 to 1
+Setting default device in layer 29 to 1
+Setting default device in layer 30 to 1
+Setting default device in layer 31 to 1
+Setting default device in layer 32 to 1
+Setting default device in layer 33 to 1
+Setting default device in layer 34 to 1
+Setting default device in layer 35 to 1
+Setting default device in layer 36 to 1
+Setting default device in layer 37 to 1
+Setting default device in layer 38 to 1
+Setting default device in layer 39 to 1
+Setting default device in layer 40 to 1
+Setting default device in layer 41 to 1
+Setting default device in layer 42 to 1
+Setting default device in layer 43 to 1
+Setting default device in layer 44 to 1
+Setting default device in layer 45 to 1
+Setting default device in layer 46 to 1
+Setting default device in layer 47 to 1
+Setting default device in layer 48 to 2
+Setting default device in layer 49 to 2
+Setting default device in layer 50 to 2
+Setting default device in layer 51 to 2
+Setting default device in layer 52 to 2
+Setting default device in layer 53 to 2
+Setting default device in layer 54 to 2
+Setting default device in layer 55 to 2
+Setting default device in layer 56 to 2
+Setting default device in layer 57 to 2
+Setting default device in layer 58 to 2
+Setting default device in layer 59 to 2
+Setting default device in layer 60 to 2
+Setting default device in layer 61 to 2
+Setting default device in layer 62 to 2
+Setting default device in layer 63 to 2
+Setting default device in layer 64 to 2
+Setting default device in layer 65 to 2
+Setting default device in layer 66 to 2
+Setting default device in layer 67 to 2
+Setting default device in layer 68 to 2
+Setting default device in layer 69 to 2
+Setting default device in layer 70 to 2
+Setting default device in layer 71 to 3
+Setting default device in layer 72 to 3
+Setting default device in layer 73 to 3
+Setting default device in layer 74 to 3
+Setting default device in layer 75 to 3
+Setting default device in layer 76 to 3
+Setting default device in layer 77 to 3
+Setting default device in layer 78 to 3
+Setting default device in layer 79 to 3
+llm_load_tensors: ggml ctx size =   20.73 MiB
+model has unused tensor blk.78.attn_norm.weight (size = 24576 bytes) -- ignoring
+model has unused tensor blk.78.attn_q_a_norm.weight (size = 8192 bytes) -- ignoring
+model has unused tensor blk.78.attn_kv_a_norm.weight (size = 2048 bytes) -- ignoring
+model has unused tensor blk.78.attn_q_a.weight (size = 4923392 bytes) -- ignoring
+model has unused tensor blk.78.attn_q_b.weight (size = 13172736 bytes) -- ignoring
+model has unused tensor blk.78.attn_kv_a_mqa.weight (size = 3760128 bytes) -- ignoring
+model has unused tensor blk.78.attn_output.weight (size = 106954752 bytes) -- ignoring
+model has unused tensor blk.78.indexer.k_norm.weight (size = 512 bytes) -- ignoring
+model has unused tensor blk.78.indexer.k_norm.bias (size = 512 bytes) -- ignoring
+model has unused tensor blk.78.indexer.proj.weight (size = 76928 bytes) -- ignoring
+model has unused tensor blk.78.indexer.attn_k.weight (size = 835584 bytes) -- ignoring
+model has unused tensor blk.78.indexer.attn_q_b.weight (size = 3293184 bytes) -- ignoring
+model has unused tensor blk.78.ffn_norm.weight (size = 24576 bytes) -- ignoring
+model has unused tensor blk.78.ffn_gate_inp.weight (size = 6291456 bytes) -- ignoring
+model has unused tensor blk.78.exp_probs_b.bias (size = 1024 bytes) -- ignoring
+model has unused tensor blk.78.ffn_gate_exps.weight (size = 1260388352 bytes) -- ignoring
+model has unused tensor blk.78.ffn_down_exps.weight (size = 1264582656 bytes) -- ignoring
+model has unused tensor blk.78.ffn_up_exps.weight (size = 1260388352 bytes) -- ignoring
+model has unused tensor blk.78.ffn_gate_shexp.weight (size = 4923392 bytes) -- ignoring
+model has unused tensor blk.78.ffn_down_shexp.weight (size = 4939776 bytes) -- ignoring
+model has unused tensor blk.78.ffn_up_shexp.weight (size = 4923392 bytes) -- ignoring
+model has unused tensor blk.78.nextn.eh_proj.weight (size = 29515776 bytes) -- ignoring
+model has unused tensor blk.78.nextn.enorm.weight (size = 24576 bytes) -- ignoring
+model has unused tensor blk.78.nextn.hnorm.weight (size = 24576 bytes) -- ignoring
+model has unused tensor blk.78.nextn.shared_head_norm.weight (size = 24576 bytes) -- ignoring
+llm_load_tensors: offloading 79 repeating layers to GPU
+llm_load_tensors: offloading non-repeating layers to GPU
+llm_load_tensors: offloaded 80/80 layers to GPU
+llm_load_tensors:  CUDA_Host buffer size =   964.22 MiB
+llm_load_tensors:      CUDA0 buffer size = 87294.19 MiB
+llm_load_tensors:      CUDA1 buffer size = 82864.71 MiB
+llm_load_tensors:      CUDA2 buffer size = 86631.29 MiB
+llm_load_tensors:      CUDA3 buffer size = 27339.85 MiB
+..............................~ggml_backend_cuda_context: have 0 graphs
+..............................~ggml_backend_cuda_context: have 0 graphs
+..............................~ggml_backend_cuda_context: have 0 graphs
+.........~ggml_backend_cuda_context: have 0 graphs
+.
+============ llm_prepare_mla: need to compute 79 wkv_b tensors
+================= Adjusted mainline llama.cpp MLA tensors to ik_llama.cpp
+Computed blk.0.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.1.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.2.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.3.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.4.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.5.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.6.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.7.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.8.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.9.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.10.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.11.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.12.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.13.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.14.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.15.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.16.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.17.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.18.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.19.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.20.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.21.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.22.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.23.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.24.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.25.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA0
+Computed blk.26.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA1
+Computed blk.27.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA1
+Computed blk.28.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA1
+Computed blk.29.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA1
+Computed blk.30.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA1
+Computed blk.31.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA1
+Computed blk.32.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA1
+Computed blk.33.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA1
+Computed blk.34.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA1
+Computed blk.35.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA1
+Computed blk.36.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA1
+Computed blk.37.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA1
+Computed blk.38.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA1
+Computed blk.39.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA1
+Computed blk.40.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA1
+Computed blk.41.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA1
+Computed blk.42.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA1
+Computed blk.43.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA1
+Computed blk.44.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA1
+Computed blk.45.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored llama_init_from_model: n_ctx         = 512
+llama_init_from_model: n_batch       = 512
+llama_init_from_model: n_ubatch      = 512
+llama_init_from_model: flash_attn    = 1
+llama_init_from_model: mla_attn      = 3
+llama_init_from_model: attn_max_b    = 4096
+llama_init_from_model: fused_moe     = 1
+llama_init_from_model: grouped er    = 0
+llama_init_from_model: fused_up_gate = 1
+llama_init_from_model: fused_mmad    = 1
+llama_init_from_model: rope_cache    = 0
+llama_init_from_model: graph_reuse   = 1
+llama_init_from_model: k_cache_hadam = 0
+llama_init_from_model: v_cache_hadam = 0
+llama_init_from_model: split_mode_graph_scheduling = 0
+llama_init_from_model: reduce_type   = f16
+llama_init_from_model: sched_async   = 0
+llama_init_from_model: ser           = -1, 0
+llama_init_from_model: freq_base     = 1000000.0
+llama_init_from_model: freq_scale    = 1
+llama_kv_cache_init:      CUDA0 KV buffer size =    14.62 MiB
+llama_kv_cache_init:      CUDA1 KV buffer size =    12.38 MiB
+llama_kv_cache_init:      CUDA2 KV buffer size =    12.94 MiB
+llama_kv_cache_init:      CUDA3 KV buffer size =     3.94 MiB
+llama_init_from_model: KV self size  =   43.88 MiB, c^KV (f16):   43.88 MiB, kv^T: not used
+llama_init_from_model:  CUDA_Host  output buffer size =     0.59 MiB
+llama_init_from_model: pipeline parallelism enabled (n_copies=1)
+llama_init_from_model:      CUDA0 compute buffer size =   157.05 MiB
+llama_init_from_model:      CUDA1 compute buffer size =   157.05 MiB
+llama_init_from_model:      CUDA2 compute buffer size =   157.05 MiB
+llama_init_from_model:      CUDA3 compute buffer size =   314.50 MiB
+llama_init_from_model:  CUDA_Host compute buffer size =    12.51 MiB
+llama_init_from_model: graph nodes  = 4166
+llama_init_from_model: graph splits = 5
+llama_init_from_model: enabling only_active_experts scheduling
+
+system_info: n_threads = 36 / 36 | AVX = 1 | AVX_VNNI = 0 | AVX2 = 1 | AVX512 = 1 | AVX512_VBMI = 0 | AVX512_VNNI = 0 | AVX512_BF16 = 0 | FMA = 1 | NEON = 0 | SVE = 0 | ARM_FMA = 0 | F16C = 1 | FP16_VA = 0 | WASM_SIMD = 0 | BLAS = 1 | SSE3 = 1 | SSSE3 = 1 | VSX = 0 | MATMUL_INT8 = 0 | 
+perplexity: saving all logits to bench_kld_result.baseline.iq3_kt.250.bin
+perplexity: tokenizing the input ..
+perplexity: tokenization took 789.335 ms
+perplexity: calculating perplexity over 250 chunks, n_ctx=512, batch_size=512, n_seq=1
+perplexity: 1.08 seconds per pass - ETA 4.48 minutes
+in buffer CUDA1
+Computed blk.46.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA1
+Computed blk.47.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA1
+Computed blk.48.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.49.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.50.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.51.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.52.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.53.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.54.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.55.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.56.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.57.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.58.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.59.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.60.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.61.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.62.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.63.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.64.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.65.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.66.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.67.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.68.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.69.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.70.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA2
+Computed blk.71.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA3
+Computed blk.72.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA3
+Computed blk.73.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA3
+Computed blk.74.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA3
+Computed blk.75.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA3
+Computed blk.76.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA3
+Computed blk.77.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA3
+Computed blk.78.attn_kv_b.weight as 512 x 28672 of type q8_0 and stored in buffer CUDA3
+[1]20.1941,[2]7.9880,[3]4.8117,[4]3.3799,[5]2.7112,[6]2.2974,[7]2.0594,[8]1.9017,[9]1.9015,[10]1.8188,[11]1.9837,[12]2.0491,[13]2.0966,[14]2.1756,[15]2.0707,[16]1.9866,[17]1.9193,[18]1.8651,[19]1.8056,[20]1.7746,[21]1.7283,[22]1.6999,[23]1.6783,[24]1.6531,[25]1.6219,[26]1.7347,[27]1.8682,[28]2.0462,[29]2.0115,[30]1.9844,[31]1.9991,[32]1.9906,[33]2.0710,[34]2.0370,[35]2.0153,[36]1.9958,[37]1.9774,[38]2.0052,[39]2.0083,[40]1.9961,[41]2.0130,[42]2.0174,[43]2.0307,[44]2.0509,[45]2.0627,[46]2.0470,[47]2.0576,[48]2.0601,[49]2.0560,[50]2.0454,[51]2.0638,[52]2.0783,[53]2.0647,[54]2.0753,[55]2.0768,[56]2.0856,[57]2.0779,[58]2.1310,[59]2.1836,[60]2.2388,[61]2.2532,[62]2.3082,[63]2.3459,[64]2.3369,[65]2.3492,[66]2.3589,[67]2.3685,[68]2.4250,[69]2.4881,[70]2.5268,[71]2.5615,[72]2.5695,[73]2.5960,[74]2.6394,[75]2.6709,[76]2.6915,[77]2.7111,[78]2.6976,[79]2.6845,[80]2.6744,[81]2.7097,[82]2.7461,[83]2.7772,[84]2.7698,[85]2.7672,[86]2.7500,[87]2.7637,[88]2.7555,[89]2.7541,[90]2.7526,[91]2.7385,[92]2.7284,[93]2.7572,[94]2.7697,[95]2.7664,[96]2.7765,[97]2.7887,[98]2.7940,[99]2.7874,[100]2.8058,[101]2.8067,[102]2.8375,[103]2.8388,[104]2.8440,[105]2.8797,[106]2.9244,[107]2.9556,[108]2.9912,[109]3.0279,[110]3.0632,[111]3.0911,[112]3.0873,[113]3.1121,[114]3.1272,[115]3.1406,[116]3.1675,[117]3.1799,[118]3.2173,[119]3.2226,[120]3.1921,[121]3.1650,[122]3.1719,[123]3.1852,[124]3.1579,[125]3.1314,[126]3.1278,[127]3.1194,[128]3.1331,[129]3.1456,[130]3.1573,[131]3.1807,[132]3.2173,[133]3.2527,[134]3.2322,[135]3.2083,[136]3.1863,[137]3.1655,[138]3.1502,[139]3.1476,[140]3.1755,[141]3.2038,[142]3.2364,[143]3.2281,[144]3.2417,[145]3.2626,[146]3.2825,[147]3.2958,[148]3.3229,[149]3.3462,[150]3.3685,[151]3.3903,[152]3.3999,[153]3.4058,[154]3.4106,[155]3.4298,[156]3.4482,[157]3.4535,[158]3.4638,[159]3.4784,[160]3.4850,[161]3.4915,[162]3.5035,[163]3.5163,[164]3.5199,[165]3.5372,[166]3.5398,[167]3.5427,[168]3.5555,[169]3.5608,[170]3.5649,[171]3.5617,[172]3.5832,[173]3.5944,[174]3.5975,[175]3.6131,[176]3.6295,[177]3.6278,[178]3.6337,[179]3.6385,[180]3.6551,[181]3.6670,[182]3.6766,[183]3.6788,[184]3.6798,[185]3.6813,[186]3.6791,[187]3.6781,[188]3.6766,[189]3.6771,[190]3.6928,[191]3.7079,[192]3.7362,[193]3.7626,[194]3.7886,[195]3.8255,[196]3.8570,[197]3.8767,[198]3.8946,[199]3.9118,[200]3.9117,[201]3.8948,[202]3.8743,[203]3.8517,[204]3.8747,[205]3.8841,[206]3.8941,[207]3.9098,[208]3.9319,[209]3.9409,[210]3.9538,[211]3.9667,[212]3.9635,[213]3.9683,[214]3.9465,[215]3.9248,[216]3.9039,[217]3.8841,[218]3.8651,[219]3.8558,[220]3.8565,[221]3.8515,[222]3.8487,[223]3.8506,[224]3.8667,[225]3.8689,[226]3.8803,[227]3.8934,[228]3.9033,[229]3.9206,[230]3.9335,[231]3.9560,[232]3.9882,[233]4.0097,[234]4.0177,[235]4.0049,[236]4.0195,[237]4.0408,[238]4.0464,[239]4.0495,[240]4.0741,[241]4.0805,[242]4.1111,[243]4.1424,[244]4.1501,[245]4.1662,[246]4.1822,[247]4.1929,[248]4.2023,[249]4.2190,[250]4.2343,
+llama_print_timings:        load time =  173772.41 ms
+llama_print_timings:      sample time =       0.00 ms /     1 runs   (    0.00 ms per token,      inf tokens per second)
+llama_print_timings: prompt eval time =  212041.98 ms / 128000 tokens (    1.66 ms per token,   603.65 tokens per second)
+llama_print_timings:        eval time =       0.00 ms /     1 runs   (    0.00 ms per token,      inf tokens per second)
+llama_print_timings:       total time =  233432.61 ms / 128001 tokens
+~ggml_backend_cuda_context: have 1 graphs
+~ggml_backend_cuda_context: have 2 graphs
+~ggml_backend_cuda_context: have 2 graphs
+~ggml_backend_cuda_context: have 2 graphs
+
+Final estimate: PPL over 250 chunks for n_ctx=512 = 4.2343 +/- 0.04131

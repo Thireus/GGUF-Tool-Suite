@@ -1,0 +1,15 @@
+Enrichment notes:
+
+cd models/GLM-4.7-Flash/group0/
+
+../../../model_tensor_bpw_metric.py --results-csv kld_results.csv --c-free --exclude-qtypes '.*_bn.*$' --transforms "identity" --ignore-outliers 50 --allow-impure-map --p-grid-max 15 --p-grid-steps 100 --d-from-lowest 1 --penalize-above 15 --resemblance-metric r2 --equation-only 2> /dev/null
+
+y = 0 + 4.55567813326e+22 * ( x + 12.3848998959 )^(-18.9726315789)
+
+cd models/GLM-5.1/group0 
+
+../../../model_tensor_bpw_metric.py --results-csv kld_results_partial.csv --c-free --exclude-qtypes '.*_bn.*$' 'iq2_s' --transforms "identity" --ignore-outliers 50 --allow-impure-map --p-grid-max 15 --p-grid-steps 100 --d-from-lowest 1 --penalize-above 15 --resemblance-metric r2 --equation-only --plot
+
+y = 0 + 170619.274266 * ( x + 3.97560149878 )^(-7.11668261563)
+
+./group0_enricher.py --reference-csv models/GLM-4.7-Flash/group0/kld_results.csv --reference-mean-equation "y = 0 + 4.55567813326e+22 * ( x + 12.3848998959 )^(-18.9726315789)" --target-csv models/GLM-5.1/group0/kld_results_partial.csv --output-csv models/GLM-5.1/group0/kld_results.csv --target-mean-equation "y = 0 + 170619.274266 * ( x + 3.97560149878 )^(-7.11668261563)"
