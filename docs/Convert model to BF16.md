@@ -77,7 +77,7 @@ uv pip install -r requirements/requirements-convert_hf_to_gguf.txt --prerelease=
 uv pip install -U git+https://github.com/huggingface/transformers.git
 ```
 
-Build and install triton-cpu (might not be required) :
+Build and install triton-cpu for models such as Kimi-K2 and DeepSeek (may not be required for other models):
 
 ```
 cd "$WORKING_DIRECTORY"
@@ -88,7 +88,7 @@ git clone --depth 1 https://github.com/triton-lang/triton-cpu --recursive && \
 cd triton-cpu && \
 sed -i '/CMAKE_CXX_FLAGS/s/-Werror //g' CMakeLists.txt && \
 sed -i '/^if (dnnl_FOUND)/,/^endif()/ s/^/# /' third_party/cpu/CMakeLists.txt && \
-MAX_JOBS=$(nproc) uv pip install -e python --no-build-isolation # Be patient, "Preparing Packages" downloads a lot of stuff before build begins...
+MAX_JOBS=$(nproc) uv pip install -e . --no-build-isolation # Be patient, "Preparing Packages" downloads a lot of stuff before build begins...
 ```
 
 Note: See [here](https://github.com/ikawrakow/ik_llama.cpp/issues/383#issuecomment-2865306085) for patch explanation.
@@ -139,6 +139,8 @@ cp /"$WORKING_DIRECTORY"/huggingface/"$MODEL"-FP8/*.py /"$WORKING_DIRECTORY"/hug
 cp /"$WORKING_DIRECTORY"/huggingface/"$MODEL"-FP8/*.model /"$WORKING_DIRECTORY"/huggingface/"$MODEL"/
 ```
 
+Note: Use the mainline `convert_hf_to_gguf.py` with `uv pip install transformers==4.57.6` to resolve the `ImportError: cannot import name 'bytes_to_unicode' from transformers.models.gpt2.tokenization_gpt2` error.
+
 ## Produce tensors.map
 
 Obtain GGUF-Tool-Suite:
@@ -186,7 +188,7 @@ Enrich tensors.map that are ready with imatrix hash:
 cd "$WORKING_DIRECTORY"
 export PATH="$WORKING_DIRECTORY"/GGUF-Tool-Suite/:$PATH && \
 for q in $(ls -l */tensors.map | sed "s/.*-${MAINTAINER^^}-//g" | cut -d'-' -f1); do cd "$WORKING_DIRECTORY" && sed -n '/:imatrix=/q1; $q0' ${MODEL}-${MAINTAINER}-${q^^}-SPECIAL_SPLIT/tensors.map && tail -n1 ${MODEL}-${MAINTAINER}-${q^^}-SPECIAL_SPLIT/tensors.map \
-| sed -nE '/-([0-9]+)-of-\1\.gguf:/q0; q1' && imatrix_tensors.py --map-file ${MODEL}-${MAINTAINER}-${q^^}-SPECIAL_SPLIT/tensors.map --output-map-file tensors.map imatrix_ubergarm.dat && mv -f tensors.map ${MODEL}-${MAINTAINER}-${q^^}-SPECIAL_SPLIT/tensors.map; done
+| sed -nE '/-([0-9]+)-of-\1\.gguf:/q0; q1' && imatrix_tensors.py --map-file ${MODEL}-${MAINTAINER}-${q^^}-SPECIAL_SPLIT/tensors.map --output-map-file tensors.map ${IMATRIX} && mv -f tensors.map ${MODEL}-${MAINTAINER}-${q^^}-SPECIAL_SPLIT/tensors.map; done
 ```
 
 ## (optional) Produce GPG signatures
