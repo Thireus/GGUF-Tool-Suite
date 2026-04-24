@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regex entries.       **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-24-2026 -------------------- **#
+#** --------------- Updated: Apr-24-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -4025,7 +4025,7 @@ quantize_tensor_from_bf16() {
 
   # Build llama-quantize invocation
   local llama_args=()
-  llama_args+=( "$LLAMA_QUANTIZE_BIN" --individual-tensors "${chunk_id}" --keep-split --skip-first-shard )
+  llama_args+=( "$LLAMA_QUANTIZE_BIN" --individual-tensors "${chunk_id}" --keep-split --pure --skip-first-shard )
   # forward imatrix-related flags if set
   if [[ "$CONVERT_IGNORE_IMATRIX_RULES" == true ]]; then
     llama_args+=( --ignore-imatrix-rules )

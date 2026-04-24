@@ -226,7 +226,7 @@ BF16 model shards can also be individually quantized using a special version of 
 
 Usage example:
 ```
-./llama-quantize --keep-split --imatrix imatrix_ubergarm.dat --individual-tensors 2,3,1094 Kimi-K2-Thinking-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01097.gguf my_new_shards.gguf iq3_s 12
+./llama-quantize --keep-split --pure --imatrix imatrix_ubergarm.dat --individual-tensors 2,3,1094 Kimi-K2-Thinking-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01097.gguf my_new_shards.gguf iq3_s 12
 ```
 
 For more information about how to use it: https://github.com/Thireus/GGUF-Tool-Suite/issues/45

@@ -5,7 +5,7 @@
 #** repositories from Thireus' special BF16 sharded model.    **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-31-2026 -------------------- **#
+#** --------------- Updated: Apr-23-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -1029,7 +1029,7 @@ for i in "${SHARD_IDS_TO_PROCESS[@]}"; do
     attempt_start_ts=$(date +%s)
     echo "▶ Shard $i/$CHUNKS_TOTAL: trying ${current_qtype} (attempt $shard_attempts)"
 
-    if "$LLAMA_QUANTIZE_BIN" $skip_first_shard --keep-split \
+    if "$LLAMA_QUANTIZE_BIN" $skip_first_shard --keep-split --pure \
         --imatrix "$IMATRIX_FILE" \
         --ignore-imatrix-rules \
         --individual-tensors "$i" \
