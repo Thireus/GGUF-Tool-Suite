@@ -10,6 +10,6 @@ cd models/gemma-4-31B-it/group0
 
 ../../../model_tensor_bpw_metric.py --results-csv kld_results_partial.csv --allow-impure-map --c-free --exclude-qtypes '.*_bn.*$' 'iq2_s' --transforms "identity" --ignore-outliers 50 --p-grid-max 15 --p-grid-steps 100 --d-from-lowest 1 --penalize-above 25 --resemblance-metric r2 --equation-only --plot 2> /dev/null
 
-y = 0 + 6.43739318783 * ( x - 0.120639322033 )^(-4.32555023923)
+y = 0 + 7.15994000255 * ( x - 0.85088210126 )^(-1.57799043062)
 
-./group0_enricher.py --reference-csv models/Qwen3.5-4B/group0/kld_results.csv --reference-mean-equation "y = 0 + 5.77261777687e+22 * ( x + 10.2181080113 )^(-20.8421052632)" --target-csv models/gemma-4-31B-it/group0/kld_results_partial.csv --output-csv models/gemma-4-31B-it/group0/kld_results.csv --target-mean-equation "y = 0 + 102601651.34 * ( x + 8.00772913444 )^(-7.37839447103)"
+./group0_enricher.py --reference-csv models/Qwen3.5-4B/group0/kld_results.csv --reference-mean-equation "y = 0 + 5.77261777687e+22 * ( x + 10.2181080113 )^(-20.8421052632)" --target-csv models/gemma-4-31B-it/group0/kld_results_partial.csv --output-csv models/gemma-4-31B-it/group0/kld_results.csv --target-mean-equation "y = 0 + 7.15994000255 * ( x - 0.85088210126 )^(-1.57799043062)"
