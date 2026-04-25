@@ -149,7 +149,7 @@ Compile Thireus' special ik_llama.cpp llama-quantize version:
 ```
 cd "$WORKING_DIRECTORY"
 git clone --depth 1 https://github.com/Thireus/ik_llama.cpp --recursive ik_llama.cpp_indiv
-cd ik_llama.cpp_indiv && git checkout th/quantize_individual_tensors && \
+cd ik_llama.cpp_indiv && git checkout th/quantize_individual_tensors
 git pull # Update if required
 cmake -B build -DGGML_MAX_CONTEXTS=2048 # -DGGML_AVX=ON -DGGML_AVX2=ON && \
 cmake --build build --config Release -j$(nproc) --target llama-quantize

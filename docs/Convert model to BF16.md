@@ -118,6 +118,8 @@ Once conversion is done, you can safely remove the `$MODEL` from the `huggingfac
 
 _Note: Some models will require more steps. You'll need to dig into github/reddit/hf._
 
+_Important: You may also be required to add your model to `convert_hf_to_gguf_update.py` and execute this script if you see a message that states `WARNING: The BPE pre-tokenizer was not recognized!`. If that's the case, you can refer to the instructions provided at https://github.com/ggml-org/llama.cpp/discussions/7927._
+
 For example, DeepSeek and Kimi-K2 FP8 needs to be cast to BF16 safetensors before it can be converted to BF16 GGUF:
 
 ```
