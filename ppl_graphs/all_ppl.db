@@ -571,6 +571,24 @@ Qwen3.5-27B|unsloth|UD-Q4_K_XL|5.238|6.957|https://huggingface.co/unsloth/Qwen3.
 Qwen3.5-27B|unsloth|UD-Q5_K_XL|5.997|6.8838|https://huggingface.co/unsloth/Qwen3.5-27B-GGUF/blob/main/Qwen3.5-27B-UD-Q5_K_XL.gguf
 Qwen3.5-27B|unsloth|UD-Q6_K_XL|7.634|6.8719|https://huggingface.co/unsloth/Qwen3.5-27B-GGUF/blob/main/Qwen3.5-27B-UD-Q6_K_XL.gguf
 Qwen3.5-27B|unsloth|UD-Q8_K_XL|10.564|6.8681|https://huggingface.co/unsloth/Qwen3.5-27B-GGUF/blob/main/Qwen3.5-27B-UD-Q8_K_XL.gguf
+Qwen3.6-27B|pure|BF16|16.002|6.9066|
+Qwen3.6-27B|pure|Q8_0|8.502|6.9063|
+Qwen3.6-27B|ubergarm|IQ5_KS|5.919|6.9341|https://huggingface.co/ubergarm/Qwen3.6-27B-GGUF/tree/main/IQ5_KS
+Qwen3.6-27B|ubergarm|smol-IQ4_NL|4.92|7.004|https://huggingface.co/ubergarm/Qwen3.6-27B-GGUF/tree/main/smol-IQ4_NL
+Qwen3.6-27B|ubergarm|IQ4_KS|4.693|6.974|https://huggingface.co/ubergarm/Qwen3.6-27B-GGUF/tree/main/IQ4_K
+Kimi-K2.6|ubergarm|Q4_X|4.549|1.8433|https://huggingface.co/ubergarm/Kimi-K2.6-GGUF/tree/main/Q4_X
+Kimi-K2.6|ubergarm|IQ3_K|3.849|1.9012|https://huggingface.co/ubergarm/Kimi-K2.6-GGUF/tree/main/IQ3_K
+Kimi-K2.6|ubergarm|smol-IQ3_KS|3.249|1.981|https://huggingface.co/ubergarm/Kimi-K2.6-GGUF/tree/main/smol-IQ3_KS
+Kimi-K2.6|ubergarm|smol-IQ2_KL|2.755|2.219|https://huggingface.co/ubergarm/Kimi-K2.6-GGUF/tree/main/smol-IQ2_KL
+Kimi-K2.6|ubergarm|smol-IQ2_KS|2.261|2.6723|https://huggingface.co/ubergarm/Kimi-K2.6-GGUF/tree/main/smol-IQ2_KS
+Kimi-K2.6|ubergarm|smol-IQ1_KT|1.832|3.3252|https://huggingface.co/ubergarm/Kimi-K2.6-GGUF/tree/main/smol-IQ1_KT
+GLM-5.1|pure|BF16|16.003|2.7257|
+GLM-5.1|pure|Q8_0|8.504|2.7257|
+GLM-5.1|ubergarm|smol-IQ4_K|4.621|2.7547|https://huggingface.co/ubergarm/GLM-5.1-GGUF/tree/main/smol-IQ4_K
+GLM-5.1|ubergarm|IQ3_KS|3.649|2.878|https://huggingface.co/ubergarm/GLM-5.1-GGUF/tree/main/IQ3_KS
+GLM-5.1|ubergarm|IQ2_KL|2.985|3.1275|https://huggingface.co/ubergarm/GLM-5.1-GGUF/tree/main/IQ2_KL
+GLM-5.1|ubergarm|smol-IQ2_KS|2.344|3.8818|https://huggingface.co/ubergarm/GLM-5.1-GGUF/tree/main/smol-IQ2_KS
+GLM-5.1|ubergarm|smol-IQ1_KT|1.928|4.6654|https://huggingface.co/ubergarm/GLM-5.1-GGUF/tree/main/smol-IQ1_KT
 Qwen3.5-9B|GGUF-Tool-Suite|e56c257_0f6c89f|4.2512|8.2505|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/llama.cpp_recipes/Qwen3.5-9B.WEB_USER-4.2512bpw-8.2505ppl-4GB-GGUF_4GB-GPU_0GB-CPU.e56c257_0f6c89f.recipe.txt
 Qwen3.5-4B|GGUF-Tool-Suite|e56c257_836a84b|2.1263|21.6337|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/llama.cpp_recipes/Qwen3.5-4B.WEB_USER-2.1263bpw-21.6337ppl-1GB-GGUF_1GB-GPU_0GB-CPU.e56c257_836a84b.recipe.txt
 Qwen3.5-4B|GGUF-Tool-Suite|e56c257_64b4ee9|1.7011|118.4771|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/llama.cpp_recipes/Qwen3.5-4B.WEB_USER-1.7011bpw-118.4771ppl-0GB-GGUF_0GB-GPU_0GB-CPU.e56c257_64b4ee9.recipe.txt
@@ -615,6 +633,7 @@ DeepSeek-V3.1|GGUF-Tool-Suite|569b7f6_6102b9f|2.6124|3.6784|https://github.com/T
 Qwen3.5-2B|GGUF-Tool-Suite|ac471ee_41582fd|1.7129|115.2574|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-2B.WEB_USER-1.7129bpw-115.2574ppl-0GB-GGUF_0GB-GPU_0GB-CPU.ac471ee_41582fd.recipe.txt
 Qwen3.5-0.8B|GGUF-Tool-Suite|ac471ee_42c28c6|2.0256|157.5438|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-0.8B.WEB_USER-2.0256bpw-157.5438ppl-0GB-GGUF_0GB-GPU_0GB-CPU.ac471ee_42c28c6.recipe.txt
 Qwen3.5-397B-A17B|GGUF-Tool-Suite|e56c257_8cf0bf9|2.1269|4.0517|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-397B-A17B.WEB_USER-2.1269bpw-4.0517ppl-98GB-GGUF_98GB-GPU_0GB-CPU.e56c257_8cf0bf9.recipe.txt
+Qwen3.6-35B-A3B|GGUF-Tool-Suite|e56c257_5086502|5.109|6.952|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.6-35B-A3B.WEB_USER-5.1090bpw-6.9520ppl-20GB-GGUF_20GB-GPU_0GB-CPU.e56c257_5086502.recipe.txt
 GLM-4.7-Flash|GGUF-Tool-Suite|9e8bf86_decc9ea|4.2925|10.2196|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/GLM-4.7-Flash.WEB_USER-4.2925bpw-10.2196ppl-14GB-GGUF_14GB-GPU_0GB-CPU.9e8bf86_decc9ea.recipe.txt
 Kimi-K2-Instruct|GGUF-Tool-Suite|569b7f6_4766d51|2.0049|3.8128|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Kimi-K2-Instruct.THIREUS-2.0049bpw-3.8128ppl.238GB-GGUF_10GB-GPU_228GB-CPU.569b7f6_4766d51.recipe
 Qwen3.5-4B|GGUF-Tool-Suite|e56c257_7f164be|4.2527|10.1675|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-4B.WEB_USER-4.2527bpw-10.1675ppl-2GB-GGUF_2GB-GPU_0GB-CPU.e56c257_7f164be.recipe.txt
@@ -627,6 +646,7 @@ DeepSeek-R1-0528|GGUF-Tool-Suite|569b7f6_6512c27|3.1736|3.3299|https://github.co
 Qwen3.5-122B-A10B|GGUF-Tool-Suite|e56c257_3a3e0eb|6.8058|4.8203|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-122B-A10B.WEB_USER-6.8058bpw-4.8203ppl-96GB-GGUF_96GB-GPU_0GB-CPU.e56c257_3a3e0eb.recipe.txt
 DeepSeek-R1-0528|GGUF-Tool-Suite|569b7f6_61fd5be|4.5294|3.2299|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/DeepSeek-R1-0528.THIREUS-4.5294bpw-3.2299ppl.354GB-GGUF_14GB-GPU_340GB-CPU.569b7f6_61fd5be.recipe
 Qwen3.5-9B|GGUF-Tool-Suite|40513ab_41582fd|1.7066|20.2773|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-9B.WEB_USER-1.7066bpw-20.2773ppl-1GB-GGUF_1GB-GPU_0GB-CPU.40513ab_41582fd.recipe.txt
+Qwen3.6-35B-A3B|GGUF-Tool-Suite|e56c257_b82533a|4.2574|6.9901|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.6-35B-A3B.WEB_USER-4.2574bpw-6.9901ppl-17GB-GGUF_17GB-GPU_0GB-CPU.e56c257_b82533a.recipe.txt
 Qwen3-235B-A22B-Thinking-2507|GGUF-Tool-Suite|569b7f6_567a482|7.3559|4.2055|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3-235B-A22B-Thinking-2507.THIREUS-7.3559bpw-4.2055ppl.201GB-GGUF_8GB-GPU_192GB-CPU.569b7f6_567a482.recipe
 Qwen3.5-397B-A17B|GGUF-Tool-Suite|e56c257_dc3929d|2.1626|3.9966|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-397B-A17B.WEB_USER-2.1626bpw-3.9966ppl-99GB-GGUF_99GB-GPU_0GB-CPU.e56c257_dc3929d.recipe.txt
 Qwen3.5-35B-A3B|GGUF-Tool-Suite|e56c257_7f164be|4.2574|6.5908|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-35B-A3B.WEB_USER-4.2574bpw-6.5908ppl-17GB-GGUF_17GB-GPU_0GB-CPU.e56c257_7f164be.recipe.txt
@@ -646,6 +666,7 @@ Qwen3.5-397B-A17B|GGUF-Tool-Suite|e56c257_604b703|3.9048|3.536|https://github.co
 Qwen3.5-9B|GGUF-Tool-Suite|cff7d90_ff77dc2|4.258|8.2052|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-9B.WEB_USER-4.2580bpw-8.2052ppl-4GB-GGUF_4GB-GPU_0GB-CPU.cff7d90_ff77dc2.recipe.txt
 Qwen3.5-122B-A10B|GGUF-Tool-Suite|e56c257_797c708|1.7015|7.4933|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-122B-A10B.WEB_USER-1.7015bpw-7.4933ppl-24GB-GGUF_24GB-GPU_0GB-CPU.e56c257_797c708.recipe.txt
 DeepSeek-R1-0528|GGUF-Tool-Suite|569b7f6_3bcb28a|2.1198|4.0294|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/DeepSeek-R1-0528.THIREUS-2.1198bpw-4.0294ppl.165GB-GGUF_13GB-GPU_151GB-CPU.569b7f6_3bcb28a.recipe
+Qwen3.6-35B-A3B|GGUF-Tool-Suite|e56c257_e98bc7d|2.001|10.7918|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.6-35B-A3B.WEB_USER-2.0010bpw-10.7918ppl-8GB-GGUF_8GB-GPU_0GB-CPU.e56c257_e98bc7d.recipe.txt
 Qwen3.5-35B-A3B|GGUF-Tool-Suite|e56c257_e17bd28|3.406|6.69|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-35B-A3B.WEB_USER-3.4060bpw-6.6900ppl-13GB-GGUF_13GB-GPU_0GB-CPU.e56c257_e17bd28.recipe.txt
 GLM-4.7-Flash|GGUF-Tool-Suite|9e8bf86_23e5dc8|1.8054|23.7421|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/GLM-4.7-Flash.WEB_USER-1.8054bpw-23.7421ppl-6GB-GGUF_6GB-GPU_0GB-CPU.9e8bf86_23e5dc8.recipe.txt
 Qwen3.5-2B|GGUF-Tool-Suite|ac471ee_4942fed|3.412|13.9846|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-2B.WEB_USER-3.4120bpw-13.9846ppl-0GB-GGUF_0GB-GPU_0GB-CPU.ac471ee_4942fed.recipe.txt
@@ -659,6 +680,7 @@ DeepSeek-R1-0528|GGUF-Tool-Suite|569b7f6_6f5170d|2.7944|3.4451|https://github.co
 Qwen3.5-397B-A17B|GGUF-Tool-Suite|e56c257_a3c5e34|2.6825|3.7801|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-397B-A17B.WEB_USER-2.6825bpw-3.7801ppl-123GB-GGUF_123GB-GPU_0GB-CPU.e56c257_a3c5e34.recipe.txt
 Qwen3.5-397B-A17B|GGUF-Tool-Suite|e56c257_63b8ee1|1.9312|4.2302|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-397B-A17B.WEB_USER-1.9312bpw-4.2302ppl-89GB-GGUF_89GB-GPU_0GB-CPU.e56c257_63b8ee1.recipe.txt
 Qwen3-235B-A22B-Thinking-2507|GGUF-Tool-Suite|569b7f6_040448d|4.5571|4.2473|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3-235B-A22B-Thinking-2507.THIREUS-4.5571bpw-4.2473ppl.124GB-GGUF_5GB-GPU_119GB-CPU.569b7f6_040448d.recipe
+Qwen3.6-35B-A3B|GGUF-Tool-Suite|e56c257_58155bc|6.8046|6.73|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.6-35B-A3B.WEB_USER-6.8046bpw-6.7300ppl-27GB-GGUF_27GB-GPU_0GB-CPU.e56c257_58155bc.recipe.txt
 Qwen3.5-35B-A3B|GGUF-Tool-Suite|e56c257_f04399e|5.1086|6.5514|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-35B-A3B.WEB_USER-5.1086bpw-6.5514ppl-20GB-GGUF_20GB-GPU_0GB-CPU.e56c257_f04399e.recipe.txt
 Qwen3.5-35B-A3B|GGUF-Tool-Suite|e56c257_3a3e0eb|6.8015|6.5379|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-35B-A3B.WEB_USER-6.8015bpw-6.5379ppl-27GB-GGUF_27GB-GPU_0GB-CPU.e56c257_3a3e0eb.recipe.txt
 Qwen3.5-27B|GGUF-Tool-Suite|e56c257_3a3e0eb|6.8017|6.8768|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-27B.WEB_USER-6.8017bpw-6.8768ppl-21GB-GGUF_21GB-GPU_0GB-CPU.e56c257_3a3e0eb.recipe.txt
@@ -679,6 +701,7 @@ Qwen3.5-397B-A17B|GGUF-Tool-Suite|e56c257_84ed83c|2.4664|3.8289|https://github.c
 GLM-4.5|GGUF-Tool-Suite|569b7f6_ebe7880|2.018|5.3005|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/GLM-4.5.THIREUS-2.0180bpw-5.3005ppl.83GB-GGUF_7GB-GPU_76GB-CPU.569b7f6_ebe7880.recipe
 DeepSeek-TNG-R1T2-Chimera|GGUF-Tool-Suite|569b7f6_eba5f00|3.0977|3.3675|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/DeepSeek-TNG-R1T2-Chimera.THIREUS-3.0977bpw-3.3675ppl.242GB-GGUF_11GB-GPU_230GB-CPU.569b7f6_eba5f00.recipe
 Qwen3.5-9B|GGUF-Tool-Suite|40513ab_4942fed|3.4076|8.634|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-9B.WEB_USER-3.4076bpw-8.6340ppl-3GB-GGUF_3GB-GPU_0GB-CPU.40513ab_4942fed.recipe.txt
+Qwen3.6-35B-A3B|GGUF-Tool-Suite|e56c257_a12cbfb|2.5545|8.2704|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.6-35B-A3B.WEB_USER-2.5545bpw-8.2704ppl-10GB-GGUF_10GB-GPU_0GB-CPU.e56c257_a12cbfb.recipe.txt
 Qwen3.5-397B-A17B|GGUF-Tool-Suite|e56c257_f04399e|5.104|3.4923|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-397B-A17B.WEB_USER-5.1040bpw-3.4923ppl-235GB-GGUF_235GB-GPU_0GB-CPU.e56c257_f04399e.recipe.txt
 Qwen3.5-2B|GGUF-Tool-Suite|ac471ee_a1ad27f|2.5631|20.1912|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-2B.WEB_USER-2.5631bpw-20.1912ppl-0GB-GGUF_0GB-GPU_0GB-CPU.ac471ee_a1ad27f.recipe.txt
 Qwen3.5-9B|GGUF-Tool-Suite|40513ab_ebcf5a5|2.1325|11.6964|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-9B.WEB_USER-2.1325bpw-11.6964ppl-2GB-GGUF_2GB-GPU_0GB-CPU.40513ab_ebcf5a5.recipe.txt
@@ -703,6 +726,8 @@ Qwen3.5-2B|GGUF-Tool-Suite|ac471ee_6ddd01f|4.2612|13.1244|https://github.com/Thi
 GLM-4.7-Flash|GGUF-Tool-Suite|9e8bf86_8e0e7f6|3.6607|10.3043|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/GLM-4.7-Flash.WEB_USER-3.6607bpw-10.3043ppl-12GB-GGUF_12GB-GPU_0GB-CPU.9e8bf86_8e0e7f6.recipe.txt
 Kimi-K2-Thinking|GGUF-Tool-Suite|569b7f6_1ac2213|2.0282|3.1317|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Kimi-K2-Thinking.ROOT-2.0282bpw-3.1317ppl.241GB-GGUF_11GB-GPU_230GB-CPU.569b7f6_1ac2213.recipe
 Qwen3.5-397B-A17B|GGUF-Tool-Suite|e56c257_e05c8c8|3.0015|3.6491|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-397B-A17B.WEB_USER-3.0015bpw-3.6491ppl-138GB-GGUF_138GB-GPU_0GB-CPU.e56c257_e05c8c8.recipe.txt
+Qwen3.6-35B-A3B|GGUF-Tool-Suite|e56c257_88a9cd6|1.703|13.4115|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.6-35B-A3B.WEB_USER-1.7030bpw-13.4115ppl-6GB-GGUF_6GB-GPU_0GB-CPU.e56c257_88a9cd6.recipe.txt
+Qwen3.6-35B-A3B|GGUF-Tool-Suite|e56c257_a1b77cf|3.406|7.5955|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.6-35B-A3B.WEB_USER-3.4060bpw-7.5955ppl-13GB-GGUF_13GB-GPU_0GB-CPU.e56c257_a1b77cf.recipe.txt
 Qwen3.5-397B-A17B|GGUF-Tool-Suite|e56c257_797c708|1.7015|4.675|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-397B-A17B.WEB_USER-1.7015bpw-4.6750ppl-78GB-GGUF_78GB-GPU_0GB-CPU.e56c257_797c708.recipe.txt
 GLM-4.5-Air|GGUF-Tool-Suite|569b7f6_e0aee12|3.8735|4.7477|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/GLM-4.5-Air.THIREUS-3.8735bpw-4.7477ppl.49GB-GGUF_5GB-GPU_44GB-CPU.569b7f6_e0aee12.recipe
 Qwen3.5-27B|GGUF-Tool-Suite|e56c257_fcd3286|2.5507|7.6317|https://github.com/Thireus/GGUF-Tool-Suite/blob/main/recipe_examples/ik_harmonized_recipes/Qwen3.5-27B.WEB_USER-2.5507bpw-7.6317ppl-7GB-GGUF_7GB-GPU_0GB-CPU.e56c257_fcd3286.recipe.txt
