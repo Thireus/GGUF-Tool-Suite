@@ -5,7 +5,7 @@
 #** group0/kld_results_partial.csv degradation data.          **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-30-2026 -------------------- **#
+#** --------------- Updated: Apr-26-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -71,37 +71,11 @@ def format_float(x: float, precision: int = 6) -> str:
     return s.rstrip("0").rstrip(".") if "." in s else s
 
 
-def interp_1d(xs: Sequence[float], ys: Sequence[float], x: float) -> Optional[float]:
-    if not xs:
-        return None
-    if len(xs) == 1:
-        return ys[0]
-    if x <= xs[0]:
-        return ys[0]
-    if x >= xs[-1]:
-        return ys[-1]
-
-    i = bisect_left(xs, x)
-    x0, x1 = xs[i - 1], xs[i]
-    y0, y1 = ys[i - 1], ys[i]
-    if x1 == x0:
-        return (y0 + y1) / 2.0
-    t = (x - x0) / (x1 - x0)
-    return y0 + t * (y1 - y0)
-
-
 def clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
 
 
 def parse_csv_numeric_value(raw_value: Any, style: Optional[str]) -> Optional[float]:
-    """Parse CSV numeric values according to the declared style.
-
-    style:
-      - "percent": values are written like "2.12%"
-      - "float": values are written like "0.0212"
-      - None: best effort parsing
-    """
     if is_missing_value(raw_value):
         return None
 
@@ -120,7 +94,6 @@ def parse_csv_numeric_value(raw_value: Any, style: Optional[str]) -> Optional[fl
             raise ValueError(f"Expected absolute float value, got percent string: {raw_value!r}")
         return float(s)
 
-    # Best effort fallback.
     if s.endswith("%"):
         s = s[:-1].strip()
         return float(s) / 100.0
@@ -128,16 +101,6 @@ def parse_csv_numeric_value(raw_value: Any, style: Optional[str]) -> Optional[fl
 
 
 def infer_degradation_style(path: str) -> Optional[str]:
-    """Infer whether the CSV uses percentage strings or absolute floats.
-
-    Returns:
-        "percent" if all non-missing values are percent strings,
-        "float" if all non-missing values are absolute values,
-        None if no usable values exist.
-
-    Raises:
-        ValueError if the file mixes percent and float styles.
-    """
     fields, rows = read_csv_rows(path)
     qtype_col = next((c for c in fields if c.upper() == "QTYPE"), None)
     if qtype_col is None:
@@ -145,7 +108,7 @@ def infer_degradation_style(path: str) -> Optional[str]:
 
     value_cols = [c for c in fields if c.upper() != "QTYPE"]
     if not value_cols:
-        raise ValueError(f"{path} must contain at least one value column besides QTYPE")
+        raise ValueError(f"{path} must contain at least one value column beside QTYPE")
     value_col = value_cols[0]
 
     saw_percent = False
@@ -184,10 +147,6 @@ def infer_degradation_style(path: str) -> Optional[str]:
 
 
 def lookup_qtype_with_r_suffix(values: Mapping[str, Any], qtype: str) -> Optional[float]:
-    """Lookup a qtype value directly, then try the base or _r4/_r8 sibling.
-
-    The degradation data for iq1_s != iq1_s_r4, this is the only exception.
-    """
     q = norm_qtype(qtype)
     direct_val = to_float(values.get(q))
     if direct_val is not None:
@@ -212,14 +171,12 @@ def lookup_qtype_with_r_suffix(values: Mapping[str, Any], qtype: str) -> Optiona
 
 
 def format_output_value(value: float, style: str, precision: int) -> str:
-    """Format output according to the target CSV style."""
     if style == "percent":
         return f"{format_float(value * 100.0, precision)}%"
     return format_float(value, precision)
 
 
 def weighted_median(values: Sequence[float], weights: Sequence[float]) -> Optional[float]:
-    """Compute a weighted median for positive weights."""
     pairs = [
         (float(v), float(w))
         for v, w in zip(values, weights)
@@ -241,6 +198,14 @@ def weighted_median(values: Sequence[float], weights: Sequence[float]) -> Option
             return value
 
     return pairs[-1][0]
+
+
+def should_unify_r_variants(qtype_a: str, qtype_b: str) -> bool:
+    """Return False if the pair is the known exception (iq1_s / iq1_s_r4)."""
+    a, b = norm_qtype(qtype_a), norm_qtype(qtype_b)
+    if {a, b} == {"IQ1_S", "IQ1_S_R4"}:
+        return False
+    return True
 
 
 # -----------------------------
@@ -325,9 +290,9 @@ BPW_TABLE = {
 BPW_TABLE = {k.upper(): float(v) for k, v in BPW_TABLE.items()}
 
 
-# -----------------------------
-# Default values and equations
-# -----------------------------
+# ---------------------------------------
+# Default reference values and equations
+# ---------------------------------------
 
 # Qwen3-4B-Thinking-2507 group0.csv values
 DEFAULT_REFERENCE_VALUES = {'bf16': 0.0, 'iq1_bn': 14.758228, 'iq1_kt': 2.692801, 'iq1_m': 4.684445, 'iq1_m_r4': 4.617296, 'iq1_s': 4.562480, 'iq1_s_r4': 5.124850, 'iq2_bn': 15.467749, 'iq2_bn_r4': 15.445743, 'iq2_k': 0.883945, 'iq2_k_r4': 0.883945, 'iq2_kl': 0.584754, 'iq2_ks': 1.347207, 'iq2_kt': 1.214565, 'iq2_s': 0.465971, 'iq2_xs': 0.633596, 'iq2_xs_r4': 0.636844, 'iq2_xxs': 1.202639, 'iq2_xxs_r4': 1.208328, 'iq3_k': 0.164337, 'iq3_k_r4': 0.164337, 'iq3_ks': 0.211158, 'iq3_kt': 0.214378, 'iq3_s': 0.210123, 'iq3_s_r4': 0.213001, 'iq3_xxs': 0.348842, 'iq3_xxs_r4': 0.351102, 'iq4_k': 0.034494, 'iq4_k_r4': 0.034494, 'iq4_ks': 0.047722, 'iq4_ks_r4': 0.047722, 'iq4_kss': 0.073993, 'iq4_kt': 0.071823, 'iq4_nl': 0.052065, 'iq4_nl_r4': 0.051893, 'iq4_xs': 0.052575, 'iq4_xs_r8': 0.055797, 'iq5_k': 0.009814, 'iq5_k_r4': 0.009814, 'iq5_ks': 0.012268, 'iq5_ks_r4': 0.012268, 'iq6_k': 0.003411, 'q2_K': 0.895361, 'q2_k_r4': 0.896636, 'q3_K': 0.226457, 'q3_k_r4': 0.228156, 'q4_0': 0.070737, 'q4_0_r8': 0.070601, 'q4_1': 0.050200, 'q4_K': 0.046677, 'q4_k_r4': 0.046609, 'q5_0': 0.018810, 'q5_0_r4': 0.018876, 'q5_1': 0.014465, 'q5_K': 0.015590, 'q5_k_r4': 0.015766, 'q6_0': 0.005317, 'q6_0_r4': 0.005244, 'q6_K': 0.004040, 'q6_k_r4': 0.006687, 'q8_0': 0.001449, 'q8_0_r8': 0.001515, 'q8_k_r8': 0.004102, 'q8_KV': 0.038383}
@@ -374,7 +339,7 @@ def parse_equation_to_callable(eq_str: str) -> Optional[Callable[[float], float]
             locals_map = {"x": float(x_val)}
             return float(eval(code, safe_globals, locals_map))
         except Exception as e:
-            raise RuntimeError(f"Error evaluating quant degradation equation at x={x_val}: {e}")
+            raise RuntimeError(f"Error evaluating equation at x={x_val}: {e}")
 
     return f
 
@@ -394,7 +359,6 @@ def build_csv_qtype_data(
     Dict[str, str],
     Optional[str],
 ]:
-    """Load qtype/value data from a CSV and preserve original qtype casing/order."""
     fields, rows = read_csv_rows(path)
     qtype_col = next((c for c in fields if c.upper() == "QTYPE"), None)
     if qtype_col is None:
@@ -429,73 +393,63 @@ def build_csv_qtype_data(
         raw_values[raw_qtype] = parsed
         norm_values[qnorm] = parsed
 
-    # Apply sibling fallback as early as possible for the target CSV.
-    # The degradation data for iq1_s != iq1_s_r4, this is the only exception.
     if apply_sibling_fallback:
-        additions_raw: Dict[str, float] = {}
         additions_norm: Dict[str, float] = {}
-
         for qnorm in list(qtype_case_by_norm.keys()):
             if qnorm in {"IQ1_S", "IQ1_S_R4"}:
                 continue
-
             if qnorm in norm_values:
                 continue
 
             base_qtype = re.sub(r"_R[48]$", "", qnorm, flags=re.IGNORECASE)
             candidate_values: List[float] = []
-
             if base_qtype != qnorm and base_qtype in norm_values:
                 candidate_values.append(norm_values[base_qtype])
-
             for suffix in ("_R4", "_R8"):
                 candidate = base_qtype + suffix
                 if candidate in norm_values:
                     candidate_values.append(norm_values[candidate])
-
             if candidate_values:
                 val = candidate_values[0]
                 additions_norm[qnorm] = val
-                additions_raw[qtype_case_by_norm[qnorm]] = val
+                raw_values[qtype_case_by_norm[qnorm]] = val
 
         for qnorm, val in additions_norm.items():
             norm_values[qnorm] = val
-            raw_values[qtype_case_by_norm[qnorm]] = val
+
+    # DEBUG: print loaded target data (first few)
+    if apply_sibling_fallback:
+        print("\n[DEBUG] Loaded target qtypes (first 20):")
+        for q in sorted(norm_values)[:20]:
+            print(f"  {q}: {norm_values[q]}")
 
     return (
-        fields,
-        rows,
-        qtype_col,
-        value_col,
-        raw_values,
-        norm_values,
-        qtype_order,
-        qtype_case_by_norm,
-        style,
+        fields, rows, qtype_col, value_col,
+        raw_values, norm_values, qtype_order, qtype_case_by_norm, style,
     )
 
 
-def load_reference_data(args: argparse.Namespace) -> Tuple[Dict[str, float], Dict[str, float], List[str], Dict[str, str], Callable[[float], float], str]:
-    """Return raw and normalized reference data plus original order/casing and mean function."""
+def load_reference_data(args: argparse.Namespace) -> Tuple[
+    Dict[str, float], Dict[str, float], List[str], Dict[str, str],
+    Callable[[float], float], str
+]:
     if args.reference_csv:
         if not args.reference_mean_equation:
             raise SystemExit("[Error] --reference-mean-equation is required when using --reference-csv")
-
         (
-            _fields,
-            _rows,
-            _qtype_col,
-            _value_col,
-            ref_raw_values,
-            ref_norm_values,
-            ref_order,
-            ref_case_by_norm,
-            ref_style,
+            _fields, _rows, _qtype_col, _value_col,
+            ref_raw_values, ref_norm_values, ref_order, ref_case_by_norm, ref_style,
         ) = build_csv_qtype_data(args.reference_csv, apply_sibling_fallback=False)
 
         ref_mean_fn = parse_equation_to_callable(args.reference_mean_equation)
         if ref_mean_fn is None:
             raise SystemExit("[Error] Invalid --reference-mean-equation provided; aborting.")
+
+        # DEBUG: print reference key values
+        print("\n[DEBUG] Loaded reference qtypes (iq1_s, iq1_s_r4):")
+        for key in ['IQ1_S', 'IQ1_S_R4']:
+            val = ref_norm_values.get(key, "MISSING")
+            print(f"  {key}: {val}")
         return ref_raw_values, ref_norm_values, ref_order, ref_case_by_norm, ref_mean_fn, (ref_style or "float")
 
     ref_raw_values = dict(DEFAULT_REFERENCE_VALUES)
@@ -509,240 +463,255 @@ def load_reference_data(args: argparse.Namespace) -> Tuple[Dict[str, float], Dic
 
 
 # -----------------------------
-# Filling logic
+# New transformation logic with global scaling & sibling unification
 # -----------------------------
 
+def get_highest_bpw_qtypes(
+    norm_values: Mapping[str, Any],
+    bpw_table: Mapping[str, float],
+) -> Tuple[float, set]:
+    """Return (max_bpw, set of qtypes that achieve that BPW) among valid entries."""
+    max_bpw = 0.0
+    for q, v in norm_values.items():
+        x = bpw_table.get(q)
+        if x is not None and not is_missing_value(v):
+            if x > max_bpw:
+                max_bpw = x
+    qtypes = set()
+    for q, v in norm_values.items():
+        x = bpw_table.get(q)
+        if x is not None and abs(x - max_bpw) < 1e-9 and not is_missing_value(v):
+            qtypes.add(norm_qtype(q))
+    return max_bpw, qtypes
 
-def transpose_reference_value_to_target_curve(
-    ref_val: float,
-    ref_mean: float,
-    target_mean: float,
+
+def extract_bpw_range(
+    ref_norm: Mapping[str, Any],
+    tgt_norm: Mapping[str, Any],
+    bpw_table: Mapping[str, float],
+) -> Tuple[float, float]:
+    ref_max_x, _ = get_highest_bpw_qtypes(ref_norm, bpw_table)
+    tgt_max_x, _ = get_highest_bpw_qtypes(tgt_norm, bpw_table)
+    print(f"[DEBUG] extract_bpw_range: ref_max_x = {ref_max_x}, tgt_max_x = {tgt_max_x}")
+    return ref_max_x, tgt_max_x
+
+
+def compute_global_envelope_ratio(
+    ref_norm: Mapping[str, Any],
+    tgt_norm: Mapping[str, Any],
+    ref_mean_fn: Callable[[float], float],
+    tgt_mean_adj_fn: Callable[[float], float],
+    bpw_table: Mapping[str, float],
 ) -> float:
-    """Normalize a reference value into the target curve's amplitude space."""
     eps = 1e-12
-    if abs(ref_mean) < eps:
-        return float(target_mean + (ref_val - ref_mean))
-    amplitude_factor = target_mean / ref_mean
-    return float(target_mean + (ref_val - ref_mean) * amplitude_factor)
+    ratios = []
+    ratios_info = []
+    skip_qtypes = {'IQ1_S', 'IQ1_S_R4'}
+    for qtype in sorted(set(ref_norm.keys()) & set(tgt_norm.keys())):
+        if qtype in skip_qtypes:
+            continue
+        x = bpw_table.get(qtype)
+        if x is None:
+            continue
+        ref_val = to_float(ref_norm.get(qtype))
+        tgt_val = to_float(tgt_norm.get(qtype))
+        if ref_val is None or tgt_val is None:
+            continue
+
+        dev_ref = ref_val - ref_mean_fn(x)
+        if abs(dev_ref) < eps:
+            continue
+
+        dev_tgt = tgt_val - tgt_mean_adj_fn(x)
+        ratio = dev_tgt / dev_ref
+        if ratio <= 0:
+            ratios_info.append((qtype, x, ref_val, ref_mean_fn(x), tgt_val, tgt_mean_adj_fn(x), ratio, "discarded(<=0)"))
+            continue
+        ratios_info.append((qtype, x, ref_val, ref_mean_fn(x), tgt_val, tgt_mean_adj_fn(x), ratio, "kept"))
+        ratios.append(clamp(ratio, 0.05, 20.0))
+
+    print("\n[DEBUG] Candidate envelope ratios:")
+    for info in ratios_info:
+        print(f"  {info[0]}: x={info[1]:.3f} ref={info[2]:.6f} ref_mean={info[3]:.6f} tgt={info[4]:.6f} tgt_mean_adj={info[5]:.6f} ratio={info[6]:.6f} {info[7]}")
+    print(f"  positive ratios (clamped): {ratios}")
+
+    if not ratios:
+        print("[DEBUG] No positive ratios, using default 1.0")
+        return 1.0
+
+    alpha = median(ratios)
+    alpha = clamp(alpha, 0.1, 10.0)
+    print(f"[DEBUG] Computed global alpha = {alpha:.6f}")
+    return alpha
 
 
-CORRECTION_FACTOR_MIN = 0.5
-CORRECTION_FACTOR_MAX = 2.0
-CORRECTION_EDGE_BLEND_START = 0.35
-CORRECTION_RESIDUAL_FLOOR_RATIO = 0.05
+def preserve_sibling_ratios_from_target(
+    enriched: Dict[str, float],
+    tgt_norm: Dict[str, Any],
+) -> None:
+    for qtype in list(enriched.keys()):
+        base = re.sub(r"_R[48]$", "", qtype, flags=re.IGNORECASE)
+        if base == qtype:
+            continue
+        if base not in tgt_norm or qtype not in tgt_norm:
+            continue
+        base_tgt = to_float(tgt_norm[base])
+        variant_tgt = to_float(tgt_norm[qtype])
+        if base_tgt is None or variant_tgt is None or base_tgt == 0:
+            continue
+        ratio = variant_tgt / base_tgt
+        old_val = enriched.get(qtype, 0.0)
+        new_val = enriched.get(base, 0.0) * ratio
+        enriched[qtype] = new_val
+        print(f"[DEBUG ratio preserve] {qtype} vs {base}: target ratio {ratio:.6f}, setting {qtype} from {old_val:.6f} to {new_val:.6f}")
 
 
-def compute_local_correction_factor(
-    x: float,
-    shared_samples: List[Dict[str, float]],
-    global_factor: float,
-) -> float:
-    """Estimate a local correction factor from nearby known qtypes.
+def apply_sibling_unification(
+    enriched: Dict[str, float],
+    tgt_norm: Dict[str, Any],
+) -> None:
+    all_qtypes = set(enriched.keys())
 
-    Known qtypes closer to the mean receive more weight, and qtypes farther away in
-    BPW from the assessed x receive less weight.
-    """
-    if not shared_samples:
-        return global_factor
+    for qtype in sorted(all_qtypes):
+        tgt_original = to_float(tgt_norm.get(qtype))
+        if tgt_original is not None:
+            print(f"[DEBUG sibling] {qtype} was originally present ({tgt_original}), skip unification")
+            continue
 
-    samples = sorted(shared_samples, key=lambda s: abs(s["x"] - x))
-    neighbors = samples[: min(9, len(samples))]
+        base = re.sub(r"_R[48]$", "", qtype, flags=re.IGNORECASE)
+        if base != qtype and base in all_qtypes:
+            if not should_unify_r_variants(qtype, base):
+                print(f"[DEBUG sibling] {qtype} vs {base} is the iq1_s exception, skip")
+                continue
+            base_tgt = to_float(tgt_norm.get(base))
+            if base_tgt is not None:
+                old_val = enriched[qtype]
+                new_val = enriched[base]
+                enriched[qtype] = new_val
+                print(f"[DEBUG sibling] {qtype} missing in target; base {base} was present. "
+                      f"Changing {qtype} from {old_val:.6f} to {new_val:.6f} (copied from base)")
+                continue
 
-    if not neighbors:
-        return global_factor
-
-    eps = 1e-12
-    span = max(max(abs(s["x"] - x) for s in neighbors), 0.5)
-
-    weights: List[float] = []
-    factors: List[float] = []
-
-    for s in neighbors:
-        d = abs(s["x"] - x)
-        bpw_weight = 1.0 / ((d / span) + 1e-6) ** 2
-        weight = bpw_weight * s["mean_weight"]
-        weights.append(weight)
-        factors.append(s["factor"])
-
-    local_factor = weighted_median(factors, weights)
-    if local_factor is None:
-        local_factor = global_factor
-
-    local_factor = clamp(local_factor, CORRECTION_FACTOR_MIN, CORRECTION_FACTOR_MAX)
-
-    domain_min = min(s["x"] for s in shared_samples)
-    domain_max = max(s["x"] for s in shared_samples)
-    domain_span = max(domain_max - domain_min, 1e-12)
-
-    distance_to_edge = min(x - domain_min, domain_max - x)
-    if distance_to_edge <= 0:
-        edge_confidence = 0.0
-    else:
-        edge_confidence = clamp(distance_to_edge / max(domain_span * CORRECTION_EDGE_BLEND_START, 1e-12), 0.0, 1.0)
-
-    # Near the edges, reduce the correction so the transposed value remains stable.
-    blended = 1.0 + edge_confidence * (local_factor - 1.0)
-    blended = 0.75 * blended + 0.25 * global_factor
-    return clamp(blended, CORRECTION_FACTOR_MIN, CORRECTION_FACTOR_MAX)
+        for suffix in ("_R4", "_R8"):
+            variant = qtype + suffix
+            if variant in all_qtypes:
+                if not should_unify_r_variants(qtype, variant):
+                    print(f"[DEBUG sibling] {qtype} vs {variant} is iq1_s exception, skip")
+                    continue
+                variant_tgt = to_float(tgt_norm.get(variant))
+                if variant_tgt is not None:
+                    old_val = enriched[qtype]
+                    new_val = enriched[variant]
+                    enriched[qtype] = new_val
+                    print(f"[DEBUG sibling] {qtype} missing in target; variant {variant} was present. "
+                          f"Changing {qtype} from {old_val:.6f} to {new_val:.6f} (copied from variant)")
+                    break
 
 
-def fill_missing_degradation_values(
+def fill_all_qtypes_by_global_transposition(
     reference_values: Mapping[str, Any],
     target_values: Mapping[str, Any],
     reference_mean_fn: Callable[[float], float],
     target_mean_fn: Callable[[float], float],
     bpw_table: Mapping[str, float],
-    keep_existing_target_values: bool = True,
-) -> Tuple[Dict[str, float], Dict[str, float], Dict[str, float]]:
-    """Fill target gaps by transposing the reference values onto the target mean.
+) -> Tuple[Dict[str, float], Dict[str, float], float]:
+    ref_norm = {norm_qtype(k): v for k, v in reference_values.items()}
+    tgt_norm = {norm_qtype(k): v for k, v in target_values.items()}
 
-    What this does:
-      1) For each reference qtype, normalize the reference point into target-curve space
-         by matching its amplitude against the target mean curve.
+    ref_max_x, ref_highest_qtypes = get_highest_bpw_qtypes(ref_norm, bpw_table)
+    tgt_max_x, tgt_highest_qtypes = get_highest_bpw_qtypes(tgt_norm, bpw_table)
 
-      2) Learn a local correction factor from nearby known qtypes, favoring points that
-         are close to their mean and close in BPW to the assessed qtype.
+    # Determine if the two datasets share the same "baseline" (highest valid quant type)
+    same_highest_qtype = bool(ref_highest_qtypes & tgt_highest_qtypes)
+    same_bpw = (abs(ref_max_x - tgt_max_x) < 1e-9)
 
-      3) For each missing target qtype, apply the local correction factor to its
-         transposed reference value.
-
-    The sibling fallback for base/_r4/_r8 remains intact and is applied before transfer.
-    """
-    ref = {norm_qtype(k): v for k, v in reference_values.items()}
-    tgt = {norm_qtype(k): v for k, v in target_values.items()}
-
-    # First normalize every reference value into target-space so the amplitude is aligned with the target curve.
-    transposed_ref_values: Dict[str, float] = {}
-    shared_samples: List[Dict[str, float]] = []
-
-    for qtype, ref_raw_val in ref.items():
-        x = bpw_table.get(qtype)
-        if x is None:
-            continue
-
-        y_ref = to_float(ref_raw_val)
-        if y_ref is None:
-            continue
-
-        ref_mean = reference_mean_fn(x)
-        tgt_mean = target_mean_fn(x)
-
-        transposed_ref = transpose_reference_value_to_target_curve(y_ref, ref_mean, tgt_mean)
-        transposed_ref_values[qtype] = float(transposed_ref)
-
-    eps = 1e-12
-    for qtype in sorted(set(ref) & set(tgt)):
-        x = bpw_table.get(qtype)
-        if x is None:
-            continue
-
-        y_ref = to_float(ref.get(qtype))
-        y_tgt = to_float(tgt.get(qtype))
-        transposed_ref = transposed_ref_values.get(qtype)
-
-        if y_ref is None or y_tgt is None or transposed_ref is None:
-            continue
-
-        tgt_mean = target_mean_fn(x)
-        target_disp = y_tgt - tgt_mean
-        transposed_disp = transposed_ref - tgt_mean
-
-        if abs(transposed_disp) < eps:
-            continue
-
-        ref_mean = reference_mean_fn(x)
-        ref_disp = y_ref - ref_mean
-
-        # Regularize the ratio so tiny residuals near the mean do not explode.
-        residual_floor = max(abs(ref_mean), abs(tgt_mean), 1e-12) * CORRECTION_RESIDUAL_FLOOR_RATIO
-        factor = (abs(target_disp) + residual_floor) / (abs(transposed_disp) + residual_floor)
-
-        ref_mean_distance = abs(ref_disp) / max(abs(ref_mean), eps)
-        tgt_mean_distance = abs(target_disp) / max(abs(tgt_mean), eps)
-        transposed_mean_distance = abs(transposed_disp) / max(abs(tgt_mean), eps)
-
-        # Favor samples that sit closer to the mean in both spaces.
-        mean_distance = (ref_mean_distance + tgt_mean_distance + transposed_mean_distance) / 3.0
-        mean_weight = 1.0 / ((1.0 + mean_distance) ** 2)
-
-        # If the sample falls on the opposite side of the mean after transposition,
-        # it should influence the correction much less.
-        if (target_disp > 0) != (transposed_disp > 0):
-            mean_weight *= 0.1
-
-        shared_samples.append(
-            {
-                "x": float(x),
-                "factor": float(factor),
-                "mean_weight": float(mean_weight),
-            }
-        )
-
-    if shared_samples:
-        global_factor = weighted_median(
-            [s["factor"] for s in shared_samples],
-            [s["mean_weight"] for s in shared_samples],
-        )
-        if global_factor is None:
-            global_factor = 1.0
+    if same_bpw or same_highest_qtype:
+        # Same baseline: no offset, preserve existing target values
+        def tgt_mean_adj(x: float) -> float:
+            return target_mean_fn(x)
+        full_overwrite = False
+        print(f"[Info] Baseline same (BPW match: {same_bpw}, same highest qtype: {same_highest_qtype}) "
+              f"→ no baseline offset; existing target values preserved.")
+    elif tgt_max_x < ref_max_x:
+        # Baseline mismatch: offset target mean and overwrite all
+        y_at_ref_max = target_mean_fn(ref_max_x)
+        def tgt_mean_adj(x: float) -> float:
+            return target_mean_fn(x) - y_at_ref_max
+        full_overwrite = True
+        print(f"[Info] Baseline adjustment: target max BPW = {tgt_max_x}, ref max BPW = {ref_max_x}. "
+              f"Subtracted {y_at_ref_max:.6g} from target mean to align at BPW={ref_max_x}.")
+        print(f"[DEBUG] y_at_ref_max = {y_at_ref_max:.10f}")
     else:
-        global_factor = 1.0
+        # tgt_max_x > ref_max_x (shouldn't happen, but treat as same baseline)
+        def tgt_mean_adj(x: float) -> float:
+            return target_mean_fn(x)
+        full_overwrite = False
+        print(f"[Info] Target max BPW ({tgt_max_x}) >= ref max BPW ({ref_max_x}) → no offset; preserving values.")
 
-    factor_by_bpw = defaultdict(list)
-    for s in shared_samples:
-        factor_by_bpw[s["x"]].append(s["factor"])
+    alpha = compute_global_envelope_ratio(
+        ref_norm, tgt_norm,
+        reference_mean_fn, tgt_mean_adj,
+        bpw_table,
+    )
+    print(f"[Info] Global envelope ratio α = {alpha:.6f}")
 
-    correction_anchors = {str(x): median(factor_by_bpw[x]) for x in sorted(factor_by_bpw)}
+    enriched = {}
+    filled = {}
 
-    output_keys = list(tgt.keys())
-    for qtype in ref.keys():
-        if qtype not in tgt:
-            output_keys.append(qtype)
-
-    enriched: Dict[str, float] = {}
-    filled: Dict[str, float] = {}
-
-    for qtype in output_keys:
+    for qtype in sorted(ref_norm.keys()):
         x = bpw_table.get(qtype)
-        tgt_val = to_float(tgt.get(qtype))
+        ref_val = to_float(ref_norm[qtype])
 
-        if keep_existing_target_values and tgt_val is not None:
-            enriched[qtype] = tgt_val
-            continue
+        if ref_val is None and x is not None:
+            ref_val = lookup_qtype_with_r_suffix(ref_norm, qtype)
 
-        # Sibling fallback: base <-> _r4/_r8, except iq1_s / iq1_s_r4.
-        sibling_val = lookup_qtype_with_r_suffix(tgt, qtype)
-        if sibling_val is not None:
-            enriched[qtype] = sibling_val
-            filled[qtype] = sibling_val
-            continue
+        if x is not None and ref_val is not None:
+            ref_mean = reference_mean_fn(x)
+            tgt_m = tgt_mean_adj(x)
+            dev_ref = ref_val - ref_mean
+            pred = tgt_m + alpha * dev_ref
+            pred = max(0.0, pred)
 
-        # Use the transposed reference value, then locally correct it using nearby known qtypes.
-        transposed_ref_val = transposed_ref_values.get(qtype)
-        if x is not None and transposed_ref_val is not None:
-            local_factor = compute_local_correction_factor(float(x), shared_samples, global_factor)
-            tgt_mean = target_mean_fn(x)
-            corrected = tgt_mean + ((transposed_ref_val - tgt_mean) * local_factor)
-            enriched[qtype] = float(corrected)
-            filled[qtype] = float(corrected)
-            continue
+            if not full_overwrite and qtype in tgt_norm and not is_missing_value(tgt_norm[qtype]):
+                enriched[qtype] = to_float(tgt_norm[qtype])
+                if qtype in ('IQ1_S', 'IQ1_S_R4'):
+                    print(f"[DEBUG transpose] {qtype}: preserved original target value {enriched[qtype]:.6f}")
+            else:
+                enriched[qtype] = float(pred)
+                if qtype in ('IQ1_S', 'IQ1_S_R4'):
+                    print(f"\n[DEBUG transpose] {qtype}: x={x:.3f} ref_val={ref_val:.6f} ref_mean={ref_mean:.6f} dev_ref={dev_ref:.6f} "
+                          f"tgt_mean_adj={tgt_m:.6f} alpha={alpha:.6f} pred={pred:.6f}")
+        elif x is not None:
+            pred = max(0.0, tgt_mean_adj(x))
+            if not full_overwrite and qtype in tgt_norm and not is_missing_value(tgt_norm[qtype]):
+                enriched[qtype] = to_float(tgt_norm[qtype])
+            else:
+                enriched[qtype] = pred
+        else:
+            enriched[qtype] = 0.0
 
-        if x is not None:
-            pred = float(target_mean_fn(x))
-            enriched[qtype] = pred
-            filled[qtype] = pred
-            continue
+        tgt_original = to_float(tgt_norm.get(qtype))
+        if tgt_original is None:
+            filled[qtype] = enriched[qtype]
 
-        enriched[qtype] = 0.0
-        filled[qtype] = 0.0
+    if full_overwrite:
+        print("\n[DEBUG] Applying target sibling ratio preservation...")
+        preserve_sibling_ratios_from_target(enriched, tgt_norm)
+    else:
+        print("\n[DEBUG] Skipping sibling ratio preservation (existing target values are kept).")
 
-    return enriched, filled, correction_anchors
+    print("\n[DEBUG] Starting sibling unification...")
+    apply_sibling_unification(enriched, tgt_norm)
+
+    print(f"\n[DEBUG] Final enriched values for iq1_s: {enriched.get('IQ1_S')}")
+    print(f"[DEBUG] Final enriched values for iq1_s_r4: {enriched.get('IQ1_S_R4')}")
+
+    return enriched, filled, alpha
 
 
 # -----------------------------
 # Output helpers
 # -----------------------------
-
 
 def build_output_rows_preserving_reference_order(
     target_fields: List[str],
@@ -754,11 +723,6 @@ def build_output_rows_preserving_reference_order(
     target_style: str,
     precision: int,
 ) -> List[Dict[str, Any]]:
-    """Write rows in reference order/casing when the qtype exists in the reference.
-
-    Any qtype present in the reference uses the exact reference casing.
-    Target-only qtypes are appended at the end in their original target order/casing.
-    """
     target_rows_by_norm: Dict[str, Dict[str, str]] = {}
     target_order: List[str] = []
 
@@ -769,11 +733,8 @@ def build_output_rows_preserving_reference_order(
         target_rows_by_norm[qnorm] = dict(row)
 
     output_rows: List[Dict[str, Any]] = []
-    emitted: set[str] = set()
+    emitted: set = set()
 
-    # Emit every qtype that exists in the reference CSV in the exact order provided there.
-    # This guarantees the enriched CSV follows the reference qtype ordering, regardless
-    # of how the target CSV was ordered.
     for ref_qtype in reference_order:
         qnorm = norm_qtype(ref_qtype)
         emitted.add(qnorm)
@@ -784,7 +745,6 @@ def build_output_rows_preserving_reference_order(
             row = {c: "" for c in target_fields}
 
         row[qtype_col] = ref_qtype
-
         if qnorm in enriched:
             row[value_col] = format_output_value(enriched[qnorm], target_style, precision)
 
@@ -793,7 +753,6 @@ def build_output_rows_preserving_reference_order(
     for qnorm in target_order:
         if qnorm in emitted:
             continue
-
         row = dict(target_rows_by_norm[qnorm])
         if qnorm in enriched:
             row[value_col] = format_output_value(enriched[qnorm], target_style, precision)
@@ -805,7 +764,6 @@ def build_output_rows_preserving_reference_order(
 # -----------------------------
 # Metrics and plot
 # -----------------------------
-
 
 def compute_error_metrics(
     predicted: Mapping[str, float],
@@ -836,11 +794,8 @@ def compute_error_metrics(
 
     if not used:
         return {
-            "count": 0.0,
-            "mae": float("nan"),
-            "rmse": float("nan"),
-            "max_abs_error": float("nan"),
-            "mean_signed_error": float("nan"),
+            "count": 0.0, "mae": float("nan"), "rmse": float("nan"),
+            "max_abs_error": float("nan"), "mean_signed_error": float("nan"),
             "mape_pct": float("nan"),
         }
 
@@ -851,11 +806,8 @@ def compute_error_metrics(
     mape = (sum(relative_errors) / len(relative_errors) * 100.0) if relative_errors else float("nan")
 
     return {
-        "count": float(used),
-        "mae": mae,
-        "rmse": rmse,
-        "max_abs_error": max_abs_error,
-        "mean_signed_error": mean_signed_error,
+        "count": float(used), "mae": mae, "rmse": rmse,
+        "max_abs_error": max_abs_error, "mean_signed_error": mean_signed_error,
         "mape_pct": mape,
     }
 
@@ -867,83 +819,69 @@ def make_comparison_plot(
     reference_values: Mapping[str, Any],
     reference_mean_fn: Callable[[float], float],
     target_mean_fn: Callable[[float], float],
-    bpw_table: Mapping[str, float],
+    target_mean_adj_fn: Optional[Callable] = None,
+    alpha: float = 1.0,
+    bpw_table: Mapping[str, float] = BPW_TABLE,
     compare_truth: Optional[Mapping[str, Any]] = None,
 ) -> None:
     plt.figure(figsize=(12, 7))
 
-    ref_x: List[float] = []
-    ref_y: List[float] = []
-    ref_labels: List[str] = []
-
-    tgt_x: List[float] = []
-    tgt_y: List[float] = []
-    tgt_labels: List[str] = []
-
-    guessed_x: List[float] = []
-    guessed_y: List[float] = []
-    guessed_labels: List[str] = []
-
-    gt_x: List[float] = []
-    gt_y: List[float] = []
-    gt_labels: List[str] = []
+    ref_x, ref_y, ref_lbl = [], [], []
+    tgt_x, tgt_y, tgt_lbl = [], [], []
+    guessed_x, guessed_y, guessed_lbl = [], [], []
+    gt_x, gt_y, gt_lbl = [], [], []
 
     for qtype, val in reference_values.items():
         x = bpw_table.get(norm_qtype(qtype))
         y = to_float(val)
         if x is not None and y is not None:
-            ref_x.append(x)
-            ref_y.append(y)
-            ref_labels.append(norm_qtype(qtype))
+            ref_x.append(x); ref_y.append(y); ref_lbl.append(norm_qtype(qtype))
 
     for qtype, val in target_values.items():
-        x = bpw_table.get(norm_qtype(qtype))
+        x = bpw_table.get(qtype)
         y = to_float(val)
         if x is not None and y is not None:
-            tgt_x.append(x)
-            tgt_y.append(y)
-            tgt_labels.append(norm_qtype(qtype))
+            tgt_x.append(x); tgt_y.append(y); tgt_lbl.append(qtype)
 
     guessed_qtypes = set(filled_keys.keys())
     for qtype, pred_val in predicted.items():
         if qtype in guessed_qtypes:
-            x = bpw_table.get(norm_qtype(qtype))
+            x = bpw_table.get(qtype)
             y = to_float(pred_val)
             if x is not None and y is not None:
-                guessed_x.append(x)
-                guessed_y.append(y)
-                guessed_labels.append(norm_qtype(qtype))
+                guessed_x.append(x); guessed_y.append(y); guessed_lbl.append(qtype)
 
     if compare_truth is not None:
         for qtype in guessed_qtypes:
-            x = bpw_table.get(norm_qtype(qtype))
+            x = bpw_table.get(qtype)
             y = to_float(compare_truth.get(qtype))
             if x is not None and y is not None:
-                gt_x.append(x)
-                gt_y.append(y)
-                gt_labels.append(norm_qtype(qtype))
+                gt_x.append(x); gt_y.append(y); gt_lbl.append(qtype)
 
     if ref_x:
         plt.scatter(ref_x, ref_y, marker="+", s=90, color="black", label="Reference values", alpha=0.9)
     if tgt_x:
-        plt.scatter(tgt_x, tgt_y, marker="+", s=90, color="blue", label="Target values", alpha=0.8)
+        plt.scatter(tgt_x, tgt_y, marker="+", s=90, color="blue", label="Target original", alpha=0.8)
     if guessed_x:
-        plt.scatter(guessed_x, guessed_y, marker="+", s=110, color="red", label="Filled target values", alpha=0.95)
+        plt.scatter(guessed_x, guessed_y, marker="+", s=110, color="red", label="Filled/predicted values", alpha=0.95)
     if gt_x:
-        plt.scatter(gt_x, gt_y, marker="+", s=110, color="green", label="Ground truth for filled values", alpha=0.95)
+        plt.scatter(gt_x, gt_y, marker="+", s=110, color="green", label="Ground truth", alpha=0.95)
 
-    all_curve_x = [x for x in BPW_TABLE.values() if isinstance(x, (int, float))]
+    all_curve_x = sorted(set(BPW_TABLE.values()))
     if all_curve_x:
-        x_min = min(all_curve_x)
-        x_max = max(all_curve_x)
+        x_min = min(all_curve_x); x_max = max(all_curve_x)
         xs = [x_min + (x_max - x_min) * i / 300.0 for i in range(301)]
-        ref_curve_y = [reference_mean_fn(x) for x in xs]
-        tgt_curve_y = [target_mean_fn(x) for x in xs]
-        plt.plot(xs, ref_curve_y, color="black", linestyle="--", linewidth=1.5, label="Reference mean curve")
-        plt.plot(xs, tgt_curve_y, color="blue", linestyle="--", linewidth=1.5, label="Target mean curve")
+        ref_curve = [reference_mean_fn(x) for x in xs]
+        tgt_curve = [target_mean_fn(x) for x in xs]
+        tgt_adj_curve = [target_mean_adj_fn(x) if target_mean_adj_fn else target_mean_fn(x) for x in xs] if target_mean_adj_fn else None
+        plt.plot(xs, ref_curve, color="black", linestyle="--", linewidth=1.5, label="Reference mean")
+        plt.plot(xs, tgt_curve, color="blue", linestyle="--", linewidth=1.5, label="Target mean (original)")
+        if tgt_adj_curve:
+            plt.plot(xs, tgt_adj_curve, color="cyan", linestyle="--", linewidth=1.5,
+                     label=f"Target mean adjusted (α={alpha:.3f})")
 
     all_x = ref_x + tgt_x + guessed_x + gt_x
-    all_labels = ref_labels + tgt_labels + guessed_labels + gt_labels
+    all_labels = ref_lbl + tgt_lbl + guessed_lbl + gt_lbl
     if all_x:
         uniq: Dict[float, List[str]] = {}
         for x, lab in zip(all_x, all_labels):
@@ -956,7 +894,7 @@ def make_comparison_plot(
 
     plt.xlabel("BPW / qtype")
     plt.ylabel("Value")
-    plt.title("Quant degradation comparison")
+    plt.title("Enriched quant degradation")
     plt.grid(True, alpha=0.25)
     plt.legend()
     plt.tight_layout()
@@ -967,60 +905,18 @@ def make_comparison_plot(
 # CLI
 # -----------------------------
 
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Fill missing quant degradation values using a reference CSV and mean equations."
     )
-    parser.add_argument(
-        "--target-csv",
-        required=True,
-        type=str,
-        help="Path to the target CSV to enrich (must contain QTYPE column and one value column).",
-    )
-    parser.add_argument(
-        "--target-mean-equation",
-        required=True,
-        type=str,
-        help=(
-            'Equation for the target mean curve, e.g. "y = 0 + 5.735e22 * ( x + 10.2181080113 )^(-20.8421052632)".'
-        ),
-    )
-    parser.add_argument(
-        "--output-csv",
-        required=True,
-        type=str,
-        help="Path where the enriched CSV will be written.",
-    )
-    parser.add_argument(
-        "--reference-csv",
-        type=str,
-        default=None,
-        help="Optional reference CSV containing known quant degradation values.",
-    )
-    parser.add_argument(
-        "--reference-mean-equation",
-        type=str,
-        default=None,
-        help="Optional mean equation for the reference dataset. Required if --reference-csv is provided.",
-    )
-    parser.add_argument(
-        "--compare-with-csv",
-        type=str,
-        default=None,
-        help="Optional fully-known CSV to compare predictions against and report error metrics.",
-    )
-    parser.add_argument(
-        "--precision",
-        type=int,
-        default=6,
-        help="Decimal precision for output values.",
-    )
-    parser.add_argument(
-        "--report-filled-only",
-        action="store_true",
-        help="Print only the entries that were filled or changed.",
-    )
+    parser.add_argument("--target-csv", required=True, help="Path to the target CSV to enrich.")
+    parser.add_argument("--target-mean-equation", required=True, help="Mean equation for the target curve.")
+    parser.add_argument("--output-csv", required=True, help="Path for the enriched CSV.")
+    parser.add_argument("--reference-csv", default=None, help="Optional reference CSV.")
+    parser.add_argument("--reference-mean-equation", default=None, help="Mean equation for the reference if --reference-csv given.")
+    parser.add_argument("--compare-with-csv", default=None, help="Fully‑known CSV for error metrics.")
+    parser.add_argument("--precision", type=int, default=6, help="Decimal precision for output values.")
+    parser.add_argument("--report-filled-only", action="store_true", help="Print only the filled entries.")
     return parser
 
 
@@ -1029,15 +925,8 @@ def main() -> None:
     args = parser.parse_args()
 
     (
-        target_fields,
-        target_rows,
-        target_qtype_col,
-        target_value_col,
-        _target_raw_values,
-        target_values,
-        target_order,
-        _target_case_by_norm,
-        target_style,
+        target_fields, target_rows, target_qtype_col, target_value_col,
+        _target_raw_values, target_values, target_order, _target_case_by_norm, target_style,
     ) = build_csv_qtype_data(args.target_csv, apply_sibling_fallback=True)
 
     target_mean_fn = parse_equation_to_callable(args.target_mean_equation)
@@ -1045,15 +934,10 @@ def main() -> None:
         raise SystemExit("[Error] Invalid --target-mean-equation provided; aborting.")
 
     (
-        reference_raw_values,
-        reference_values,
-        reference_order,
-        _reference_case_by_norm,
-        reference_mean_fn,
-        reference_style,
+        reference_raw_values, reference_values, reference_order,
+        _reference_case_by_norm, reference_mean_fn, reference_style,
     ) = load_reference_data(args)
 
-    # Style check: percent must match percent, float must match float.
     if target_style is None:
         target_style = reference_style
     if reference_style is None:
@@ -1062,17 +946,15 @@ def main() -> None:
     if reference_style != target_style:
         raise SystemExit(
             f"[Error] Value format mismatch: reference data is '{reference_style}' "
-            f"but target data is '{target_style}'. Both CSVs must use the same format "
-            f"(percent vs absolute float)."
+            f"but target data is '{target_style}'. Both CSVs must use the same format."
         )
 
-    enriched, filled, correction_anchors = fill_missing_degradation_values(
+    enriched, filled, alpha = fill_all_qtypes_by_global_transposition(
         reference_values=reference_values,
         target_values=target_values,
         reference_mean_fn=reference_mean_fn,
         target_mean_fn=target_mean_fn,
         bpw_table=BPW_TABLE,
-        keep_existing_target_values=True,
     )
 
     output_rows = build_output_rows_preserving_reference_order(
@@ -1091,33 +973,35 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(output_rows)
 
+    # For plotting: compute adjusted mean
+    ref_norm_dummy = {norm_qtype(k): v for k, v in reference_values.items()}
+    tgt_norm_dummy = target_values
+    ref_max_x, _ = get_highest_bpw_qtypes(ref_norm_dummy, BPW_TABLE)
+    tgt_max_x, _ = get_highest_bpw_qtypes(tgt_norm_dummy, BPW_TABLE)
+    if tgt_max_x < ref_max_x:
+        y_off = target_mean_fn(ref_max_x)
+        tgt_mean_adj_fn = lambda x: target_mean_fn(x) - y_off
+    else:
+        tgt_mean_adj_fn = target_mean_fn
+
     compare_truth = None
     if args.compare_with_csv:
         (
-            _cmp_fields,
-            _cmp_rows,
-            cmp_qtype_col,
-            cmp_value_col,
-            _cmp_raw_values,
-            compare_truth,
-            _cmp_order,
-            _cmp_case_by_norm,
-            _cmp_style,
+            _cmp_fields, _cmp_rows, cmp_qtype_col, cmp_value_col,
+            _cmp_raw_values, compare_truth, _cmp_order, _cmp_case_by_norm, _cmp_style,
         ) = build_csv_qtype_data(args.compare_with_csv, apply_sibling_fallback=False)
 
         metrics = compute_error_metrics(enriched, compare_truth)
         make_comparison_plot(
-            enriched,
-            filled,
-            target_values,
-            reference_raw_values,
-            reference_mean_fn,
-            target_mean_fn,
-            BPW_TABLE,
+            enriched, filled,
+            target_values, reference_raw_values,
+            reference_mean_fn, target_mean_fn, tgt_mean_adj_fn,
+            alpha=alpha,
+            bpw_table=BPW_TABLE,
             compare_truth=compare_truth,
         )
 
-        print("[Compare] Error metrics vs known-all-values CSV:")
+        print("\n[Compare] Error metrics vs known-all-values CSV:")
         print(f"[Compare] count={int(metrics['count'])}")
         print(f"[Compare] MAE={metrics['mae']:.10f}")
         print(f"[Compare] RMSE={metrics['rmse']:.10f}")
@@ -1126,13 +1010,11 @@ def main() -> None:
         if not math.isnan(metrics['mape_pct']):
             print(f"[Compare] MAPE%={metrics['mape_pct']:.6f}")
 
-    print(f"[Info] Wrote enriched CSV to: {args.output_csv}")
-    print(f"[Info] Filled {len(filled)} values")
-    if correction_anchors:
-        print(f"[Info] Learned local correction anchors: {json.dumps(correction_anchors, sort_keys=True)}")
-
+    print(f"\n[Info] Wrote enriched CSV to: {args.output_csv}")
+    print(f"[Info] Global envelope ratio α = {alpha:.6f}")
+    print(f"[Info] Predicted values for {len(enriched)} qtypes")
     if args.report_filled_only:
-        print("[Info] Filled entries:")
+        print("[Info] Entries that were missing in target (now filled):")
         for k in sorted(filled):
             print(f"{k},{format_float(filled[k], args.precision)}")
 
