@@ -1,0 +1,789 @@
+main: build = 0 (unknown)
+main: built with cc (Debian 15.2.0-16) 15.2.0 for x86_64-linux-gnu
+main: seed  = 1337
+ggml_cuda_init: GGML_CUDA_FORCE_MMQ:    no
+ggml_cuda_init: GGML_CUDA_FORCE_CUBLAS: no
+ggml_cuda_init: found 1 CUDA devices:
+  Device 0: NVIDIA GeForce RTX 3090, compute capability 8.6, VMM: yes, VRAM: 24126 MiB
+CUDA0: using device CUDA0 - 23861 MiB free
+llama_model_loader: additional 1096 GGUFs metadata loaded.
+llama_model_loader: loaded meta data with 57 key-value pairs and 1096 tensors from ./Kimi-K2.5-THIREUS-Q8_0-SPECIAL_TENSOR-00001-of-01097.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = deepseek2
+llama_model_loader: - kv   1:                               general.type str              = model
+llama_model_loader: - kv   2:                               general.name str              = Kimi K2.5
+llama_model_loader: - kv   3:                         general.size_label str              = 384x14B
+llama_model_loader: - kv   4:                            general.license str              = other
+llama_model_loader: - kv   5:                       general.license.name str              = modified-mit
+llama_model_loader: - kv   6:                               general.tags arr[str,2]       = ["compressed-tensors", "image-text-to...
+llama_model_loader: - kv   7:                      deepseek2.block_count u32              = 61
+llama_model_loader: - kv   8:                   deepseek2.context_length u32              = 262144
+llama_model_loader: - kv   9:                 deepseek2.embedding_length u32              = 7168
+llama_model_loader: - kv  10:              deepseek2.feed_forward_length u32              = 18432
+llama_model_loader: - kv  11:             deepseek2.attention.head_count u32              = 64
+llama_model_loader: - kv  12:          deepseek2.attention.head_count_kv u32              = 1
+llama_model_loader: - kv  13:                deepseek2.rope.scaling.type str              = yarn
+llama_model_loader: - kv  14:              deepseek2.rope.scaling.factor f32              = 64.000000
+llama_model_loader: - kv  15: deepseek2.rope.scaling.original_context_length u32              = 4096
+llama_model_loader: - kv  16:      deepseek2.rope.scaling.yarn_beta_fast f32              = 32.000000
+llama_model_loader: - kv  17:      deepseek2.rope.scaling.yarn_beta_slow f32              = 1.000000
+llama_model_loader: - kv  18:                   deepseek2.rope.freq_base f32              = 50000.000000
+llama_model_loader: - kv  19: deepseek2.attention.layer_norm_rms_epsilon f32              = 0.000010
+llama_model_loader: - kv  20:                deepseek2.expert_used_count u32              = 8
+llama_model_loader: - kv  21:               deepseek2.expert_group_count u32              = 1
+llama_model_loader: - kv  22:          deepseek2.expert_group_used_count u32              = 1
+llama_model_loader: - kv  23:               deepseek2.expert_gating_func u32              = 2
+llama_model_loader: - kv  24:                          general.file_type u32              = 7
+llama_model_loader: - kv  25:        deepseek2.leading_dense_block_count u32              = 1
+llama_model_loader: - kv  26:                       deepseek2.vocab_size u32              = 163840
+llama_model_loader: - kv  27:            deepseek2.attention.q_lora_rank u32              = 1536
+llama_model_loader: - kv  28:           deepseek2.attention.kv_lora_rank u32              = 512
+llama_model_loader: - kv  29:             deepseek2.attention.key_length u32              = 576
+llama_model_loader: - kv  30:           deepseek2.attention.value_length u32              = 512
+llama_model_loader: - kv  31:         deepseek2.attention.key_length_mla u32              = 192
+llama_model_loader: - kv  32:       deepseek2.attention.value_length_mla u32              = 128
+llama_model_loader: - kv  33:       deepseek2.expert_feed_forward_length u32              = 2048
+llama_model_loader: - kv  34:                     deepseek2.expert_count u32              = 384
+llama_model_loader: - kv  35:              deepseek2.expert_shared_count u32              = 1
+llama_model_loader: - kv  36:             deepseek2.expert_weights_scale f32              = 2.827000
+llama_model_loader: - kv  37:              deepseek2.expert_weights_norm bool             = true
+llama_model_loader: - kv  38:             deepseek2.rope.dimension_count u32              = 64
+llama_model_loader: - kv  39: deepseek2.rope.scaling.yarn_log_multiplier f32              = 0.100000
+llama_model_loader: - kv  40:               general.quantization_version u32              = 2
+llama_model_loader: - kv  41:                       tokenizer.ggml.model str              = gpt2
+llama_model_loader: - kv  42:                         tokenizer.ggml.pre str              = kimi-k2
+llama_model_loader: - kv  43:                      tokenizer.ggml.tokens arr[str,163840]  = ["!", "\"", "#", "$", "%", "&", "'", ...
+llama_model_loader: - kv  44:                  tokenizer.ggml.token_type arr[i32,163840]  = [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  45:                      tokenizer.ggml.merges arr[str,163328]  = ["Ġ Ġ", "ĠĠ ĠĠ", "Ġ t", "i n",...
+llama_model_loader: - kv  46:                tokenizer.ggml.bos_token_id u32              = 163584
+llama_model_loader: - kv  47:                tokenizer.ggml.eos_token_id u32              = 163585
+llama_model_loader: - kv  48:            tokenizer.ggml.padding_token_id u32              = 163839
+llama_model_loader: - kv  49:                    tokenizer.chat_template str              = {%- macro render_content(msg) -%}\n   ...
+llama_model_loader: - kv  50:                      quantize.imatrix.file str              = imatrix_ubergarm.dat
+llama_model_loader: - kv  51:                   quantize.imatrix.dataset str              = ubergarm-imatrix-calibration-corpus-v...
+llama_model_loader: - kv  52:             quantize.imatrix.entries_count i32              = 790
+llama_model_loader: - kv  53:              quantize.imatrix.chunks_count i32              = 826
+llama_model_loader: - kv  54:                                   split.no u16              = 0
+llama_model_loader: - kv  55:                                split.count u16              = 1097
+llama_model_loader: - kv  56:                        split.tensors.count i32              = 1096
+llama_model_loader: - type  f32:  365 tensors
+llama_model_loader: - type iq4_nl:   61 tensors
+llama_model_loader: - type iq3_kt:  670 tensors
+load: special_eos_id is not in special_eog_ids - the tokenizer config may be incorrect
+load: printing all EOG tokens:
+load:   - 163585 ('[EOS]')
+load:   - 163586 ('<|im_end|>')
+load: special tokens cache size = 256
+load: token to piece cache size = 1.0606 MB
+llm_load_print_meta: format           = GGUF V3 (latest)
+llm_load_print_meta: arch             = deepseek2
+llm_load_print_meta: n_ctx_train      = 262144
+llm_load_print_meta: n_embd           = 7168
+llm_load_print_meta: n_layer          = 61
+llm_load_print_meta: n_head           = 64
+llm_load_print_meta: n_head_kv        = 64
+llm_load_print_meta: n_rot            = 64
+llm_load_print_meta: n_swa            = 0
+llm_load_print_meta: n_swa_pattern    = 1
+llm_load_print_meta: n_embd_head_k    = 192
+llm_load_print_meta: n_embd_head_v    = 128
+llm_load_print_meta: n_gqa            = 1
+llm_load_print_meta: n_embd_k_gqa     = 12288
+llm_load_print_meta: n_embd_v_gqa     = 8192
+llm_load_print_meta: f_norm_eps       = 0.0e+00
+llm_load_print_meta: f_norm_rms_eps   = 1.0e-05
+llm_load_print_meta: f_clamp_kqv      = 0.0e+00
+llm_load_print_meta: f_max_alibi_bias = 0.0e+00
+llm_load_print_meta: f_logit_scale    = 0.0e+00
+llm_load_print_meta: n_ff             = 18432
+llm_load_print_meta: n_expert         = 384
+llm_load_print_meta: n_expert_used    = 8
+llm_load_print_meta: causal attn      = 1
+llm_load_print_meta: pooling type     = 0
+llm_load_print_meta: rope type        = 0
+llm_load_print_meta: rope scaling     = yarn
+llm_load_print_meta: freq_base_train  = 50000.0
+llm_load_print_meta: freq_scale_train = 0.015625
+llm_load_print_meta: n_ctx_orig_yarn  = 4096
+llm_load_print_meta: rope_finetuned   = unknown
+llm_load_print_meta: ssm_d_conv       = 0
+llm_load_print_meta: ssm_d_inner      = 0
+llm_load_print_meta: ssm_d_state      = 0
+llm_load_print_meta: ssm_dt_rank      = 0
+llm_load_print_meta: ssm_n_group      = 0
+llm_load_print_meta: model type       = 671B
+llm_load_print_meta: model ftype      = Q8_0
+llm_load_print_meta: model params     = 1.026 T
+llm_load_print_meta: model size       = 374.982 GiB (3.138 BPW) 
+llm_load_print_meta: repeating layers = 374.126 GiB (3.138 BPW, 1024.059 B parameters)
+llm_load_print_meta: general.name     = Kimi K2.5
+llm_load_print_meta: n_layer_dense_lead   = 1
+llm_load_print_meta: n_lora_q             = 1536
+llm_load_print_meta: n_lora_kv            = 512
+llm_load_print_meta: n_ff_exp             = 2048
+llm_load_print_meta: n_expert_shared      = 1
+llm_load_print_meta: expert_weights_scale = 2.8
+llm_load_print_meta: expert_weights_norm  = 1
+llm_load_print_meta: expert_gating_func   = sigmoid
+llm_load_print_meta: rope_yarn_log_mul    = 0.1000
+print_info: vocab type       = BPE
+print_info: n_vocab          = 163840
+print_info: n_merges         = 163328
+print_info: BOS token        = 163584 '[BOS]'
+print_info: EOS token        = 163585 '[EOS]'
+print_info: EOT token        = 163586 '<|im_end|>'
+print_info: PAD token        = 163839 '[PAD]'
+print_info: LF token         = 198 'Ċ'
+print_info: EOG token        = 163585 '[EOS]'
+print_info: EOG token        = 163586 '<|im_end|>'
+print_info: max token length = 512
+======================================= HAVE_FANCY_SIMD is NOT defined
+------------------- Layer sizes:
+Layer  0:    228.86,      0.56,    229.42      114.00  MiB
+Layer  1:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer  2:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer  3:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer  4:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer  5:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer  6:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer  7:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer  8:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer  9:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 10:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 11:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 12:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 13:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 14:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 15:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 16:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 17:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 18:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 19:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 20:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 21:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 22:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 23:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 24:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 25:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 26:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 27:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 28:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 29:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 30:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 31:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 32:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 33:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 34:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 35:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 36:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 37:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 38:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 39:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 40:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 41:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 42:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 43:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 44:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 45:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 46:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 47:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 48:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 49:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 50:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 51:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 52:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 53:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 54:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 55:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 56:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 57:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 58:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 59:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 60:   6424.49,      0.56,   6425.05       72.00  MiB
+Layer 61:    438.12,      0.00,    438.12 MiB (output layer)
+--------------------------------------------------------------------------
+Total   : 385697.97,     34.31, 385732.28 MiB
+Memory required for model tensors + cache: 386170 MiB
+Memory available on all devices - compute: 22723 MiB
+llm_load_tensors: ggml ctx size =    0.94 MiB
+Tensor blk.1.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.1.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.1.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.2.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.2.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.2.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.3.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.3.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.3.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.4.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.4.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.4.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.5.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.5.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.5.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.6.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.6.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.6.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.7.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.7.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.7.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.8.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.8.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.8.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.9.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.9.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.9.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.10.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.10.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.10.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.11.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.11.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.11.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.12.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.12.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.12.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.13.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.13.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.13.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.14.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.14.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.14.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.15.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.15.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.15.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.16.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.16.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.16.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.17.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.17.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.17.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.18.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.18.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.18.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.19.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.19.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.19.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.20.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.20.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.20.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.21.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.21.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.21.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.22.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.22.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.22.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.23.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.23.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.23.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.24.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.24.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.24.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.25.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.25.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.25.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.26.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.26.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.26.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.27.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.27.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.27.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.28.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.28.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.28.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.29.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.29.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.29.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.30.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.30.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.30.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.31.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.31.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.31.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.32.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.32.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.32.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.33.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.33.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.33.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.34.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.34.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.34.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.35.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.35.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.35.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.36.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.36.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.36.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.37.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.37.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.37.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.38.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.38.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.38.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.39.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.39.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.39.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.40.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.40.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.40.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.41.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.41.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.41.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.42.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.42.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.42.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.43.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.43.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.43.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.44.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.44.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.44.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.45.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.45.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.45.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.46.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.46.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.46.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.47.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.47.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.47.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.48.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.48.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.48.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.49.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.49.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.49.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.50.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.50.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.50.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.51.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.51.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.51.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.52.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.52.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.52.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.53.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.53.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.53.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.54.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.54.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.54.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.55.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.55.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.55.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.56.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.56.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.56.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.57.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.57.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.57.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.58.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.58.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.58.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.59.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.59.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.59.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+Tensor blk.60.ffn_up_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.60.ffn_gate_exps.weight (size = 2103.00 MiB) buffer type overriden to CUDA_Host
+Tensor blk.60.ffn_down_exps.weight (size = 2110.50 MiB) buffer type overriden to CUDA_Host
+llm_load_tensors: offloading 61 repeating layers to GPU
+llm_load_tensors: offloading non-repeating layers to GPU
+llm_load_tensors: offloaded 62/62 layers to GPU
+llm_load_tensors:        CPU buffer size = 379428.13 MiB
+llm_load_tensors:      CUDA0 buffer size =  4553.63 MiB
+...................................................................................................~ggml_backend_cuda_context: have 0 graphs
+.
+============ llm_prepare_mla: need to compute 61 wkv_b tensors
+================= Adjusted mainline llama.cpp MLA tensors to ik_llama.cpp
+Computed blk.0.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.1.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.2.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.3.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.4.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.5.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.6.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.7.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.8.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.9.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.10.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.11.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.12.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.13.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.14.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.15.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.16.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.17.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.18.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.19.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.20.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.21.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.22.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.23.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.24.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.25.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.26.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.27.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.28.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.29.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.30.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.31.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.32.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.33.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.34.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.35.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.36.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.37.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.38.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.39.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.40.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.41.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.42.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.43.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.44.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.45.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored llama_init_from_model: n_ctx         = 512
+llama_init_from_model: n_batch       = 512
+llama_init_from_model: n_ubatch      = 512
+llama_init_from_model: flash_attn    = 1
+llama_init_from_model: mla_attn      = 3
+llama_init_from_model: attn_max_b    = 256
+llama_init_from_model: fused_moe     = 1
+llama_init_from_model: grouped er    = 0
+llama_init_from_model: fused_up_gate = 1
+llama_init_from_model: fused_mmad    = 1
+llama_init_from_model: rope_cache    = 0
+llama_init_from_model: graph_reuse   = 1
+llama_init_from_model: k_cache_hadam = 0
+llama_init_from_model: v_cache_hadam = 0
+llama_init_from_model: split_mode_graph_scheduling = 0
+llama_init_from_model: reduce_type   = f16
+llama_init_from_model: sched_async   = 0
+llama_init_from_model: ser           = -1, 0
+llama_init_from_model: freq_base     = 50000.0
+llama_init_from_model: freq_scale    = 0.015625
+llama_init_from_model: cuda_params   = fusion=1
+llama_kv_cache_init:      CUDA0 KV buffer size =    34.31 MiB
+llama_init_from_model: KV self size  =   34.31 MiB, c^KV (f16):   34.31 MiB, kv^T: not used
+llama_init_from_model:        CPU  output buffer size =     0.63 MiB
+llama_init_from_model:      CUDA0 compute buffer size =   155.30 MiB
+llama_init_from_model:  CUDA_Host compute buffer size =   159.25 MiB
+llama_init_from_model: graph nodes  = 3343
+llama_init_from_model: graph splits = 122
+llama_init_from_model: enabling only_active_experts scheduling
+
+system_info: n_threads = 128 / 256 | AVX = 1 | AVX_VNNI = 0 | AVX2 = 1 | AVX512 = 0 | AVX512_VBMI = 0 | AVX512_VNNI = 0 | AVX512_BF16 = 0 | FMA = 1 | NEON = 0 | SVE = 0 | ARM_FMA = 0 | F16C = 1 | FP16_VA = 0 | WASM_SIMD = 0 | BLAS = 1 | SSE3 = 1 | SSSE3 = 1 | VSX = 0 | MATMUL_INT8 = 0 | 
+kl_divergence: 6.70 seconds per pass - ETA 27.90 minutes
+in buffer CUDA0
+Computed blk.46.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.47.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.48.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.49.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.50.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.51.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.52.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.53.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.54.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.55.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.56.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.57.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.58.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.59.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+Computed blk.60.attn_kv_b.weight as 512 x 16384 of type q8_0 and stored in buffer CUDA0
+
+chunk             PPL               ln(PPL(Q)/PPL(base))          KL Divergence              Δp RMS            Same top p
+   1      72.3233 ±   14.3941       0.10782 ±    0.05026       0.11550 ±    0.04538     6.003 ±  0.766 %    38.039 ±  3.046 %
+   2      15.1341 ±    2.2845       0.31995 ±    0.07490       0.31132 ±    0.07263    13.873 ±  1.721 %    63.922 ±  2.129 %
+   3       7.0888 ±    0.7953       0.30385 ±    0.05657       0.30463 ±    0.05481    16.414 ±  1.417 %    73.987 ±  1.587 %
+   4       4.3679 ±    0.3855       0.22691 ±    0.04264       0.22876 ±    0.04130    14.221 ±  1.233 %    80.490 ±  1.241 %
+   5       3.3714 ±    0.2506       0.18902 ±    0.03474       0.19157 ±    0.03351    12.995 ±  1.089 %    84.078 ±  1.025 %
+   6       2.7812 ±    0.1757       0.15909 ±    0.02901       0.16097 ±    0.02799    11.957 ±  0.990 %    86.667 ±  0.869 %
+   7       2.4228 ±    0.1332       0.13782 ±    0.02492       0.13895 ±    0.02403    11.102 ±  0.916 %    88.459 ±  0.756 %
+   8       2.1900 ±    0.1067       0.12247 ±    0.02184       0.12303 ±    0.02105    10.456 ±  0.852 %    89.755 ±  0.672 %
+   9       2.1104 ±    0.0944       0.10709 ±    0.01954       0.11455 ±    0.01877    10.003 ±  0.794 %    90.414 ±  0.615 %
+  10       2.0448 ±    0.0844       0.10100 ±    0.01782       0.11131 ±    0.01715     9.723 ±  0.739 %    90.941 ±  0.569 %
+  11       2.0209 ±    0.0772       0.09854 ±    0.01637       0.10929 ±    0.01565    10.183 ±  0.685 %    90.945 ±  0.542 %
+  12       2.1245 ±    0.0800       0.13804 ±    0.01808       0.14566 ±    0.01725    12.810 ±  0.673 %    90.327 ±  0.534 %
+  13       2.1751 ±    0.0792       0.13263 ±    0.01687       0.14357 ±    0.01597    12.664 ±  0.632 %    90.498 ±  0.509 %
+  14       2.2453 ±    0.0819       0.16819 ±    0.01942       0.17720 ±    0.01846    13.584 ±  0.635 %    90.364 ±  0.494 %
+  15       2.1360 ±    0.0731       0.15724 ±    0.01816       0.16595 ±    0.01725    13.139 ±  0.613 %    90.980 ±  0.463 %
+  16       2.0790 ±    0.0682       0.16325 ±    0.01818       0.17182 ±    0.01736    13.370 ±  0.608 %    91.373 ±  0.440 %
+  17       2.0403 ±    0.0645       0.17651 ±    0.01838       0.18408 ±    0.01762    14.000 ±  0.608 %    91.603 ±  0.421 %
+  18       1.9787 ±    0.0595       0.16959 ±    0.01751       0.17773 ±    0.01679    13.809 ±  0.592 %    91.917 ±  0.402 %
+  19       1.9266 ±    0.0555       0.16889 ±    0.01702       0.17663 ±    0.01636    13.821 ±  0.584 %    92.239 ±  0.384 %
+  20       1.8731 ±    0.0515       0.15983 ±    0.01619       0.16908 ±    0.01556    13.547 ±  0.567 %    92.529 ±  0.368 %
+  21       1.8447 ±    0.0492       0.16577 ±    0.01625       0.17479 ±    0.01567    13.753 ±  0.562 %    92.754 ±  0.354 %
+  22       1.8134 ±    0.0466       0.16279 ±    0.01575       0.17186 ±    0.01520    13.662 ±  0.551 %    92.941 ±  0.342 %
+  23       1.8030 ±    0.0452       0.17393 ±    0.01582       0.18225 ±    0.01530    14.365 ±  0.541 %    92.924 ±  0.335 %
+  24       1.7774 ±    0.0431       0.17484 ±    0.01545       0.18332 ±    0.01495    14.603 ±  0.532 %    93.007 ±  0.326 %
+  25       1.7431 ±    0.0408       0.17084 ±    0.01497       0.17918 ±    0.01450    14.480 ±  0.522 %    93.224 ±  0.315 %
+  26       1.7914 ±    0.0416       0.18932 ±    0.01486       0.19293 ±    0.01424    15.324 ±  0.508 %    92.579 ±  0.322 %
+  27       1.8421 ±    0.0425       0.21975 ±    0.01515       0.22043 ±    0.01442    16.984 ±  0.498 %    91.837 ±  0.330 %
+  28       1.9026 ±    0.0446       0.24470 ±    0.01587       0.24546 ±    0.01518    18.071 ±  0.493 %    91.527 ±  0.330 %
+  29       1.8952 ±    0.0432       0.23842 ±    0.01539       0.24108 ±    0.01471    17.907 ±  0.482 %    91.535 ±  0.324 %
+  30       1.8853 ±    0.0417       0.23082 ±    0.01489       0.23397 ±    0.01423    17.650 ±  0.473 %    91.673 ±  0.316 %
+  31       1.8626 ±    0.0400       0.22448 ±    0.01444       0.22869 ±    0.01378    17.508 ±  0.462 %    91.752 ±  0.309 %
+  32       1.8629 ±    0.0394       0.22289 ±    0.01409       0.22785 ±    0.01343    17.521 ±  0.453 %    91.691 ±  0.306 %
+  33       1.8769 ±    0.0392       0.22560 ±    0.01397       0.23091 ±    0.01333    17.713 ±  0.445 %    91.586 ±  0.303 %
+  34       1.8659 ±    0.0380       0.22341 ±    0.01362       0.22832 ±    0.01297    17.625 ±  0.437 %    91.626 ±  0.297 %
+  35       1.8571 ±    0.0370       0.22312 ±    0.01333       0.22777 ±    0.01269    17.681 ±  0.428 %    91.541 ±  0.295 %
+  36       1.8596 ±    0.0367       0.22732 ±    0.01335       0.23090 ±    0.01273    17.763 ±  0.421 %    91.536 ±  0.291 %
+  37       1.8506 ±    0.0357       0.22188 ±    0.01308       0.22935 ±    0.01241    17.700 ±  0.413 %    91.521 ±  0.287 %
+  38       1.8528 ±    0.0354       0.21924 ±    0.01283       0.22717 ±    0.01217    17.613 ±  0.406 %    91.507 ±  0.283 %
+  39       1.8608 ±    0.0353       0.22815 ±    0.01298       0.23884 ±    0.01229    18.163 ±  0.401 %    91.302 ±  0.283 %
+  40       1.8464 ±    0.0343       0.22863 ±    0.01281       0.23973 ±    0.01214    18.289 ±  0.397 %    91.412 ±  0.277 %
+  41       1.8605 ±    0.0344       0.24068 ±    0.01301       0.25104 ±    0.01234    18.744 ±  0.393 %    91.267 ±  0.276 %
+  42       1.8645 ±    0.0341       0.24219 ±    0.01284       0.25306 ±    0.01213    18.782 ±  0.386 %    91.186 ±  0.274 %
+  43       1.8704 ±    0.0337       0.24726 ±    0.01279       0.26033 ±    0.01210    19.100 ±  0.379 %    90.962 ±  0.274 %
+  44       1.8841 ±    0.0337       0.25409 ±    0.01277       0.26736 ±    0.01209    19.334 ±  0.373 %    90.766 ±  0.273 %
+  45       1.8888 ±    0.0334       0.25713 ±    0.01266       0.26994 ±    0.01199    19.450 ±  0.368 %    90.702 ±  0.271 %
+  46       1.8754 ±    0.0325       0.25386 ±    0.01240       0.26580 ±    0.01173    19.337 ±  0.363 %    90.784 ±  0.267 %
+  47       1.8612 ±    0.0317       0.24909 ±    0.01216       0.26148 ±    0.01149    19.199 ±  0.359 %    90.855 ±  0.263 %
+  48       1.8552 ±    0.0311       0.24522 ±    0.01191       0.25694 ±    0.01126    19.036 ±  0.354 %    90.964 ±  0.259 %
+  49       1.8453 ±    0.0304       0.24293 ±    0.01173       0.25464 ±    0.01108    18.978 ±  0.350 %    90.996 ±  0.256 %
+  50       1.8360 ±    0.0297       0.24096 ±    0.01153       0.25251 ±    0.01089    18.950 ±  0.346 %    91.027 ±  0.253 %
+  51       1.8524 ±    0.0298       0.24106 ±    0.01141       0.25221 ±    0.01076    18.930 ±  0.342 %    90.942 ±  0.252 %
+  52       1.8705 ±    0.0300       0.24152 ±    0.01135       0.25312 ±    0.01068    18.901 ±  0.338 %    90.905 ±  0.250 %
+  53       1.8655 ±    0.0296       0.23735 ±    0.01114       0.24888 ±    0.01049    18.748 ±  0.335 %    91.010 ±  0.246 %
+  54       1.8798 ±    0.0297       0.23295 ±    0.01094       0.24479 ±    0.01030    18.581 ±  0.332 %    91.024 ±  0.244 %
+  55       1.8865 ±    0.0296       0.22876 ±    0.01076       0.24150 ±    0.01011    18.443 ±  0.329 %    91.087 ±  0.241 %
+  56       1.8932 ±    0.0295       0.22505 ±    0.01059       0.23866 ±    0.00994    18.298 ±  0.326 %    91.099 ±  0.238 %
+  57       1.8838 ±    0.0290       0.22279 ±    0.01046       0.23611 ±    0.00983    18.177 ±  0.323 %    91.173 ±  0.235 %
+  58       1.9222 ±    0.0295       0.22108 ±    0.01030       0.23397 ±    0.00967    18.080 ±  0.320 %    91.082 ±  0.234 %
+  59       1.9507 ±    0.0299       0.21877 ±    0.01016       0.23156 ±    0.00953    17.958 ±  0.317 %    91.060 ±  0.233 %
+  60       1.9864 ±    0.0306       0.22191 ±    0.01021       0.23473 ±    0.00958    17.958 ±  0.315 %    90.915 ±  0.232 %
+  61       2.0270 ±    0.0313       0.22156 ±    0.01011       0.23445 ±    0.00947    17.898 ±  0.312 %    90.749 ±  0.232 %
+  62       2.0625 ±    0.0318       0.21784 ±    0.00996       0.23183 ±    0.00932    17.775 ±  0.310 %    90.677 ±  0.231 %
+  63       2.0985 ±    0.0323       0.21489 ±    0.00982       0.22948 ±    0.00918    17.662 ±  0.307 %    90.582 ±  0.230 %
+  64       2.1483 ±    0.0335       0.22561 ±    0.01011       0.24033 ±    0.00949    17.914 ±  0.306 %    90.362 ±  0.231 %
+  65       2.2011 ±    0.0344       0.22243 ±    0.00998       0.23870 ±    0.00935    17.817 ±  0.303 %    90.238 ±  0.231 %
+  66       2.2293 ±    0.0349       0.22212 ±    0.00993       0.23880 ±    0.00932    17.719 ±  0.300 %    90.208 ±  0.229 %
+  67       2.2789 ±    0.0361       0.23272 ±    0.01027       0.25028 ±    0.00969    17.964 ±  0.300 %    90.020 ±  0.229 %
+  68       2.3320 ±    0.0371       0.23652 ±    0.01026       0.25445 ±    0.00971    17.996 ±  0.298 %    89.856 ±  0.229 %
+  69       2.3692 ±    0.0376       0.23393 ±    0.01012       0.25191 ±    0.00957    17.891 ±  0.295 %    89.798 ±  0.228 %
+  70       2.3907 ±    0.0376       0.23153 ±    0.00999       0.24956 ±    0.00943    17.786 ±  0.293 %    89.720 ±  0.227 %
+  71       2.4190 ±    0.0379       0.22901 ±    0.00986       0.24723 ±    0.00930    17.689 ±  0.290 %    89.727 ±  0.226 %
+  72       2.4274 ±    0.0378       0.22714 ±    0.00974       0.24502 ±    0.00919    17.603 ±  0.288 %    89.739 ±  0.224 %
+  73       2.4419 ±    0.0378       0.22406 ±    0.00962       0.24302 ±    0.00907    17.513 ±  0.286 %    89.723 ±  0.223 %
+  74       2.4744 ±    0.0383       0.22336 ±    0.00954       0.24260 ±    0.00900    17.444 ±  0.284 %    89.687 ±  0.221 %
+  75       2.4911 ±    0.0383       0.22092 ±    0.00943       0.24070 ±    0.00889    17.355 ±  0.282 %    89.689 ±  0.220 %
+  76       2.5045 ±    0.0383       0.21860 ±    0.00934       0.23906 ±    0.00879    17.266 ±  0.280 %    89.634 ±  0.219 %
+  77       2.5253 ±    0.0384       0.21865 ±    0.00928       0.23911 ±    0.00876    17.187 ±  0.277 %    89.615 ±  0.218 %
+  78       2.5267 ±    0.0382       0.21894 ±    0.00924       0.23974 ±    0.00872    17.223 ±  0.276 %    89.583 ±  0.217 %
+  79       2.5228 ±    0.0377       0.21674 ±    0.00913       0.23744 ±    0.00862    17.144 ±  0.274 %    89.620 ±  0.215 %
+  80       2.5306 ±    0.0376       0.21511 ±    0.00903       0.23551 ±    0.00851    17.091 ±  0.272 %    89.608 ±  0.214 %
+  81       2.5483 ±    0.0376       0.21398 ±    0.00892       0.23359 ±    0.00841    17.014 ±  0.270 %    89.596 ±  0.212 %
+  82       2.5832 ±    0.0381       0.21272 ±    0.00883       0.23268 ±    0.00831    16.982 ±  0.267 %    89.536 ±  0.212 %
+  83       2.6049 ±    0.0383       0.21164 ±    0.00876       0.23187 ±    0.00825    16.931 ±  0.266 %    89.468 ±  0.211 %
+  84       2.6045 ±    0.0381       0.21188 ±    0.00872       0.23178 ±    0.00820    16.925 ±  0.264 %    89.500 ±  0.209 %
+  85       2.6190 ±    0.0381       0.20991 ±    0.00864       0.23058 ±    0.00813    16.853 ±  0.262 %    89.481 ±  0.208 %
+  86       2.6129 ±    0.0377       0.20757 ±    0.00854       0.22870 ±    0.00804    16.785 ±  0.260 %    89.530 ±  0.207 %
+  87       2.6562 ±    0.0383       0.20746 ±    0.00849       0.22933 ±    0.00800    16.737 ±  0.258 %    89.457 ±  0.206 %
+  88       2.6765 ±    0.0384       0.20529 ±    0.00841       0.22747 ±    0.00791    16.667 ±  0.257 %    89.470 ±  0.205 %
+  89       2.6982 ±    0.0386       0.20408 ±    0.00833       0.22675 ±    0.00783    16.631 ±  0.255 %    89.443 ±  0.204 %
+  90       2.7218 ±    0.0388       0.20300 ±    0.00825       0.22611 ±    0.00776    16.593 ±  0.253 %    89.377 ±  0.203 %
+  91       2.7265 ±    0.0386       0.20668 ±    0.00827       0.22876 ±    0.00777    16.689 ±  0.251 %    89.304 ±  0.203 %
+  92       2.7540 ±    0.0389       0.20495 ±    0.00818       0.22676 ±    0.00768    16.603 ±  0.250 %    89.305 ±  0.202 %
+  93       2.7601 ±    0.0388       0.20356 ±    0.00810       0.22492 ±    0.00760    16.537 ±  0.248 %    89.323 ±  0.201 %
+  94       2.7656 ±    0.0386       0.20157 ±    0.00802       0.22293 ±    0.00752    16.460 ±  0.247 %    89.341 ±  0.199 %
+  95       2.7758 ±    0.0385       0.20145 ±    0.00798       0.22286 ±    0.00749    16.410 ±  0.245 %    89.350 ±  0.198 %
+  96       2.7847 ±    0.0384       0.20007 ±    0.00791       0.22135 ±    0.00742    16.338 ±  0.244 %    89.346 ±  0.197 %
+  97       2.7823 ±    0.0382       0.19910 ±    0.00785       0.22004 ±    0.00737    16.277 ±  0.243 %    89.400 ±  0.196 %
+  98       2.8157 ±    0.0387       0.20073 ±    0.00785       0.22135 ±    0.00735    16.284 ±  0.242 %    89.352 ±  0.195 %
+  99       2.8042 ±    0.0383       0.20334 ±    0.00786       0.22395 ±    0.00737    16.422 ±  0.241 %    89.348 ±  0.194 %
+ 100       2.8372 ±    0.0386       0.20145 ±    0.00779       0.22218 ±    0.00730    16.349 ±  0.240 %    89.345 ±  0.193 %
+ 101       2.8619 ±    0.0389       0.20130 ±    0.00776       0.22217 ±    0.00728    16.310 ±  0.239 %    89.342 ±  0.192 %
+ 102       2.8534 ±    0.0385       0.20191 ±    0.00774       0.22249 ±    0.00726    16.289 ±  0.238 %    89.366 ±  0.191 %
+ 103       2.8845 ±    0.0389       0.20032 ±    0.00767       0.22103 ±    0.00719    16.225 ±  0.236 %    89.347 ±  0.190 %
+ 104       2.9284 ±    0.0394       0.19867 ±    0.00760       0.21945 ±    0.00712    16.155 ±  0.235 %    89.340 ±  0.190 %
+ 105       2.9563 ±    0.0396       0.19719 ±    0.00753       0.21788 ±    0.00705    16.095 ±  0.234 %    89.315 ±  0.189 %
+ 106       3.0052 ±    0.0404       0.20089 ±    0.00761       0.22265 ±    0.00715    16.151 ±  0.233 %    89.201 ±  0.189 %
+ 107       3.0378 ±    0.0408       0.19930 ±    0.00755       0.22113 ±    0.00709    16.087 ±  0.232 %    89.199 ±  0.188 %
+ 108       3.0646 ±    0.0410       0.19788 ±    0.00748       0.21946 ±    0.00702    16.019 ±  0.231 %    89.208 ±  0.187 %
+ 109       3.1043 ±    0.0416       0.20070 ±    0.00753       0.22210 ±    0.00707    16.057 ±  0.231 %    89.131 ±  0.187 %
+ 110       3.0931 ±    0.0412       0.20056 ±    0.00748       0.22163 ±    0.00702    16.053 ±  0.230 %    89.166 ±  0.186 %
+ 111       3.1220 ±    0.0415       0.20164 ±    0.00746       0.22226 ±    0.00701    16.043 ±  0.228 %    89.129 ±  0.185 %
+ 112       3.1297 ±    0.0414       0.20205 ±    0.00742       0.22267 ±    0.00697    16.058 ±  0.227 %    89.118 ±  0.184 %
+ 113       3.1412 ±    0.0415       0.20356 ±    0.00743       0.22420 ±    0.00698    16.085 ±  0.226 %    89.044 ±  0.184 %
+ 114       3.1423 ±    0.0413       0.20395 ±    0.00741       0.22445 ±    0.00697    16.086 ±  0.225 %    89.068 ±  0.183 %
+ 115       3.1781 ±    0.0418       0.20522 ±    0.00740       0.22592 ±    0.00696    16.056 ±  0.224 %    88.989 ±  0.183 %
+ 116       3.2134 ±    0.0422       0.20449 ±    0.00735       0.22493 ±    0.00690    15.997 ±  0.223 %    88.932 ±  0.182 %
+ 117       3.2303 ±    0.0423       0.20310 ±    0.00729       0.22368 ±    0.00684    15.939 ±  0.222 %    88.926 ±  0.182 %
+ 118       3.2255 ±    0.0421       0.20386 ±    0.00726       0.22467 ±    0.00684    15.989 ±  0.221 %    88.940 ±  0.181 %
+ 119       3.2037 ±    0.0415       0.20472 ±    0.00724       0.22539 ±    0.00682    16.052 ±  0.221 %    88.980 ±  0.180 %
+ 120       3.1958 ±    0.0413       0.20702 ±    0.00726       0.22747 ±    0.00684    16.149 ±  0.220 %    88.997 ±  0.179 %
+ 121       3.2108 ±    0.0413       0.20571 ±    0.00721       0.22634 ±    0.00680    16.093 ±  0.219 %    88.997 ±  0.178 %
+ 122       3.2072 ±    0.0411       0.20432 ±    0.00716       0.22484 ±    0.00674    16.038 ±  0.218 %    89.026 ±  0.177 %
+ 123       3.1804 ±    0.0405       0.20303 ±    0.00711       0.22360 ±    0.00669    15.998 ±  0.217 %    89.099 ±  0.176 %
+ 124       3.1732 ±    0.0402       0.20406 ±    0.00712       0.22483 ±    0.00671    16.033 ±  0.217 %    89.092 ±  0.175 %
+ 125       3.1677 ±    0.0399       0.20270 ±    0.00707       0.22342 ±    0.00665    15.986 ±  0.216 %    89.092 ±  0.175 %
+ 126       3.1696 ±    0.0397       0.20162 ±    0.00701       0.22251 ±    0.00661    15.945 ±  0.215 %    89.091 ±  0.174 %
+ 127       3.1773 ±    0.0397       0.20174 ±    0.00699       0.22278 ±    0.00659    15.938 ±  0.214 %    89.063 ±  0.173 %
+ 128       3.1810 ±    0.0396       0.20136 ±    0.00696       0.22262 ±    0.00656    15.911 ±  0.213 %    89.053 ±  0.173 %
+ 129       3.1795 ±    0.0394       0.20051 ±    0.00691       0.22159 ±    0.00651    15.871 ±  0.212 %    89.044 ±  0.172 %
+ 130       3.1980 ±    0.0395       0.19964 ±    0.00687       0.22056 ±    0.00647    15.823 ±  0.211 %    89.044 ±  0.172 %
+ 131       3.2322 ±    0.0399       0.19860 ±    0.00682       0.21942 ±    0.00642    15.776 ±  0.210 %    89.002 ±  0.171 %
+ 132       3.2667 ±    0.0403       0.19725 ±    0.00677       0.21831 ±    0.00637    15.725 ±  0.209 %    88.993 ±  0.171 %
+ 133       3.2584 ±    0.0400       0.19738 ±    0.00674       0.21819 ±    0.00634    15.751 ±  0.208 %    89.031 ±  0.170 %
+ 134       3.2348 ±    0.0395       0.19731 ±    0.00670       0.21791 ±    0.00631    15.794 ±  0.207 %    89.066 ±  0.169 %
+ 135       3.2153 ±    0.0390       0.19836 ±    0.00668       0.21874 ±    0.00629    15.880 ±  0.207 %    89.098 ±  0.168 %
+ 136       3.1941 ±    0.0385       0.19884 ±    0.00666       0.21908 ±    0.00627    15.949 ±  0.206 %    89.141 ±  0.167 %
+ 137       3.1719 ±    0.0380       0.19871 ±    0.00662       0.21878 ±    0.00624    15.983 ±  0.206 %    89.188 ±  0.166 %
+ 138       3.1721 ±    0.0378       0.19737 ±    0.00658       0.21772 ±    0.00619    15.938 ±  0.205 %    89.216 ±  0.165 %
+ 139       3.1915 ±    0.0380       0.19631 ±    0.00653       0.21673 ±    0.00615    15.890 ±  0.204 %    89.161 ±  0.165 %
+ 140       3.2148 ±    0.0382       0.19555 ±    0.00649       0.21575 ±    0.00611    15.849 ±  0.203 %    89.134 ±  0.165 %
+ 141       3.2484 ±    0.0386       0.19466 ±    0.00645       0.21465 ±    0.00606    15.799 ±  0.202 %    89.114 ±  0.164 %
+ 142       3.2382 ±    0.0382       0.19353 ±    0.00641       0.21356 ±    0.00602    15.764 ±  0.202 %    89.116 ±  0.164 %
+ 143       3.2499 ±    0.0382       0.19249 ±    0.00636       0.21257 ±    0.00598    15.721 ±  0.201 %    89.121 ±  0.163 %
+ 144       3.2674 ±    0.0384       0.19203 ±    0.00632       0.21176 ±    0.00594    15.677 ±  0.200 %    89.090 ±  0.163 %
+ 145       3.2887 ±    0.0385       0.19300 ±    0.00631       0.21249 ±    0.00593    15.665 ±  0.199 %    89.006 ±  0.163 %
+ 146       3.3040 ±    0.0386       0.19457 ±    0.00630       0.21386 ±    0.00591    15.729 ±  0.198 %    88.950 ±  0.162 %
+ 147       3.3221 ±    0.0387       0.19333 ±    0.00626       0.21285 ±    0.00587    15.683 ±  0.197 %    88.926 ±  0.162 %
+ 148       3.3425 ±    0.0389       0.19210 ±    0.00622       0.21191 ±    0.00583    15.639 ±  0.197 %    88.900 ±  0.162 %
+ 149       3.3623 ±    0.0389       0.19096 ±    0.00618       0.21092 ±    0.00579    15.596 ±  0.196 %    88.877 ±  0.161 %
+ 150       3.3814 ±    0.0391       0.18995 ±    0.00614       0.20991 ±    0.00576    15.554 ±  0.195 %    88.860 ±  0.161 %
+ 151       3.3759 ±    0.0388       0.18878 ±    0.00610       0.20888 ±    0.00572    15.511 ±  0.194 %    88.890 ±  0.160 %
+ 152       3.3777 ±    0.0387       0.18811 ±    0.00607       0.20837 ±    0.00569    15.480 ±  0.193 %    88.891 ±  0.160 %
+ 153       3.3777 ±    0.0386       0.18735 ±    0.00603       0.20767 ±    0.00565    15.442 ±  0.193 %    88.874 ±  0.159 %
+ 154       3.4063 ±    0.0389       0.18635 ±    0.00600       0.20680 ±    0.00562    15.399 ±  0.192 %    88.869 ±  0.159 %
+ 155       3.4181 ±    0.0390       0.18795 ±    0.00600       0.20845 ±    0.00562    15.442 ±  0.191 %    88.832 ±  0.158 %
+ 156       3.4236 ±    0.0389       0.18725 ±    0.00597       0.20751 ±    0.00559    15.403 ±  0.191 %    88.846 ±  0.158 %
+ 157       3.4366 ±    0.0389       0.18631 ±    0.00593       0.20654 ±    0.00555    15.359 ±  0.190 %    88.807 ±  0.158 %
+ 158       3.4489 ±    0.0390       0.18553 ±    0.00590       0.20565 ±    0.00552    15.319 ±  0.189 %    88.831 ±  0.157 %
+ 159       3.4486 ±    0.0388       0.18464 ±    0.00586       0.20472 ±    0.00548    15.282 ±  0.189 %    88.835 ±  0.156 %
+ 160       3.4528 ±    0.0387       0.18373 ±    0.00583       0.20385 ±    0.00545    15.242 ±  0.188 %    88.836 ±  0.156 %
+ 161       3.4637 ±    0.0387       0.18278 ±    0.00579       0.20294 ±    0.00542    15.202 ±  0.187 %    88.815 ±  0.156 %
+ 162       3.4732 ±    0.0387       0.18187 ±    0.00576       0.20198 ±    0.00538    15.162 ±  0.187 %    88.824 ±  0.155 %
+ 163       3.4767 ±    0.0386       0.18114 ±    0.00573       0.20110 ±    0.00535    15.125 ±  0.186 %    88.837 ±  0.154 %
+ 164       3.4906 ±    0.0387       0.18031 ±    0.00569       0.20024 ±    0.00532    15.086 ±  0.185 %    88.843 ±  0.154 %
+ 165       3.4909 ±    0.0385       0.17953 ±    0.00566       0.19944 ±    0.00529    15.060 ±  0.185 %    88.839 ±  0.154 %
+ 166       3.4938 ±    0.0385       0.17866 ±    0.00563       0.19851 ±    0.00526    15.024 ±  0.184 %    88.840 ±  0.153 %
+ 167       3.5009 ±    0.0384       0.17809 ±    0.00560       0.19771 ±    0.00522    14.992 ±  0.183 %    88.846 ±  0.153 %
+ 168       3.5064 ±    0.0384       0.17731 ±    0.00557       0.19690 ±    0.00519    14.952 ±  0.183 %    88.845 ±  0.152 %
+ 169       3.5108 ±    0.0383       0.17629 ±    0.00554       0.19611 ±    0.00516    14.918 ±  0.182 %    88.850 ±  0.152 %
+ 170       3.5039 ±    0.0381       0.17549 ±    0.00550       0.19518 ±    0.00513    14.880 ±  0.182 %    88.877 ±  0.151 %
+ 171       3.5212 ±    0.0382       0.17500 ±    0.00547       0.19448 ±    0.00510    14.845 ±  0.181 %    88.864 ±  0.151 %
+ 172       3.5285 ±    0.0381       0.17411 ±    0.00544       0.19369 ±    0.00507    14.809 ±  0.180 %    88.876 ±  0.150 %
+ 173       3.5328 ±    0.0381       0.17338 ±    0.00541       0.19293 ±    0.00505    14.775 ±  0.180 %    88.888 ±  0.150 %
+ 174       3.5421 ±    0.0380       0.17254 ±    0.00538       0.19217 ±    0.00502    14.738 ±  0.179 %    88.884 ±  0.149 %
+ 175       3.5542 ±    0.0381       0.17189 ±    0.00536       0.19142 ±    0.00499    14.706 ±  0.179 %    88.899 ±  0.149 %
+ 176       3.5518 ±    0.0379       0.17131 ±    0.00534       0.19103 ±    0.00497    14.689 ±  0.178 %    88.915 ±  0.148 %
+ 177       3.5549 ±    0.0379       0.17063 ±    0.00531       0.19024 ±    0.00494    14.654 ±  0.178 %    88.935 ±  0.148 %
+ 178       3.5608 ±    0.0378       0.17018 ±    0.00528       0.18953 ±    0.00491    14.625 ±  0.177 %    88.942 ±  0.147 %
+ 179       3.5750 ±    0.0379       0.16936 ±    0.00525       0.18883 ±    0.00489    14.594 ±  0.176 %    88.932 ±  0.147 %
+ 180       3.5859 ±    0.0378       0.16856 ±    0.00523       0.18814 ±    0.00486    14.562 ±  0.176 %    88.917 ±  0.147 %
+ 181       3.5945 ±    0.0378       0.16778 ±    0.00520       0.18741 ±    0.00483    14.529 ±  0.175 %    88.900 ±  0.146 %
+ 182       3.5872 ±    0.0375       0.16685 ±    0.00517       0.18646 ±    0.00481    14.493 ±  0.175 %    88.912 ±  0.146 %
+ 183       3.5818 ±    0.0373       0.16632 ±    0.00514       0.18572 ±    0.00478    14.462 ±  0.174 %    88.915 ±  0.145 %
+ 184       3.5759 ±    0.0371       0.16548 ±    0.00512       0.18479 ±    0.00476    14.426 ±  0.174 %    88.928 ±  0.145 %
+ 185       3.5681 ±    0.0368       0.16480 ±    0.00509       0.18391 ±    0.00473    14.392 ±  0.173 %    88.931 ±  0.144 %
+ 186       3.5614 ±    0.0366       0.16404 ±    0.00506       0.18301 ±    0.00471    14.358 ±  0.173 %    88.954 ±  0.144 %
+ 187       3.5537 ±    0.0364       0.16321 ±    0.00504       0.18210 ±    0.00468    14.323 ±  0.172 %    88.957 ±  0.144 %
+ 188       3.5474 ±    0.0361       0.16236 ±    0.00501       0.18128 ±    0.00466    14.289 ±  0.172 %    88.959 ±  0.143 %
+ 189       3.5558 ±    0.0362       0.16227 ±    0.00500       0.18130 ±    0.00465    14.262 ±  0.171 %    88.962 ±  0.143 %
+ 190       3.5692 ±    0.0362       0.16167 ±    0.00497       0.18060 ±    0.00462    14.231 ±  0.171 %    88.968 ±  0.142 %
+ 191       3.5986 ±    0.0365       0.16104 ±    0.00495       0.18003 ±    0.00460    14.199 ±  0.170 %    88.937 ±  0.142 %
+ 192       3.6222 ±    0.0367       0.16051 ±    0.00492       0.17968 ±    0.00457    14.174 ±  0.170 %    88.901 ±  0.142 %
+ 193       3.6455 ±    0.0369       0.16009 ±    0.00490       0.17910 ±    0.00455    14.144 ±  0.169 %    88.881 ±  0.142 %
+ 194       3.6794 ±    0.0372       0.15955 ±    0.00488       0.17847 ±    0.00453    14.111 ±  0.169 %    88.868 ±  0.141 %
+ 195       3.7060 ±    0.0375       0.15900 ±    0.00485       0.17791 ±    0.00450    14.080 ±  0.168 %    88.835 ±  0.141 %
+ 196       3.7222 ±    0.0376       0.15828 ±    0.00483       0.17725 ±    0.00448    14.051 ±  0.168 %    88.824 ±  0.141 %
+ 197       3.7374 ±    0.0377       0.15734 ±    0.00481       0.17664 ±    0.00446    14.023 ±  0.167 %    88.805 ±  0.141 %
+ 198       3.7499 ±    0.0377       0.15674 ±    0.00479       0.17610 ±    0.00444    13.992 ±  0.167 %    88.806 ±  0.140 %
+ 199       3.7530 ±    0.0377       0.15611 ±    0.00476       0.17540 ±    0.00442    13.963 ±  0.166 %    88.828 ±  0.140 %
+ 200       3.7523 ±    0.0377       0.15930 ±    0.00482       0.17863 ±    0.00447    14.114 ±  0.167 %    88.810 ±  0.140 %
+ 201       3.7359 ±    0.0375       0.16046 ±    0.00484       0.17967 ±    0.00450    14.154 ±  0.166 %    88.848 ±  0.139 %
+ 202       3.7207 ±    0.0372       0.16203 ±    0.00486       0.18106 ±    0.00452    14.210 ±  0.167 %    88.876 ±  0.139 %
+ 203       3.7411 ±    0.0373       0.16140 ±    0.00484       0.18042 ±    0.00450    14.180 ±  0.166 %    88.871 ±  0.138 %
+ 204       3.7550 ±    0.0374       0.16167 ±    0.00482       0.18056 ±    0.00449    14.167 ±  0.166 %    88.875 ±  0.138 %
+ 205       3.7607 ±    0.0374       0.16116 ±    0.00480       0.18002 ±    0.00447    14.150 ±  0.165 %    88.876 ±  0.138 %
+ 206       3.7753 ±    0.0375       0.16055 ±    0.00478       0.17942 ±    0.00445    14.123 ±  0.165 %    88.886 ±  0.137 %
+ 207       3.7961 ±    0.0376       0.16000 ±    0.00476       0.17883 ±    0.00442    14.093 ±  0.164 %    88.868 ±  0.137 %
+ 208       3.8088 ±    0.0376       0.15943 ±    0.00474       0.17819 ±    0.00440    14.065 ±  0.164 %    88.844 ±  0.137 %
+ 209       3.8222 ±    0.0377       0.15872 ±    0.00472       0.17766 ±    0.00438    14.037 ±  0.163 %    88.823 ±  0.136 %
+ 210       3.8416 ±    0.0378       0.15817 ±    0.00469       0.17705 ±    0.00436    14.008 ±  0.163 %    88.818 ±  0.136 %
+ 211       3.8485 ±    0.0378       0.15775 ±    0.00467       0.17660 ±    0.00434    13.985 ±  0.162 %    88.828 ±  0.136 %
+ 212       3.8457 ±    0.0377       0.15750 ±    0.00466       0.17636 ±    0.00433    13.973 ±  0.162 %    88.838 ±  0.135 %
+ 213       3.8240 ±    0.0373       0.15737 ±    0.00464       0.17612 ±    0.00431    13.995 ±  0.162 %    88.872 ±  0.135 %
+ 214       3.8087 ±    0.0371       0.15887 ±    0.00464       0.17751 ±    0.00432    14.111 ±  0.162 %    88.882 ±  0.135 %
+ 215       3.7925 ±    0.0368       0.15992 ±    0.00465       0.17841 ±    0.00433    14.171 ±  0.162 %    88.903 ±  0.134 %
+ 216       3.7737 ±    0.0365       0.16031 ±    0.00464       0.17863 ±    0.00432    14.210 ±  0.161 %    88.925 ±  0.134 %
+ 217       3.7550 ±    0.0362       0.16068 ±    0.00463       0.17891 ±    0.00431    14.254 ±  0.161 %    88.951 ±  0.133 %
+ 218       3.7337 ±    0.0358       0.16025 ±    0.00461       0.17848 ±    0.00429    14.255 ±  0.161 %    88.989 ±  0.133 %
+ 219       3.7237 ±    0.0356       0.16210 ±    0.00463       0.18018 ±    0.00431    14.355 ±  0.161 %    88.978 ±  0.133 %
+ 220       3.7197 ±    0.0355       0.16304 ±    0.00462       0.18098 ±    0.00430    14.381 ±  0.160 %    88.963 ±  0.132 %
+ 221       3.7134 ±    0.0353       0.16192 ±    0.00461       0.18071 ±    0.00429    14.373 ±  0.160 %    88.965 ±  0.132 %
+ 222       3.7019 ±    0.0352       0.16344 ±    0.00462       0.18211 ±    0.00430    14.448 ±  0.160 %    88.977 ±  0.132 %
+ 223       3.6996 ±    0.0351       0.16575 ±    0.00464       0.18452 ±    0.00432    14.529 ±  0.159 %    88.951 ±  0.131 %
+ 224       3.7091 ±    0.0352       0.16769 ±    0.00466       0.18630 ±    0.00435    14.586 ±  0.159 %    88.922 ±  0.131 %
+ 225       3.7110 ±    0.0351       0.16750 ±    0.00465       0.18636 ±    0.00434    14.585 ±  0.159 %    88.936 ±  0.131 %
+ 226       3.7317 ±    0.0353       0.16711 ±    0.00464       0.18619 ±    0.00432    14.561 ±  0.158 %    88.905 ±  0.131 %
+ 227       3.7501 ±    0.0355       0.16732 ±    0.00463       0.18642 ±    0.00431    14.545 ±  0.158 %    88.869 ±  0.131 %
+ 228       3.7622 ±    0.0356       0.16724 ±    0.00461       0.18644 ±    0.00430    14.525 ±  0.157 %    88.839 ±  0.131 %
+ 229       3.7817 ±    0.0358       0.16676 ±    0.00460       0.18630 ±    0.00429    14.503 ±  0.157 %    88.816 ±  0.130 %
+ 230       3.7927 ±    0.0359       0.17191 ±    0.00467       0.19125 ±    0.00437    14.706 ±  0.158 %    88.769 ±  0.130 %
+ 231       3.8157 ±    0.0361       0.17168 ±    0.00465       0.19087 ±    0.00435    14.683 ±  0.157 %    88.734 ±  0.130 %
+ 232       3.8365 ±    0.0363       0.17175 ±    0.00464       0.19132 ±    0.00434    14.674 ±  0.157 %    88.690 ±  0.130 %
+ 233       3.8435 ±    0.0363       0.17149 ±    0.00463       0.19116 ±    0.00432    14.663 ±  0.156 %    88.688 ±  0.130 %
+ 234       3.8596 ±    0.0365       0.17206 ±    0.00463       0.19196 ±    0.00432    14.685 ±  0.156 %    88.649 ±  0.130 %
+ 235       3.8542 ±    0.0363       0.17439 ±    0.00464       0.19470 ±    0.00434    14.847 ±  0.156 %    88.609 ±  0.130 %
+ 236       3.8792 ±    0.0366       0.17448 ±    0.00463       0.19505 ±    0.00433    14.830 ±  0.155 %    88.588 ±  0.130 %
+ 237       3.9031 ±    0.0368       0.17450 ±    0.00463       0.19516 ±    0.00433    14.813 ±  0.155 %    88.556 ±  0.129 %
+ 238       3.9081 ±    0.0368       0.17564 ±    0.00463       0.19612 ±    0.00433    14.834 ±  0.154 %    88.514 ±  0.129 %
+ 239       3.9225 ±    0.0369       0.17670 ±    0.00464       0.19736 ±    0.00434    14.854 ±  0.154 %    88.499 ±  0.129 %
+ 240       3.9340 ±    0.0369       0.17640 ±    0.00463       0.19699 ±    0.00433    14.829 ±  0.154 %    88.498 ±  0.129 %
+ 241       3.9467 ±    0.0370       0.17603 ±    0.00461       0.19647 ±    0.00431    14.805 ±  0.153 %    88.488 ±  0.129 %
+ 242       3.9703 ±    0.0372       0.17574 ±    0.00459       0.19604 ±    0.00429    14.784 ±  0.153 %    88.482 ±  0.129 %
+ 243       3.9959 ±    0.0374       0.17737 ±    0.00461       0.19787 ±    0.00431    14.802 ±  0.153 %    88.435 ±  0.128 %
+ 244       4.0093 ±    0.0375       0.17700 ±    0.00459       0.19743 ±    0.00429    14.778 ±  0.152 %    88.419 ±  0.128 %
+ 245       4.0174 ±    0.0375       0.17642 ±    0.00457       0.19685 ±    0.00428    14.753 ±  0.152 %    88.424 ±  0.128 %
+ 246       4.0435 ±    0.0380       0.18534 ±    0.00474       0.20581 ±    0.00445    14.999 ±  0.153 %    88.348 ±  0.128 %
+ 247       4.0813 ±    0.0384       0.18680 ±    0.00475       0.20733 ±    0.00447    14.992 ±  0.152 %    88.308 ±  0.128 %
+ 248       4.0919 ±    0.0384       0.18662 ±    0.00474       0.20701 ±    0.00445    14.969 ±  0.152 %    88.291 ±  0.128 %
+ 249       4.1139 ±    0.0386       0.18670 ±    0.00473       0.20722 ±    0.00444    14.958 ±  0.151 %    88.265 ±  0.128 %
+ 250       4.1211 ±    0.0386       0.18679 ±    0.00472       0.20719 ±    0.00443    14.946 ±  0.151 %    88.232 ±  0.128 %
+
+llama_print_timings:        load time =  100958.45 ms
+llama_print_timings:      sample time =       0.00 ms /     1 runs   (    0.00 ms per token,      inf tokens per second)
+llama_print_timings: prompt eval time = 1475327.48 ms / 128000 tokens (   11.53 ms per token,    86.76 tokens per second)
+llama_print_timings:        eval time =       0.00 ms /     1 runs   (    0.00 ms per token,      inf tokens per second)
+llama_print_timings:       total time = 1492721.43 ms / 128001 tokens
+~ggml_backend_cuda_context: have 119 graphs
+
+====== Perplexity statistics ======
+Mean PPL(Q)                   :   4.121138 ±   0.038619
+Mean PPL(base)                :   3.418981 ±   0.028731
+Cor(ln(PPL(Q)), ln(PPL(base))):  86.46%
+Mean ln(PPL(Q)/PPL(base))     :   0.186787 ±   0.004717
+Mean PPL(Q)/PPL(base)         :   1.205370 ±   0.005686
+Mean PPL(Q)-PPL(base)         :   0.702157 ±   0.019954
+
+====== KL divergence statistics ======
+Mean    KLD:   0.207188 ±   0.004431
+Maximum KLD:  18.558834
+99.9%   KLD:  13.779643
+99.0%   KLD:   5.698678
+95.0%   KLD:   0.451445
+90.0%   KLD:   0.206128
+Median  KLD:   0.021016
+10.0%   KLD:   0.000078
+ 5.0%   KLD:   0.000021
+ 1.0%   KLD:   0.000002
+ 0.1%   KLD:  -0.000000
+Minimum KLD:  -0.000010
+
+====== Token probability statistics ======
+Mean    Δp: -3.420 ± 0.058 %
+Maximum Δp: 93.612%
+99.9%   Δp: 44.232%
+99.0%   Δp: 18.939%
+95.0%   Δp:  6.529%
+90.0%   Δp:  2.665%
+75.0%   Δp:  0.035%
+Median  Δp: -0.072%
+25.0%   Δp: -2.240%
+10.0%   Δp: -10.536%
+ 5.0%   Δp: -21.449%
+ 1.0%   Δp: -90.741%
+ 0.1%   Δp: -99.983%
+Minimum Δp: -100.000%
+RMS Δp    : 14.946 ± 0.151 %
+Same top p: 88.232 ± 0.128 %
