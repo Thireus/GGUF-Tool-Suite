@@ -581,9 +581,9 @@ Qwen3.5-27B|unsloth|UD-Q6_K_XL|7.634|6.8719|https://huggingface.co/unsloth/Qwen3
 Qwen3.5-27B|unsloth|UD-Q8_K_XL|10.564|6.8681|https://huggingface.co/unsloth/Qwen3.5-27B-GGUF/blob/main/Qwen3.5-27B-UD-Q8_K_XL.gguf
 Qwen3.6-27B|pure|BF16|16.002|6.9066
 Qwen3.6-27B|pure|Q8_0|8.502|6.9063
-Qwen3.6-27B|ubergarm|IQ5_KS|5.919|6.9341|https://huggingface.co/ubergarm/Qwen3.6-27B-GGUF/tree/main/IQ5_KS
-Qwen3.6-27B|ubergarm|smol-IQ4_NL|4.920|7.0040|https://huggingface.co/ubergarm/Qwen3.6-27B-GGUF/tree/main/smol-IQ4_NL
-Qwen3.6-27B|ubergarm|IQ4_KS|4.693|6.9740|https://huggingface.co/ubergarm/Qwen3.6-27B-GGUF/tree/main/IQ4_K
+Qwen3.6-27B|ubergarm|IQ5_KS|5.919|6.9341|https://huggingface.co/ubergarm/Qwen3.6-27B-GGUF/blob/main/Qwen3.6-27B-IQ5_KS.gguf
+Qwen3.6-27B|ubergarm|smol-IQ4_NL|4.920|7.0040|https://huggingface.co/ubergarm/Qwen3.6-27B-GGUF/blob/main/Qwen3.6-27B-smol-IQ4_NL.gguf
+Qwen3.6-27B|ubergarm|IQ4_KS|4.693|6.9740|https://huggingface.co/ubergarm/Qwen3.6-27B-GGUF/blob/main/Qwen3.6-27B-IQ4_KS.gguf
 Kimi-K2.6|ubergarm|Q4_X|4.549|1.8433|https://huggingface.co/ubergarm/Kimi-K2.6-GGUF/tree/main/Q4_X
 Kimi-K2.6|ubergarm|IQ3_K|3.849|1.9012|https://huggingface.co/ubergarm/Kimi-K2.6-GGUF/tree/main/IQ3_K
 Kimi-K2.6|ubergarm|smol-IQ3_KS|3.249|1.9810|https://huggingface.co/ubergarm/Kimi-K2.6-GGUF/tree/main/smol-IQ3_KS
