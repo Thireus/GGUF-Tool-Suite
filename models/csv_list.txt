@@ -102,6 +102,12 @@ Kimi-K2.5/group0/bpw_kld_results_partial.csv
 Kimi-K2.5/group0/kld_results_partial.csv
 Kimi-K2.5/group0/kld_results.csv
 Kimi-K2.5/group0/ppl_results_partial.csv
+Qwen3.6-27B/ppl_results.csv
+Qwen3.6-27B/kld_results.csv
+Qwen3.6-27B/group0/bpw_kld_results_partial.csv
+Qwen3.6-27B/group0/kld_results_partial.csv
+Qwen3.6-27B/group0/kld_results.csv
+Qwen3.6-27B/group0/ppl_results_partial.csv
 Kimi-K2-Instruct-0905/ppl_results.csv
 Qwen3-Coder-480B-A35B-Instruct/ppl_results.csv
 Qwen3.6-35B-A3B/ppl_results.csv
