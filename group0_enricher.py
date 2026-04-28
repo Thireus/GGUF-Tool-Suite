@@ -5,7 +5,7 @@
 #** group0/kld_results_partial.csv degradation data.          **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Apr-26-2026 -------------------- **#
+#** --------------- Updated: Apr-28-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -710,6 +710,106 @@ def fill_all_qtypes_by_global_transposition(
 
 
 # -----------------------------
+# Reference ranking adjustment
+# -----------------------------
+
+def adjust_reference_for_ordering(
+    ref_norm: Dict[str, float],
+    tgt_norm: Dict[str, Any],
+    ref_mean_fn: Callable[[float], float],
+    tgt_mean_adj_fn: Callable[[float], float],
+    bpw_table: Dict[str, float],
+    aggressiveness: float = 0.8,
+    min_discrepancy: float = 0.1,
+    max_discrepancy: float = 2.0,
+) -> Dict[str, float]:
+    """
+    Adjust reference values to better respect the ordering / ratios observed
+    in the known target values, while staying anchored to the reference mean curve.
+
+    Returns a new dictionary with adjusted normalized reference values.
+    """
+    factor_map: Dict[str, Optional[float]] = {}  # qtype -> deviation multiplier
+    new_ref: Dict[str, float] = {}
+
+    # First pass: adjust known qtypes
+    for qtype, ref_val in ref_norm.items():
+        x = bpw_table.get(qtype)
+        if x is None:
+            new_ref[qtype] = ref_val
+            continue
+
+        tgt_val = to_float(tgt_norm.get(qtype))
+        if tgt_val is None:
+            # No target info – keep original for now
+            new_ref[qtype] = ref_val
+            continue
+
+        ref_val_float = float(ref_val)
+        ref_mean = ref_mean_fn(x)
+        tgt_adj_mean = tgt_mean_adj_fn(x)
+
+        ref_orig_dev = ref_val_float - ref_mean
+        tgt_dev_adj = tgt_val - tgt_adj_mean
+
+        if abs(ref_orig_dev) < 1e-12:
+            # Reference point lies exactly on its mean – directly adopt target deviation
+            new_ref_dev = tgt_dev_adj
+            factor_map[qtype] = None
+            new_val = max(0.0, ref_mean + new_ref_dev)
+            new_ref[qtype] = new_val
+        else:
+            ratio = tgt_dev_adj / ref_orig_dev
+            disc = abs(ratio - 1.0)
+
+            # Map discrepancy to weight w ∈ [0, aggressiveness]
+            if disc <= min_discrepancy:
+                w = 0.0
+            elif disc >= max_discrepancy:
+                w = aggressiveness
+            else:
+                w = aggressiveness * (disc - min_discrepancy) / (max_discrepancy - min_discrepancy)
+
+            new_dev = ref_orig_dev + w * (tgt_dev_adj - ref_orig_dev)
+            new_val = max(0.0, ref_mean + new_dev)
+            new_ref[qtype] = new_val
+            factor = new_dev / ref_orig_dev
+            factor_map[qtype] = factor
+
+    # Second pass: propagate factors to unknown siblings (only when base/variant is known)
+    for qtype in sorted(new_ref.keys()):
+        if qtype in factor_map:
+            continue  # already adjusted from target data
+        x = bpw_table.get(qtype)
+        if x is None:
+            continue
+
+        # Try to find a known counterpart
+        base = re.sub(r"_R[48]$", "", qtype, flags=re.IGNORECASE)
+        known_q = None
+        if base != qtype and base in factor_map and factor_map[base] is not None:
+            known_q = base
+        else:
+            for suffix in ("_R4", "_R8"):
+                variant = qtype + suffix
+                if variant in factor_map and factor_map[variant] is not None:
+                    known_q = variant
+                    break
+
+        if known_q is not None:
+            factor = factor_map[known_q]
+            # compute original reference deviation for this missing qtype
+            orig_ref_val = float(new_ref.get(qtype, ref_norm.get(qtype, 0.0)))
+            ref_mean = ref_mean_fn(x)
+            orig_dev = orig_ref_val - ref_mean
+            new_dev = orig_dev * factor
+            new_val = max(0.0, ref_mean + new_dev)
+            new_ref[qtype] = new_val
+
+    return new_ref
+
+
+# -----------------------------
 # Output helpers
 # -----------------------------
 
@@ -917,6 +1017,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--compare-with-csv", default=None, help="Fully‑known CSV for error metrics.")
     parser.add_argument("--precision", type=int, default=6, help="Decimal precision for output values.")
     parser.add_argument("--report-filled-only", action="store_true", help="Print only the filled entries.")
+    parser.add_argument("--ref-ranking-aggressiveness", type=float, default=None,
+                       help="Aggressiveness for reference ranking adjustment (0-1). If provided, only this single "
+                            "pass is used (no averaging).")
+    parser.add_argument("--no-mean-ranking", action="store_true",
+                       help="Disable the default averaging of ranked and non‑ranked passes. "
+                            "When set, only the ranking pass is used (with default aggressiveness 0.8, "
+                            "or the value supplied by --ref-ranking-aggressiveness).")
     return parser
 
 
@@ -935,7 +1042,7 @@ def main() -> None:
 
     (
         reference_raw_values, reference_values, reference_order,
-        _reference_case_by_norm, reference_mean_fn, reference_style,
+        reference_case_by_norm, reference_mean_fn, reference_style,
     ) = load_reference_data(args)
 
     if target_style is None:
@@ -949,21 +1056,115 @@ def main() -> None:
             f"but target data is '{target_style}'. Both CSVs must use the same format."
         )
 
-    enriched, filled, alpha = fill_all_qtypes_by_global_transposition(
-        reference_values=reference_values,
-        target_values=target_values,
-        reference_mean_fn=reference_mean_fn,
-        target_mean_fn=target_mean_fn,
-        bpw_table=BPW_TABLE,
-    )
+    # Determine baseline offset information (unchanged logic)
+    ref_norm_for_baseline = {norm_qtype(k): v for k, v in reference_values.items()}
+    tgt_norm_for_baseline = {norm_qtype(k): v for k, v in target_values.items()}
+    ref_max_x, _ = get_highest_bpw_qtypes(ref_norm_for_baseline, BPW_TABLE)
+    tgt_max_x, _ = get_highest_bpw_qtypes(tgt_norm_for_baseline, BPW_TABLE)
+    if tgt_max_x < ref_max_x:
+        y_off = target_mean_fn(ref_max_x)
+        tgt_mean_adj_fn = lambda x: target_mean_fn(x) - y_off
+    else:
+        tgt_mean_adj_fn = target_mean_fn
 
+    # Default ranking aggressiveness
+    DEFAULT_AGGRESSIVENESS = 0.8
+
+    # Determine which passes to run and how to combine them
+    do_ranking = True   # we always need the ranking pass in some form
+    do_no_ranking = False
+    averaging_mode = False
+
+    if args.ref_ranking_aggressiveness is not None:
+        # User explicitly set aggressiveness -> single pass with that value
+        rank_agg = args.ref_ranking_aggressiveness
+        do_no_ranking = False
+        averaging_mode = False
+        print(f"[Info] Using single ranking pass with aggressiveness = {rank_agg}")
+    elif args.no_mean_ranking:
+        # User disables averaging -> single ranking pass with default aggressiveness
+        rank_agg = DEFAULT_AGGRESSIVENESS
+        do_no_ranking = False
+        averaging_mode = False
+        print("[Info] --no-mean-ranking active: using single ranking pass with default aggressiveness.")
+    else:
+        # Default: average the ranking and non‑ranking passes
+        rank_agg = DEFAULT_AGGRESSIVENESS
+        do_no_ranking = True
+        averaging_mode = True
+        print("[Info] Default mode: averaging ranking and non‑ranking passes.")
+
+    # ---------- Compute enriched values ----------
+    enriched_final: Dict[str, float] = {}
+    filled_final: Dict[str, float] = {}
+    alphas = []
+
+    # Helper that runs a single enrichment pass and returns the enriched dict
+    def run_enrichment_pass(ref_for_pass: Dict[str, float], label: str) -> Dict[str, float]:
+        print(f"\n[Step] Enrichment pass: {label}")
+        enriched_pass, filled_pass, alpha_pass = fill_all_qtypes_by_global_transposition(
+            reference_values=ref_for_pass,
+            target_values=target_values,
+            reference_mean_fn=reference_mean_fn,
+            target_mean_fn=target_mean_fn,
+            bpw_table=BPW_TABLE,
+        )
+        alphas.append(alpha_pass)
+        return enriched_pass
+
+    # Pass 1: no ranking (original reference)
+    if do_no_ranking:
+        enriched_no_rank = run_enrichment_pass(reference_values, "no ranking (original reference)")
+
+    # Pass 2: with ranking
+    # Adjust reference
+    adjusted_ref_norm = adjust_reference_for_ordering(
+        ref_norm=reference_values,
+        tgt_norm=target_values,
+        ref_mean_fn=reference_mean_fn,
+        tgt_mean_adj_fn=tgt_mean_adj_fn,
+        bpw_table=BPW_TABLE,
+        aggressiveness=rank_agg,
+    )
+    enriched_rank = run_enrichment_pass(adjusted_ref_norm, f"ranking (aggressiveness={rank_agg})")
+
+    # Combine results
+    if averaging_mode and do_no_ranking:
+        print("\n[Info] Averaging the two enrichment passes:")
+        all_qtypes = set(enriched_no_rank.keys()) | set(enriched_rank.keys())
+        for q in sorted(all_qtypes):
+            v1 = enriched_no_rank.get(q, 0.0)
+            v2 = enriched_rank.get(q, 0.0)
+            enriched_final[q] = (v1 + v2) / 2.0
+        # Also compute a unified filled dict (keys missing in target)
+        for q in all_qtypes:
+            if q not in target_values or is_missing_value(target_values[q]):
+                filled_final[q] = enriched_final[q]
+    else:
+        enriched_final = enriched_rank
+        # filled dict from the ranking pass (the fill_all... returns filled, we need to capture it)
+        # We'll recompute filled from enriched_final for consistency
+        for qtype in enriched_final:
+            if qtype not in target_values or is_missing_value(target_values[qtype]):
+                filled_final[qtype] = enriched_final[qtype]
+
+    # For plotting / output we need a reference dict that matches the final enriched.
+    # For the plot we can use the adjusted reference from ranking pass, or the original.
+    # We'll use the adjusted ref for consistency (since final mostly comes from ranking pass).
+    # Build adjusted reference raw values for plotting
+    adjusted_reference_raw = {}
+    for norm_q, raw_q in reference_case_by_norm.items():
+        if norm_q in adjusted_ref_norm:
+            adjusted_reference_raw[raw_q] = adjusted_ref_norm[norm_q]
+
+    # Output rows
     output_rows = build_output_rows_preserving_reference_order(
         target_fields=target_fields,
         qtype_col=target_qtype_col,
         value_col=target_value_col,
         target_rows=target_rows,
         reference_order=reference_order,
-        enriched=enriched,
+        enriched=enriched_final,
         target_style=target_style or "float",
         precision=args.precision,
     )
@@ -973,17 +1174,7 @@ def main() -> None:
         writer.writeheader()
         writer.writerows(output_rows)
 
-    # For plotting: compute adjusted mean
-    ref_norm_dummy = {norm_qtype(k): v for k, v in reference_values.items()}
-    tgt_norm_dummy = target_values
-    ref_max_x, _ = get_highest_bpw_qtypes(ref_norm_dummy, BPW_TABLE)
-    tgt_max_x, _ = get_highest_bpw_qtypes(tgt_norm_dummy, BPW_TABLE)
-    if tgt_max_x < ref_max_x:
-        y_off = target_mean_fn(ref_max_x)
-        tgt_mean_adj_fn = lambda x: target_mean_fn(x) - y_off
-    else:
-        tgt_mean_adj_fn = target_mean_fn
-
+    # Comparison and plot
     compare_truth = None
     if args.compare_with_csv:
         (
@@ -991,12 +1182,12 @@ def main() -> None:
             _cmp_raw_values, compare_truth, _cmp_order, _cmp_case_by_norm, _cmp_style,
         ) = build_csv_qtype_data(args.compare_with_csv, apply_sibling_fallback=False)
 
-        metrics = compute_error_metrics(enriched, compare_truth)
+        metrics = compute_error_metrics(enriched_final, compare_truth)
         make_comparison_plot(
-            enriched, filled,
-            target_values, reference_raw_values,
+            enriched_final, filled_final,
+            target_values, adjusted_reference_raw,   # show adjusted ref on plot
             reference_mean_fn, target_mean_fn, tgt_mean_adj_fn,
-            alpha=alpha,
+            alpha=alphas[-1] if alphas else 1.0,    # use last alpha for display
             bpw_table=BPW_TABLE,
             compare_truth=compare_truth,
         )
@@ -1010,13 +1201,17 @@ def main() -> None:
         if not math.isnan(metrics['mape_pct']):
             print(f"[Compare] MAPE%={metrics['mape_pct']:.6f}")
 
+    # Final report
     print(f"\n[Info] Wrote enriched CSV to: {args.output_csv}")
-    print(f"[Info] Global envelope ratio α = {alpha:.6f}")
-    print(f"[Info] Predicted values for {len(enriched)} qtypes")
+    if len(alphas) == 1:
+        print(f"[Info] Global envelope ratio α = {alphas[0]:.6f}")
+    else:
+        print(f"[Info] Global envelope ratio α (ranking) = {alphas[1]:.6f}, α (no ranking) = {alphas[0]:.6f}")
+    print(f"[Info] Predicted values for {len(enriched_final)} qtypes")
     if args.report_filled_only:
         print("[Info] Entries that were missing in target (now filled):")
-        for k in sorted(filled):
-            print(f"{k},{format_float(filled[k], args.precision)}")
+        for k in sorted(filled_final):
+            print(f"{k},{format_float(filled_final[k], args.precision)}")
 
 
 if __name__ == "__main__":
