@@ -399,7 +399,7 @@ cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
 export PATH="$WORKING_DIRECTORY"/"$MODEL"-BENCH/:$PATH && \
 cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
-benchmark_each_tensor.sh --allow-impure-quant --chunks 250 --group-tensors '.*' --benchmark-groups-only --qtypes iq1_s_r4 iq1_s iq1_kt iq1_m iq1_m_r4 iq2_xxs iq2_kt iq2_ks iq2_xs iq2_k iq2_s q2_K iq2_kl iq3_xxs iq3_kt iq3_ks iq3_k iq3_s q3_K iq4_kss iq4_kt iq4_ks iq4_xs iq4_k iq4_nl q4_0 q4_K q4_1 iq5_ks iq5_k q5_0 q5_K q5_1 q6_0 q6_K iq6_k q8_0 bf16
+benchmark_each_tensor.sh --chunks 250 --group-tensors '.*' --benchmark-groups-only --qtypes iq1_s_r4 iq1_s iq1_kt iq1_m iq1_m_r4 iq2_xxs iq2_kt iq2_ks iq2_xs iq2_k iq2_s q2_K iq2_kl iq3_xxs iq3_kt iq3_ks iq3_k iq3_s q3_K iq4_kss iq4_kt iq4_ks iq4_xs iq4_k iq4_nl q4_0 q4_K q4_1 iq5_ks iq5_k q5_0 q5_K q5_1 q6_0 q6_K iq6_k q8_0 bf16
 ```
 
 Note: Trim the list of qtypes to the qtypes your hardware can handle, otherwise you will end up with empty benchmark results for these qtypes.

@@ -102,6 +102,12 @@ Kimi-K2.5/group0/bpw_kld_results_partial.csv
 Kimi-K2.5/group0/kld_results_partial.csv
 Kimi-K2.5/group0/kld_results.csv
 Kimi-K2.5/group0/ppl_results_partial.csv
+Qwen3.5-397B-A17B/ppl_results.csv
+Qwen3.5-397B-A17B/kld_results.csv
+Qwen3.5-397B-A17B/group0/bpw_kld_results_partial.csv
+Qwen3.5-397B-A17B/group0/kld_results_partial.csv
+Qwen3.5-397B-A17B/group0/kld_results.csv
+Qwen3.5-397B-A17B/group0/ppl_results_partial.csv
 Qwen3.6-27B/ppl_results.csv
 Qwen3.6-27B/kld_results.csv
 Qwen3.6-27B/group0/bpw_kld_results_partial.csv
