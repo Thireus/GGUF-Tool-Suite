@@ -131,7 +131,7 @@ for f in "${files[@]}"; do
       break
     fi
 
-    # If this is a _no-others.csv file, require at least 2 points with bpw < 4.
+    # If this is a _no-others.csv file, require more than 2 points with bpw < 4.
     # Otherwise, the base CSV takes over completely.
     if [[ "$cur_f" == *_no-others.csv ]]; then
       below4_count=0
@@ -148,8 +148,8 @@ for f in "${files[@]}"; do
         fi
       done < <(tail -n +2 -- "$cur_f")
 
-      if [ "$below4_count" -lt 2 ] && [ -n "$fallback_f" ] && [ -f "$fallback_f" ]; then
-        echo "Skipping '$cur_f' (only $below4_count points with bpw < 4); base CSV takes over"
+      if [ "$below4_count" -le 2 ] && [ -n "$fallback_f" ] && [ -f "$fallback_f" ]; then
+        echo "Skipping '$cur_f' (only $below4_count points with bpw < 4, need >2); base CSV takes over"
         cur_f="$fallback_f"
         fallback_f=""
         continue
@@ -487,7 +487,7 @@ for f in "${files[@]}"; do
         fallback_eq=$(printf '%s\n' "$output" | grep -m1 -E '^\s*y\s*=' | sed 's/^[[:space:]]*//')
 
         if [ -n "$fallback_eq" ]; then
-          echo "Using fallback equation from _no-others.csv"
+          echo "Using fallback equation from _no-others.csv unless no equation found, in which case the base will be used"
           equation="$fallback_eq"
         else
           echo "Fallback also failed to produce an equation"
