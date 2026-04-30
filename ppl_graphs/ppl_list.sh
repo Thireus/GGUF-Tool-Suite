@@ -5,7 +5,7 @@
 #** ppl equations of models using model_tensor_bpw_metric.py  **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Apr-14-2026 -------------------- **#
+#** --------------- Updated: Apr-30-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -162,93 +162,308 @@ for f in "${files[@]}"; do
 
     echo "Processing '$cur_f' ($rows rows)..."
 
+    # Find a column index by header name
+    find_col_idx() {
+      local wanted1=$1
+      local wanted2=$2
+      local idx=-1
+      local i col
+
+      for i in "${!header_cols[@]}"; do
+        col=$(printf '%s' "${header_cols[$i]}" | tr -d '[:space:]"')
+        if [ "$col" = "$wanted1" ] || [ "$col" = "$wanted2" ]; then
+          idx=$i
+          break
+        fi
+      done
+
+      printf '%s' "$idx"
+    }
+
+    # Find perplexity column index (0-based) from header
+    ppl_idx=$(find_col_idx perplexity ppl)
+
     # Try with progressively fewer filters if no equation is found
     # Attempt 1: original flags (--ignore-bpw-below 1.8 --ignore-ppl-above 20)
     # Attempt 2: without --ignore-ppl-above
     # Attempt 3: without --ignore-bpw-below and --ignore-ppl-above
-    equation=""
-    for attempt in 1 2 3; do
-      case $attempt in
-        1) extra_flags="--ignore-bpw-below 1.8 --ignore-ppl-above 20.5" ;;
-        2) extra_flags="--ignore-bpw-below 1.8" ;;
-        3) extra_flags="" ;;
-      esac
 
-      # run command, capture stdout (suppress stderr). continue on non-zero exit.
-      output=$("$CMD" --recipe-results-csv "$cur_f" --metric-name "perplexity" --d-from-lowest 1 --c-free --transforms "identity" --ignore-outliers 5 --p-grid-max 15 --p-grid-steps 100 --penalize-above 15 --drift-below 15 --resemblance-metric "abs_mean" $extra_flags --equation-only 2>/dev/null) || true
+    # Evaluate the RHS at a given x using awk.
+    # Awk handles scientific notation and ^.
+    eval_rhs() {
+      local x_val=$1
+      local rhs=$2
+      awk -v x="$x_val" "BEGIN { print ($rhs) }" 2>/dev/null
+    }
 
-      # extract first line that looks like "y = ..."
-      equation=$(printf '%s\n' "$output" | grep -m1 -E '^\s*y\s*=' | sed 's/^[[:space:]]*//')
+    validate_equation() {
+      local equation=$1
+      local rhs min_x="" min_y="" x_val y_val y_eq cmp
+      local line
 
-      # If attempt 1 or 2 yields an equation, check that the lowest bpw data point is not below the curve
-      if [ -n "$equation" ] && [ "$attempt" -le 2 ]; then
-        # find perplexity column index (0-based) from header
-        ppl_idx=-1
-        for i in "${!header_cols[@]}"; do
-          col=$(printf '%s' "${header_cols[$i]}" | tr -d '[:space:]' | tr -d '"')
-          if [ "$col" = "perplexity" ] || [ "$col" = "ppl" ]; then
-            ppl_idx=$i
-            break
+      rhs="${equation#*=}"
+      rhs=$(printf '%s' "$rhs" | sed 's/^[[:space:]]*//')
+
+      while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        IFS=',' read -r -a fields <<< "$line"
+
+        x_val=${fields[$bpw_idx]:-}
+        y_val=${fields[$ppl_idx]:-}
+
+        # strip quotes and whitespace
+        x_val=$(printf '%s' "$x_val" | tr -d '"' | tr -d '[:space:]')
+        y_val=$(printf '%s' "$y_val" | tr -d '"' | tr -d '[:space:]')
+        [ -z "$x_val" ] || [ -z "$y_val" ] && continue
+
+        if [ -z "$min_x" ]; then
+          min_x="$x_val"
+          min_y="$y_val"
+        else
+          # compare x_val < min_x
+          cmp=$(awk -v a="$x_val" -v b="$min_x" 'BEGIN { print (a < b) ? 1 : 0 }')
+          if [ "$cmp" = "1" ]; then
+            min_x="$x_val"
+            min_y="$y_val"
           fi
-        done
+        fi
+      done < <(tail -n +2 -- "$cur_f")
 
-        if [ "$ppl_idx" -ge 0 ]; then
-          attempt_failed=0
-          rhs="${equation#*=}"
-          # Adjust common math syntax for Python compatibility
-          rhs=$(printf '%s' "$rhs" | sed 's/\^/**/g')
-          
-          min_x=""
-          min_y=""
-          while IFS= read -r line; do
-            [ -z "$line" ] && continue
-            IFS=',' read -r -a fields <<< "$line"
-            x_val=${fields[$bpw_idx]:-}
-            y_val=${fields[$ppl_idx]:-}
-            # strip quotes and whitespace
-            x_val=$(printf '%s' "$x_val" | tr -d '"' | tr -d '[:space:]')
-            y_val=$(printf '%s' "$y_val" | tr -d '"' | tr -d '[:space:]')
-            [ -z "$x_val" ] || [ -z "$y_val" ] && continue
+      if [ -n "$min_x" ] && [ -n "$min_y" ]; then
+        # Evaluate equation at min_x
+        y_eq=$(eval_rhs "$min_x" "$rhs") || return 1
+        [ -n "$y_eq" ] || return 1
 
-            if [ -z "$min_x" ]; then
-              min_x="$x_val"
-              min_y="$y_val"
-            else
-              # compare x_val < min_x
-              cmp=$(echo "$x_val < $min_x" | bc -l 2>/dev/null || echo 0)
-              if [ "$cmp" = "1" ]; then
-                min_x="$x_val"
-                min_y="$y_val"
-              fi
-            fi
-          done < <(tail -n +2 -- "$cur_f")
+        case "$y_eq" in
+          *nan*|*NaN*|*inf*|*Inf*|-inf*|-Inf*)
+            return 1
+            ;;
+        esac
 
-          if [ -n "$min_x" ] && [ -n "$min_y" ]; then
-            # Evaluate equation at min_x
-            y_eq=$(python3 -c "from math import *; x=${min_x}; print(${rhs})" 2>/dev/null)
-
-            if [ -n "$y_eq" ]; then
-              # Compare min_y < y_eq
-              cmp=$(echo "$min_y < $y_eq" | bc -l 2>/dev/null || echo 0)
-              if [ "$cmp" = "1" ]; then
-                attempt_failed=1
-                echo "Attempt $attempt failed: lowest bpw data point (bpw=$min_x, ppl=$min_y) is below equation (y=$y_eq)"
-              fi
-            fi
-          fi
-
-          if [ "$attempt_failed" -eq 1 ]; then
-            equation=""
-          fi
+        # Compare min_y < y_eq
+        cmp=$(awk -v a="$min_y" -v b="$y_eq" 'BEGIN { print (a < b) ? 1 : 0 }')
+        if [ "$cmp" = "1" ]; then
+          echo "Attempt failed: lowest bpw data point (bpw=$min_x, ppl=$min_y) is below equation (y=$y_eq)"
+          return 1
         fi
       fi
 
-      if [ -n "$equation" ]; then
-        break
-      fi
+      return 0
+    }
 
-      echo "No equation found for '$cur_f' (attempt $attempt/3)"
-    done
+    score_equation() {
+      local equation=$1
+      local rhs sum="0" count=0 x_val y_val y_eq diff
+      local line
+
+      rhs="${equation#*=}"
+      rhs=$(printf '%s' "$rhs" | sed 's/^[[:space:]]*//')
+
+      while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        IFS=',' read -r -a fields <<< "$line"
+
+        x_val=${fields[$bpw_idx]:-}
+        y_val=${fields[$ppl_idx]:-}
+
+        # strip quotes and whitespace
+        x_val=$(printf '%s' "$x_val" | tr -d '"' | tr -d '[:space:]')
+        y_val=$(printf '%s' "$y_val" | tr -d '"' | tr -d '[:space:]')
+        [ -z "$x_val" ] || [ -z "$y_val" ] && continue
+
+        # Only score points below 4 bpw
+        if [ "$(awk -v x="$x_val" 'BEGIN { print (x < 4) ? 1 : 0 }')" != "1" ]; then
+          continue
+        fi
+
+        y_eq=$(eval_rhs "$x_val" "$rhs") || continue
+        [ -n "$y_eq" ] || continue
+
+        case "$y_eq" in
+          *nan*|*NaN*|*inf*|*Inf*|-inf*|-Inf*)
+            continue
+            ;;
+        esac
+
+        diff=$(awk -v a="$y_val" -v b="$y_eq" '
+          BEGIN {
+            d = a - b;
+            if (d != d) exit 1;       # NaN
+            if (d < 0) d = -d;
+            if (d != d) exit 1;       # NaN after abs
+            printf "%.12f", d
+          }' 2>/dev/null) || continue
+
+        case "$diff" in
+          *nan*|*NaN*|*inf*|*Inf*)
+            continue
+            ;;
+        esac
+
+        sum=$(awk -v s="$sum" -v d="$diff" 'BEGIN { printf "%.12f", s + d }')
+        case "$sum" in
+          *nan*|*NaN*|*inf*|*Inf*)
+            return 1
+            ;;
+        esac
+
+        count=$((count + 1))
+      done < <(tail -n +2 -- "$cur_f")
+
+      [ "$count" -gt 0 ] || return 1
+      awk -v s="$sum" -v c="$count" 'BEGIN { printf "%.12f", s / c }'
+    }
+
+    fit_equation_for_outliers() {
+      local outliers=$1
+      local log_file=$2
+      local equation=""
+      local attempt output extra_flags
+      local cmd_args
+
+      for attempt in 1 2 3; do
+        case $attempt in
+          1) extra_flags=(--ignore-bpw-below 1.8 --ignore-ppl-above 20.5) ;;
+          2) extra_flags=(--ignore-bpw-below 1.8) ;;
+          3) extra_flags=() ;;
+        esac
+
+        echo "Trying --ignore-outliers $outliers (attempt $attempt/3)..." >> "$log_file"
+
+        cmd_args=(
+          "$CMD"
+          --recipe-results-csv "$cur_f"
+          --metric-name "perplexity"
+          --d-from-lowest 1
+          --c-free
+          --transforms "identity"
+          --ignore-outliers "$outliers"
+          --p-grid-max 15
+          --p-grid-steps 100
+          --penalize-above 15
+          --drift-below 15
+          --resemblance-metric "abs_mean"
+          "${extra_flags[@]}"
+          --equation-only
+        )
+
+        # run command, capture stdout (suppress stderr). continue on non-zero exit.
+        output=$("${cmd_args[@]}" 2>/dev/null) || true
+
+        # extract first line that looks like "y = ..."
+        equation=$(printf '%s\n' "$output" | grep -m1 -E '^\s*y\s*=' | sed 's/^[[:space:]]*//')
+
+        if [ -n "$equation" ]; then
+          echo "  Found equation: $equation" >> "$log_file"
+
+          if validate_equation "$equation"; then
+            echo "  Validation passed on lowest bpw point" >> "$log_file"
+            printf '%s' "$equation"
+            return 0
+          fi
+
+          echo "  Validation failed: lowest bpw point is below the curve" >> "$log_file"
+          equation=""
+        else
+          echo "  No equation found" >> "$log_file"
+        fi
+      done
+
+      return 1
+    }
+
+    tmp35=$(mktemp)
+    tmp5=$(mktemp)
+    log35=$(mktemp)
+    log5=$(mktemp)
+
+    # Run both searches at the same time
+    fit_equation_for_outliers 35 "$log35" > "$tmp35" &
+    pid35=$!
+    fit_equation_for_outliers 5 "$log5" > "$tmp5" &
+    pid5=$!
+
+    wait "$pid35"
+    wait "$pid5"
+
+    # Show the attempts again so they are visible in the output
+    echo "---- Attempt log: --ignore-outliers 35 ----"
+    cat "$log35"
+    echo "---- Attempt log: --ignore-outliers 5 ----"
+    cat "$log5"
+
+    eq35=$(cat "$tmp35")
+    eq5=$(cat "$tmp5")
+
+    rm -f "$tmp35" "$tmp5" "$log35" "$log5"
+
+    chosen_equation=""
+    chosen_outliers=""
+    score35=""
+    score5=""
+
+    if [ -n "$eq35" ]; then
+      score35=$(score_equation "$eq35") || score35=""
+    fi
+
+    if [ -n "$eq5" ]; then
+      score5=$(score_equation "$eq5") || score5=""
+    fi
+
+    if [ -n "$eq35" ] && [ -n "$score35" ] && [ -n "$eq5" ] && [ -n "$score5" ]; then
+      if [ "$(echo "$score35 <= $score5" | bc -l 2>/dev/null || echo 0)" = "1" ]; then
+        chosen_equation="$eq35"
+        chosen_outliers=35
+      else
+        chosen_equation="$eq5"
+        chosen_outliers=5
+      fi
+    elif [ -n "$eq35" ] && [ -n "$score35" ]; then
+      chosen_equation="$eq35"
+      chosen_outliers=35
+    elif [ -n "$eq5" ] && [ -n "$score5" ]; then
+      chosen_equation="$eq5"
+      chosen_outliers=5
+    fi
+
+    equation="$chosen_equation"
+
+    # --- Fallback to _no-others.csv if nothing found ---
+    if [ -z "$equation" ]; then
+      fallback_csv="${cur_f%.*}_no-others.csv"
+
+      if [ -f "$fallback_csv" ]; then
+        echo "Falling back to '$fallback_csv'..."
+
+        output=$("$CMD" \
+          --recipe-results-csv "$fallback_csv" \
+          --metric-name "perplexity" \
+          --d-from-lowest 1 \
+          --c-free \
+          --transforms "identity" \
+          --p-grid-max 15 \
+          --p-grid-steps 100 \
+          --penalize-above 15 \
+          --drift-below 15 \
+          --resemblance-metric "abs_mean" \
+          --equation-only 2>/dev/null) || true
+
+        fallback_eq=$(printf '%s\n' "$output" | grep -m1 -E '^\s*y\s*=' | sed 's/^[[:space:]]*//')
+
+        if [ -n "$fallback_eq" ]; then
+          echo "Using fallback equation from _no-others.csv"
+          equation="$fallback_eq"
+        else
+          echo "Fallback also failed to produce an equation"
+        fi
+      fi
+    fi
+
+    if [ -n "$equation" ]; then
+      echo "Chosen equation from --ignore-outliers $chosen_outliers (avg abs error on bpw<4: ${score35:-n/a} / ${score5:-n/a})"
+    else
+      echo "No valid equation found for '$cur_f'"
+    fi
 
     if [ -n "$equation" ]; then
       printf '%s:%s\n' "$model_name" "$equation" >> "$OUTFILE"
