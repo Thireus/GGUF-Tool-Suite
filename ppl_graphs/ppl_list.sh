@@ -131,6 +131,31 @@ for f in "${files[@]}"; do
       break
     fi
 
+    # If this is a _no-others.csv file, require at least 2 points with bpw < 4.
+    # Otherwise, the base CSV takes over completely.
+    if [[ "$cur_f" == *_no-others.csv ]]; then
+      below4_count=0
+      while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        IFS=',' read -r -a fields <<< "$line"
+
+        x_val=${fields[$bpw_idx]:-}
+        x_val=$(printf '%s' "$x_val" | tr -d '"' | tr -d '[:space:]')
+        [ -z "$x_val" ] && continue
+
+        if [ "$(awk -v x="$x_val" 'BEGIN { print (x < 4) ? 1 : 0 }')" = "1" ]; then
+          below4_count=$((below4_count + 1))
+        fi
+      done < <(tail -n +2 -- "$cur_f")
+
+      if [ "$below4_count" -lt 2 ] && [ -n "$fallback_f" ] && [ -f "$fallback_f" ]; then
+        echo "Skipping '$cur_f' (only $below4_count points with bpw < 4); base CSV takes over"
+        cur_f="$fallback_f"
+        fallback_f=""
+        continue
+      fi
+    fi
+
     # check that at least one bpw value (in data rows) is > 4 (use bc for float compare)
     has_gt4=0
     # read data rows and test the bpw column
@@ -243,7 +268,7 @@ for f in "${files[@]}"; do
         # Compare min_y < y_eq
         cmp=$(awk -v a="$min_y" -v b="$y_eq" 'BEGIN { print (a < b) ? 1 : 0 }')
         if [ "$cmp" = "1" ]; then
-          echo "Attempt failed: lowest bpw data point (bpw=$min_x, ppl=$min_y) is below equation (y=$y_eq)"
+          echo "Attempt failed: lowest bpw data point (bpw=$min_x, ppl=$min_y) is below equation (y=$y_eq)" >&2
           return 1
         fi
       fi
@@ -424,6 +449,17 @@ for f in "${files[@]}"; do
     elif [ -n "$eq5" ] && [ -n "$score5" ]; then
       chosen_equation="$eq5"
       chosen_outliers=5
+    fi
+
+    # if everything failed, default to 35 if eq35 exists
+    if [ -z "$chosen_equation" ]; then
+      if [ -n "$eq35" ]; then
+        chosen_equation="$eq35"
+        chosen_outliers=35
+      elif [ -n "$eq5" ]; then
+        chosen_equation="$eq5"
+        chosen_outliers=5
+      fi
     fi
 
     equation="$chosen_equation"
