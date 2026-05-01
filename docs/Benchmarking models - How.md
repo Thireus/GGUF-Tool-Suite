@@ -42,7 +42,7 @@ Important: You will notice that `q` quants end with uppercase letters such as `_
 
 The `TARGET_QTYPE` variable defines the quantization type that each benchmarking run will drop the invividually assessed tensors to.
 
-Important: `BASELINE_QTYPE` and `TARGET_QTYPE` must be chosen with as few quant impurities as possible. You can use [gguf.thireus.com](https://gguf.thireus.com/) to identify which quants are impure (they are highlighted in orange and red), alternatively you can identify this yourself via the tensors.map files produced that record if tensor quantization fallback to other quant types have occured. I also recommend against using `*_BN` quants. Soft-impure quants (quant type replaced by row-interleaved or non-ri equivalent) are always better than hard-impure quants. Finally, the largest bpw gap there is between `BASELINE_QTYPE` and `TARGET_QTYPE`, the better the calibration data will be.
+Important: `BASELINE_QTYPE` and `TARGET_QTYPE` must be chosen with as few quant impurities as possible - especially for important tensors such as `token_embd.weight` and `output.weight`! You can use [gguf.thireus.com](https://gguf.thireus.com/) to identify which quants are impure (they are highlighted in orange and red), alternatively you can identify this yourself via the tensors.map files produced that record if tensor quantization fallback to other quant types have occured. I also recommend against using `*_BN` quants. Soft-impure quants (quant type replaced by row-interleaved or non-ri equivalent) are always better than hard-impure quants. Finally, the largest bpw gap there is between `BASELINE_QTYPE` and `TARGET_QTYPE`, the better the calibration data will be.
 
 ## Prepare the environment
 
