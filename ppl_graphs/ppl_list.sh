@@ -218,7 +218,22 @@ for f in "${files[@]}"; do
     eval_rhs() {
       local x_val=$1
       local rhs=$2
-      awk -v x="$x_val" "BEGIN { print ($rhs) }" 2>/dev/null
+
+      echo "[DEBUG] x = $x_val" >&2
+      echo "[DEBUG] rhs = $rhs" >&2
+
+      # Build awk program separately for clarity
+      local awk_prog="BEGIN { print ($rhs) }"
+      echo "[DEBUG] awk program = $awk_prog" >&2
+
+      # Capture result
+      local y_val
+      y_val=$(awk -v x="$x_val" "$awk_prog")
+
+      echo "[DEBUG] y = $y_val" >&2
+
+      # Return value
+      printf '%s\n' "$y_val"
     }
 
     validate_equation() {
