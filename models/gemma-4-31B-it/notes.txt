@@ -1,0 +1,1 @@
+Patched token_embd.weight kld and ppl results with iq2_xxs (closest to iq1_kt) - because this tensor cannot be quantized to iq1_kt.
