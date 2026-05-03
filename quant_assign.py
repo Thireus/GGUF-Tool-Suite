@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: May-03-2026 -------------------- **#
+#** --------------- Updated: Mar-29-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -46,7 +46,7 @@ import subprocess
 import tempfile
 from collections import Counter
 import textwrap
-from typing import Any, Callable, cast, Dict, List, Iterable, Tuple, Optional
+from typing import Any, cast, Dict, List, Iterable, Tuple, Optional
 import heapq
 
 _cached_functions = []
@@ -1307,7 +1307,7 @@ def greedy_quant_assign(
     tensors: Iterable[str],
     tensor_sizes: Dict[str, Dict[str, int]],
     ppl_loss: Dict[str, float],
-    degradation_fn: Callable[[str, str], float],
+    degradation_factors: Any,  # can be Dict[str, float] or a callable(qtype)->Optional[float]
     tensor_quants: Optional[Dict[str, List[str]]],
     budget_bytes: int,
     *,
@@ -1323,7 +1323,7 @@ def greedy_quant_assign(
     - tensors: iterable of tensor names to assign
     - tensor_sizes[tensor][qtype] -> size in bytes (must exist for qtypes used)
     - ppl_loss[tensor] -> sensitivity (float). If missing and preassign_missing_ppl True, the tensor is kept at initial quant.
-    - degradation_fn(tensor, qtype) -> float (bigger means worse quant)
+    - degradation_factors[qtype] -> size/deg mapping OR a callable(qtype)->float (bigger means worse quant)
     - tensor_quants[tensor] -> list of qtypes allowed for that tensor (if None, fallback to all qtypes available in tensor_sizes[t])
     - budget_bytes: absolute byte budget for this class (already adjusted by offsets)
     - harmonized_groups: optional list of lists of tensor-names
@@ -1335,6 +1335,14 @@ def greedy_quant_assign(
     tensors = list(tensors)
     # ensure tensor_quants is present for lookups
     tensor_quants = tensor_quants or {}
+
+    # --- Accept both mapping or callable for degradation_factors ---
+    if callable(degradation_factors):
+        get_deg = degradation_factors
+    else:
+        def get_deg(q):
+            # mapping fallback
+            return degradation_factors.get(q)
 
     # --- Validation & normalize tensor_quants into allowed_map (ordered largest->smallest)
     allowed_map: Dict[str, List[str]] = {}
@@ -1356,7 +1364,6 @@ def greedy_quant_assign(
             if q not in tensor_sizes.get(t, {}):
                 # skip qtypes with no size info for this tensor
                 continue
-            # also ensure degradation_fn returns a value (don't filter here, just skip later)
             filtered.append(q)
         if not filtered:
             raise ValueError(f"No usable qtypes for tensor '{t}' after filtering (allowed: {allowed}).")
@@ -1365,12 +1372,16 @@ def greedy_quant_assign(
         filtered.sort(key=lambda q: tensor_sizes[t][q], reverse=True)
         allowed_map[t] = filtered
 
-    # --- Step 1a: Apply exponent scaling to all loss values
+    # --- Step 1a: Apply exponent scaling to all loss values (do not mutate original)
     ppl_loss_exp: Dict[str, float] = {}
     for t, v in ppl_loss.items():
-        ppl_loss_exp[t] = float(v) ** float(loss_exponent)
+        try:
+            ppl_loss_exp[t] = float(v) ** float(loss_exponent)
+        except Exception:
+            # fallback to original float value
+            ppl_loss_exp[t] = float(v)
 
-    # --- Step 1b: Apply synergistic adjustment if requested
+    # --- Step 1b: Apply synergistic adjustment if requested ---
     if synergistic_groups and synergy_strength > 0.0:
         if debug:
             print(f"[GREEDY] applying synergistic adjustment (strength={synergy_strength}) to loss values", file=sys.stderr)
@@ -1481,7 +1492,7 @@ def greedy_quant_assign(
     if debug:
         print(f"[GREEDY] initial total_size = {total_size / GIB:.3f} GiB; budget = {budget_bytes / GIB:.3f} GiB", file=sys.stderr)
 
-    # --- prepare downgrade heap ---
+    # --- prepare heap with (score, counter, tensor, from_q, to_q)
     pq: List[Tuple[float, int, str, str, str]] = []
     counter = 0
 
@@ -1496,17 +1507,22 @@ def greedy_quant_assign(
         except ValueError:
             # from_q not in list (shouldn't happen) -> skip
             return
-        loss = ppl_loss_exp.get(tensor, None)
-        if loss is None:
-            return
+        # consider all smaller-quality quants (larger index)
         for to_q in allowed[from_idx + 1:]:
             size_from = int(tensor_sizes[tensor][from_q])
             size_to = int(tensor_sizes[tensor][to_q])
             delta_size = size_from - size_to
             if delta_size <= 0:
                 continue
-            deg_from = degradation_fn(tensor, from_q)
-            deg_to = degradation_fn(tensor, to_q)
+            # use exponentiated/adjusted loss
+            loss = ppl_loss_exp.get(tensor, None)
+            if loss is None:
+                # If no ppl data and we didn't preassign, skip (safety)
+                continue
+            # get degradation values via get_deg (callable)
+            deg_from = get_deg(from_q)
+            deg_to = get_deg(to_q)
+            # if either is None, we cannot compute score reliably -> skip this move
             if deg_from is None or deg_to is None:
                 if debug:
                     print(f"[GREEDY] missing degradation estimate for {from_q} or {to_q}; skipping move {tensor}:{from_q}->{to_q}", file=sys.stderr)
@@ -1522,7 +1538,7 @@ def greedy_quant_assign(
     for t in tensors:
         push_moves(t, assignment[t])
 
-    # --- main downgrade loop ---
+    # --- main loop (downgrade until within budget)
     while total_size > budget_bytes and pq:
         score, _, tensor, from_q, to_q = heapq.heappop(pq)
         # stale-check: must still be at from_q
@@ -1560,15 +1576,15 @@ def greedy_quant_assign(
         except ValueError:
             return
         # explore upgrades to higher quants (i.e. lower indices)
-        loss = ppl_loss_exp.get(tensor, 0.0)
         for to_q in reversed(allowed[:from_idx]):
             size_from = int(tensor_sizes[tensor][from_q])
             size_to = int(tensor_sizes[tensor][to_q])
             delta_size = size_to - size_from
             if delta_size <= 0:
                 continue
-            deg_from = degradation_fn(tensor, from_q)
-            deg_to = degradation_fn(tensor, to_q)
+            loss = ppl_loss_exp.get(tensor, 0.0)
+            deg_from = get_deg(from_q)
+            deg_to = get_deg(to_q)
             if deg_from is None or deg_to is None:
                 if debug:
                     print(f"[GREEDY] missing degradation estimate for promotion {tensor}:{from_q}->{to_q}; skipping", file=sys.stderr)
@@ -2279,10 +2295,6 @@ def main():
     parser.add_argument('--quant-degradation-csv', type=str, help='Path to CSV file containing quant degradation values for use by greedy quant assign method (optional). If not provided, hardcoded Qwen3-4B-Thinking-2507 degradation values are used, and you will need to tweak --exponential-factor. ')
     parser.add_argument('--quant-degradation-equation', type=str,
                         help=('Deprecated option; no longer used in this script. Use group0_enricher.py instead to fill the gaps of missing group0/kld_results_partial.csv degradation data.'))
-    parser.add_argument('--per-tensor-degradation-scaling', type=float, default=None,
-                        help='Exponent for scaling group degradation values per tensor based on its loss relative to the mean. Only valid when greedy quant assign method is used. '
-                            '0 = disabled. Higher values protect highly sensitive tensors more strongly. '
-                            'Recommended range 0.5 - 2.0. Default (enabled even when parameter isn\'t set): 0.5')
     parser.add_argument('--synergistic-tensors', nargs='+', default=[["blk\\..*\\.ffn_up_exps.*","blk\\..*\\.ffn_gate_exps.*","blk\\..*\\.ffn_down_exps.*"]],
                         help=('A Python literal list-of-lists of regex patterns. Each inner list defines tensors that '
                             'exhibit synergistic effects and should have their loss adjusted together. '
@@ -2291,8 +2303,7 @@ def main():
                             'Use --synergistic-tensors "" to disable synergy adjustment. '
                             'Note: synergy encourages similar quantization within each layer, '
                             'typically improving quality without strictly enforcing identical qtypes.'))
-    parser.add_argument('--synergy-strength',type=float, default=0.0,
-                        help='Strength of synergy-based loss adjustment (0 = disabled, 1 = fully averaged losses). Default: 0')
+    parser.add_argument('--synergy-strength',type=float,default=0.0,help='Strength of synergy-based loss adjustment (0 = disabled, 1 = fully averaged losses). Default: 0')
     parser.add_argument('--no-fallback', action='store_true',
                         help=('Disable automatic fallback checks: do NOT attempt to inspect map files to detect per-tensor dtype mismatches. '
                               'When set, the script will act as if the quantized tensors of the map files were pure and any tensor mismatching the quant type will have its size "guessed" as if it had been quantized to that qtype. (Also forwarded to convert_map_qtype.py when used)'))
@@ -2324,21 +2335,12 @@ def main():
         parser.error("--quant-degradation-csv may only be used with --use-greedy-quant-assign")
     
     # Enforce: --synergistic-tensors is only valid when using --use-greedy-quant-assign
-    if args.synergistic_tensors and not args.use_greedy_quant_assign:
+    if args.synergistic_tensors and args.synergy_strength > 0 and not args.use_greedy_quant_assign:
         parser.error("--synergistic-tensors may only be used with --use-greedy-quant-assign")
     
     # Enforce: --synergy-strength is only valid when using --synergistic-tensors
-    if args.synergy_strength and args.synergy_strength > 0 and not args.synergistic_tensors:
+    if args.synergistic_tensors and args.synergy_strength > 0 and not args.synergistic_tensors:
         parser.error("--synergy-strength may only be used with --synergistic-tensors")
-    
-    # Enforce: --per-tensor-degradation-scaling is only valid when using --use-greedy-quant-assign
-    if args.per_tensor_degradation_scaling and args.per_tensor_degradation_scaling > 0 and not args.use_greedy_quant_assign:
-        parser.error("--per-tensor-degradation-scaling may only be used with --use-greedy-quant-assign")
-    
-    if not args.per_tensor_degradation_scaling:
-        per_tensor_degradation_scaling_final = 0.5 # Default value
-    else:
-        per_tensor_degradation_scaling_final = args.per_tensor_degradation_scaling
 
     # ---- BEGIN pgpy-based “trusted-keys.asc” check ----
     if not SKIP_GPG:
@@ -2932,26 +2934,6 @@ def main():
                 if INFO and synergistic_groups and not expanded_synergistic_groups:
                     print(f"[Info] No synergistic groups expanded for class {cls}.", file=sys.stderr)
 
-                # Build per-tensor scaled degradation function
-                scaling_exponent = per_tensor_degradation_scaling_final
-                if scaling_exponent > 0 and class_vals:
-                    mean_loss = sum(class_vals.values()) / len(class_vals)
-                    def make_degradation_fn(base_lookup, cls_vals, mean_loss, exponent):
-                        def fn(tensor, qtype):
-                            base = base_lookup(qtype)      # may exit if qtype unknown
-                            if base is None:
-                                return None
-                            loss = cls_vals.get(tensor)
-                            if loss is not None and mean_loss > 0:
-                                scale = (loss / mean_loss) ** exponent
-                                return base * scale
-                            return base
-                        return fn
-                    degradation_fn = make_degradation_fn(quant_deg_lookup, class_vals, mean_loss, scaling_exponent)
-                else:
-                    # No scaling – just wrap the old lookup as a two-argument callable
-                    degradation_fn = lambda tensor, qtype: quant_deg_lookup(qtype)
-
                 # ---- Call greedy quant assignment with all parameters ----
                 # Use get_map_sizes_and_elements to build the tensor_sizes mapping
                 assignment, total_bytes = greedy_quant_assign(
@@ -2962,7 +2944,7 @@ def main():
                         for n in names_to_assign
                     },
                     ppl_loss=class_vals,
-                    degradation_fn=degradation_fn,
+                    degradation_factors=quant_deg_lookup,  # pass the lookup callable
                     tensor_quants=tensor_quants_local,
                     budget_bytes=int(max_arg_bytes),
                     debug=DEBUG,
@@ -3533,12 +3515,10 @@ def main():
         print(f"# - GPG signatures: DISABLED")
 
     # List some important parameters that would otherwise be hard to guess (because dynamic or changing over versions or arg-dependant and complex)
-    if not args.exponential_factor or not args.per_tensor_degradation_scaling:
+    if not args.exponential_factor:
         print(f"# - Hidden parameters (not passed as CLI args):")
         if not args.exponential_factor:
             print(f"#   Exponential factor: {exp_factor_final:.8f}".rstrip('0').rstrip('.'))
-        if not args.per_tensor_degradation_scaling:
-            print(f"#   Per tensor degradation scaling exponent: {per_tensor_degradation_scaling_final:.8f}".rstrip('0').rstrip('.'))
 
     # Wrap the command into lines starting with "# "
     wrapped_lines = textwrap.wrap(
