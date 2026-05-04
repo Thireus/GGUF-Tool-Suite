@@ -2282,7 +2282,7 @@ def main():
     parser.add_argument('--per-tensor-degradation-scaling', type=float, default=None,
                         help='Exponent for scaling group degradation values per tensor based on its loss relative to the mean. Only valid when greedy quant assign method is used. '
                             '0 = disabled. Higher values protect highly sensitive tensors more strongly. '
-                            'Recommended range 0.5 - 2.0. Default (enabled even when parameter isn\'t set): 0.5')
+                            'Recommended range 0.5 - 2.0. Default (disabled when parameter isn\'t set): 0.0')
     parser.add_argument('--synergistic-tensors', nargs='+', default=[["blk\\..*\\.ffn_up_exps.*","blk\\..*\\.ffn_gate_exps.*","blk\\..*\\.ffn_down_exps.*"]],
                         help=('A Python literal list-of-lists of regex patterns. Each inner list defines tensors that '
                             'exhibit synergistic effects and should have their loss adjusted together. '
@@ -2336,7 +2336,7 @@ def main():
         parser.error("--per-tensor-degradation-scaling may only be used with --use-greedy-quant-assign")
     
     if not args.per_tensor_degradation_scaling:
-        per_tensor_degradation_scaling_final = 0.5 # Default value
+        per_tensor_degradation_scaling_final = 0.0 # Default value
     else:
         per_tensor_degradation_scaling_final = args.per_tensor_degradation_scaling
 

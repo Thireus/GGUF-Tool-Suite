@@ -272,7 +272,7 @@ def emit_parameters(params: Dict[str, Any]) -> str:
     lines.append(f'quant_degradation_csv = "{params["quant_degradation_csv"]}"     #@param {{type:"string"}}')
     lines.append("# Optional equation to compute degradation from bpw. Only valid when use_greedy_quant_assign=True.")
     lines.append(f'quant_degradation_equation = "{params["quant_degradation_equation"]}" #@param {{type:"string"}}')
-    lines.append("# Exponent for scaling group degradation values per tensor based on its loss relative to the mean (0 = disabled, 0.5 = default). Only valid when use_greedy_quant_assign=True.")
+    lines.append("# Exponent for scaling group degradation values per tensor based on its loss relative to the mean (Disabled by default, 0 = disabled). Only valid when use_greedy_quant_assign=True.")
     lines.append(f'per_tensor_degradation_scaling = {params["per_tensor_degradation_scaling"]}          #@param {{type:"number"}}')
     lines.append("# Synergistic tensors for greedy quant assignment: list-of-lists of regex patterns. Each inner list defines tensors whose losses should be adjusted together. Use \"\" to disable.")
     st = params.get("synergistic_tensors", "")
