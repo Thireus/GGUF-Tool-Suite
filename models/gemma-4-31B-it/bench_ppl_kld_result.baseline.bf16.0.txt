@@ -1,0 +1,1128 @@
+main: build = 1 (a946d1c)
+main: built with MSVC 19.44.35226.0 for 
+main: seed  = 1337
+ggml_cuda_init: GGML_CUDA_FORCE_MMQ:    no
+ggml_cuda_init: GGML_CUDA_FORCE_CUBLAS: no
+ggml_cuda_init: found 1 CUDA devices:
+  Device 0: NVIDIA RTX PRO 6000 Blackwell Workstation Edition, compute capability 12.0, VMM: yes, VRAM: 97886 MiB
+CUDA0: using device CUDA0 - 95346 MiB free
+llama_model_loader: max stdio successfully set to 2048
+llama_model_loader: additional 833 GGUFs metadata loaded.
+llama_model_loader: loaded meta data with 50 key-value pairs and 833 tensors from ./gemma-4-31B-it-THIREUS-BF16-SPECIAL_TENSOR-00001-of-00834.gguf (version GGUF V3 (latest))
+llama_model_loader: Dumping metadata keys/values. Note: KV overrides do not apply in this output.
+llama_model_loader: - kv   0:                       general.architecture str              = gemma4
+llama_model_loader: - kv   1:                               general.type str              = model
+llama_model_loader: - kv   2:                     general.sampling.top_k i32              = 64
+llama_model_loader: - kv   3:                     general.sampling.top_p f32              = 0.950000
+llama_model_loader: - kv   4:                      general.sampling.temp f32              = 1.000000
+llama_model_loader: - kv   5:                               general.name str              = Gemma 4 31B It
+llama_model_loader: - kv   6:                           general.finetune str              = it
+llama_model_loader: - kv   7:                           general.basename str              = gemma-4
+llama_model_loader: - kv   8:                         general.size_label str              = 31B
+llama_model_loader: - kv   9:                            general.license str              = apache-2.0
+llama_model_loader: - kv  10:                       general.license.link str              = https://ai.google.dev/gemma/docs/gemm...
+llama_model_loader: - kv  11:                               general.tags arr[str,1]       = ["image-text-to-text"]
+llama_model_loader: - kv  12:                         gemma4.block_count u32              = 60
+llama_model_loader: - kv  13:                      gemma4.context_length u32              = 262144
+llama_model_loader: - kv  14:                    gemma4.embedding_length u32              = 5376
+llama_model_loader: - kv  15:                 gemma4.feed_forward_length u32              = 21504
+llama_model_loader: - kv  16:                gemma4.attention.head_count u32              = 32
+llama_model_loader: - kv  17:             gemma4.attention.head_count_kv arr[i32,60]      = [16, 16, 16, 16, 16, 4, 16, 16, 16, 1...
+llama_model_loader: - kv  18:                      gemma4.rope.freq_base f32              = 1000000.000000
+llama_model_loader: - kv  19:                  gemma4.rope.freq_base_swa f32              = 10000.000000
+llama_model_loader: - kv  20:    gemma4.attention.layer_norm_rms_epsilon f32              = 0.000001
+llama_model_loader: - kv  21:                gemma4.attention.key_length u32              = 512
+llama_model_loader: - kv  22:              gemma4.attention.value_length u32              = 512
+llama_model_loader: - kv  23:                          general.file_type u32              = 32
+llama_model_loader: - kv  24:             gemma4.final_logit_softcapping f32              = 30.000000
+llama_model_loader: - kv  25:            gemma4.attention.sliding_window u32              = 1024
+llama_model_loader: - kv  26:          gemma4.attention.shared_kv_layers u32              = 0
+llama_model_loader: - kv  27:    gemma4.embedding_length_per_layer_input u32              = 0
+llama_model_loader: - kv  28:    gemma4.attention.sliding_window_pattern arr[bool,60]     = [true, true, true, true, true, false,...
+llama_model_loader: - kv  29:            gemma4.attention.key_length_swa u32              = 256
+llama_model_loader: - kv  30:          gemma4.attention.value_length_swa u32              = 256
+llama_model_loader: - kv  31:                gemma4.rope.dimension_count u32              = 512
+llama_model_loader: - kv  32:            gemma4.rope.dimension_count_swa u32              = 256
+llama_model_loader: - kv  33:               general.quantization_version u32              = 2
+llama_model_loader: - kv  34:                       tokenizer.ggml.model str              = gemma4
+llama_model_loader: - kv  35:                      tokenizer.ggml.tokens arr[str,262144]  = ["<pad>", "<eos>", "<bos>", "<unk>", ...
+llama_model_loader: - kv  36:                      tokenizer.ggml.scores arr[f32,262144]  = [-1000.000000, -1000.000000, -1000.00...
+llama_model_loader: - kv  37:                  tokenizer.ggml.token_type arr[i32,262144]  = [3, 3, 3, 3, 3, 1, 1, 1, 1, 1, 1, 1, ...
+llama_model_loader: - kv  38:                      tokenizer.ggml.merges arr[str,514906]  = ["\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n \n", ...
+llama_model_loader: - kv  39:                tokenizer.ggml.bos_token_id u32              = 2
+llama_model_loader: - kv  40:                tokenizer.ggml.eos_token_id u32              = 1
+llama_model_loader: - kv  41:            tokenizer.ggml.unknown_token_id u32              = 3
+llama_model_loader: - kv  42:            tokenizer.ggml.padding_token_id u32              = 0
+llama_model_loader: - kv  43:               tokenizer.ggml.mask_token_id u32              = 4
+llama_model_loader: - kv  44:                    tokenizer.chat_template str              = {%- macro format_parameters(propertie...
+llama_model_loader: - kv  45:            tokenizer.ggml.add_space_prefix bool             = false
+llama_model_loader: - kv  46:               tokenizer.ggml.add_bos_token bool             = true
+llama_model_loader: - kv  47:                                   split.no u16              = 0
+llama_model_loader: - kv  48:                                split.count u16              = 834
+llama_model_loader: - kv  49:                        split.tensors.count i32              = 833
+llama_model_loader: - type  f32:  422 tensors
+llama_model_loader: - type bf16:  411 tensors
+load: 0 unused tokens
+load: control-looking token:     50 '<|tool_response>' was not control-type; this is probably a bug in the model. its type will be overridden
+load: control-looking token:    212 '</s>' was not control-type; this is probably a bug in the model. its type will be overridden
+load: printing all EOG tokens:
+load:   - 1 ('<eos>')
+load:   - 50 ('<|tool_response>')
+load:   - 106 ('<turn|>')
+load:   - 212 ('</s>')
+load: special_eog_ids contains '<|tool_response>', removing '</s>' token from EOG list
+load: special tokens cache size = 24
+load: token to piece cache size = 1.9445 MB
+llm_load_print_meta: format           = GGUF V3 (latest)
+llm_load_print_meta: arch             = gemma4
+llm_load_print_meta: n_ctx_train      = 262144
+llm_load_print_meta: n_embd           = 5376
+llm_load_print_meta: n_layer          = 60
+llm_load_print_meta: n_head           = 32
+llm_load_print_meta: n_head_kv        = [16, 16, 16, 16, 16, 4, 16, 16, 16, 16, 16, 4, 16, 16, 16, 16, 16, 4, 16, 16, 16, 16, 16, 4, 16, 16, 16, 16, 16, 4, 16, 16, 16, 16, 16, 4, 16, 16, 16, 16, 16, 4, 16, 16, 16, 16, 16, 4, 16, 16, 16, 16, 16, 4, 16, 16, 16, 16, 16, 4]
+llm_load_print_meta: n_rot            = 512
+llm_load_print_meta: n_swa            = 1024
+llm_load_print_meta: n_swa_pattern    = 1
+llm_load_print_meta: n_embd_head_k    = 256
+llm_load_print_meta: n_embd_head_v    = 256
+llm_load_print_meta: n_gqa            = [2, 2, 2, 2, 2, 8, 2, 2, 2, 2, 2, 8, 2, 2, 2, 2, 2, 8, 2, 2, 2, 2, 2, 8, 2, 2, 2, 2, 2, 8, 2, 2, 2, 2, 2, 8, 2, 2, 2, 2, 2, 8, 2, 2, 2, 2, 2, 8, 2, 2, 2, 2, 2, 8, 2, 2, 2, 2, 2, 8]
+llm_load_print_meta: n_embd_k_gqa     = [4096, 4096, 4096, 4096, 4096, 2048, 4096, 4096, 4096, 4096, 4096, 2048, 4096, 4096, 4096, 4096, 4096, 2048, 4096, 4096, 4096, 4096, 4096, 2048, 4096, 4096, 4096, 4096, 4096, 2048, 4096, 4096, 4096, 4096, 4096, 2048, 4096, 4096, 4096, 4096, 4096, 2048, 4096, 4096, 4096, 4096, 4096, 2048, 4096, 4096, 4096, 4096, 4096, 2048, 4096, 4096, 4096, 4096, 4096, 2048]
+llm_load_print_meta: n_embd_v_gqa     = [4096, 4096, 4096, 4096, 4096, 2048, 4096, 4096, 4096, 4096, 4096, 2048, 4096, 4096, 4096, 4096, 4096, 2048, 4096, 4096, 4096, 4096, 4096, 2048, 4096, 4096, 4096, 4096, 4096, 2048, 4096, 4096, 4096, 4096, 4096, 2048, 4096, 4096, 4096, 4096, 4096, 2048, 4096, 4096, 4096, 4096, 4096, 2048, 4096, 4096, 4096, 4096, 4096, 2048, 4096, 4096, 4096, 4096, 4096, 2048]
+llm_load_print_meta: f_norm_eps       = 0.0e+00
+llm_load_print_meta: f_norm_rms_eps   = 1.0e-06
+llm_load_print_meta: f_clamp_kqv      = 0.0e+00
+llm_load_print_meta: f_max_alibi_bias = 0.0e+00
+llm_load_print_meta: f_logit_scale    = 0.0e+00
+llm_load_print_meta: n_ff             = 21504
+llm_load_print_meta: n_expert         = 0
+llm_load_print_meta: n_expert_used    = 0
+llm_load_print_meta: causal attn      = 1
+llm_load_print_meta: pooling type     = 0
+llm_load_print_meta: rope type        = 2
+llm_load_print_meta: rope scaling     = linear
+llm_load_print_meta: freq_base_train  = 1000000.0
+llm_load_print_meta: freq_scale_train = 1
+llm_load_print_meta: n_ctx_orig_yarn  = 262144
+llm_load_print_meta: rope_finetuned   = unknown
+llm_load_print_meta: ssm_d_conv       = 0
+llm_load_print_meta: ssm_d_inner      = 0
+llm_load_print_meta: ssm_d_state      = 0
+llm_load_print_meta: ssm_dt_rank      = 0
+llm_load_print_meta: ssm_n_group      = 0
+llm_load_print_meta: model type       = ?B
+llm_load_print_meta: model ftype      = BF16
+llm_load_print_meta: model params     = 30.697 B
+llm_load_print_meta: model size       = 57.181 GiB (16.001 BPW) 
+llm_load_print_meta: general.name     = Gemma 4 31B It
+print_info: vocab type            = BPE
+print_info: n_vocab               = 262144
+print_info: n_merges              = 514906
+print_info: BOS token             = 2 '<bos>'
+print_info: EOS token             = 1 '<eos>'
+print_info: UNK token             = 3 '<unk>'
+print_info: PAD token             = 0 '<pad>'
+print_info: MASK token            = 4 '<mask>'
+print_info: LF token              = 107 '
+'
+print_info: EOG token             = 1 '<eos>'
+print_info: EOG token             = 50 '<|tool_response>'
+print_info: EOG token             = 106 '<turn|>'
+print_info: max token length      = 93
+======================================= HAVE_FANCY_SIMD is NOT defined
+Oops: tensor with strange name rope_freqs.weight
+------------------- Layer sizes:
+Layer  0:    913.58,     64.00,    977.58      115.50  MiB
+Layer  1:    913.58,     64.00,    977.58      115.50  MiB
+Layer  2:    913.58,     64.00,    977.58      115.50  MiB
+Layer  3:    913.58,     64.00,    977.58      115.50  MiB
+Layer  4:    913.58,     64.00,    977.58      115.50  MiB
+Layer  5:   1018.59,     32.00,   1050.59      115.50  MiB
+Layer  6:    913.58,     64.00,    977.58      115.50  MiB
+Layer  7:    913.58,     64.00,    977.58      115.50  MiB
+Layer  8:    913.58,     64.00,    977.58      115.50  MiB
+Layer  9:    913.58,     64.00,    977.58      115.50  MiB
+Layer 10:    913.58,     64.00,    977.58      115.50  MiB
+Layer 11:   1018.59,     32.00,   1050.59      115.50  MiB
+Layer 12:    913.58,     64.00,    977.58      115.50  MiB
+Layer 13:    913.58,     64.00,    977.58      115.50  MiB
+Layer 14:    913.58,     64.00,    977.58      115.50  MiB
+Layer 15:    913.58,     64.00,    977.58      115.50  MiB
+Layer 16:    913.58,     64.00,    977.58      115.50  MiB
+Layer 17:   1018.59,     32.00,   1050.59      115.50  MiB
+Layer 18:    913.58,     64.00,    977.58      115.50  MiB
+Layer 19:    913.58,     64.00,    977.58      115.50  MiB
+Layer 20:    913.58,     64.00,    977.58      115.50  MiB
+Layer 21:    913.58,     64.00,    977.58      115.50  MiB
+Layer 22:    913.58,     64.00,    977.58      115.50  MiB
+Layer 23:   1018.59,     32.00,   1050.59      115.50  MiB
+Layer 24:    913.58,     64.00,    977.58      115.50  MiB
+Layer 25:    913.58,     64.00,    977.58      115.50  MiB
+Layer 26:    913.58,     64.00,    977.58      115.50  MiB
+Layer 27:    913.58,     64.00,    977.58      115.50  MiB
+Layer 28:    913.58,     64.00,    977.58      115.50  MiB
+Layer 29:   1018.59,     32.00,   1050.59      115.50  MiB
+Layer 30:    913.58,     64.00,    977.58      115.50  MiB
+Layer 31:    913.58,     64.00,    977.58      115.50  MiB
+Layer 32:    913.58,     64.00,    977.58      115.50  MiB
+Layer 33:    913.58,     64.00,    977.58      115.50  MiB
+Layer 34:    913.58,     64.00,    977.58      115.50  MiB
+Layer 35:   1018.59,     32.00,   1050.59      115.50  MiB
+Layer 36:    913.58,     64.00,    977.58      115.50  MiB
+Layer 37:    913.58,     64.00,    977.58      115.50  MiB
+Layer 38:    913.58,     64.00,    977.58      115.50  MiB
+Layer 39:    913.58,     64.00,    977.58      115.50  MiB
+Layer 40:    913.58,     64.00,    977.58      115.50  MiB
+Layer 41:   1018.59,     32.00,   1050.59      115.50  MiB
+Layer 42:    913.58,     64.00,    977.58      115.50  MiB
+Layer 43:    913.58,     64.00,    977.58      115.50  MiB
+Layer 44:    913.58,     64.00,    977.58      115.50  MiB
+Layer 45:    913.58,     64.00,    977.58      115.50  MiB
+Layer 46:    913.58,     64.00,    977.58      115.50  MiB
+Layer 47:   1018.59,     32.00,   1050.59      115.50  MiB
+Layer 48:    913.58,     64.00,    977.58      115.50  MiB
+Layer 49:    913.58,     64.00,    977.58      115.50  MiB
+Layer 50:    913.58,     64.00,    977.58      115.50  MiB
+Layer 51:    913.58,     64.00,    977.58      115.50  MiB
+Layer 52:    913.58,     64.00,    977.58      115.50  MiB
+Layer 53:   1018.59,     32.00,   1050.59      115.50  MiB
+Layer 54:    913.58,     64.00,    977.58      115.50  MiB
+Layer 55:    913.58,     64.00,    977.58      115.50  MiB
+Layer 56:    913.58,     64.00,    977.58      115.50  MiB
+Layer 57:    913.58,     64.00,    977.58      115.50  MiB
+Layer 58:    913.58,     64.00,    977.58      115.50  MiB
+Layer 59:   1018.59,     32.00,   1050.59      115.50  MiB
+Layer 60:   2688.00,    396.50,   3084.50 MiB (output layer)
+--------------------------------------------------------------------------
+Total   :  55865.06,   3916.50,  59781.56 MiB
+Memory required for model tensors + cache: 62470 MiB
+Memory available on all devices - compute: 94206 MiB
+llm_load_tensors: ggml ctx size =    0.71 MiB
+llm_load_tensors: offloading 60 repeating layers to GPU
+llm_load_tensors: offloading non-repeating layers to GPU
+llm_load_tensors: offloaded 61/61 layers to GPU
+llm_load_tensors:  CUDA_Host buffer size =  2688.00 MiB
+llm_load_tensors:      CUDA0 buffer size = 58553.10 MiB
+.............................................................................................~ggml_backend_cuda_context: have 0 graphs
+.
+llama_init_from_model: n_ctx         = 4096
+llama_init_from_model: n_batch       = 512
+llama_init_from_model: n_ubatch      = 512
+llama_init_from_model: flash_attn    = 1
+llama_init_from_model: attn_max_b    = 2048
+llama_init_from_model: fused_moe     = 1
+llama_init_from_model: grouped er    = 0
+llama_init_from_model: fused_up_gate = 1
+llama_init_from_model: fused_mmad    = 1
+llama_init_from_model: rope_cache    = 0
+llama_init_from_model: graph_reuse   = 1
+llama_init_from_model: k_cache_hadam = 0
+llama_init_from_model: v_cache_hadam = 0
+llama_init_from_model: split_mode_graph_scheduling = 0
+llama_init_from_model: reduce_type   = f16
+llama_init_from_model: sched_async   = 0
+llama_init_from_model: ser           = -1, 0
+llama_init_from_model: freq_base     = 1000000.0
+llama_init_from_model: freq_scale    = 1
+llama_kv_cache_init:      CUDA0 KV buffer size =  3520.00 MiB
+llama_init_from_model: KV self size  = 3520.00 MiB, K (f16): 1760.00 MiB, V (f16): 1760.00 MiB
+llama_init_from_model:  CUDA_Host  output buffer size =     1.00 MiB
+llama_init_from_model:      CUDA0 compute buffer size =  1034.50 MiB
+llama_init_from_model:  CUDA_Host compute buffer size =    18.51 MiB
+llama_init_from_model: graph nodes  = 1917
+llama_init_from_model: graph splits = 2
+llama_init_from_model: enabling only_active_experts scheduling
+
+system_info: n_threads = 1 / 36 | AVX = 1 | AVX_VNNI = 0 | AVX2 = 1 | AVX512 = 1 | AVX512_VBMI = 0 | AVX512_VNNI = 0 | AVX512_BF16 = 0 | FMA = 1 | NEON = 0 | SVE = 0 | ARM_FMA = 0 | F16C = 1 | FP16_VA = 0 | WASM_SIMD = 0 | BLAS = 1 | SSE3 = 1 | SSSE3 = 1 | VSX = 0 | MATMUL_INT8 = 0 | 
+main: splitting on exact string: '____IMATRIX_SEPARATOR____'
+main: split into 286 non-empty chunk(s) in 1.665 ms
+main: 286 chunk(s) will be processed
+main: tokenization of 286 chunk(s) took 857.129 ms
+main: chunk token sizes:
+main:   chunk 1 -> 1354 token(s), using chunk length (< ctx 4096)
+main:   chunk 2 -> 498 token(s), using chunk length (< ctx 4096)
+main:   chunk 3 -> 13472 token(s), will be truncated to 4096
+main:   chunk 4 -> 4042 token(s), using chunk length (< ctx 4096)
+main:   chunk 5 -> 2732 token(s), using chunk length (< ctx 4096)
+main:   chunk 6 -> 4037 token(s), using chunk length (< ctx 4096)
+main:   chunk 7 -> 981 token(s), using chunk length (< ctx 4096)
+main:   chunk 8 -> 1242 token(s), using chunk length (< ctx 4096)
+main:   chunk 9 -> 1215 token(s), using chunk length (< ctx 4096)
+main:   chunk 10 -> 879 token(s), using chunk length (< ctx 4096)
+main:   chunk 11 -> 4242 token(s), will be truncated to 4096
+main:   chunk 12 -> 13275 token(s), will be truncated to 4096
+main:   chunk 13 -> 2793 token(s), using chunk length (< ctx 4096)
+main:   chunk 14 -> 723 token(s), using chunk length (< ctx 4096)
+main:   chunk 15 -> 1108 token(s), using chunk length (< ctx 4096)
+main:   chunk 16 -> 260 token(s), using chunk length (< ctx 4096)
+main:   chunk 17 -> 445 token(s), using chunk length (< ctx 4096)
+main:   chunk 18 -> 1110 token(s), using chunk length (< ctx 4096)
+main:   chunk 19 -> 905 token(s), using chunk length (< ctx 4096)
+main:   chunk 20 -> 860 token(s), using chunk length (< ctx 4096)
+main:   chunk 21 -> 118 token(s), using chunk length (< ctx 4096)
+main:   chunk 22 -> 187 token(s), using chunk length (< ctx 4096)
+main:   chunk 23 -> 672 token(s), using chunk length (< ctx 4096)
+main:   chunk 24 -> 925 token(s), using chunk length (< ctx 4096)
+main:   chunk 25 -> 472 token(s), using chunk length (< ctx 4096)
+main:   chunk 26 -> 390 token(s), using chunk length (< ctx 4096)
+main:   chunk 27 -> 314 token(s), using chunk length (< ctx 4096)
+main:   chunk 28 -> 219 token(s), using chunk length (< ctx 4096)
+main:   chunk 29 -> 654 token(s), using chunk length (< ctx 4096)
+main:   chunk 30 -> 462 token(s), using chunk length (< ctx 4096)
+main:   chunk 31 -> 289 token(s), using chunk length (< ctx 4096)
+main:   chunk 32 -> 420 token(s), using chunk length (< ctx 4096)
+main:   chunk 33 -> 316 token(s), using chunk length (< ctx 4096)
+main:   chunk 34 -> 519 token(s), using chunk length (< ctx 4096)
+main:   chunk 35 -> 1188 token(s), using chunk length (< ctx 4096)
+main:   chunk 36 -> 367 token(s), using chunk length (< ctx 4096)
+main:   chunk 37 -> 230 token(s), using chunk length (< ctx 4096)
+main:   chunk 38 -> 424 token(s), using chunk length (< ctx 4096)
+main:   chunk 39 -> 1154 token(s), using chunk length (< ctx 4096)
+main:   chunk 40 -> 1415 token(s), using chunk length (< ctx 4096)
+main:   chunk 41 -> 799 token(s), using chunk length (< ctx 4096)
+main:   chunk 42 -> 445 token(s), using chunk length (< ctx 4096)
+main:   chunk 43 -> 625 token(s), using chunk length (< ctx 4096)
+main:   chunk 44 -> 818 token(s), using chunk length (< ctx 4096)
+main:   chunk 45 -> 397 token(s), using chunk length (< ctx 4096)
+main:   chunk 46 -> 2359 token(s), using chunk length (< ctx 4096)
+main:   chunk 47 -> 755 token(s), using chunk length (< ctx 4096)
+main:   chunk 48 -> 236 token(s), using chunk length (< ctx 4096)
+main:   chunk 49 -> 268 token(s), using chunk length (< ctx 4096)
+main:   chunk 50 -> 106 token(s), using chunk length (< ctx 4096)
+main:   chunk 51 -> 182 token(s), using chunk length (< ctx 4096)
+main:   chunk 52 -> 844 token(s), using chunk length (< ctx 4096)
+main:   chunk 53 -> 665 token(s), using chunk length (< ctx 4096)
+main:   chunk 54 -> 481 token(s), using chunk length (< ctx 4096)
+main:   chunk 55 -> 421 token(s), using chunk length (< ctx 4096)
+main:   chunk 56 -> 718 token(s), using chunk length (< ctx 4096)
+main:   chunk 57 -> 218 token(s), using chunk length (< ctx 4096)
+main:   chunk 58 -> 408 token(s), using chunk length (< ctx 4096)
+main:   chunk 59 -> 298 token(s), using chunk length (< ctx 4096)
+main:   chunk 60 -> 1826 token(s), using chunk length (< ctx 4096)
+main:   chunk 61 -> 396 token(s), using chunk length (< ctx 4096)
+main:   chunk 62 -> 366 token(s), using chunk length (< ctx 4096)
+main:   chunk 63 -> 798 token(s), using chunk length (< ctx 4096)
+main:   chunk 64 -> 402 token(s), using chunk length (< ctx 4096)
+main:   chunk 65 -> 476 token(s), using chunk length (< ctx 4096)
+main:   chunk 66 -> 214 token(s), using chunk length (< ctx 4096)
+main:   chunk 67 -> 236 token(s), using chunk length (< ctx 4096)
+main:   chunk 68 -> 238 token(s), using chunk length (< ctx 4096)
+main:   chunk 69 -> 10858 token(s), will be truncated to 4096
+main:   chunk 70 -> 451 token(s), using chunk length (< ctx 4096)
+main:   chunk 71 -> 249 token(s), using chunk length (< ctx 4096)
+main:   chunk 72 -> 864 token(s), using chunk length (< ctx 4096)
+main:   chunk 73 -> 1439 token(s), using chunk length (< ctx 4096)
+main:   chunk 74 -> 4249 token(s), will be truncated to 4096
+main:   chunk 75 -> 367 token(s), using chunk length (< ctx 4096)
+main:   chunk 76 -> 1000 token(s), using chunk length (< ctx 4096)
+main:   chunk 77 -> 1474 token(s), using chunk length (< ctx 4096)
+main:   chunk 78 -> 72 token(s), using chunk length (< ctx 4096)
+main:   chunk 79 -> 155 token(s), using chunk length (< ctx 4096)
+main:   chunk 80 -> 874 token(s), using chunk length (< ctx 4096)
+main:   chunk 81 -> 109 token(s), using chunk length (< ctx 4096)
+main:   chunk 82 -> 53 token(s), using chunk length (< ctx 4096)
+main:   chunk 83 -> 830 token(s), using chunk length (< ctx 4096)
+main:   chunk 84 -> 521 token(s), using chunk length (< ctx 4096)
+main:   chunk 85 -> 562 token(s), using chunk length (< ctx 4096)
+main:   chunk 86 -> 267 token(s), using chunk length (< ctx 4096)
+main:   chunk 87 -> 337 token(s), using chunk length (< ctx 4096)
+main:   chunk 88 -> 1447 token(s), using chunk length (< ctx 4096)
+main:   chunk 89 -> 750 token(s), using chunk length (< ctx 4096)
+main:   chunk 90 -> 648 token(s), using chunk length (< ctx 4096)
+main:   chunk 91 -> 2915 token(s), using chunk length (< ctx 4096)
+main:   chunk 92 -> 137 token(s), using chunk length (< ctx 4096)
+main:   chunk 93 -> 236 token(s), using chunk length (< ctx 4096)
+main:   chunk 94 -> 309 token(s), using chunk length (< ctx 4096)
+main:   chunk 95 -> 174 token(s), using chunk length (< ctx 4096)
+main:   chunk 96 -> 258 token(s), using chunk length (< ctx 4096)
+main:   chunk 97 -> 5842 token(s), will be truncated to 4096
+main:   chunk 98 -> 561 token(s), using chunk length (< ctx 4096)
+main:   chunk 99 -> 493 token(s), using chunk length (< ctx 4096)
+main:   chunk 100 -> 619 token(s), using chunk length (< ctx 4096)
+main:   chunk 101 -> 1049 token(s), using chunk length (< ctx 4096)
+main:   chunk 102 -> 278 token(s), using chunk length (< ctx 4096)
+main:   chunk 103 -> 705 token(s), using chunk length (< ctx 4096)
+main:   chunk 104 -> 361 token(s), using chunk length (< ctx 4096)
+main:   chunk 105 -> 1658 token(s), using chunk length (< ctx 4096)
+main:   chunk 106 -> 202 token(s), using chunk length (< ctx 4096)
+main:   chunk 107 -> 444 token(s), using chunk length (< ctx 4096)
+main:   chunk 108 -> 162 token(s), using chunk length (< ctx 4096)
+main:   chunk 109 -> 172 token(s), using chunk length (< ctx 4096)
+main:   chunk 110 -> 331 token(s), using chunk length (< ctx 4096)
+main:   chunk 111 -> 479 token(s), using chunk length (< ctx 4096)
+main:   chunk 112 -> 122 token(s), using chunk length (< ctx 4096)
+main:   chunk 113 -> 319 token(s), using chunk length (< ctx 4096)
+main:   chunk 114 -> 433 token(s), using chunk length (< ctx 4096)
+main:   chunk 115 -> 436 token(s), using chunk length (< ctx 4096)
+main:   chunk 116 -> 271 token(s), using chunk length (< ctx 4096)
+main:   chunk 117 -> 109 token(s), using chunk length (< ctx 4096)
+main:   chunk 118 -> 85 token(s), using chunk length (< ctx 4096)
+main:   chunk 119 -> 654 token(s), using chunk length (< ctx 4096)
+main:   chunk 120 -> 996 token(s), using chunk length (< ctx 4096)
+main:   chunk 121 -> 418 token(s), using chunk length (< ctx 4096)
+main:   chunk 122 -> 423 token(s), using chunk length (< ctx 4096)
+main:   chunk 123 -> 510 token(s), using chunk length (< ctx 4096)
+main:   chunk 124 -> 136 token(s), using chunk length (< ctx 4096)
+main:   chunk 125 -> 112 token(s), using chunk length (< ctx 4096)
+main:   chunk 126 -> 302 token(s), using chunk length (< ctx 4096)
+main:   chunk 127 -> 129 token(s), using chunk length (< ctx 4096)
+main:   chunk 128 -> 398 token(s), using chunk length (< ctx 4096)
+main:   chunk 129 -> 138 token(s), using chunk length (< ctx 4096)
+main:   chunk 130 -> 719 token(s), using chunk length (< ctx 4096)
+main:   chunk 131 -> 330 token(s), using chunk length (< ctx 4096)
+main:   chunk 132 -> 360 token(s), using chunk length (< ctx 4096)
+main:   chunk 133 -> 383 token(s), using chunk length (< ctx 4096)
+main:   chunk 134 -> 140 token(s), using chunk length (< ctx 4096)
+main:   chunk 135 -> 285 token(s), using chunk length (< ctx 4096)
+main:   chunk 136 -> 488 token(s), using chunk length (< ctx 4096)
+main:   chunk 137 -> 238 token(s), using chunk length (< ctx 4096)
+main:   chunk 138 -> 352 token(s), using chunk length (< ctx 4096)
+main:   chunk 139 -> 1053 token(s), using chunk length (< ctx 4096)
+main:   chunk 140 -> 807 token(s), using chunk length (< ctx 4096)
+main:   chunk 141 -> 714 token(s), using chunk length (< ctx 4096)
+main:   chunk 142 -> 340 token(s), using chunk length (< ctx 4096)
+main:   chunk 143 -> 411 token(s), using chunk length (< ctx 4096)
+main:   chunk 144 -> 337 token(s), using chunk length (< ctx 4096)
+main:   chunk 145 -> 413 token(s), using chunk length (< ctx 4096)
+main:   chunk 146 -> 213 token(s), using chunk length (< ctx 4096)
+main:   chunk 147 -> 222 token(s), using chunk length (< ctx 4096)
+main:   chunk 148 -> 453 token(s), using chunk length (< ctx 4096)
+main:   chunk 149 -> 340 token(s), using chunk length (< ctx 4096)
+main:   chunk 150 -> 717 token(s), using chunk length (< ctx 4096)
+main:   chunk 151 -> 135 token(s), using chunk length (< ctx 4096)
+main:   chunk 152 -> 1042 token(s), using chunk length (< ctx 4096)
+main:   chunk 153 -> 2495 token(s), using chunk length (< ctx 4096)
+main:   chunk 154 -> 598 token(s), using chunk length (< ctx 4096)
+main:   chunk 155 -> 419 token(s), using chunk length (< ctx 4096)
+main:   chunk 156 -> 1797 token(s), using chunk length (< ctx 4096)
+main:   chunk 157 -> 622 token(s), using chunk length (< ctx 4096)
+main:   chunk 158 -> 83 token(s), using chunk length (< ctx 4096)
+main:   chunk 159 -> 552 token(s), using chunk length (< ctx 4096)
+main:   chunk 160 -> 514 token(s), using chunk length (< ctx 4096)
+main:   chunk 161 -> 873 token(s), using chunk length (< ctx 4096)
+main:   chunk 162 -> 162 token(s), using chunk length (< ctx 4096)
+main:   chunk 163 -> 619 token(s), using chunk length (< ctx 4096)
+main:   chunk 164 -> 227 token(s), using chunk length (< ctx 4096)
+main:   chunk 165 -> 94 token(s), using chunk length (< ctx 4096)
+main:   chunk 166 -> 1114 token(s), using chunk length (< ctx 4096)
+main:   chunk 167 -> 657 token(s), using chunk length (< ctx 4096)
+main:   chunk 168 -> 355 token(s), using chunk length (< ctx 4096)
+main:   chunk 169 -> 390 token(s), using chunk length (< ctx 4096)
+main:   chunk 170 -> 378 token(s), using chunk length (< ctx 4096)
+main:   chunk 171 -> 167 token(s), using chunk length (< ctx 4096)
+main:   chunk 172 -> 194 token(s), using chunk length (< ctx 4096)
+main:   chunk 173 -> 1321 token(s), using chunk length (< ctx 4096)
+main:   chunk 174 -> 135 token(s), using chunk length (< ctx 4096)
+main:   chunk 175 -> 324 token(s), using chunk length (< ctx 4096)
+main:   chunk 176 -> 567 token(s), using chunk length (< ctx 4096)
+main:   chunk 177 -> 675 token(s), using chunk length (< ctx 4096)
+main:   chunk 178 -> 171 token(s), using chunk length (< ctx 4096)
+main:   chunk 179 -> 775 token(s), using chunk length (< ctx 4096)
+main:   chunk 180 -> 626 token(s), using chunk length (< ctx 4096)
+main:   chunk 181 -> 243 token(s), using chunk length (< ctx 4096)
+main:   chunk 182 -> 255 token(s), using chunk length (< ctx 4096)
+main:   chunk 183 -> 156 token(s), using chunk length (< ctx 4096)
+main:   chunk 184 -> 1412 token(s), using chunk length (< ctx 4096)
+main:   chunk 185 -> 1528 token(s), using chunk length (< ctx 4096)
+main:   chunk 186 -> 81 token(s), using chunk length (< ctx 4096)
+main:   chunk 187 -> 148 token(s), using chunk length (< ctx 4096)
+main:   chunk 188 -> 1518 token(s), using chunk length (< ctx 4096)
+main:   chunk 189 -> 165 token(s), using chunk length (< ctx 4096)
+main:   chunk 190 -> 150 token(s), using chunk length (< ctx 4096)
+main:   chunk 191 -> 538 token(s), using chunk length (< ctx 4096)
+main:   chunk 192 -> 336 token(s), using chunk length (< ctx 4096)
+main:   chunk 193 -> 643 token(s), using chunk length (< ctx 4096)
+main:   chunk 194 -> 1679 token(s), using chunk length (< ctx 4096)
+main:   chunk 195 -> 288 token(s), using chunk length (< ctx 4096)
+main:   chunk 196 -> 983 token(s), using chunk length (< ctx 4096)
+main:   chunk 197 -> 640 token(s), using chunk length (< ctx 4096)
+main:   chunk 198 -> 271 token(s), using chunk length (< ctx 4096)
+main:   chunk 199 -> 156 token(s), using chunk length (< ctx 4096)
+main:   chunk 200 -> 700 token(s), using chunk length (< ctx 4096)
+main:   chunk 201 -> 144 token(s), using chunk length (< ctx 4096)
+main:   chunk 202 -> 280 token(s), using chunk length (< ctx 4096)
+main:   chunk 203 -> 252 token(s), using chunk length (< ctx 4096)
+main:   chunk 204 -> 2516 token(s), using chunk length (< ctx 4096)
+main:   chunk 205 -> 2675 token(s), using chunk length (< ctx 4096)
+main:   chunk 206 -> 1786 token(s), using chunk length (< ctx 4096)
+main:   chunk 207 -> 282 token(s), using chunk length (< ctx 4096)
+main:   chunk 208 -> 695 token(s), using chunk length (< ctx 4096)
+main:   chunk 209 -> 677 token(s), using chunk length (< ctx 4096)
+main:   chunk 210 -> 2496 token(s), using chunk length (< ctx 4096)
+main:   chunk 211 -> 3064 token(s), using chunk length (< ctx 4096)
+main:   chunk 212 -> 1926 token(s), using chunk length (< ctx 4096)
+main:   chunk 213 -> 1503 token(s), using chunk length (< ctx 4096)
+main:   chunk 214 -> 4291 token(s), will be truncated to 4096
+main:   chunk 215 -> 278 token(s), using chunk length (< ctx 4096)
+main:   chunk 216 -> 351 token(s), using chunk length (< ctx 4096)
+main:   chunk 217 -> 331 token(s), using chunk length (< ctx 4096)
+main:   chunk 218 -> 713 token(s), using chunk length (< ctx 4096)
+main:   chunk 219 -> 650 token(s), using chunk length (< ctx 4096)
+main:   chunk 220 -> 1197 token(s), using chunk length (< ctx 4096)
+main:   chunk 221 -> 1365 token(s), using chunk length (< ctx 4096)
+main:   chunk 222 -> 1134 token(s), using chunk length (< ctx 4096)
+main:   chunk 223 -> 433 token(s), using chunk length (< ctx 4096)
+main:   chunk 224 -> 1143 token(s), using chunk length (< ctx 4096)
+main:   chunk 225 -> 232 token(s), using chunk length (< ctx 4096)
+main:   chunk 226 -> 2455 token(s), using chunk length (< ctx 4096)
+main:   chunk 227 -> 1105 token(s), using chunk length (< ctx 4096)
+main:   chunk 228 -> 2321 token(s), using chunk length (< ctx 4096)
+main:   chunk 229 -> 402 token(s), using chunk length (< ctx 4096)
+main:   chunk 230 -> 515 token(s), using chunk length (< ctx 4096)
+main:   chunk 231 -> 226 token(s), using chunk length (< ctx 4096)
+main:   chunk 232 -> 491 token(s), using chunk length (< ctx 4096)
+main:   chunk 233 -> 1182 token(s), using chunk length (< ctx 4096)
+main:   chunk 234 -> 290 token(s), using chunk length (< ctx 4096)
+main:   chunk 235 -> 3104 token(s), using chunk length (< ctx 4096)
+main:   chunk 236 -> 2809 token(s), using chunk length (< ctx 4096)
+main:   chunk 237 -> 2443 token(s), using chunk length (< ctx 4096)
+main:   chunk 238 -> 659 token(s), using chunk length (< ctx 4096)
+main:   chunk 239 -> 577 token(s), using chunk length (< ctx 4096)
+main:   chunk 240 -> 898 token(s), using chunk length (< ctx 4096)
+main:   chunk 241 -> 226 token(s), using chunk length (< ctx 4096)
+main:   chunk 242 -> 2971 token(s), using chunk length (< ctx 4096)
+main:   chunk 243 -> 4318 token(s), will be truncated to 4096
+main:   chunk 244 -> 5641 token(s), will be truncated to 4096
+main:   chunk 245 -> 2004 token(s), using chunk length (< ctx 4096)
+main:   chunk 246 -> 1149 token(s), using chunk length (< ctx 4096)
+main:   chunk 247 -> 552 token(s), using chunk length (< ctx 4096)
+main:   chunk 248 -> 1088 token(s), using chunk length (< ctx 4096)
+main:   chunk 249 -> 1552 token(s), using chunk length (< ctx 4096)
+main:   chunk 250 -> 761 token(s), using chunk length (< ctx 4096)
+main:   chunk 251 -> 577 token(s), using chunk length (< ctx 4096)
+main:   chunk 252 -> 217 token(s), using chunk length (< ctx 4096)
+main:   chunk 253 -> 1044 token(s), using chunk length (< ctx 4096)
+main:   chunk 254 -> 1145 token(s), using chunk length (< ctx 4096)
+main:   chunk 255 -> 365 token(s), using chunk length (< ctx 4096)
+main:   chunk 256 -> 4860 token(s), will be truncated to 4096
+main:   chunk 257 -> 5028 token(s), will be truncated to 4096
+main:   chunk 258 -> 1876 token(s), using chunk length (< ctx 4096)
+main:   chunk 259 -> 440 token(s), using chunk length (< ctx 4096)
+main:   chunk 260 -> 410 token(s), using chunk length (< ctx 4096)
+main:   chunk 261 -> 6187 token(s), will be truncated to 4096
+main:   chunk 262 -> 477 token(s), using chunk length (< ctx 4096)
+main:   chunk 263 -> 994 token(s), using chunk length (< ctx 4096)
+main:   chunk 264 -> 651 token(s), using chunk length (< ctx 4096)
+main:   chunk 265 -> 5918 token(s), will be truncated to 4096
+main:   chunk 266 -> 1459 token(s), using chunk length (< ctx 4096)
+main:   chunk 267 -> 383 token(s), using chunk length (< ctx 4096)
+main:   chunk 268 -> 822 token(s), using chunk length (< ctx 4096)
+main:   chunk 269 -> 1929 token(s), using chunk length (< ctx 4096)
+main:   chunk 270 -> 4494 token(s), will be truncated to 4096
+main:   chunk 271 -> 28506 token(s), will be truncated to 4096
+main:   chunk 272 -> 2128 token(s), using chunk length (< ctx 4096)
+main:   chunk 273 -> 22820 token(s), will be truncated to 4096
+main:   chunk 274 -> 2039 token(s), using chunk length (< ctx 4096)
+main:   chunk 275 -> 1564 token(s), using chunk length (< ctx 4096)
+main:   chunk 276 -> 1275 token(s), using chunk length (< ctx 4096)
+main:   chunk 277 -> 1440 token(s), using chunk length (< ctx 4096)
+main:   chunk 278 -> 552 token(s), using chunk length (< ctx 4096)
+main:   chunk 279 -> 914 token(s), using chunk length (< ctx 4096)
+main:   chunk 280 -> 416 token(s), using chunk length (< ctx 4096)
+main:   chunk 281 -> 490 token(s), using chunk length (< ctx 4096)
+main:   chunk 282 -> 11732 token(s), will be truncated to 4096
+main:   chunk 283 -> 1115 token(s), using chunk length (< ctx 4096)
+main:   chunk 284 -> 15412 token(s), will be truncated to 4096
+main:   chunk 285 -> 3033 token(s), using chunk length (< ctx 4096)
+main:   chunk 286 -> 68240 token(s), will be truncated to 4096
+main: saving split logits to bench_kld_result.baseline.bf16.0.bin
+perplexity_tokens: processing segment with 1354 token(s), batch_size 512
+perplexity_tokens: 0.98 seconds per pass - ETA 0.00 minutes
+llm_scale_gate_inp_s: n_embd = 5376
+[1/286]19.9642,perplexity_tokens: processing segment with 498 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[2/286]20.4074,perplexity_tokens: chunk has 13472 tokens, truncating to context limit 4096
+perplexity_tokens: processing segment with 4096 token(s), batch_size 512
+perplexity_tokens: 2.60 seconds per pass - ETA 0.03 minutes
+[3/286]3.4010,perplexity_tokens: processing segment with 4042 token(s), batch_size 512
+perplexity_tokens: 2.57 seconds per pass - ETA 0.03 minutes
+[4/286]5.9671,perplexity_tokens: processing segment with 2732 token(s), batch_size 512
+perplexity_tokens: 1.77 seconds per pass - ETA 0.02 minutes
+[5/286]14.7061,perplexity_tokens: processing segment with 4037 token(s), batch_size 512
+perplexity_tokens: 2.55 seconds per pass - ETA 0.03 minutes
+[6/286]17.3013,perplexity_tokens: processing segment with 981 token(s), batch_size 512
+perplexity_tokens: 0.62 seconds per pass - ETA 0.00 minutes
+[7/286]16.5203,perplexity_tokens: processing segment with 1242 token(s), batch_size 512
+perplexity_tokens: 0.81 seconds per pass - ETA 0.00 minutes
+[8/286]16.9678,perplexity_tokens: processing segment with 1215 token(s), batch_size 512
+perplexity_tokens: 0.80 seconds per pass - ETA 0.00 minutes
+[9/286]16.7119,perplexity_tokens: processing segment with 879 token(s), batch_size 512
+perplexity_tokens: 0.57 seconds per pass - ETA 0.00 minutes
+[10/286]18.0682,perplexity_tokens: chunk has 4242 tokens, truncating to context limit 4096
+perplexity_tokens: processing segment with 4096 token(s), batch_size 512
+perplexity_tokens: 2.61 seconds per pass - ETA 0.03 minutes
+[11/286]13.5636,perplexity_tokens: chunk has 13275 tokens, truncating to context limit 4096
+perplexity_tokens: processing segment with 4096 token(s), batch_size 512
+perplexity_tokens: 2.60 seconds per pass - ETA 0.03 minutes
+[12/286]51.8281,perplexity_tokens: processing segment with 2793 token(s), batch_size 512
+perplexity_tokens: 1.81 seconds per pass - ETA 0.02 minutes
+[13/286]69.5171,perplexity_tokens: processing segment with 723 token(s), batch_size 512
+perplexity_tokens: 0.48 seconds per pass - ETA 0.00 minutes
+[14/286]72.3245,perplexity_tokens: processing segment with 1108 token(s), batch_size 512
+perplexity_tokens: 0.73 seconds per pass - ETA 0.00 minutes
+[15/286]81.6728,perplexity_tokens: processing segment with 260 token(s), batch_size 512
+perplexity_tokens: 0.09 seconds per pass - ETA 0.00 minutes
+[16/286]81.5784,perplexity_tokens: processing segment with 445 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[17/286]78.3572,perplexity_tokens: processing segment with 1110 token(s), batch_size 512
+perplexity_tokens: 0.75 seconds per pass - ETA 0.00 minutes
+[18/286]88.8872,perplexity_tokens: processing segment with 905 token(s), batch_size 512
+perplexity_tokens: 0.59 seconds per pass - ETA 0.00 minutes
+[19/286]90.8723,perplexity_tokens: processing segment with 860 token(s), batch_size 512
+perplexity_tokens: 0.57 seconds per pass - ETA 0.00 minutes
+[20/286]96.0743,perplexity_tokens: processing segment with 118 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[21/286]95.7036,perplexity_tokens: processing segment with 187 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[22/286]96.5209,perplexity_tokens: processing segment with 672 token(s), batch_size 512
+perplexity_tokens: 0.46 seconds per pass - ETA 0.00 minutes
+[23/286]99.5047,perplexity_tokens: processing segment with 925 token(s), batch_size 512
+perplexity_tokens: 0.59 seconds per pass - ETA 0.00 minutes
+[24/286]101.2857,perplexity_tokens: processing segment with 472 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[25/286]102.3248,perplexity_tokens: processing segment with 390 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[26/286]108.0971,perplexity_tokens: processing segment with 314 token(s), batch_size 512
+perplexity_tokens: 0.09 seconds per pass - ETA 0.00 minutes
+[27/286]112.4725,perplexity_tokens: processing segment with 219 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[28/286]112.1234,perplexity_tokens: processing segment with 654 token(s), batch_size 512
+perplexity_tokens: 0.46 seconds per pass - ETA 0.00 minutes
+[29/286]111.8146,perplexity_tokens: processing segment with 462 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[30/286]116.7034,perplexity_tokens: processing segment with 289 token(s), batch_size 512
+perplexity_tokens: 0.09 seconds per pass - ETA 0.00 minutes
+[31/286]117.5253,perplexity_tokens: processing segment with 420 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[32/286]118.0564,perplexity_tokens: processing segment with 316 token(s), batch_size 512
+perplexity_tokens: 0.09 seconds per pass - ETA 0.00 minutes
+[33/286]120.7126,perplexity_tokens: processing segment with 519 token(s), batch_size 512
+perplexity_tokens: 0.40 seconds per pass - ETA 0.00 minutes
+[34/286]122.9288,perplexity_tokens: processing segment with 1188 token(s), batch_size 512
+perplexity_tokens: 0.79 seconds per pass - ETA 0.00 minutes
+[35/286]137.3276,perplexity_tokens: processing segment with 367 token(s), batch_size 512
+perplexity_tokens: 0.09 seconds per pass - ETA 0.00 minutes
+[36/286]140.6687,perplexity_tokens: processing segment with 230 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[37/286]142.3153,perplexity_tokens: processing segment with 424 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[38/286]144.9494,perplexity_tokens: processing segment with 1154 token(s), batch_size 512
+perplexity_tokens: 0.77 seconds per pass - ETA 0.00 minutes
+[39/286]136.1783,perplexity_tokens: processing segment with 1415 token(s), batch_size 512
+perplexity_tokens: 0.91 seconds per pass - ETA 0.00 minutes
+[40/286]134.6798,perplexity_tokens: processing segment with 799 token(s), batch_size 512
+perplexity_tokens: 0.54 seconds per pass - ETA 0.00 minutes
+[41/286]139.6258,perplexity_tokens: processing segment with 445 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[42/286]141.5271,perplexity_tokens: processing segment with 625 token(s), batch_size 512
+perplexity_tokens: 0.44 seconds per pass - ETA 0.00 minutes
+[43/286]145.6302,perplexity_tokens: processing segment with 818 token(s), batch_size 512
+perplexity_tokens: 0.54 seconds per pass - ETA 0.00 minutes
+[44/286]149.5733,perplexity_tokens: processing segment with 397 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[45/286]151.8509,perplexity_tokens: processing segment with 2359 token(s), batch_size 512
+perplexity_tokens: 1.61 seconds per pass - ETA 0.02 minutes
+[46/286]199.3262,perplexity_tokens: processing segment with 755 token(s), batch_size 512
+perplexity_tokens: 0.48 seconds per pass - ETA 0.00 minutes
+[47/286]192.6678,perplexity_tokens: processing segment with 236 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[48/286]194.2121,perplexity_tokens: processing segment with 268 token(s), batch_size 512
+perplexity_tokens: 0.09 seconds per pass - ETA 0.00 minutes
+[49/286]195.1772,perplexity_tokens: processing segment with 106 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[50/286]194.6404,perplexity_tokens: processing segment with 182 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[51/286]196.3517,perplexity_tokens: processing segment with 844 token(s), batch_size 512
+perplexity_tokens: 0.56 seconds per pass - ETA 0.00 minutes
+[52/286]199.9069,perplexity_tokens: processing segment with 665 token(s), batch_size 512
+perplexity_tokens: 0.47 seconds per pass - ETA 0.00 minutes
+[53/286]195.6102,perplexity_tokens: processing segment with 481 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[54/286]193.9622,perplexity_tokens: processing segment with 421 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[55/286]196.2698,perplexity_tokens: processing segment with 718 token(s), batch_size 512
+perplexity_tokens: 0.49 seconds per pass - ETA 0.00 minutes
+[56/286]207.4301,perplexity_tokens: processing segment with 218 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[57/286]208.9148,perplexity_tokens: processing segment with 408 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[58/286]212.1388,perplexity_tokens: processing segment with 298 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[59/286]217.9814,perplexity_tokens: processing segment with 1826 token(s), batch_size 512
+perplexity_tokens: 1.19 seconds per pass - ETA 0.02 minutes
+[60/286]219.0077,perplexity_tokens: processing segment with 396 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[61/286]216.2016,perplexity_tokens: processing segment with 366 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[62/286]214.8911,perplexity_tokens: processing segment with 798 token(s), batch_size 512
+perplexity_tokens: 0.53 seconds per pass - ETA 0.00 minutes
+[63/286]212.1894,perplexity_tokens: processing segment with 402 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[64/286]211.9329,perplexity_tokens: processing segment with 476 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[65/286]215.5932,perplexity_tokens: processing segment with 214 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[66/286]217.3039,perplexity_tokens: processing segment with 236 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[67/286]217.1254,perplexity_tokens: processing segment with 238 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[68/286]217.3733,perplexity_tokens: chunk has 10858 tokens, truncating to context limit 4096
+perplexity_tokens: processing segment with 4096 token(s), batch_size 512
+perplexity_tokens: 2.77 seconds per pass - ETA 0.03 minutes
+[69/286]231.4704,perplexity_tokens: processing segment with 451 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[70/286]225.9919,perplexity_tokens: processing segment with 249 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[71/286]225.2436,perplexity_tokens: processing segment with 864 token(s), batch_size 512
+perplexity_tokens: 0.57 seconds per pass - ETA 0.00 minutes
+[72/286]227.3113,perplexity_tokens: processing segment with 1439 token(s), batch_size 512
+perplexity_tokens: 0.92 seconds per pass - ETA 0.00 minutes
+[73/286]224.6173,perplexity_tokens: chunk has 4249 tokens, truncating to context limit 4096
+perplexity_tokens: processing segment with 4096 token(s), batch_size 512
+perplexity_tokens: 2.63 seconds per pass - ETA 0.03 minutes
+[74/286]186.5222,perplexity_tokens: processing segment with 367 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[75/286]186.2381,perplexity_tokens: processing segment with 1000 token(s), batch_size 512
+perplexity_tokens: 0.62 seconds per pass - ETA 0.00 minutes
+[76/286]185.6154,perplexity_tokens: processing segment with 1474 token(s), batch_size 512
+perplexity_tokens: 0.93 seconds per pass - ETA 0.00 minutes
+[77/286]201.6190,perplexity_tokens: processing segment with 72 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[78/286]201.0805,perplexity_tokens: processing segment with 155 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[79/286]201.3377,perplexity_tokens: processing segment with 874 token(s), batch_size 512
+perplexity_tokens: 0.56 seconds per pass - ETA 0.00 minutes
+[80/286]211.2011,perplexity_tokens: processing segment with 109 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[81/286]210.5171,perplexity_tokens: processing segment with 53 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[82/286]210.9343,perplexity_tokens: processing segment with 830 token(s), batch_size 512
+perplexity_tokens: 0.54 seconds per pass - ETA 0.00 minutes
+[83/286]215.0305,perplexity_tokens: processing segment with 521 token(s), batch_size 512
+perplexity_tokens: 0.40 seconds per pass - ETA 0.00 minutes
+[84/286]210.2412,perplexity_tokens: processing segment with 562 token(s), batch_size 512
+perplexity_tokens: 0.41 seconds per pass - ETA 0.00 minutes
+[85/286]212.2065,perplexity_tokens: processing segment with 267 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[86/286]211.9929,perplexity_tokens: processing segment with 337 token(s), batch_size 512
+perplexity_tokens: 0.09 seconds per pass - ETA 0.00 minutes
+[87/286]210.2611,perplexity_tokens: processing segment with 1447 token(s), batch_size 512
+perplexity_tokens: 0.92 seconds per pass - ETA 0.00 minutes
+[88/286]201.5902,perplexity_tokens: processing segment with 750 token(s), batch_size 512
+perplexity_tokens: 0.49 seconds per pass - ETA 0.00 minutes
+[89/286]204.5937,perplexity_tokens: processing segment with 648 token(s), batch_size 512
+perplexity_tokens: 0.45 seconds per pass - ETA 0.00 minutes
+[90/286]206.6327,perplexity_tokens: processing segment with 2915 token(s), batch_size 512
+perplexity_tokens: 1.87 seconds per pass - ETA 0.02 minutes
+[91/286]228.3935,perplexity_tokens: processing segment with 137 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[92/286]227.0296,perplexity_tokens: processing segment with 236 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[93/286]226.1311,perplexity_tokens: processing segment with 309 token(s), batch_size 512
+perplexity_tokens: 0.09 seconds per pass - ETA 0.00 minutes
+[94/286]226.0798,perplexity_tokens: processing segment with 174 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[95/286]225.4346,perplexity_tokens: processing segment with 258 token(s), batch_size 512
+perplexity_tokens: 0.09 seconds per pass - ETA 0.00 minutes
+[96/286]225.7883,perplexity_tokens: chunk has 5842 tokens, truncating to context limit 4096
+perplexity_tokens: processing segment with 4096 token(s), batch_size 512
+perplexity_tokens: 2.67 seconds per pass - ETA 0.03 minutes
+[97/286]276.9610,perplexity_tokens: processing segment with 561 token(s), batch_size 512
+perplexity_tokens: 0.44 seconds per pass - ETA 0.00 minutes
+[98/286]287.5900,perplexity_tokens: processing segment with 493 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[99/286]291.4148,perplexity_tokens: processing segment with 619 token(s), batch_size 512
+perplexity_tokens: 0.44 seconds per pass - ETA 0.00 minutes
+[100/286]294.7997,perplexity_tokens: processing segment with 1049 token(s), batch_size 512
+perplexity_tokens: 0.73 seconds per pass - ETA 0.00 minutes
+[101/286]314.1074,perplexity_tokens: processing segment with 278 token(s), batch_size 512
+perplexity_tokens: 0.09 seconds per pass - ETA 0.00 minutes
+[102/286]314.7162,perplexity_tokens: processing segment with 705 token(s), batch_size 512
+perplexity_tokens: 0.48 seconds per pass - ETA 0.00 minutes
+[103/286]322.3016,perplexity_tokens: processing segment with 361 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[104/286]324.4799,perplexity_tokens: processing segment with 1658 token(s), batch_size 512
+perplexity_tokens: 1.09 seconds per pass - ETA 0.02 minutes
+[105/286]341.5560,perplexity_tokens: processing segment with 202 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[106/286]342.1479,perplexity_tokens: processing segment with 444 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[107/286]344.6525,perplexity_tokens: processing segment with 162 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[108/286]344.5990,perplexity_tokens: processing segment with 172 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[109/286]345.3806,perplexity_tokens: processing segment with 331 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[110/286]349.3047,perplexity_tokens: processing segment with 479 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[111/286]354.4948,perplexity_tokens: processing segment with 122 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[112/286]356.3718,perplexity_tokens: processing segment with 319 token(s), batch_size 512
+perplexity_tokens: 0.09 seconds per pass - ETA 0.00 minutes
+[113/286]356.3126,perplexity_tokens: processing segment with 433 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[114/286]355.9278,perplexity_tokens: processing segment with 436 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[115/286]357.0176,perplexity_tokens: processing segment with 271 token(s), batch_size 512
+perplexity_tokens: 0.09 seconds per pass - ETA 0.00 minutes
+[116/286]359.1522,perplexity_tokens: processing segment with 109 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[117/286]359.0007,perplexity_tokens: processing segment with 85 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[118/286]359.0259,perplexity_tokens: processing segment with 654 token(s), batch_size 512
+perplexity_tokens: 0.46 seconds per pass - ETA 0.00 minutes
+[119/286]359.9738,perplexity_tokens: processing segment with 996 token(s), batch_size 512
+perplexity_tokens: 0.63 seconds per pass - ETA 0.00 minutes
+[120/286]375.7041,perplexity_tokens: processing segment with 418 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[121/286]378.8865,perplexity_tokens: processing segment with 423 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[122/286]383.6922,perplexity_tokens: processing segment with 510 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[123/286]387.3065,perplexity_tokens: processing segment with 136 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[124/286]387.4199,perplexity_tokens: processing segment with 112 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[125/286]388.5873,perplexity_tokens: processing segment with 302 token(s), batch_size 512
+perplexity_tokens: 0.09 seconds per pass - ETA 0.00 minutes
+[126/286]388.2038,perplexity_tokens: processing segment with 129 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[127/286]389.3964,perplexity_tokens: processing segment with 398 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[128/286]394.2003,perplexity_tokens: processing segment with 138 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[129/286]394.5192,perplexity_tokens: processing segment with 719 token(s), batch_size 512
+perplexity_tokens: 0.48 seconds per pass - ETA 0.00 minutes
+[130/286]407.0066,perplexity_tokens: processing segment with 330 token(s), batch_size 512
+perplexity_tokens: 0.09 seconds per pass - ETA 0.00 minutes
+[131/286]410.1222,perplexity_tokens: processing segment with 360 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[132/286]412.6950,perplexity_tokens: processing segment with 383 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[133/286]414.0335,perplexity_tokens: processing segment with 140 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[134/286]416.2956,perplexity_tokens: processing segment with 285 token(s), batch_size 512
+perplexity_tokens: 0.09 seconds per pass - ETA 0.00 minutes
+[135/286]418.0553,perplexity_tokens: processing segment with 488 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[136/286]419.7135,perplexity_tokens: processing segment with 238 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[137/286]421.8484,perplexity_tokens: processing segment with 352 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[138/286]422.5707,perplexity_tokens: processing segment with 1053 token(s), batch_size 512
+perplexity_tokens: 0.73 seconds per pass - ETA 0.00 minutes
+[139/286]436.9945,perplexity_tokens: processing segment with 807 token(s), batch_size 512
+perplexity_tokens: 0.54 seconds per pass - ETA 0.00 minutes
+[140/286]443.3125,perplexity_tokens: processing segment with 714 token(s), batch_size 512
+perplexity_tokens: 0.49 seconds per pass - ETA 0.00 minutes
+[141/286]445.6957,perplexity_tokens: processing segment with 340 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[142/286]443.7780,perplexity_tokens: processing segment with 411 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[143/286]446.9950,perplexity_tokens: processing segment with 337 token(s), batch_size 512
+perplexity_tokens: 0.09 seconds per pass - ETA 0.00 minutes
+[144/286]450.5048,perplexity_tokens: processing segment with 413 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[145/286]454.0187,perplexity_tokens: processing segment with 213 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[146/286]454.3156,perplexity_tokens: processing segment with 222 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[147/286]454.6513,perplexity_tokens: processing segment with 453 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[148/286]460.3673,perplexity_tokens: processing segment with 340 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[149/286]463.7426,perplexity_tokens: processing segment with 717 token(s), batch_size 512
+perplexity_tokens: 0.51 seconds per pass - ETA 0.00 minutes
+[150/286]466.6055,perplexity_tokens: processing segment with 135 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[151/286]467.4546,perplexity_tokens: processing segment with 1042 token(s), batch_size 512
+perplexity_tokens: 0.75 seconds per pass - ETA 0.00 minutes
+[152/286]468.6514,perplexity_tokens: processing segment with 2495 token(s), batch_size 512
+perplexity_tokens: 1.67 seconds per pass - ETA 0.02 minutes
+[153/286]497.7628,perplexity_tokens: processing segment with 598 token(s), batch_size 512
+perplexity_tokens: 0.47 seconds per pass - ETA 0.00 minutes
+[154/286]498.6712,perplexity_tokens: processing segment with 419 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[155/286]504.8507,perplexity_tokens: processing segment with 1797 token(s), batch_size 512
+perplexity_tokens: 1.17 seconds per pass - ETA 0.02 minutes
+[156/286]517.3417,perplexity_tokens: processing segment with 622 token(s), batch_size 512
+perplexity_tokens: 0.45 seconds per pass - ETA 0.00 minutes
+[157/286]523.2844,perplexity_tokens: processing segment with 83 token(s), batch_size 512
+perplexity_tokens: 0.06 seconds per pass - ETA 0.00 minutes
+[158/286]523.6429,perplexity_tokens: processing segment with 552 token(s), batch_size 512
+perplexity_tokens: 0.41 seconds per pass - ETA 0.00 minutes
+[159/286]531.3999,perplexity_tokens: processing segment with 514 token(s), batch_size 512
+perplexity_tokens: 0.40 seconds per pass - ETA 0.00 minutes
+[160/286]535.5018,perplexity_tokens: processing segment with 873 token(s), batch_size 512
+perplexity_tokens: 0.57 seconds per pass - ETA 0.00 minutes
+[161/286]544.8866,perplexity_tokens: processing segment with 162 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[162/286]544.8292,perplexity_tokens: processing segment with 619 token(s), batch_size 512
+perplexity_tokens: 0.44 seconds per pass - ETA 0.00 minutes
+[163/286]553.2245,perplexity_tokens: processing segment with 227 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[164/286]555.6124,perplexity_tokens: processing segment with 94 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[165/286]555.9752,perplexity_tokens: processing segment with 1114 token(s), batch_size 512
+perplexity_tokens: 0.75 seconds per pass - ETA 0.00 minutes
+[166/286]576.9489,perplexity_tokens: processing segment with 657 token(s), batch_size 512
+perplexity_tokens: 0.46 seconds per pass - ETA 0.00 minutes
+[167/286]581.5698,perplexity_tokens: processing segment with 355 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[168/286]579.8092,perplexity_tokens: processing segment with 390 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[169/286]587.5254,perplexity_tokens: processing segment with 378 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[170/286]587.9799,perplexity_tokens: processing segment with 167 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[171/286]588.0505,perplexity_tokens: processing segment with 194 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[172/286]585.7865,perplexity_tokens: processing segment with 1321 token(s), batch_size 512
+perplexity_tokens: 0.89 seconds per pass - ETA 0.00 minutes
+[173/286]602.3634,perplexity_tokens: processing segment with 135 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[174/286]599.7741,perplexity_tokens: processing segment with 324 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[175/286]600.7690,perplexity_tokens: processing segment with 567 token(s), batch_size 512
+perplexity_tokens: 0.41 seconds per pass - ETA 0.00 minutes
+[176/286]608.8028,perplexity_tokens: processing segment with 675 token(s), batch_size 512
+perplexity_tokens: 0.46 seconds per pass - ETA 0.00 minutes
+[177/286]613.5728,perplexity_tokens: processing segment with 171 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[178/286]612.8421,perplexity_tokens: processing segment with 775 token(s), batch_size 512
+perplexity_tokens: 0.52 seconds per pass - ETA 0.00 minutes
+[179/286]622.3212,perplexity_tokens: processing segment with 626 token(s), batch_size 512
+perplexity_tokens: 0.45 seconds per pass - ETA 0.00 minutes
+[180/286]631.3289,perplexity_tokens: processing segment with 243 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[181/286]633.0151,perplexity_tokens: processing segment with 255 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[182/286]636.0849,perplexity_tokens: processing segment with 156 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[183/286]637.4250,perplexity_tokens: processing segment with 1412 token(s), batch_size 512
+perplexity_tokens: 0.95 seconds per pass - ETA 0.00 minutes
+[184/286]654.4306,perplexity_tokens: processing segment with 1528 token(s), batch_size 512
+perplexity_tokens: 1.00 seconds per pass - ETA 0.02 minutes
+[185/286]670.9223,perplexity_tokens: processing segment with 81 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[186/286]670.0064,perplexity_tokens: processing segment with 148 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[187/286]670.7727,perplexity_tokens: processing segment with 1518 token(s), batch_size 512
+perplexity_tokens: 0.95 seconds per pass - ETA 0.00 minutes
+[188/286]684.6895,perplexity_tokens: processing segment with 165 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[189/286]685.1960,perplexity_tokens: processing segment with 150 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[190/286]685.9151,perplexity_tokens: processing segment with 538 token(s), batch_size 512
+perplexity_tokens: 0.41 seconds per pass - ETA 0.00 minutes
+[191/286]684.3472,perplexity_tokens: processing segment with 336 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[192/286]682.8920,perplexity_tokens: processing segment with 643 token(s), batch_size 512
+perplexity_tokens: 0.45 seconds per pass - ETA 0.00 minutes
+[193/286]681.8080,perplexity_tokens: processing segment with 1679 token(s), batch_size 512
+perplexity_tokens: 1.12 seconds per pass - ETA 0.02 minutes
+[194/286]686.5081,perplexity_tokens: processing segment with 288 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[195/286]688.3109,perplexity_tokens: processing segment with 983 token(s), batch_size 512
+perplexity_tokens: 0.63 seconds per pass - ETA 0.00 minutes
+[196/286]695.3734,perplexity_tokens: processing segment with 640 token(s), batch_size 512
+perplexity_tokens: 0.44 seconds per pass - ETA 0.00 minutes
+[197/286]701.1515,perplexity_tokens: processing segment with 271 token(s), batch_size 512
+perplexity_tokens: 0.09 seconds per pass - ETA 0.00 minutes
+[198/286]702.3842,perplexity_tokens: processing segment with 156 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[199/286]703.1277,perplexity_tokens: processing segment with 700 token(s), batch_size 512
+perplexity_tokens: 0.47 seconds per pass - ETA 0.00 minutes
+[200/286]713.1245,perplexity_tokens: processing segment with 144 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[201/286]715.6360,perplexity_tokens: processing segment with 280 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[202/286]714.9970,perplexity_tokens: processing segment with 252 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[203/286]718.2708,perplexity_tokens: processing segment with 2516 token(s), batch_size 512
+perplexity_tokens: 1.67 seconds per pass - ETA 0.02 minutes
+[204/286]704.8183,perplexity_tokens: processing segment with 2675 token(s), batch_size 512
+perplexity_tokens: 1.82 seconds per pass - ETA 0.02 minutes
+[205/286]724.2360,perplexity_tokens: processing segment with 1786 token(s), batch_size 512
+perplexity_tokens: 1.16 seconds per pass - ETA 0.02 minutes
+[206/286]754.4234,perplexity_tokens: processing segment with 282 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[207/286]754.4691,perplexity_tokens: processing segment with 695 token(s), batch_size 512
+perplexity_tokens: 0.47 seconds per pass - ETA 0.00 minutes
+[208/286]745.8256,perplexity_tokens: processing segment with 677 token(s), batch_size 512
+perplexity_tokens: 0.45 seconds per pass - ETA 0.00 minutes
+[209/286]748.0894,perplexity_tokens: processing segment with 2496 token(s), batch_size 512
+perplexity_tokens: 1.59 seconds per pass - ETA 0.02 minutes
+[210/286]750.4530,perplexity_tokens: processing segment with 3064 token(s), batch_size 512
+perplexity_tokens: 1.97 seconds per pass - ETA 0.02 minutes
+[211/286]825.0510,perplexity_tokens: processing segment with 1926 token(s), batch_size 512
+perplexity_tokens: 1.28 seconds per pass - ETA 0.02 minutes
+[212/286]831.8184,perplexity_tokens: processing segment with 1503 token(s), batch_size 512
+perplexity_tokens: 0.96 seconds per pass - ETA 0.00 minutes
+[213/286]817.8467,perplexity_tokens: chunk has 4291 tokens, truncating to context limit 4096
+perplexity_tokens: processing segment with 4096 token(s), batch_size 512
+perplexity_tokens: 2.67 seconds per pass - ETA 0.03 minutes
+[214/286]855.6613,perplexity_tokens: processing segment with 278 token(s), batch_size 512
+perplexity_tokens: 0.09 seconds per pass - ETA 0.00 minutes
+[215/286]852.7561,perplexity_tokens: processing segment with 351 token(s), batch_size 512
+perplexity_tokens: 0.12 seconds per pass - ETA 0.00 minutes
+[216/286]847.2676,perplexity_tokens: processing segment with 331 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[217/286]842.1093,perplexity_tokens: processing segment with 713 token(s), batch_size 512
+perplexity_tokens: 0.48 seconds per pass - ETA 0.00 minutes
+[218/286]826.0426,perplexity_tokens: processing segment with 650 token(s), batch_size 512
+perplexity_tokens: 0.45 seconds per pass - ETA 0.00 minutes
+[219/286]807.8161,perplexity_tokens: processing segment with 1197 token(s), batch_size 512
+perplexity_tokens: 0.79 seconds per pass - ETA 0.00 minutes
+[220/286]785.8076,perplexity_tokens: processing segment with 1365 token(s), batch_size 512
+perplexity_tokens: 0.89 seconds per pass - ETA 0.00 minutes
+[221/286]756.7233,perplexity_tokens: processing segment with 1134 token(s), batch_size 512
+perplexity_tokens: 0.76 seconds per pass - ETA 0.00 minutes
+[222/286]744.3666,perplexity_tokens: processing segment with 433 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[223/286]740.8660,perplexity_tokens: processing segment with 1143 token(s), batch_size 512
+perplexity_tokens: 0.76 seconds per pass - ETA 0.00 minutes
+[224/286]719.9376,perplexity_tokens: processing segment with 232 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[225/286]717.8668,perplexity_tokens: processing segment with 2455 token(s), batch_size 512
+perplexity_tokens: 1.58 seconds per pass - ETA 0.02 minutes
+[226/286]685.5751,perplexity_tokens: processing segment with 1105 token(s), batch_size 512
+perplexity_tokens: 0.75 seconds per pass - ETA 0.00 minutes
+[227/286]668.9316,perplexity_tokens: processing segment with 2321 token(s), batch_size 512
+perplexity_tokens: 1.49 seconds per pass - ETA 0.02 minutes
+[228/286]654.6634,perplexity_tokens: processing segment with 402 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[229/286]652.6250,perplexity_tokens: processing segment with 515 token(s), batch_size 512
+perplexity_tokens: 0.39 seconds per pass - ETA 0.00 minutes
+[230/286]650.4687,perplexity_tokens: processing segment with 226 token(s), batch_size 512
+perplexity_tokens: 0.07 seconds per pass - ETA 0.00 minutes
+[231/286]649.0458,perplexity_tokens: processing segment with 491 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[232/286]641.6768,perplexity_tokens: processing segment with 1182 token(s), batch_size 512
+perplexity_tokens: 0.79 seconds per pass - ETA 0.00 minutes
+[233/286]622.7245,perplexity_tokens: processing segment with 290 token(s), batch_size 512
+perplexity_tokens: 0.09 seconds per pass - ETA 0.00 minutes
+[234/286]619.9660,perplexity_tokens: processing segment with 3104 token(s), batch_size 512
+perplexity_tokens: 2.10 seconds per pass - ETA 0.03 minutes
+[235/286]567.1075,perplexity_tokens: processing segment with 2809 token(s), batch_size 512
+perplexity_tokens: 1.89 seconds per pass - ETA 0.02 minutes
+[236/286]544.2030,perplexity_tokens: processing segment with 2443 token(s), batch_size 512
+perplexity_tokens: 1.58 seconds per pass - ETA 0.02 minutes
+[237/286]512.4100,perplexity_tokens: processing segment with 659 token(s), batch_size 512
+perplexity_tokens: 0.47 seconds per pass - ETA 0.00 minutes
+[238/286]503.1065,perplexity_tokens: processing segment with 577 token(s), batch_size 512
+perplexity_tokens: 0.42 seconds per pass - ETA 0.00 minutes
+[239/286]496.2295,perplexity_tokens: processing segment with 898 token(s), batch_size 512
+perplexity_tokens: 0.58 seconds per pass - ETA 0.00 minutes
+[240/286]486.0396,perplexity_tokens: processing segment with 226 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[241/286]483.4028,perplexity_tokens: processing segment with 2971 token(s), batch_size 512
+perplexity_tokens: 1.93 seconds per pass - ETA 0.02 minutes
+[242/286]448.5825,perplexity_tokens: chunk has 4318 tokens, truncating to context limit 4096
+perplexity_tokens: processing segment with 4096 token(s), batch_size 512
+perplexity_tokens: 2.71 seconds per pass - ETA 0.03 minutes
+[243/286]432.0385,perplexity_tokens: chunk has 5641 tokens, truncating to context limit 4096
+perplexity_tokens: processing segment with 4096 token(s), batch_size 512
+perplexity_tokens: 2.63 seconds per pass - ETA 0.03 minutes
+[244/286]392.3621,perplexity_tokens: processing segment with 2004 token(s), batch_size 512
+perplexity_tokens: 1.29 seconds per pass - ETA 0.02 minutes
+[245/286]379.0555,perplexity_tokens: processing segment with 1149 token(s), batch_size 512
+perplexity_tokens: 0.74 seconds per pass - ETA 0.00 minutes
+[246/286]372.6752,perplexity_tokens: processing segment with 552 token(s), batch_size 512
+perplexity_tokens: 0.41 seconds per pass - ETA 0.00 minutes
+[247/286]373.7909,perplexity_tokens: processing segment with 1088 token(s), batch_size 512
+perplexity_tokens: 0.74 seconds per pass - ETA 0.00 minutes
+[248/286]369.6671,perplexity_tokens: processing segment with 1552 token(s), batch_size 512
+perplexity_tokens: 1.04 seconds per pass - ETA 0.02 minutes
+[249/286]356.3764,perplexity_tokens: processing segment with 761 token(s), batch_size 512
+perplexity_tokens: 0.50 seconds per pass - ETA 0.00 minutes
+[250/286]350.9993,perplexity_tokens: processing segment with 577 token(s), batch_size 512
+perplexity_tokens: 0.42 seconds per pass - ETA 0.00 minutes
+[251/286]347.4005,perplexity_tokens: processing segment with 217 token(s), batch_size 512
+perplexity_tokens: 0.08 seconds per pass - ETA 0.00 minutes
+[252/286]345.9766,perplexity_tokens: processing segment with 1044 token(s), batch_size 512
+perplexity_tokens: 0.72 seconds per pass - ETA 0.00 minutes
+[253/286]339.3613,perplexity_tokens: processing segment with 1145 token(s), batch_size 512
+perplexity_tokens: 0.76 seconds per pass - ETA 0.00 minutes
+[254/286]332.1637,perplexity_tokens: processing segment with 365 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[255/286]329.8559,perplexity_tokens: chunk has 4860 tokens, truncating to context limit 4096
+perplexity_tokens: processing segment with 4096 token(s), batch_size 512
+perplexity_tokens: 2.73 seconds per pass - ETA 0.03 minutes
+[256/286]299.8577,perplexity_tokens: chunk has 5028 tokens, truncating to context limit 4096
+perplexity_tokens: processing segment with 4096 token(s), batch_size 512
+perplexity_tokens: 2.70 seconds per pass - ETA 0.03 minutes
+[257/286]280.7516,perplexity_tokens: processing segment with 1876 token(s), batch_size 512
+perplexity_tokens: 1.25 seconds per pass - ETA 0.02 minutes
+[258/286]273.7263,perplexity_tokens: processing segment with 440 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[259/286]271.4886,perplexity_tokens: processing segment with 410 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[260/286]270.8025,perplexity_tokens: chunk has 6187 tokens, truncating to context limit 4096
+perplexity_tokens: processing segment with 4096 token(s), batch_size 512
+perplexity_tokens: 2.59 seconds per pass - ETA 0.03 minutes
+[261/286]248.3588,perplexity_tokens: processing segment with 477 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[262/286]246.4928,perplexity_tokens: processing segment with 994 token(s), batch_size 512
+perplexity_tokens: 0.63 seconds per pass - ETA 0.00 minutes
+[263/286]242.4836,perplexity_tokens: processing segment with 651 token(s), batch_size 512
+perplexity_tokens: 0.45 seconds per pass - ETA 0.00 minutes
+[264/286]239.7166,perplexity_tokens: chunk has 5918 tokens, truncating to context limit 4096
+perplexity_tokens: processing segment with 4096 token(s), batch_size 512
+perplexity_tokens: 2.61 seconds per pass - ETA 0.03 minutes
+[265/286]229.0214,perplexity_tokens: processing segment with 1459 token(s), batch_size 512
+perplexity_tokens: 0.93 seconds per pass - ETA 0.00 minutes
+[266/286]225.1268,perplexity_tokens: processing segment with 383 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[267/286]223.8004,perplexity_tokens: processing segment with 822 token(s), batch_size 512
+perplexity_tokens: 0.54 seconds per pass - ETA 0.00 minutes
+[268/286]220.8469,perplexity_tokens: processing segment with 1929 token(s), batch_size 512
+perplexity_tokens: 1.23 seconds per pass - ETA 0.02 minutes
+[269/286]215.3692,perplexity_tokens: chunk has 4494 tokens, truncating to context limit 4096
+perplexity_tokens: processing segment with 4096 token(s), batch_size 512
+perplexity_tokens: 2.61 seconds per pass - ETA 0.03 minutes
+[270/286]215.5897,perplexity_tokens: chunk has 28506 tokens, truncating to context limit 4096
+perplexity_tokens: processing segment with 4096 token(s), batch_size 512
+perplexity_tokens: 2.64 seconds per pass - ETA 0.03 minutes
+[271/286]219.7605,perplexity_tokens: processing segment with 2128 token(s), batch_size 512
+perplexity_tokens: 1.45 seconds per pass - ETA 0.02 minutes
+[272/286]238.7703,perplexity_tokens: chunk has 22820 tokens, truncating to context limit 4096
+perplexity_tokens: processing segment with 4096 token(s), batch_size 512
+perplexity_tokens: 2.62 seconds per pass - ETA 0.03 minutes
+[273/286]262.0827,perplexity_tokens: processing segment with 2039 token(s), batch_size 512
+perplexity_tokens: 1.33 seconds per pass - ETA 0.02 minutes
+[274/286]256.5337,perplexity_tokens: processing segment with 1564 token(s), batch_size 512
+perplexity_tokens: 1.05 seconds per pass - ETA 0.02 minutes
+[275/286]259.0883,perplexity_tokens: processing segment with 1275 token(s), batch_size 512
+perplexity_tokens: 0.82 seconds per pass - ETA 0.00 minutes
+[276/286]259.4842,perplexity_tokens: processing segment with 1440 token(s), batch_size 512
+perplexity_tokens: 0.92 seconds per pass - ETA 0.00 minutes
+[277/286]262.5943,perplexity_tokens: processing segment with 552 token(s), batch_size 512
+perplexity_tokens: 0.41 seconds per pass - ETA 0.00 minutes
+[278/286]263.3628,perplexity_tokens: processing segment with 914 token(s), batch_size 512
+perplexity_tokens: 0.59 seconds per pass - ETA 0.00 minutes
+[279/286]264.1272,perplexity_tokens: processing segment with 416 token(s), batch_size 512
+perplexity_tokens: 0.10 seconds per pass - ETA 0.00 minutes
+[280/286]263.3683,perplexity_tokens: processing segment with 490 token(s), batch_size 512
+perplexity_tokens: 0.11 seconds per pass - ETA 0.00 minutes
+[281/286]262.7650,perplexity_tokens: chunk has 11732 tokens, truncating to context limit 4096
+perplexity_tokens: processing segment with 4096 token(s), batch_size 512
+perplexity_tokens: 2.68 seconds per pass - ETA 0.03 minutes
+[282/286]269.9530,perplexity_tokens: processing segment with 1115 token(s), batch_size 512
+perplexity_tokens: 0.81 seconds per pass - ETA 0.00 minutes
+[283/286]268.3438,perplexity_tokens: chunk has 15412 tokens, truncating to context limit 4096
+perplexity_tokens: processing segment with 4096 token(s), batch_size 512
+perplexity_tokens: 2.62 seconds per pass - ETA 0.03 minutes
+[284/286]277.6979,perplexity_tokens: processing segment with 3033 token(s), batch_size 512
+perplexity_tokens: 1.92 seconds per pass - ETA 0.02 minutes
+[285/286]276.3354,perplexity_tokens: chunk has 68240 tokens, truncating to context limit 4096
+perplexity_tokens: processing segment with 4096 token(s), batch_size 512
+perplexity_tokens: 2.62 seconds per pass - ETA 0.03 minutes
+[286/286]261.9999,
+llama_print_timings:        load time =   18667.26 ms
+llama_print_timings:      sample time =       0.00 ms /     1 runs   (    0.00 ms per token,      inf tokens per second)
+llama_print_timings: prompt eval time =  118136.33 ms / 282685 tokens (    0.42 ms per token,  2392.87 tokens per second)
+llama_print_timings:        eval time =       0.00 ms /     1 runs   (    0.00 ms per token,      inf tokens per second)
+llama_print_timings:       total time =  341208.34 ms / 282686 tokens
+~ggml_backend_cuda_context: have 1 graphs
+
+Final estimate: PPL = 261.9999 +/- 4.67957
