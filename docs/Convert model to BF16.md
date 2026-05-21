@@ -109,14 +109,15 @@ python convert_hf_to_gguf.py \
      --outtype bf16 \
      --outfile /"$WORKING_DIRECTORY"/"$MODEL"-"${MAINTAINER^^}"-BF16-SPECIAL_SPLIT/model_name \
      --no-tensor-first-split --split-max-tensors 1 \
+     --no-mtp \
      /"$WORKING_DIRECTORY"/huggingface/"$MODEL" 
 cd /"$WORKING_DIRECTORY"/"$MODEL"-"${MAINTAINER^^}"-BF16-SPECIAL_SPLIT && \
 for f in $(ls); do mv -f $f $(echo $f | sed "s/model_name/$MODEL-${MAINTAINER^^}-BF16-SPECIAL_TENSOR/g"); done
 ```
 
-Once conversion is done, you can safely remove the `$MODEL` from the `huggingface` directory.
+Once conversion is done, you can safely remove the `$MODEL` from the `huggingface` directory unless you plan to produce the mtp or mmproj GGUFs.
 
-_Note: Some models will require more steps. You'll need to dig into github/reddit/hf._
+_Note: Some models will require more steps. You'll need to dig into github/reddit/hf. It is preferable to produce the mtp tensors separately (for models that support mtp); similarly to mmproj you will find how to produce the mtp GGUF in the optional section at the bottom of this guide._
 
 _Important: You may also be required to add your model to `convert_hf_to_gguf_update.py` and execute this script if you see a message that states `WARNING: The BPE pre-tokenizer was not recognized!`. If that's the case, you can refer to the instructions provided at https://github.com/ggml-org/llama.cpp/discussions/7927._
 
@@ -226,3 +227,49 @@ export PATH="$WORKING_DIRECTORY"/GGUF-Tool-Suite/helpers/:$PATH && \
 cd "$WORKING_DIRECTORY" && \
 for q in $(ls -l */tensors.map | sed "s/.*-${MAINTAINER^^}-//g" | cut -d'-' -f1); do cd "$WORKING_DIRECTORY" && d="${MODEL}-THIREUS-${q^^}-SPECIAL_SPLIT" && ls "$d"/*.sig >/dev/null 2>&1 && echo "Skipping $d: .sig files found — run prepare_model.sh -p $d manually to replace signatures" || prepare_model.sh -p "$d"; done
 ```
+
+## (optional) Produce the `mtp` BF16 GGUF
+
+Extract the `mtp` tensors from the model and produce the mtp-only BF16 GGUF:
+
+```
+cd "$WORKING_DIRECTORY"
+mkdir -p /"$WORKING_DIRECTORY"/mtp-"$MODEL"-"${MAINTAINER^^}"-BF16-SPECIAL_SPLIT
+# Activate env
+source venv/bin/activate && \
+cd llama.cpp && \
+ulimit -n 9999 || sudo ulimit -n 9999 || echo "Warning: Could not increase file descriptor limit (ulimit -n). The model may fail to load on Linux/macOS." && \
+python convert_hf_to_gguf.py \
+     --outtype bf16 \
+     --outfile /"$WORKING_DIRECTORY"/mtp-"$MODEL"-"${MAINTAINER^^}"-BF16-SPECIAL_SPLIT/mtp-model_name \
+     --no-tensor-first-split --split-max-tensors 1 \
+     --mtp \
+     /"$WORKING_DIRECTORY"/huggingface/"$MODEL" 
+cd /"$WORKING_DIRECTORY"/mtp-"$MODEL"-"${MAINTAINER^^}"-BF16-SPECIAL_SPLIT && \
+for f in $(ls); do mv -f $f $(echo $f | sed "s/mtp-model_name/mtp-$MODEL-${MAINTAINER^^}-BF16-SPECIAL_TENSOR/g"); done
+```
+
+Once conversion is done, I recommend to follow the `Produce tensors.map` steps. The imatrix steps are not applicable to `mtp`.
+
+## (optional) Produce the `mproj` BF16 GGUF
+
+Extract the `mmproj` tensors from the model and produce the mmproj-only BF16 GGUF:
+
+```
+cd "$WORKING_DIRECTORY"
+mkdir -p /"$WORKING_DIRECTORY"/mmproj-"$MODEL"-"${MAINTAINER^^}"-BF16-SPECIAL_SPLIT
+# Activate env
+source venv/bin/activate && \
+cd llama.cpp && \
+ulimit -n 9999 || sudo ulimit -n 9999 || echo "Warning: Could not increase file descriptor limit (ulimit -n). The model may fail to load on Linux/macOS." && \
+python convert_hf_to_gguf.py \
+     --outtype bf16 \
+     --outfile /"$WORKING_DIRECTORY"/mmproj-"$MODEL"-"${MAINTAINER^^}"-BF16-SPECIAL_SPLIT/mmproj-model_name \
+     --no-tensor-first-split --split-max-tensors 1 \
+     --mmproj \
+     /"$WORKING_DIRECTORY"/huggingface/"$MODEL" 
+cd /"$WORKING_DIRECTORY"/mmproj-"$MODEL"-"${MAINTAINER^^}"-BF16-SPECIAL_SPLIT && \
+for f in $(ls); do mv -f $f $(echo $f | sed "s/mmproj-model_name/mmproj-$MODEL-${MAINTAINER^^}-BF16-SPECIAL_TENSOR/g"); done
+```
+
+Once conversion is done, I recommend to follow the `Produce tensors.map` steps. The imatrix steps are not applicable to `mmproj`.

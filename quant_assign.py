@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: May-03-2026 -------------------- **#
+#** --------------- Updated: May-05-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -2282,7 +2282,7 @@ def main():
     parser.add_argument('--per-tensor-degradation-scaling', type=float, default=None,
                         help='Exponent for scaling group degradation values per tensor based on its loss relative to the mean. Only valid when greedy quant assign method is used. '
                             '0 = disabled. Higher values protect highly sensitive tensors more strongly. '
-                            'Recommended range 0.5 - 2.0. Default (disabled when parameter isn\'t set): 0.0')
+                            'Recommended range 0.0 - 0.5. Default (disabled when parameter isn\'t set): 0.0')
     parser.add_argument('--synergistic-tensors', nargs='+', default=[["blk\\..*\\.ffn_up_exps.*","blk\\..*\\.ffn_gate_exps.*","blk\\..*\\.ffn_down_exps.*"]],
                         help=('A Python literal list-of-lists of regex patterns. Each inner list defines tensors that '
                             'exhibit synergistic effects and should have their loss adjusted together. '
@@ -3537,7 +3537,7 @@ def main():
         print(f"# - Hidden parameters (not passed as CLI args):")
         if not args.exponential_factor:
             print(f"#   Exponential factor: {exp_factor_final:.8f}".rstrip('0').rstrip('.'))
-        if not args.per_tensor_degradation_scaling:
+        if not args.per_tensor_degradation_scaling and per_tensor_degradation_scaling_final != 0.0:
             print(f"#   Per tensor degradation scaling exponent: {per_tensor_degradation_scaling_final:.8f}".rstrip('0').rstrip('.'))
 
     # Wrap the command into lines starting with "# "

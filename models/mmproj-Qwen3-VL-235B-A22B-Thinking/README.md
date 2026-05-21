@@ -6,7 +6,7 @@ license: mit
 
 ## 🤔 What is this [HuggingFace repository](https://huggingface.co/Thireus/mmproj-Qwen3-VL-235B-A22B-Thinking-THIREUS-BF16-SPECIAL_SPLIT/) about?
 
-This repository provides **GGUF-quantized tensors** for the [mmproj](https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal.md) version of the mmproj-Qwen3-VL-235B-A22B-Thinking model (official repo: https://huggingface.co/Qwen/Qwen3-VL-235B-A22B-Thinking). These GGUF shards are designed to be used with **Thireus’ GGUF Tool Suite** (https://github.com/Thireus/GGUF-Tool-Suite), a collection of tools that automatically finds the perplexity-optimal mix of quantizations for any given a model size target. With this GGUF Tool Suite, you can produce your own Dynamic 3.0 Quants recipes and achieve optimum accuracy & SOTA quantization performance. Give it a try here: https://gguf.thireus.com/quant_assign.html  
+This repository provides **GGUF-quantized tensors** for the [mmproj](https://github.com/ggml-org/llama.cpp/blob/master/docs/multimodal.md) layer(s) of the Qwen3-VL-235B-A22B-Thinking model (official repo: https://huggingface.co/Qwen/Qwen3-VL-235B-A22B-Thinking). These GGUF shards are designed to be used with **Thireus’ GGUF Tool Suite** (https://github.com/Thireus/GGUF-Tool-Suite), a collection of tools that automatically finds the perplexity-optimal mix of quantizations for any given a model size target. With this GGUF Tool Suite, you can produce your own Dynamic 3.0 Quants recipes and achieve optimum accuracy & SOTA quantization performance. Give it a try here: https://gguf.thireus.com/quant_assign.html  
 
 - 📖 Documentation: https://github.com/Thireus/GGUF-Tool-Suite/tree/main/docs
 - 🔍 Example of GGUF recipes: https://github.com/Thireus/GGUF-Tool-Suite/tree/main/recipe_examples  
@@ -48,7 +48,8 @@ mkdir -p kitchen && cd kitchen
 # Launch ik_llama's llama-cli:
 ulimit -n 9999 # Lifts "too many open files" limitation on Linux
 ~/ik_llama.cpp/build/bin/llama-cli \
-  -m mmproj-Qwen3-VL-235B-A22B-Thinking-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01132.gguf \
+  -m Qwen3-VL-235B-A22B-Thinking-THIREUS-BF16-SPECIAL_TENSOR-00001-of-*.gguf \
+  --mmproj mmproj-Qwen3-VL-235B-A22B-Thinking-THIREUS-BF16-SPECIAL_TENSOR-00001-of-*.gguf \
   -mla 3 -fa auto -amb 512 -ctk f16 -c 4096 -ngl 99 \
   -ot "blk\.(3|4|5|6)\.ffn_.*=CUDA0" \
   -ot "blk\.(7|8|9|10)\.ffn_.*=CUDA1" \
