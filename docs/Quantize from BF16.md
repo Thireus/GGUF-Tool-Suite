@@ -163,7 +163,7 @@ Quantize the model to the chosen `$QTYPE`:
 ```
 cd "$WORKING_DIRECTORY" && \
 export PATH="$WORKING_DIRECTORY"/GGUF-Tool-Suite/:$PATH && \
-export PATH=~/AI/ik_llama.cpp_indiv/build/bin/:$PATH && \
+export PATH="$WORKING_DIRECTORY"/ik_llama.cpp_indiv/build/bin/:$PATH && \
 mkdir ${MODEL}-${MAINTAINER}-${QTYPE^^}-SPECIAL_SPLIT && \
 quantize_model.sh --imatrix "$IMATRIX" --model "$MODEL" --qtype "$QTYPE" --destination-dir "${MODEL}-${MAINTAINER}-${QTYPE^^}-SPECIAL_SPLIT"
 ```
