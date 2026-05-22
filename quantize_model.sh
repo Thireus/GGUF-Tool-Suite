@@ -5,7 +5,7 @@
 #** repositories from Thireus' special BF16 sharded model.    **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Apr-23-2026 -------------------- **#
+#** --------------- Updated: May-22-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -33,6 +33,7 @@ MODEL=""
 MAINTAINER="THIREUS" # BF16 repo maintainer
 LLAMA_QUANTIZE_BIN="llama-quantize"
 IMATRIX_FILE="imatrix_ubergarm.dat"
+USE_IMATRIX=1           # 1 = use imatrix, 0 = skip (--no-imatrix)
 # ------------------ USER CONFIG ------------------
 
 # --- BPW lookup table for GGUF quant dtypes ---
@@ -302,6 +303,7 @@ Options:
   --maintainer NAME            Maintainer tag used in repo names (default: THIREUS)
   --llama-quantize PATH        Thireus's special llama-quantize binary to use (default: llama-quantize)
   --imatrix PATH               Imatrix file to use (default: imatrix_ubergarm.dat)
+  --no-imatrix                 Do not use importance matrix during quantization
   --source-dir PATH            Directory containing BF16 source shards
                                (default: <MODEL>-<MAINTAINER>-BF16-SPECIAL_SPLIT)
   --destination-dir PATH       Directory where quantized shards are written
@@ -554,7 +556,12 @@ print_summary() {
   echo "Model: $MODEL"
   echo "Target dtype: $TARGET_QTYPE"
   echo "Fallback pool: $FALLBACK_POOL_LABEL"
-  echo "Imatrix file: $IMATRIX_FILE"
+  if (( USE_IMATRIX )); then
+    echo "Imatrix mode: enabled"
+    echo "Imatrix file: $IMATRIX_FILE"
+  else
+    echo "Imatrix mode: disabled"
+  fi
   echo "Output directory: $TARGET_DIR"
   if (( USE_INDIVIDUAL_TENSORS )); then
     echo "Shard mode: individual tensors"
@@ -638,6 +645,10 @@ while [[ $# -gt 0 ]]; do
       fi
       IMATRIX_FILE="$2"
       shift 2
+      ;;
+    --no-imatrix)
+      USE_IMATRIX=0
+      shift
       ;;
     --source-dir)
       if [[ ${2-} == "" || ${2-} == --* ]]; then
@@ -1029,8 +1040,14 @@ for i in "${SHARD_IDS_TO_PROCESS[@]}"; do
     attempt_start_ts=$(date +%s)
     echo "▶ Shard $i/$CHUNKS_TOTAL: trying ${current_qtype} (attempt $shard_attempts)"
 
+    # Build imatrix arguments only when enabled
+    imatrix_args=()
+    if (( USE_IMATRIX )); then
+      imatrix_args+=( --imatrix "$IMATRIX_FILE" )
+    fi
+
     if "$LLAMA_QUANTIZE_BIN" $skip_first_shard --keep-split --pure \
-        --imatrix "$IMATRIX_FILE" \
+        "${imatrix_args[@]}" \
         --ignore-imatrix-rules \
         --individual-tensors "$i" \
         "$SOURCE_FIRST_SHARD" \
