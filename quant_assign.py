@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: May-05-2026 -------------------- **#
+#** --------------- Updated: May-24-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -748,9 +748,12 @@ def compute_map_for_qtype(qtype: str) -> bool:
             print(f"[Debug] Running: {' '.join(shlex.quote(c) for c in cmd)}", file=sys.stderr)
 
     try:
-        # Run convert script; it should write tensors.<qtype>.map into same dir as bf16_map_path
+        # Run convert script; it should write tensors.<qtype>.map into same dir as bf16_map_path.
+        # convert_map_qtype.py writes its progress to stdout, but quant_assign.py
+        # uses stdout for the recipe (commonly piped into quants_regex_merger.py),
+        # so redirect convert_map_qtype.py's stdout to our stderr instead.
         if DEBUG or INFO:
-            subprocess.run(cmd, check=True)
+            subprocess.run(cmd, check=True, stdout=sys.stderr.fileno())
         else:
             subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except subprocess.CalledProcessError as e:
@@ -839,8 +842,13 @@ def fetch_map_for_qtype(qtype: str):
                 if INFO:
                     print(f"[Info] Exception while computing {qtype} map: {e}", file=sys.stderr)
         else:
+            # tensor_downloader.sh writes its progress messages to stdout, but
+            # quant_assign.py uses stdout for the recipe itself (which is
+            # commonly piped into quants_regex_merger.py). Redirect the
+            # downloader's stdout to OUR stderr so its log lines join the
+            # other [Info]/[Debug] log instead of polluting the recipe.
             if DEBUG or INFO:
-                subprocess.run(cmd, check=True)
+                subprocess.run(cmd, check=True, stdout=sys.stderr.fileno())
             else:
                 subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if INFO: print(f"[Info] Saved map to {local_map}", file=sys.stderr)
@@ -850,7 +858,7 @@ def fetch_map_for_qtype(qtype: str):
                 if INFO: print(f"[Info] Fetching map gpg signature for {qtype}...", file=sys.stderr)
                 try:
                     if DEBUG or INFO:
-                        subprocess.run(cmd_sig, check=True)
+                        subprocess.run(cmd_sig, check=True, stdout=sys.stderr.fileno())
                     else:
                         subprocess.run(cmd_sig, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                     if DEBUG: print(f"[Debug] Saved map gpg signature to {local_map}.sig", file=sys.stderr)
@@ -1638,6 +1646,978 @@ def greedy_quant_assign(
     return assignment, total_size
 
 
+def rank_quant_assign(
+    tensors: Iterable[str],
+    tensor_sizes: Dict[str, Dict[str, int]],
+    ppl_loss: Dict[str, float],
+    degradation_fn: Callable[[str, str], float],
+    tensor_quants: Optional[Dict[str, List[str]]],
+    budget_bytes: int,
+    *,
+    preassign_missing_ppl: bool = True,
+    debug: bool = False,
+    harmonized_groups: Optional[List[List[str]]] = None,
+    loss_exponent: float = 1.0,
+    deg_exponent: float = 1.0,
+    auto_sweep: bool = True,
+    synergistic_groups: Optional[List[List[str]]] = None,
+    synergy_strength: float = 0.0,
+    zero_kld_threshold: float = 0.0,
+    tolerance: float = 0.0,
+    extra_outlier_qtypes: Optional[List[str]] = None,
+    pareto_filter: bool = True,
+    chosen_params_out: Optional[Dict[str, float]] = None,
+) -> Tuple[Dict[str, str], int]:
+    """
+    Rank-preserving "shrinking-pool" quant assignment.
+
+    Algorithm overview:
+      1. Tensors whose sensitivity (kld) is ≤ zero_kld_threshold are treated as
+         unused outliers and assigned the qtype that yields the smallest size for
+         that tensor (drawn from the union of allowed qtypes and the user-provided
+         extra_outlier_qtypes — typically the cpu/gpu --*-assign-qtype defaults).
+      2. The remaining tensors are sorted by sensitivity (descending) and a
+         rank-based mapping is applied that projects the sensitivity rank onto
+         the available qtype pool (sorted by degradation ascending — best first).
+         The most-sensitive tensor maps to the best qtype, the least-sensitive to
+         the worst qtype, and intermediate tensors are distributed according to
+         their unique-rank position.
+      3. Iterative pool narrowing:
+           Phase A — while size > budget, trim the best qtype from the pool
+                     (forcing all tensors down a slot) and re-map.
+           Phase B — while size ≤ budget, try to trim the worst qtype from the
+                     pool (lifting the least-sensitive tensors up); accept the
+                     change only if size stays ≤ budget, otherwise revert.
+         Repeat A then B alternately until no further change can shrink the
+         pool while satisfying the budget.
+      4. Phase C — promote individual tensors from smallest-current-size first,
+         while preserving rank monotonicity (a less-sensitive tensor never ends
+         up with a strictly better qtype than a more-sensitive one).
+    """
+    # --- Step 0: Copy/normalize inputs to avoid mutating caller data
+    tensors = list(tensors)
+    tensor_quants = tensor_quants or {}
+    extra_outlier_qtypes = list(extra_outlier_qtypes or [])
+
+    # --- Step 1: Build per-tensor allowed-qtype map (sorted best→worst by degradation)
+    allowed_map: Dict[str, List[str]] = {}
+    for t in tensors:
+        if tensor_quants and t in tensor_quants and tensor_quants[t]:
+            allowed = list(tensor_quants[t])
+        else:
+            allowed = list(tensor_sizes.get(t, {}).keys())
+        # Keep only qtypes that have a known size for this tensor.
+        allowed = [q for q in allowed if q in tensor_sizes.get(t, {})]
+        if not allowed:
+            raise ValueError(f"No usable qtypes for tensor '{t}'.")
+        # Sort by degradation ascending — index 0 is best (lowest degradation).
+        def _deg_key(q, _t=t):
+            try:
+                v = degradation_fn(_t, q)
+            except Exception:
+                v = None
+            return v if v is not None else float('inf')
+        allowed.sort(key=_deg_key)
+        allowed_map[t] = allowed
+
+    # Per-tensor "outlier qtype candidates": union of allowed_map[t] and the
+    # extra_outlier_qtypes the caller passed (e.g. --gpu/--cpu-assign-qtype). We
+    # only use those qtypes when sizes are actually known for this tensor.
+    outlier_qtypes_for_tensor: Dict[str, List[str]] = {}
+    for t in tensors:
+        cand = list(dict.fromkeys(allowed_map[t] + list(extra_outlier_qtypes)))
+        cand = [q for q in cand if q in tensor_sizes.get(t, {})]
+        outlier_qtypes_for_tensor[t] = cand
+
+    # --- Step 2: Apply synergistic adjustment to RAW loss values
+    # (we don't pre-apply the loss exponent — it's applied inside the score
+    # function instead, so that the auto-sweep can vary it without re-running
+    # the whole pipeline; rank-mapping and outlier detection are exponent-
+    # invariant since they operate on the relative order, not the magnitude.)
+    ppl_loss_raw: Dict[str, float] = {t: float(v) if v is not None else 0.0 for t, v in ppl_loss.items()}
+    if synergistic_groups and synergy_strength > 0.0:
+        if debug:
+            print(f"[RANK] applying synergistic adjustment (strength={synergy_strength}) to raw loss values", file=sys.stderr)
+        ppl_loss_raw = adjust_losses_with_synergy(
+            synergistic_groups=synergistic_groups,
+            loss=ppl_loss_raw,
+            tensor_sizes=tensor_sizes,
+            strength=synergy_strength
+        )
+
+    # --- Step 4: Harmonization — merge tensors into virtual group entities
+    group_defs: Dict[str, List[str]] = {}
+    if harmonized_groups:
+        for i, group in enumerate(harmonized_groups):
+            members = []
+            for pat in group:
+                for t in tensors:
+                    if t == pat and t not in members:
+                        members.append(t)
+            if members:
+                gid = f"HARM_GROUP_{i}"
+                group_defs[gid] = members
+
+    merged = False
+    group_map: Dict[str, str] = {}
+    if group_defs:
+        merged = True
+        merged_tensor_sizes: Dict[str, Dict[str, int]] = {}
+        merged_ppl_loss: Dict[str, float] = {}
+        merged_allowed_map: Dict[str, List[str]] = {}
+        merged_outlier_qtypes: Dict[str, List[str]] = {}
+
+        for gid, members in group_defs.items():
+            qs_sets = [set(allowed_map[m]) for m in members]
+            common_qs = set.intersection(*qs_sets) if qs_sets else set()
+            if not common_qs:
+                common_qs = set().union(*qs_sets)
+            qlist = [q for q in common_qs
+                     if all(q in tensor_sizes.get(m, {}) for m in members)]
+            if not qlist:
+                raise ValueError(f"Unable to find compatible quants for harmonized group {gid} members {members}")
+
+            merged_tensor_sizes[gid] = {q: sum(int(tensor_sizes[m][q]) for m in members) for q in qlist}
+            merged_ppl_loss[gid] = sum(ppl_loss_raw.get(m, 0.0) for m in members)
+
+            def _gdeg_key(q, _members=members):
+                try:
+                    v = degradation_fn(_members[0], q)
+                except Exception:
+                    v = None
+                return v if v is not None else float('inf')
+            qlist_sorted = sorted(qlist, key=_gdeg_key)
+            merged_allowed_map[gid] = qlist_sorted
+
+            outlier_cand = list(dict.fromkeys(qlist_sorted + list(extra_outlier_qtypes)))
+            outlier_cand = [q for q in outlier_cand if q in merged_tensor_sizes[gid]]
+            merged_outlier_qtypes[gid] = outlier_cand
+
+            for m in members:
+                group_map[m] = gid
+
+        for t in tensors:
+            if t not in group_map:
+                merged_tensor_sizes[t] = tensor_sizes[t].copy()
+                merged_ppl_loss[t] = ppl_loss_raw.get(t, 0.0)
+                merged_allowed_map[t] = allowed_map[t][:]
+                merged_outlier_qtypes[t] = outlier_qtypes_for_tensor[t][:]
+
+        # Replace working views with merged views
+        tensor_sizes_w = merged_tensor_sizes
+        ppl_loss_w = merged_ppl_loss
+        allowed_map_w = merged_allowed_map
+        outlier_qtypes_w = merged_outlier_qtypes
+        tensors_w = list(tensor_sizes_w.keys())
+    else:
+        tensor_sizes_w = tensor_sizes
+        ppl_loss_w = ppl_loss_raw
+        allowed_map_w = allowed_map
+        outlier_qtypes_w = outlier_qtypes_for_tensor
+        tensors_w = tensors
+
+    # --- Step 5: Categorize tensors
+    #     - outlier (zero / near-zero kld) -> minimum-size qtype
+    #     - preassigned (missing kld) -> best qtype, exempted from later passes
+    #     - sortable -> normal rank mapping
+    outlier_tensors = set()
+    preassigned = set()
+    for t in tensors_w:
+        if t not in ppl_loss_w:
+            if preassign_missing_ppl:
+                preassigned.add(t)
+            continue
+        if ppl_loss_w[t] <= zero_kld_threshold:
+            outlier_tensors.add(t)
+
+    assignment: Dict[str, str] = {}
+
+    # Outlier (kld≈0) tensors -> qtype that yields the smallest size for that tensor,
+    # picked from a candidate list that includes the user-provided assign-qtypes too.
+    for t in outlier_tensors:
+        candidates = outlier_qtypes_w.get(t) or allowed_map_w[t]
+        smallest_q = min(candidates, key=lambda q: tensor_sizes_w[t][q])
+        assignment[t] = smallest_q
+        if debug:
+            print(
+                f"[RANK] outlier (kld≤{zero_kld_threshold}) {t} -> {smallest_q} "
+                f"(size={tensor_sizes_w[t][smallest_q]/GIB:.4f} GiB; picked from {candidates})",
+                file=sys.stderr,
+            )
+
+    # Pre-assigned (no ppl data) -> best qtype in allowed list
+    for t in preassigned:
+        assignment[t] = allowed_map_w[t][0]
+        if debug:
+            print(f"[RANK] preassigning {t} -> {allowed_map_w[t][0]} (missing ppl_loss)", file=sys.stderr)
+
+    sortable = [t for t in tensors_w if t not in outlier_tensors and t not in preassigned]
+
+    def compute_total(curr_assignment: Dict[str, str]) -> int:
+        total = 0
+        for t in tensors_w:
+            q = curr_assignment.get(t)
+            if q is None:
+                # safety: fall back to best allowed
+                q = allowed_map_w[t][0]
+                curr_assignment[t] = q
+            total += int(tensor_sizes_w[t][q])
+        return total
+
+    if not sortable:
+        total_size = compute_total(assignment)
+        # Expand harmonized groups
+        if merged:
+            expanded: Dict[str, str] = {}
+            for gid, members in group_defs.items():
+                q = assignment.get(gid)
+                if q is None:
+                    continue
+                for m in members:
+                    expanded[m] = q
+            for t in tensors_w:
+                if t in group_defs:
+                    continue
+                if t.startswith("HARM_GROUP_"):
+                    continue
+                expanded[t] = assignment.get(t, allowed_map_w[t][0])
+            return expanded, total_size
+        return assignment, total_size
+
+    # Sort sortable tensors by sensitivity DESCENDING (most-sensitive first).
+    sortable.sort(key=lambda t: -ppl_loss_w[t])
+
+    # --- Step 6: Build global qtype pool (union of allowed qtypes across sortable)
+    global_pool_set = set()
+    for t in sortable:
+        global_pool_set.update(allowed_map_w[t])
+
+    # Sort pool by degradation ascending (best first). Use any tensor that
+    # legitimately has the qtype in its allowed list to obtain the degradation
+    # value (per-tensor degradation can differ when per-tensor scaling is in use,
+    # but the *order* is what matters here).
+    def _pool_sort_key(q):
+        for tt in sortable:
+            if q in allowed_map_w[tt]:
+                try:
+                    v = degradation_fn(tt, q)
+                except Exception:
+                    v = None
+                if v is not None:
+                    return v
+        return float('inf')
+
+    global_pool = sorted(global_pool_set, key=_pool_sort_key)
+
+    # --- Pareto frontier filtering (per-tensor) ---
+    # Rationale: a qtype q is "dominated" for tensor t if there exists another
+    # qtype q' (also in t's allowed list) such that BOTH size_t(q') ≤ size_t(q)
+    # AND deg_t(q') ≤ deg_t(q) (with at least one strict). A dominated qtype is
+    # never preferable — it costs more bytes AND yields more degradation than
+    # some alternative. Removing dominated qtypes from each tensor's allowed
+    # list lets the rank-mapping step focus on truly meaningful tradeoffs.
+    #
+    # We also rebuild the global_pool after filtering: a qtype that is
+    # dominated for every tensor disappears entirely. (Per-tensor dominance is
+    # preserved because map-file fallbacks can make a qtype non-dominated for
+    # *some* tensors while being dominated for others.)
+    #
+    # Related: a Lagrangian relaxation on (deg, size) — i.e. find the optimum
+    # of Σ loss·deg + λ·size for some λ — would, for each tensor, only ever
+    # select a qtype on this same Pareto frontier. So filtering up-front is the
+    # correct preconditioner and is essentially free.
+    if pareto_filter:
+        if debug:
+            print("[RANK] Applying per-tensor Pareto-frontier filter to allowed qtypes...", file=sys.stderr)
+        total_removed = 0
+        dropped_qtype_counter: Counter = Counter()
+        for t in list(allowed_map_w.keys()):
+            allowed = allowed_map_w[t]
+            if len(allowed) <= 1:
+                continue
+            sd: List[Tuple[str, int, float]] = []
+            for q in allowed:
+                size_t = int(tensor_sizes_w[t].get(q, 0))
+                try:
+                    d = degradation_fn(t, q)
+                except Exception:
+                    d = None
+                d_val = float(d) if d is not None else float('inf')
+                sd.append((q, size_t, d_val))
+            # Sort by size ascending (ties broken by deg ascending — smaller is better)
+            sd.sort(key=lambda x: (x[1], x[2]))
+            kept: List[str] = []
+            min_deg = float('inf')
+            for q, _sz, d in sd:
+                # A qtype is on the frontier iff its degradation is strictly
+                # better than the minimum so far (among smaller-or-equal sizes).
+                if d < min_deg:
+                    kept.append(q)
+                    min_deg = d
+            # Restore the original allowed-list ordering (sorted by degradation ascending),
+            # but only retain Pareto-kept qtypes.
+            kept_set = set(kept)
+            new_allowed = [q for q in allowed if q in kept_set]
+            removed = len(allowed) - len(new_allowed)
+            total_removed += removed
+            for q in allowed:
+                if q not in kept_set:
+                    dropped_qtype_counter[q] += 1
+            allowed_map_w[t] = new_allowed
+            outlier_qtypes_w[t] = [q for q in outlier_qtypes_w[t] if q in tensor_sizes_w[t]]
+        if debug and total_removed:
+            top_dropped = ", ".join(f"{q}×{c}" for q, c in dropped_qtype_counter.most_common(10))
+            print(
+                f"[RANK] Pareto filter removed {total_removed} (tensor,qtype) allowed-list entries; "
+                f"most-dropped qtypes: {top_dropped}",
+                file=sys.stderr,
+            )
+
+        # Rebuild global_pool from filtered allowed lists.
+        global_pool_set = set()
+        for t in sortable:
+            global_pool_set.update(allowed_map_w[t])
+        global_pool = sorted(global_pool_set, key=_pool_sort_key)
+        if debug:
+            print(f"[RANK] Pareto-filtered global pool ({len(global_pool)} qtypes): {global_pool}", file=sys.stderr)
+
+    # Build sens-rank lookup using unique sens values (ties get the same rank,
+    # which means tensors with identical sensitivity map to the same qtype).
+    sens_vals_sorted = sorted({ppl_loss_w[t] for t in sortable}, reverse=True)
+    sens_to_rank: Dict[float, int] = {s: i for i, s in enumerate(sens_vals_sorted)}
+    L = len(sens_vals_sorted)
+
+    def rank_map(pool: List[str]) -> Dict[str, str]:
+        K = len(pool)
+        if K == 0:
+            return {}
+        out: Dict[str, str] = {}
+        for t in sortable:
+            rank = sens_to_rank[ppl_loss_w[t]]
+            if L == 1:
+                p_t = 0.0
+            else:
+                p_t = rank / (L - 1)  # 0 = most sens, 1 = least sens
+            # Map rank position to pool index. Use round-half-down so ties prefer
+            # the *better* qtype (lower index in the pool).
+            ideal = p_t * (K - 1)
+            idx = int(math.floor(ideal + 0.5 - 1e-9))
+            if idx < 0:
+                idx = 0
+            elif idx > K - 1:
+                idx = K - 1
+            target_q = pool[idx]
+            allowed_t = allowed_map_w[t]
+            if target_q in allowed_t:
+                out[t] = target_q
+            else:
+                # Closest allowed by pool-position
+                best_q = allowed_t[0]
+                best_diff = float('inf')
+                for q in allowed_t:
+                    if q in pool:
+                        q_idx = pool.index(q)
+                        diff = abs(q_idx - idx)
+                        if diff < best_diff:
+                            best_diff = diff
+                            best_q = q
+                out[t] = best_q
+        return out
+
+    # --- Step 7: Initial mapping with the full pool
+    current_pool = list(global_pool)
+    initial_mapping = rank_map(current_pool)
+    assignment.update(initial_mapping)
+    total_size = compute_total(assignment)
+
+    if debug:
+        print(f"[RANK] initial pool ({len(current_pool)} qtypes): {current_pool}", file=sys.stderr)
+        print(f"[RANK] initial total_size = {total_size/GIB:.3f} GiB; budget = {budget_bytes/GIB:.3f} GiB", file=sys.stderr)
+
+    # Helper: snapshot assignment for sortable tensors only (outliers/preassigned
+    # stay put across phases).
+    def apply_mapping(mapping: Dict[str, str]) -> Dict[str, str]:
+        a = dict(assignment)
+        a.update(mapping)
+        return a
+
+    # Score function — parameterised by (p, q):
+    #   score(assignment) = Σ_t loss_t^p · deg_t(q_t)^q
+    # The loss exponent p amplifies the contribution of high-sensitivity
+    # tensors so they get protected (large p ⇒ outlier preservation wins). The
+    # degradation exponent q amplifies the *badness* of low-quality qtypes so
+    # tensors at iq1_s/iq1_m get penalised even when their loss is small
+    # (large q ⇒ the floor of the recipe is lifted, no tensor lands at a
+    # disastrously high-deg qtype). The two exponents are auto-tuned by the
+    # outer sweep; advanced users can override via --exponential-factor /
+    # --deg-exponent.
+    def _make_score_fn(p: float, q: float) -> Callable[[Dict[str, str]], float]:
+        def fn(curr_assignment: Dict[str, str]) -> float:
+            s = 0.0
+            for t in tensors_w:
+                qt = curr_assignment.get(t)
+                if qt is None:
+                    continue
+                try:
+                    d = degradation_fn(t, qt)
+                except Exception:
+                    d = None
+                if d is None:
+                    continue
+                loss = ppl_loss_w.get(t, 0.0)
+                try:
+                    loss_p = float(loss) ** float(p)
+                except Exception:
+                    loss_p = float(loss) if loss is not None else 0.0
+                try:
+                    deg_q = float(d) ** float(q)
+                except Exception:
+                    deg_q = float(d) if d is not None else 0.0
+                s += loss_p * deg_q
+            return s
+        return fn
+
+    # Meta-score for the auto-sweep — lexicographic on (max_deg, outlier_loss_deg, sum_deg)
+    # where:
+    #   - max_deg = the worst (highest-deg) qtype any tensor ends up at. This
+    #     captures the user's primary priority: "lift the floor", i.e. no
+    #     tensor should land at a disastrously-high-deg qtype like iq1_s.
+    #   - outlier_loss_deg = Σ (loss · deg) over the detected high-sens
+    #     outliers. Once max_deg is fixed, prefer the assignment that gives
+    #     the most-sensitive tensors the best available qtype.
+    #   - sum_deg = Σ deg, used purely as a tiebreaker to favour narrow
+    #     distributions of qtypes when both above are equal.
+    # Lower is better on every key.
+    def _meta_score(curr_assignment: Dict[str, str]) -> Tuple[float, float, float]:
+        max_d = 0.0
+        outlier_ld = 0.0
+        sum_d = 0.0
+        for t in tensors_w:
+            qt = curr_assignment.get(t)
+            if qt is None:
+                continue
+            try:
+                d = degradation_fn(t, qt)
+            except Exception:
+                d = None
+            if d is None:
+                continue
+            d = float(d)
+            sum_d += d
+            if d > max_d:
+                max_d = d
+            if t in high_outliers_set:
+                loss = ppl_loss_w.get(t, 0.0)
+                outlier_ld += float(loss) * d
+        return (max_d, outlier_ld, sum_d)
+
+    # --- Step 7b: Detect *high-sensitivity outliers* — tensors whose loss is
+    # so much larger than the rest that a uniform rank-mapping would under-rate
+    # them (they end up wherever the window's best qtype is, which can still be
+    # too low when the budget forces a narrow window). For each window we'll
+    # explore, an outlier is allowed to *decouple* from the rank mapping and
+    # pick any qtype in its allowed list that's at least as good as the window's
+    # best qtype (preserving rank monotonicity). This matches the intuition
+    # behind hand-tuned recipes that lift the embedding/output tensors above
+    # the rest.
+    #
+    # Detection: standard IQR on the *raw* ppl_loss values (not exponent-scaled
+    # — otherwise the detection becomes unstable with --exponential-factor),
+    # with a conservative multiplier (k=3) AND a minimum-gap requirement (the
+    # outlier's loss must be at least 1.5× the max non-outlier loss). This
+    # avoids flagging mildly-above-Q3 tensors.
+    high_outliers: List[str] = []
+    if len(sortable) >= 4:
+        # Raw loss values (before exponent / synergy adjustments) for stable
+        # outlier detection independent of the score's loss exponent.
+        raw_loss = {t: float(ppl_loss.get(t, 0.0)) for t in sortable}
+        sens_sorted_asc = sorted(raw_loss.values())
+        n_ss = len(sens_sorted_asc)
+        q1_idx = max(0, n_ss // 4)
+        q3_idx = min(n_ss - 1, (3 * n_ss) // 4)
+        q1_v = sens_sorted_asc[q1_idx]
+        q3_v = sens_sorted_asc[q3_idx]
+        iqr_v = q3_v - q1_v
+        upper_bound = q3_v + 3.0 * iqr_v
+        candidate_outliers = [t for t in sortable if raw_loss[t] > upper_bound]
+        # Require a gap: outlier's loss must be ≥ 1.5× the highest non-outlier loss.
+        non_outlier_max = max(
+            (raw_loss[t] for t in sortable if t not in candidate_outliers),
+            default=0.0,
+        )
+        for t in candidate_outliers:
+            if non_outlier_max <= 0 or raw_loss[t] >= 1.5 * non_outlier_max:
+                high_outliers.append(t)
+        # Sort outliers by raw sens descending (most-extreme first).
+        high_outliers.sort(key=lambda t: -raw_loss[t])
+        # Cap to a small number to keep the inner search cheap.
+        if len(high_outliers) > 3:
+            if debug:
+                print(
+                    f"[RANK] Detected {len(high_outliers)} high-sens outliers; "
+                    f"keeping top-3 for decoupled assignment: {high_outliers[:3]}",
+                    file=sys.stderr,
+                )
+            high_outliers = high_outliers[:3]
+        elif debug and high_outliers:
+            print(f"[RANK] Detected high-sens outliers: {high_outliers}", file=sys.stderr)
+
+    # Rank-mapping should also place outliers (they're still part of sortable),
+    # but at brute-force time we override their assignment with a decoupled
+    # choice. Build a "non-outlier sortable" view for the score's tie-breaking.
+    high_outliers_set = set(high_outliers)
+
+    # --- Step 8: Brute-force search over (best_idx, worst_idx) windows
+    #     We enumerate every contiguous sub-window of global_pool, build the
+    #     rank-mapped assignment for that window, compute total size, and keep
+    #     the one with the lowest aggregated degradation score among windows
+    #     that satisfy the budget.
+    #
+    #     Outliers are *decoupled*: for each window, each outlier independently
+    #     picks the qtype in its allowed list that minimizes its contribution
+    #     to the score while still fitting the remaining budget and satisfying
+    #     rank monotonicity (outlier's deg ≤ window-best's deg).
+    #
+    #     Complexity per (p,q): O(K^2 * (N + O*K)) — cheap. The outer auto-
+    #     sweep below evaluates a handful of (p,q) pairs and picks the one
+    #     whose chosen assignment minimises the L∞ meta-score.
+    K_full = len(global_pool)
+
+    # Pre-compute window-pool first qtype's degradation for the outlier ceiling.
+    # We use the most "deg-permissive" tensor as the reference (first in
+    # global_pool order).
+    def _pool_first_deg(pool_q: str) -> float:
+        for tt in sortable:
+            if pool_q in allowed_map_w[tt]:
+                try:
+                    v = degradation_fn(tt, pool_q)
+                except Exception:
+                    v = None
+                if v is not None:
+                    return float(v)
+        return float('inf')
+
+    # Pre-compute outlier allowed lists sorted by actual degradation (best→worst).
+    outlier_allowed: Dict[str, List[Tuple[str, float, int]]] = {}
+    for ot in high_outliers:
+        rows: List[Tuple[str, float, int]] = []
+        for q in allowed_map_w[ot]:
+            try:
+                d = degradation_fn(ot, q)
+            except Exception:
+                d = None
+            sz = int(tensor_sizes_w[ot].get(q, 0))
+            rows.append((q, float(d) if d is not None else float('inf'), sz))
+        rows.sort(key=lambda r: r[1])
+        outlier_allowed[ot] = rows
+
+    # --- Window enumeration is independent of (p, q): rank_map, outlier
+    # override, and per-tensor sizes do NOT depend on the loss/deg exponents.
+    # So we compute (assignment, total) once per window and then iterate the
+    # (p, q) grid over these cached results. This makes the inner sweep ~free,
+    # which is what lets us use a fine (p, q) grid (steps of 0.1) without
+    # blowing up the runtime.
+    window_data: List[Tuple[Tuple[int, int], Dict[str, str], int]] = []
+    fallback_assignment: Optional[Dict[str, str]] = None
+    fallback_total: int = -1
+    for best_idx in range(K_full):
+        for worst_idx in range(best_idx, K_full):
+            pool_subset = global_pool[best_idx:worst_idx + 1]
+            mapping = rank_map(pool_subset)
+            cand_assignment = apply_mapping(mapping)
+            base_total = compute_total(cand_assignment)
+
+            # Outlier decoupling — independent of (p, q).
+            if high_outliers:
+                window_first_deg = _pool_first_deg(pool_subset[0])
+                outlier_current_size = sum(
+                    int(tensor_sizes_w[ot][cand_assignment[ot]]) for ot in high_outliers
+                )
+                non_outlier_size = base_total - outlier_current_size
+                running_total = non_outlier_size
+                for ot in high_outliers:
+                    chosen_q: Optional[str] = None
+                    for q_, d_, sz_ in outlier_allowed[ot]:
+                        if d_ > window_first_deg:
+                            continue
+                        if running_total + sz_ <= budget_bytes:
+                            chosen_q = q_
+                            running_total += sz_
+                            break
+                    if chosen_q is None:
+                        chosen_q = cand_assignment[ot]
+                        running_total += int(tensor_sizes_w[ot][chosen_q])
+                    cand_assignment[ot] = chosen_q
+                cand_total = running_total
+            else:
+                cand_total = base_total
+
+            # Track smallest-size candidate as fallback for impossible budgets.
+            if fallback_assignment is None or cand_total < fallback_total:
+                fallback_assignment = dict(cand_assignment)
+                fallback_total = cand_total
+
+            window_data.append(((best_idx, worst_idx), cand_assignment, cand_total))
+
+    # Restrict to in-budget windows for the (p, q) sweep. If none fit, the
+    # fallback assignment is used.
+    feasible_windows = [(w, a, t_) for (w, a, t_) in window_data if t_ <= budget_bytes]
+
+    def _pick_best_for(score_fn: Callable[[Dict[str, str]], float]):
+        best_a, best_t, best_s, best_w = None, -1, float('inf'), (0, K_full - 1)
+        for w, a, t_ in feasible_windows:
+            s = score_fn(a)
+            if s < best_s:
+                best_s = s
+                best_t = t_
+                best_a = a
+                best_w = w
+        return best_a, best_t, best_s, best_w
+
+    # --- Auto-sweep over (p, q) — only if the caller didn't pin both values.
+    if auto_sweep:
+        # Two-stage grid sweep:
+        #   1. Coarse pass at 0.1 step over the full [0.5,6.0]×[0.5,4.0] box —
+        #      cheap, identifies the "winning region" (which feasible window
+        #      minimises the score for each (p,q)).
+        #   2. Fine refinement at 0.01 step inside each *boundary* coarse cell
+        #      (a cell whose winner differs from at least one neighbour). This
+        #      catches winners that only appear inside a thin (p,q) ribbon and
+        #      would be missed by a 0.1-only grid, but skips the bulk of the
+        #      193k full-fine-grid points where the winner doesn't change.
+        #
+        # Total cost is dominated by the coarse pass (≈ 2k cells) plus a few
+        # thousand fine refinement cells; in practice well under a second.
+        coarse_step = 0.1
+        fine_step = 0.01
+        p_min, p_max = 0.5, 6.0
+        q_min, q_max = 0.5, 4.0
+        p_coarse = np.round(np.arange(p_min, p_max + 1e-9, coarse_step), 4)
+        q_coarse = np.round(np.arange(q_min, q_max + 1e-9, coarse_step), 4)
+
+        sweep_results: List[Tuple[float, float, Dict[str, str], int, float, Tuple[float, float, float], Tuple[int, int]]] = []
+        n_candidates_coarse = int(p_coarse.size * q_coarse.size)
+        n_candidates_fine = 0
+
+        if feasible_windows:
+            # Build numpy arrays for vectorised scoring.
+            tensor_list = list(tensors_w)
+            N_t = len(tensor_list)
+            L_np = np.array(
+                [float(ppl_loss_w.get(t, 0.0)) for t in tensor_list],
+                dtype=float,
+            )
+
+            # For each in-budget window, compute the (per-tensor) deg vector.
+            window_meta: List[Tuple[Tuple[int, int], Dict[str, str], int]] = []
+            d_vectors: List[np.ndarray] = []
+            for win, assign_, total_ in feasible_windows:
+                vec = np.zeros(N_t, dtype=float)
+                for i, t in enumerate(tensor_list):
+                    qt = assign_.get(t)
+                    if qt is None:
+                        continue
+                    try:
+                        d = degradation_fn(t, qt)
+                    except Exception:
+                        d = None
+                    if d is None:
+                        continue
+                    vec[i] = float(d)
+                d_vectors.append(vec)
+                window_meta.append((win, assign_, total_))
+
+            D_np = np.stack(d_vectors) if d_vectors else np.zeros((0, N_t))
+            W_count = D_np.shape[0]
+
+            if W_count > 0:
+                safe_L = np.where(L_np > 0, L_np, 1.0)
+                safe_D = np.where(D_np > 0, D_np, 1.0)
+                log_L = np.log(safe_L)            # (N,)
+                log_D = np.log(safe_D)            # (W, N)
+                mask_L = (L_np > 0).astype(float) # (N,)
+                mask_D = (D_np > 0).astype(float) # (W, N)
+
+                def _sweep_grid(p_arr: np.ndarray, q_arr: np.ndarray):
+                    """Score every (p, q) on the given grid; return:
+                       - coarse_grid: 2D array (len(p_arr), len(q_arr)) of winning win_idx
+                       - first_pq:    win_idx -> first (p, q) seen
+                    """
+                    coarse_grid = np.full((p_arr.size, q_arr.size), -1, dtype=int)
+                    first_pq: Dict[int, Tuple[float, float]] = {}
+                    for i, p_ in enumerate(p_arr):
+                        L_pow = np.exp(p_ * log_L) * mask_L
+                        for j, q_ in enumerate(q_arr):
+                            D_pow = np.exp(q_ * log_D) * mask_D
+                            scores = D_pow @ L_pow
+                            w_ = int(np.argmin(scores))
+                            coarse_grid[i, j] = w_
+                            if w_ not in first_pq:
+                                first_pq[w_] = (float(p_), float(q_))
+                    return coarse_grid, first_pq
+
+                # === Stage 1: coarse pass ===
+                coarse_grid, winner_first_pq = _sweep_grid(p_coarse, q_coarse)
+
+                # === Stage 2: fine refinement on boundary cells ===
+                # A boundary coarse cell is one whose winner differs from any
+                # of its 8 neighbours. Refine inside [p_i, p_{i+1}] × [q_j, q_{j+1}]
+                # at the fine step. This catches winners that occupy a sub-cell
+                # region of (p, q).
+                P_n, Q_n = coarse_grid.shape
+                boundary_cells: List[Tuple[int, int]] = []
+                for i in range(P_n):
+                    for j in range(Q_n):
+                        w = coarse_grid[i, j]
+                        is_boundary = False
+                        for di in (-1, 0, 1):
+                            for dj in (-1, 0, 1):
+                                if di == 0 and dj == 0:
+                                    continue
+                                ni, nj = i + di, j + dj
+                                if 0 <= ni < P_n and 0 <= nj < Q_n and coarse_grid[ni, nj] != w:
+                                    is_boundary = True
+                                    break
+                            if is_boundary:
+                                break
+                        if is_boundary:
+                            boundary_cells.append((i, j))
+
+                # Build dense fine grids inside each boundary 0.1 cell. We
+                # deduplicate (p, q) so cells touching share their boundary
+                # points only once.
+                fine_pq_set: set = set()
+                for (i, j) in boundary_cells:
+                    p_lo = float(p_coarse[i])
+                    p_hi = float(p_coarse[min(i + 1, P_n - 1)])
+                    q_lo = float(q_coarse[j])
+                    q_hi = float(q_coarse[min(j + 1, Q_n - 1)])
+                    p_sub = np.round(np.arange(p_lo, p_hi + 1e-9, fine_step), 4)
+                    q_sub = np.round(np.arange(q_lo, q_hi + 1e-9, fine_step), 4)
+                    for p_ in p_sub:
+                        for q_ in q_sub:
+                            fine_pq_set.add((float(p_), float(q_)))
+                # Skip points already on the coarse grid (we already scored them).
+                fine_pq_list = sorted(fine_pq_set)
+                fine_pq_list = [
+                    (p_, q_) for (p_, q_) in fine_pq_list
+                    if not (round(p_ * 10) / 10 == p_ and round(q_ * 10) / 10 == q_)
+                ]
+                n_candidates_fine = len(fine_pq_list)
+
+                # Score the fine points and update winner_first_pq.
+                for (p_, q_) in fine_pq_list:
+                    L_pow = np.exp(p_ * log_L) * mask_L
+                    D_pow = np.exp(q_ * log_D) * mask_D
+                    scores = D_pow @ L_pow
+                    w_ = int(np.argmin(scores))
+                    if w_ not in winner_first_pq:
+                        winner_first_pq[w_] = (p_, q_)
+
+                # Now compute meta exactly once per distinct winning window.
+                for win_idx, (p_, q_) in winner_first_pq.items():
+                    win, assign_, total_ = window_meta[win_idx]
+                    score_fn_ = _make_score_fn(p_, q_)
+                    s_ = score_fn_(assign_)
+                    m_ = _meta_score(assign_)
+                    sweep_results.append((p_, q_, assign_, total_, s_, m_, win))
+
+        n_candidates = n_candidates_coarse + n_candidates_fine
+
+        if not sweep_results:
+            # No in-budget windows — fall back to the smallest-size assignment.
+            if debug:
+                print(
+                    f"[RANK] Warning: no window fits budget {budget_bytes/GIB:.3f} GiB. "
+                    f"Falling back to smallest-size assignment ({fallback_total/GIB:.3f} GiB).",
+                    file=sys.stderr,
+                )
+            assignment = fallback_assignment or assignment
+            total_size = fallback_total if fallback_total >= 0 else 0
+            current_pool = list(global_pool)
+            best_p = best_q = 1.0
+            best_meta = _meta_score(assignment) if assignment else (0.0, 0.0, 0.0)
+            best_score = float('inf')
+            best_window = (0, K_full - 1)
+            unique_results = []
+        else:
+            # Pick the (p, q) minimising the lexicographic meta-score.
+            sweep_results.sort(key=lambda r: r[5])
+            best_p, best_q, assignment, total_size, best_score, best_meta, best_window = sweep_results[0]
+            current_pool = global_pool[best_window[0]:best_window[1] + 1]
+            # sweep_results already contains one entry per distinct winning
+            # window (deduplicated during the sweep), so re-use it.
+            unique_results = list(sweep_results)
+        if chosen_params_out is not None:
+            chosen_params_out['loss_exponent'] = best_p
+            chosen_params_out['deg_exponent'] = best_q
+        if debug and sweep_results:
+            def _fmt_meta(m):
+                if isinstance(m, tuple):
+                    return "max_deg={:.3f} outlier_loss·deg={:.4f} sum_deg={:.1f}".format(*m)
+                return f"{m:.4f}"
+            print(
+                f"[RANK] Auto-sweep tried {n_candidates} (p,q) candidates"
+                f" ({len(unique_results)} distinct assignments). "
+                f"Best: p={best_p} q={best_q}; window={current_pool}; "
+                f"total={total_size/GIB:.3f} GiB; score={best_score:.4f}; "
+                f"meta=({_fmt_meta(best_meta)})",
+                file=sys.stderr,
+            )
+            # Show DISTINCT sweep results (sorted by meta) for diagnostics.
+            for p_, q_, _a, t_, s_, m_, _w in unique_results:
+                pool_str = global_pool[_w[0]:_w[1] + 1]
+                print(
+                    f"[RANK] sweep  p={p_:.2f} q={q_:.2f} meta=({_fmt_meta(m_)}) "
+                    f"score={s_:.4f} total={t_/GIB:.3f}GiB pool={pool_str}",
+                    file=sys.stderr,
+                )
+    else:
+        # Caller pinned exponents — single pass over the cached window data.
+        score_fn = _make_score_fn(loss_exponent, deg_exponent)
+        if feasible_windows:
+            a, t_, s_, win = _pick_best_for(score_fn)
+            assignment, total_size, best_score, best_window = a, t_, s_, win
+        else:
+            if debug:
+                print(
+                    f"[RANK] Warning: no window fits budget {budget_bytes/GIB:.3f} GiB.",
+                    file=sys.stderr,
+                )
+            assignment = fallback_assignment or {}
+            total_size = fallback_total if fallback_total >= 0 else 0
+            best_score = float('inf')
+            best_window = (0, K_full - 1)
+        current_pool = global_pool[best_window[0]:best_window[1] + 1]
+        if chosen_params_out is not None:
+            chosen_params_out['loss_exponent'] = float(loss_exponent)
+            chosen_params_out['deg_exponent'] = float(deg_exponent)
+        if debug:
+            print(
+                f"[RANK] Best window (p={loss_exponent}, q={deg_exponent}): "
+                f"{current_pool}; total={total_size/GIB:.3f} GiB; score={best_score:.6f}",
+                file=sys.stderr,
+            )
+
+    # --- Step 9: Phase C — promote individual sortable tensors with headroom,
+    #     respecting rank monotonicity. Smallest current-size tensors go first
+    #     because each promotion costs less, so we get more quality per byte.
+    # Build (and continually update) the per-tensor "ceiling" — the minimum
+    # degradation observed among MORE-sensitive tensors. A promotion that would
+    # make this tensor strictly better than a more-sensitive tensor is rejected.
+    sortable_sens_desc = sorted(sortable, key=lambda t: -ppl_loss_w[t])
+    sens_pos: Dict[str, int] = {t: i for i, t in enumerate(sortable_sens_desc)}
+
+    def ceiling_for(t: str) -> float:
+        """Minimum degradation among tensors strictly more sensitive than t."""
+        i = sens_pos[t]
+        if i == 0:
+            return float('-inf')  # no upper bound for the most sensitive tensor
+        best = float('inf')
+        for k in range(0, i):
+            tt = sortable_sens_desc[k]
+            try:
+                d = degradation_fn(tt, assignment[tt])
+            except Exception:
+                d = None
+            if d is not None and d < best:
+                best = d
+        return best
+
+    # Budget for phase C — strict: never exceed budget_bytes. (`tolerance` is
+    # only a hint that small over/undershoot is acceptable for OTHER methods;
+    # the rank method already finds the best window within budget via the
+    # brute-force search, so Phase C should only fill the leftover headroom
+    # rather than spend any of the user's tolerance allowance.)
+    headroom_budget = budget_bytes
+
+    if debug:
+        print(
+            f"[RANK] Phase C: starting promotions "
+            f"(headroom = {(headroom_budget - total_size)/GIB:.3f} GiB up to "
+            f"{headroom_budget/GIB:.3f} GiB)",
+            file=sys.stderr,
+        )
+
+    # Sort sortable by current size ascending (smallest first).
+    promotions = 0
+    while True:
+        # Re-sort each pass; a tensor's "current size" changes after promotion.
+        order = sorted(sortable, key=lambda t: tensor_sizes_w[t][assignment[t]])
+        any_promoted = False
+        for t in order:
+            current_q = assignment[t]
+            allowed_t = allowed_map_w[t]
+            try:
+                cur_idx = allowed_t.index(current_q)
+            except ValueError:
+                continue
+            if cur_idx == 0:
+                continue  # already at best allowed qtype
+            ceil_d = ceiling_for(t)
+            # Try the SMALLEST upgrade first (one index up). Repeated passes will
+            # naturally explore larger upgrades when the budget permits.
+            new_q = allowed_t[cur_idx - 1]
+            try:
+                new_deg = degradation_fn(t, new_q)
+            except Exception:
+                new_deg = None
+            if new_deg is not None and ceil_d != float('-inf') and new_deg < ceil_d:
+                # would strictly outrank a more-sensitive tensor — reject
+                continue
+            delta = int(tensor_sizes_w[t][new_q]) - int(tensor_sizes_w[t][current_q])
+            if delta <= 0:
+                # No size gain — apply if it doesn't break rank; harmless
+                assignment[t] = new_q
+                total_size += delta
+                any_promoted = True
+                promotions += 1
+                continue
+            if total_size + delta > headroom_budget:
+                continue
+            assignment[t] = new_q
+            total_size += delta
+            any_promoted = True
+            promotions += 1
+            if debug:
+                print(
+                    f"[RANK] Phase C: promoted {t} {current_q} -> {new_q} "
+                    f"(+{delta/GIB:.4f} GiB; total={total_size/GIB:.3f} GiB)",
+                    file=sys.stderr,
+                )
+        if not any_promoted:
+            break
+
+    if debug:
+        print(
+            f"[RANK] Phase C: {promotions} promotions performed. "
+            f"Final total_size = {total_size/GIB:.3f} GiB",
+            file=sys.stderr,
+        )
+
+    # --- Step 10: Expand harmonized groups back to original tensor names
+    if merged and group_defs:
+        expanded: Dict[str, str] = {}
+        for gid, members in group_defs.items():
+            q = assignment.get(gid)
+            if q is None:
+                continue
+            for m in members:
+                expanded[m] = q
+        for t in tensors_w:
+            if t in group_defs:
+                continue
+            if t.startswith("HARM_GROUP_"):
+                continue
+            val = assignment.get(t)
+            if val is None:
+                continue
+            expanded[t] = val
+        assignment = expanded
+
+    return assignment, total_size
+
+
 
 def optimize_midpoint_and_assign(quants, _, class_values,
                                  max_bytes, tolerance=0.05, exp_factor=1.0, harmonize_groups=None):
@@ -2276,6 +3256,23 @@ def main():
                             'Values are applied element-wise per layer across the matched tensors.'
                             'Max ensures calibration data measurement is not negatively degraded. Min will degrade calibration data accuracy but appears to give the best results. Mean is a compromise in-between. Disabled means harmonization is disabled.'))
     parser.add_argument('--use-greedy-quant-assign', action='store_true', help='Use greedy priority-queue quant assignment instead of default spread/midpoint method. The method tries to minimize overall degradation by prioritizing quant downgrades that yield the least degradation per byte saved. This method requires per-tensor degradation data (e.g. KLD) to be present in the csv_file - perplexity data only works suboptimally. It also requires per quant type degradation estimates which can be supplied either via --quant-degradation-csv - if not present hardcoded Qwen3-4B-Thinking-2507 degradation values are used. override with --quant-degradation-csv. It is recommended to use --exponential-factor between 1.0 and 5.0 when using this method to try to map per-tensor degradation values into a more linear space.')
+    parser.add_argument('--use-rank-quant-assign', action='store_true',
+                        help=('Use the rank-preserving "exhaustive-window" quant assignment instead of the greedy or default spread/midpoint methods. '
+                              'The method strictly preserves the sensitivity rank order of tensors (the most-sensitive tensor never gets a worse qtype than a less-sensitive one), '
+                              'identifies zero-kld outliers (tensors unused by the model) and assigns them the smallest-size qtype, '
+                              'then projects the sensitivity rank onto every contiguous sub-window of the qtype pool (sorted by degradation best→worst) and picks the window that minimizes total Σ loss·deg while fitting the size budget. '
+                              'A final promotion pass lifts the smallest tensors first to consume any remaining headroom while still preserving rank monotonicity. '
+                              'Designed to work well out-of-the-box without tweaking --exponential-factor / --per-tensor-degradation-scaling / --harmonize-tensors / --synergistic-tensors — those parameters remain available for advanced users. '
+                              'Requires --quant-degradation-csv (recommended) or falls back to hardcoded defaults.'))
+    parser.add_argument('--rank-no-pareto-filter', action='store_true',
+                        help=('Only valid with --use-rank-quant-assign. By default the rank method drops per-tensor allowed qtypes that are Pareto-dominated on the (size, degradation) plane '
+                              '— a qtype that is BOTH larger AND more-degrading than another available qtype is never preferable, so filtering it eliminates wasted budget. '
+                              'Pass this flag to disable Pareto filtering (e.g. if you deliberately want to use qtypes that look "objectively worse" by group0 stats but behave better at inference time on your specific hardware).'))
+    parser.add_argument('--rank-deg-exponent', type=float, default=None,
+                        help=('Only valid with --use-rank-quant-assign. Degradation exponent q in the rank method\'s score function Σ loss^p · deg^q. '
+                              'q > 1 amplifies the badness of high-degradation qtypes (e.g. iq1_s) and pushes the recipe to avoid using them; q = 1 is the linear regime. '
+                              'When neither --exponential-factor (p) nor --rank-deg-exponent (q) are provided, the rank method auto-sweeps a small grid of (p, q) and selects the pair whose chosen assignment minimises the worst per-tensor loss·degradation product — and reports the selection in the recipe\'s hidden-parameters footer. '
+                              'Override only if you know what you\'re doing.'))
     parser.add_argument('--quant-degradation-csv', type=str, help='Path to CSV file containing quant degradation values for use by greedy quant assign method (optional). If not provided, hardcoded Qwen3-4B-Thinking-2507 degradation values are used, and you will need to tweak --exponential-factor. ')
     parser.add_argument('--quant-degradation-equation', type=str,
                         help=('Deprecated option; no longer used in this script. Use group0_enricher.py instead to fill the gaps of missing group0/kld_results_partial.csv degradation data.'))
@@ -2319,21 +3316,38 @@ def main():
     if args.compute_missing_map and args.compute_all_map:
         parser.error("--compute-missing-map and --compute-all-map are mutually exclusive")
 
-    # Enforce: --quant-degradation-csv are only valid when using --use-greedy-quant-assign
-    if args.quant_degradation_csv and not args.use_greedy_quant_assign:
-        parser.error("--quant-degradation-csv may only be used with --use-greedy-quant-assign")
-    
-    # Enforce: --synergistic-tensors is only valid when using --use-greedy-quant-assign
-    if args.synergistic_tensors and not args.use_greedy_quant_assign:
-        parser.error("--synergistic-tensors may only be used with --use-greedy-quant-assign")
-    
+    # --use-greedy-quant-assign and --use-rank-quant-assign are mutually exclusive
+    if args.use_greedy_quant_assign and args.use_rank_quant_assign:
+        parser.error("--use-greedy-quant-assign and --use-rank-quant-assign are mutually exclusive")
+
+    # Convenience: a single flag indicating whether ANY degradation-aware
+    # assignment method is in use. The same auxiliary options (--quant-degradation-csv,
+    # --synergistic-tensors, --per-tensor-degradation-scaling) apply to both.
+    using_degradation_method = bool(args.use_greedy_quant_assign or args.use_rank_quant_assign)
+
+    # Enforce: --quant-degradation-csv only valid with greedy/rank methods
+    if args.quant_degradation_csv and not using_degradation_method:
+        parser.error("--quant-degradation-csv may only be used with --use-greedy-quant-assign or --use-rank-quant-assign")
+
+    # Enforce: --synergistic-tensors only valid with greedy/rank methods
+    if args.synergistic_tensors and not using_degradation_method:
+        parser.error("--synergistic-tensors may only be used with --use-greedy-quant-assign or --use-rank-quant-assign")
+
     # Enforce: --synergy-strength is only valid when using --synergistic-tensors
     if args.synergy_strength and args.synergy_strength > 0 and not args.synergistic_tensors:
         parser.error("--synergy-strength may only be used with --synergistic-tensors")
-    
-    # Enforce: --per-tensor-degradation-scaling is only valid when using --use-greedy-quant-assign
-    if args.per_tensor_degradation_scaling and args.per_tensor_degradation_scaling > 0 and not args.use_greedy_quant_assign:
-        parser.error("--per-tensor-degradation-scaling may only be used with --use-greedy-quant-assign")
+
+    # Enforce: --per-tensor-degradation-scaling only valid with greedy/rank methods
+    if args.per_tensor_degradation_scaling and args.per_tensor_degradation_scaling > 0 and not using_degradation_method:
+        parser.error("--per-tensor-degradation-scaling may only be used with --use-greedy-quant-assign or --use-rank-quant-assign")
+
+    # Enforce: --rank-no-pareto-filter only valid with --use-rank-quant-assign
+    if args.rank_no_pareto_filter and not args.use_rank_quant_assign:
+        parser.error("--rank-no-pareto-filter may only be used with --use-rank-quant-assign")
+
+    # Enforce: --rank-deg-exponent only valid with --use-rank-quant-assign
+    if args.rank_deg_exponent is not None and not args.use_rank_quant_assign:
+        parser.error("--rank-deg-exponent may only be used with --use-rank-quant-assign")
     
     if not args.per_tensor_degradation_scaling:
         per_tensor_degradation_scaling_final = 0.0 # Default value
@@ -2502,8 +3516,8 @@ def main():
 
     # harmonize_groups is now a list-of-lists of regex strings (or empty list to disable)
 
-    # --- Disable harmonization here when using greedy quant assign. for greedy quant assign the harmonization is handled inside greedy_quant_assign itself ---
-    if not args.use_greedy_quant_assign:
+    # --- Disable harmonization here when using greedy or rank quant assign — both methods handle harmonization internally ---
+    if not (args.use_greedy_quant_assign or args.use_rank_quant_assign):
         try:
             # Provide df columns (excluding QTYPE) so the helper can match against available tensor names
             harmonize_row(row, [c for c in df.columns if c != 'QTYPE'], harmonize_groups, args.harmonization_technique)
@@ -2566,7 +3580,18 @@ def main():
             print(f"[Info] Exponential-factor value set by the user: {exp_factor_final}", file=sys.stderr)
     else:
         # Not specified by user
-        if args.use_greedy_quant_assign and args.quant_degradation_csv:
+        if args.use_rank_quant_assign:
+            # Rank method scores assignments by Σ loss^p · deg^q. When the user
+            # leaves --exponential-factor unset, we run an internal auto-sweep
+            # over a small (p, q) grid inside rank_quant_assign and pick the
+            # pair whose chosen assignment minimises the worst per-tensor
+            # loss·degradation product. exp_factor_final is left at 1.0 here
+            # purely as a fallback / display value — the real chosen p will
+            # come back via chosen_params_out.
+            if INFO:
+                print(f"[Info] --exponential-factor not specified for --use-rank-quant-assign: enabling internal (p, q) auto-sweep.", file=sys.stderr)
+            exp_factor_final = 1.0
+        elif args.use_greedy_quant_assign and args.quant_degradation_csv:
             if INFO:
                 print(f"[Info] Using exponential-factor value of 1.0 because quant degradation csv provided", file=sys.stderr)
             exp_factor_final = 1.0
@@ -2860,7 +3885,7 @@ def main():
                         if INFO:
                             print(f"[Info] Assigned {desc} quant {assigned_q} to outlier {nm}, size={size_harmonized/GIB:.3f} GiB (harmonized group {group_idx})", file=sys.stderr)
 
-        if not args.use_greedy_quant_assign:
+        if not (args.use_greedy_quant_assign or args.use_rank_quant_assign):
             # process low and high outliers (lowest quant = quants[-1], highest quant = quants[0])
             _process_outliers_list(out_low, quants[-1], "lowest")
             _process_outliers_list(out_high, quants[0], "highest")
@@ -2911,7 +3936,7 @@ def main():
                 [lowest_q], None, class_vals)
             total_bytes = sum(sizes.values())
         elif max_arg_bytes:
-            if args.use_greedy_quant_assign:
+            if args.use_greedy_quant_assign or args.use_rank_quant_assign:
                 # Build tensor_quants mapping (default to cls-specific quants)
                 tensor_quants_local = {n: (gpu_quants if cls == 'gpu' else cpu_quants) for n in names_to_assign}
 
@@ -2952,25 +3977,100 @@ def main():
                     # No scaling – just wrap the old lookup as a two-argument callable
                     degradation_fn = lambda tensor, qtype: quant_deg_lookup(qtype)
 
-                # ---- Call greedy quant assignment with all parameters ----
-                # Use get_map_sizes_and_elements to build the tensor_sizes mapping
-                assignment, total_bytes = greedy_quant_assign(
-                    tensors=names_to_assign,
-                    tensor_sizes={
-                        n: {q: get_map_sizes_and_elements(q)[0].get(n, 0)
-                            for q in (gpu_quants if cls == 'gpu' else cpu_quants)}
-                        for n in names_to_assign
-                    },
-                    ppl_loss=class_vals,
-                    degradation_fn=degradation_fn,
-                    tensor_quants=tensor_quants_local,
-                    budget_bytes=int(max_arg_bytes),
-                    debug=DEBUG,
-                    harmonized_groups=expanded_harmonize_groups,
-                    loss_exponent=exp_factor_final,
-                    synergistic_groups=expanded_synergistic_groups,
-                    synergy_strength=args.synergy_strength
-                )
+                # Build the per-tensor sizes mapping used by both methods
+                _quants_for_class = gpu_quants if cls == 'gpu' else cpu_quants
+                tensor_sizes_local = {
+                    n: {q: get_map_sizes_and_elements(q)[0].get(n, 0)
+                        for q in _quants_for_class}
+                    for n in names_to_assign
+                }
+
+                if args.use_rank_quant_assign:
+                    # The rank method also benefits from being told about the
+                    # class-default assign-qtype so that zero-kld outliers can be
+                    # assigned to the smallest-size qtype across the full set the
+                    # user has allowed (gpu/cpu quants + the class assign-qtype).
+                    _extra_outlier_qtypes: List[str] = []
+                    cls_assign_qtype = args.cpu_assign_qtype if cls == 'cpu' else args.gpu_assign_qtype
+                    if cls_assign_qtype:
+                        _extra_outlier_qtypes.append(cls_assign_qtype)
+
+                    # Make sure outlier-candidate qtypes have known sizes for each
+                    # tensor (lazily fetch maps just in case the user passed a
+                    # qtype outside of gpu/cpu-quants).
+                    for _q in list(_extra_outlier_qtypes):
+                        try:
+                            fetched, _, _ = get_map_sizes_and_elements(_q)
+                            for n in names_to_assign:
+                                if _q not in tensor_sizes_local[n]:
+                                    tensor_sizes_local[n][_q] = int(fetched.get(n, 0))
+                        except Exception:
+                            pass
+
+                    # The rank method uses *label* degradation (the tabulated
+                    # deg for the qtype the recipe will list), not the actual
+                    # fallback-storage deg. Reasons:
+                    #   - The user reads recipes by label; "no iq1_s entries"
+                    #     should mean exactly that.
+                    #   - Label deg keeps Pareto filtering predictable — a label
+                    #     is dominated iff its tabulated (size, deg) is, without
+                    #     two different labels collapsing into one storage point.
+                    #   - For tensors whose label falls back to higher-quality
+                    #     storage, sizing is already accurate (tensor_sizes uses
+                    #     actual fallback bytes), so budget is correct even
+                    #     though the labeled deg is a slight pessimism.
+
+                    # Auto-sweep (p, q) inside the rank method ONLY when the
+                    # user hasn't pinned both exponents. If --exponential-factor
+                    # is set, the user has expressed a preference for p; if
+                    # --rank-deg-exponent is also set, both are pinned and we
+                    # skip the sweep. Otherwise we sweep and report the chosen
+                    # (p, q) in the recipe's hidden-parameters footer.
+                    _auto_sweep = (args.exponential_factor is None)
+                    _user_q = args.rank_deg_exponent if args.rank_deg_exponent is not None else 1.0
+                    if args.rank_deg_exponent is not None:
+                        # User pinned q — still skip sweep only when p is also
+                        # pinned (avoid surprising behaviour).
+                        _auto_sweep = _auto_sweep and (args.exponential_factor is None and False)
+                    chosen_rank_params: Dict[str, float] = {}
+                    assignment, total_bytes = rank_quant_assign(
+                        tensors=names_to_assign,
+                        tensor_sizes=tensor_sizes_local,
+                        ppl_loss=class_vals,
+                        degradation_fn=degradation_fn,
+                        tensor_quants=tensor_quants_local,
+                        budget_bytes=int(max_arg_bytes),
+                        debug=DEBUG,
+                        harmonized_groups=expanded_harmonize_groups,
+                        loss_exponent=exp_factor_final,
+                        deg_exponent=_user_q,
+                        auto_sweep=_auto_sweep,
+                        synergistic_groups=expanded_synergistic_groups,
+                        synergy_strength=args.synergy_strength,
+                        tolerance=args.tolerance,
+                        extra_outlier_qtypes=_extra_outlier_qtypes,
+                        pareto_filter=not args.rank_no_pareto_filter,
+                        chosen_params_out=chosen_rank_params,
+                    )
+                    # Stash the chosen (p, q) onto args so the hidden-parameter
+                    # footer can include them in the recipe.
+                    if chosen_rank_params:
+                        args.__dict__.setdefault('_rank_chosen_params', {})[cls] = chosen_rank_params
+                else:
+                    # ---- Call greedy quant assignment with all parameters ----
+                    assignment, total_bytes = greedy_quant_assign(
+                        tensors=names_to_assign,
+                        tensor_sizes=tensor_sizes_local,
+                        ppl_loss=class_vals,
+                        degradation_fn=degradation_fn,
+                        tensor_quants=tensor_quants_local,
+                        budget_bytes=int(max_arg_bytes),
+                        debug=DEBUG,
+                        harmonized_groups=expanded_harmonize_groups,
+                        loss_exponent=exp_factor_final,
+                        synergistic_groups=expanded_synergistic_groups,
+                        synergy_strength=args.synergy_strength
+                    )
             else:
                 assignment, total_bytes = optimize_midpoint_and_assign(
                     quants, None, class_vals,
@@ -3533,10 +4633,24 @@ def main():
         print(f"# - GPG signatures: DISABLED")
 
     # List some important parameters that would otherwise be hard to guess (because dynamic or changing over versions or arg-dependant and complex)
-    if not args.exponential_factor or not args.per_tensor_degradation_scaling:
+    rank_chosen = args.__dict__.get('_rank_chosen_params', {}) or {}
+    if not args.exponential_factor or not args.per_tensor_degradation_scaling or rank_chosen:
         print(f"# - Hidden parameters (not passed as CLI args):")
         if not args.exponential_factor:
-            print(f"#   Exponential factor: {exp_factor_final:.8f}".rstrip('0').rstrip('.'))
+            if args.use_rank_quant_assign and rank_chosen:
+                # The rank method auto-sweeps (p, q). Report the chosen values
+                # per class (loss_exponent = p, deg_exponent = q).
+                for _cls, _params in rank_chosen.items():
+                    p_v = _params.get('loss_exponent')
+                    q_v = _params.get('deg_exponent')
+                    if p_v is not None:
+                        s_p = (f"{p_v:.8f}".rstrip('0').rstrip('.'))
+                        print(f"#   Loss exponent (p) [{_cls.upper()}]: {s_p}")
+                    if q_v is not None:
+                        s_q = (f"{q_v:.8f}".rstrip('0').rstrip('.'))
+                        print(f"#   Degradation exponent (q) [{_cls.upper()}]: {s_q}")
+            else:
+                print(f"#   Exponential factor: {exp_factor_final:.8f}".rstrip('0').rstrip('.'))
         if not args.per_tensor_degradation_scaling and per_tensor_degradation_scaling_final != 0.0:
             print(f"#   Per tensor degradation scaling exponent: {per_tensor_degradation_scaling_final:.8f}".rstrip('0').rstrip('.'))
 

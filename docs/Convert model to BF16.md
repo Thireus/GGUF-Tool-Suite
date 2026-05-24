@@ -251,7 +251,7 @@ for f in $(ls); do mv -f $f $(echo $f | sed "s/mtp-model_name/mtp-$MODEL-${MAINT
 
 Once conversion is done, I recommend to follow the `Produce tensors.map` steps. The imatrix steps are not applicable to `mtp`.
 
-## (optional) Produce the `mproj` BF16 GGUF
+## (optional) Produce the `mmproj` BF16 GGUF
 
 Extract the `mmproj` tensors from the model and produce the mmproj-only BF16 GGUF:
 

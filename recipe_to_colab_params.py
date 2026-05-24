@@ -5,7 +5,7 @@
 #** Colab pipeline parameters for quant_recipe_pipeline.ipynb **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Feb-22-2026 -------------------- **#
+#** --------------- Updated: May-24-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -61,6 +61,9 @@ DEFAULTS: Dict[str, Any] = {
     "csv_filename": "",
     "qtype": "",
     "use_greedy_quant_assign": False,
+    "use_rank_quant_assign": False,
+    "rank_no_pareto_filter": False,
+    "rank_deg_exponent": None,
     "quant_degradation_csv": "",
     "quant_degradation_equation": "",
     "synergistic_tensors": [],
@@ -266,15 +269,21 @@ def emit_parameters(params: Dict[str, Any]) -> str:
     lines.append("# calibration data qtype (leave empty for auto-selection which will choose the lowest bpw) - list of available qtypes can be found in the calibration data file")
     lines.append(f'qtype = "{params["qtype"]}"                  #@param {{type:"string"}}')
     lines.append("")
-    lines.append("# Use the greedy priority-queue quant assignment instead of the default method.")
+    lines.append("# Use the greedy priority-queue quant assignment instead of the default method. Mutually exclusive with use_rank_quant_assign.")
     lines.append(f'use_greedy_quant_assign = {params["use_greedy_quant_assign"]}  #@param {{type:"boolean"}}')
-    lines.append("# Optional path to CSV with quant degradation values. Only valid when use_greedy_quant_assign=True.")
+    lines.append("# Use the rank-preserving \"exhaustive-window\" quant assignment instead of the default/greedy methods. Mutually exclusive with use_greedy_quant_assign.")
+    lines.append(f'use_rank_quant_assign = {params["use_rank_quant_assign"]}  #@param {{type:"boolean"}}')
+    lines.append("# Disable the per-tensor Pareto-frontier filter (only valid with use_rank_quant_assign=True). The filter normally drops qtypes dominated by another qtype on the (size, degradation) plane.")
+    lines.append(f'rank_no_pareto_filter = {params["rank_no_pareto_filter"]}  #@param {{type:"boolean"}}')
+    lines.append("# Degradation exponent q in the rank method's score function Σ loss^p · deg^q (only valid with use_rank_quant_assign=True). Leave empty for auto-sweep.")
+    lines.append(f'rank_deg_exponent = {params["rank_deg_exponent"]}  #@param {{type:"number"}}')
+    lines.append("# Optional path to CSV with quant degradation values. Only valid when use_greedy_quant_assign=True or use_rank_quant_assign=True.")
     lines.append(f'quant_degradation_csv = "{params["quant_degradation_csv"]}"     #@param {{type:"string"}}')
-    lines.append("# Optional equation to compute degradation from bpw. Only valid when use_greedy_quant_assign=True.")
+    lines.append("# Optional equation to compute degradation from bpw. Only valid when use_greedy_quant_assign=True or use_rank_quant_assign=True.")
     lines.append(f'quant_degradation_equation = "{params["quant_degradation_equation"]}" #@param {{type:"string"}}')
-    lines.append("# Exponent for scaling group degradation values per tensor based on its loss relative to the mean (Disabled by default, 0 = disabled). Only valid when use_greedy_quant_assign=True.")
+    lines.append("# Exponent for scaling group degradation values per tensor based on its loss relative to the mean (Disabled by default, 0 = disabled). Only valid when use_greedy_quant_assign=True or use_rank_quant_assign=True.")
     lines.append(f'per_tensor_degradation_scaling = {params["per_tensor_degradation_scaling"]}          #@param {{type:"number"}}')
-    lines.append("# Synergistic tensors for greedy quant assignment: list-of-lists of regex patterns. Each inner list defines tensors whose losses should be adjusted together. Use \"\" to disable.")
+    lines.append("# Synergistic tensors for greedy/rank quant assignment: list-of-lists of regex patterns. Each inner list defines tensors whose losses should be adjusted together. Use \"\" to disable.")
     st = params.get("synergistic_tensors", "")
     if st == "" or st is None:
         lines.append('synergistic_tensors = ""  #@param {type:"raw"}')
@@ -419,6 +428,7 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
             '--quant-degradation-equation': 'quant_degradation_equation',
             '--per-tensor-degradation-scaling': 'per_tensor_degradation_scaling',
             '--synergy-strength': 'synergy_strength',
+            '--rank-deg-exponent': 'rank_deg_exponent',
         }
         i = 0
         while i < len(tokens):
@@ -451,6 +461,8 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
             '--skip-gpg': 'skip_gpg',
             '--no-fallback': 'no_fallback',
             '--use-greedy-quant-assign': 'use_greedy_quant_assign',
+            '--use-rank-quant-assign': 'use_rank_quant_assign',
+            '--rank-no-pareto-filter': 'rank_no_pareto_filter',
             '--compute-missing-map': 'compute_missing_map',
             '--compute-all-map': 'compute_all_map',
             '--ignore-imatrix-rules': 'ignore_imatrix_rules',
@@ -525,6 +537,11 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
     if 'per_tensor_degradation_scaling' in params:
         try:
             params['per_tensor_degradation_scaling'] = float(params['per_tensor_degradation_scaling'])
+        except Exception:
+            pass
+    if 'rank_deg_exponent' in params:
+        try:
+            params['rank_deg_exponent'] = float(params['rank_deg_exponent'])
         except Exception:
             pass
     if 'synergy_strength' in params:
