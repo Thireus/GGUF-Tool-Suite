@@ -2077,19 +2077,78 @@ def rank_quant_assign(
             return s
         return fn
 
-    # Meta-score for the auto-sweep — lexicographic on (max_deg, outlier_loss_deg, sum_deg)
-    # where:
-    #   - max_deg = the worst (highest-deg) qtype any tensor ends up at. This
-    #     captures the user's primary priority: "lift the floor", i.e. no
-    #     tensor should land at a disastrously-high-deg qtype like iq1_s.
-    #   - outlier_loss_deg = Σ (loss · deg) over the detected high-sens
-    #     outliers. Once max_deg is fixed, prefer the assignment that gives
-    #     the most-sensitive tensors the best available qtype.
-    #   - sum_deg = Σ deg, used purely as a tiebreaker to favour narrow
-    #     distributions of qtypes when both above are equal.
-    # Lower is better on every key.
+    # Meta-score for the auto-sweep — data-adaptive Σ loss · deg^q_meta.
+    #
+    # Rationale: different models have radically different shapes of group0
+    # degradation. Some (e.g. gemma-4-31B-it) have a catastrophic cliff at the
+    # low-bit end — iq1_s has deg ≈ 12.8, ~2× higher than the next qtype.
+    # Others (e.g. Qwen3.5-4B) have a smooth deg curve — iq1_s is only marginally
+    # worse than iq1_m. For cliff models we want a rank-style assignment that
+    # strictly avoids the catastrophic qtypes; for smooth models we want a
+    # greedy-style assignment that diversifies quality across many qtypes.
+    #
+    # The deg-exponent q_meta auto-tunes this: q_meta = max(1, log2(max_pool_deg))
+    # so a model with max_pool_deg ≈ 12 gets q_meta ≈ 3.6 (heavy nonlinear
+    # penalty on bad qtypes → rank-like) and a model with max_pool_deg ≈ 2.5
+    # gets q_meta ≈ 1.3 (nearly linear → greedy-like). The transition is smooth
+    # and data-driven; no hard-coded thresholds.
+    #
+    # Compute pool deg statistics using the same per-tensor degradation_fn
+    # the rest of the algorithm uses (so per-tensor scaling, if any, is
+    # respected). We need both the maximum and the SECOND-maximum to compute
+    # a "spike ratio" that captures how outlier-shaped the worst qtype is
+    # relative to the rest of the pool. Models with a sharp cliff at the
+    # low-bit end (e.g. gemma where iq1_s deg is 2.07× the next qtype) get a
+    # much larger q_meta than models with a smooth curve (e.g. Qwen3.5-4B
+    # where iq1_s deg is only 1.01× the next qtype). That's exactly what we
+    # need to interpolate smoothly between rank-like and greedy-like behavior.
+    _pool_degs: List[float] = []
+    if sortable and global_pool:
+        ref_t = sortable[0]
+        for q in global_pool:
+            try:
+                _d = degradation_fn(ref_t, q)
+            except Exception:
+                _d = None
+            if _d is not None:
+                _pool_degs.append(float(_d))
+    _pool_degs.sort(reverse=True)
+    _pool_max_deg = _pool_degs[0] if _pool_degs else 1.0
+    _pool_second_max_deg = _pool_degs[1] if len(_pool_degs) > 1 else _pool_max_deg
+    if _pool_max_deg <= 0:
+        _pool_max_deg = 1.0
+    if _pool_second_max_deg <= 0:
+        _pool_second_max_deg = _pool_max_deg
+    # spike_ratio ≈ 2 means the worst qtype's deg is ~2× the next; that's a
+    # cliff (gemma). spike_ratio ≈ 1 means smooth (Qwen3.5-4B).
+    _spike_ratio = _pool_max_deg / _pool_second_max_deg
+    # q_meta combines absolute scale (log2 of max) and the spike ratio. The
+    # multiplication makes the penalty grow faster when BOTH the max is large
+    # AND the spike is sharp — i.e. when low-bit quants are catastrophically
+    # worse than the rest, not merely large in absolute terms.
+    q_meta = max(1.0, math.log2(max(1.0, _pool_max_deg)) * _spike_ratio)
+    if debug:
+        print(
+            f"[RANK] meta-score: q_meta={q_meta:.3f} (auto from max_pool_deg={_pool_max_deg:.3f}, "
+            f"spike_ratio={_spike_ratio:.3f}; large q_meta ⇒ rank-like, q_meta=1 ⇒ greedy-like)",
+            file=sys.stderr,
+        )
+    if debug:
+        print(
+            f"[RANK] meta-score: q_meta={q_meta:.3f} (auto from max_pool_deg={_pool_max_deg:.3f}; "
+            f"large q_meta ⇒ rank-like, q_meta=1 ⇒ greedy-like)",
+            file=sys.stderr,
+        )
+
     def _meta_score(curr_assignment: Dict[str, str]) -> Tuple[float, float, float]:
-        max_d = 0.0
+        # Primary key: Σ loss · deg^q_meta. The deg exponent makes this
+        # interpolate continuously between greedy-like (q_meta=1) and rank-
+        # like / minimax-like (q_meta >> 1) based on the model's data.
+        # Secondary key: outlier contribution (helps protect outliers among
+        # ties).
+        # Tertiary key: sum of all degradations (favours narrower distributions
+        # on ties).
+        primary = 0.0
         outlier_ld = 0.0
         sum_d = 0.0
         for t in tensors_w:
@@ -2103,13 +2162,16 @@ def rank_quant_assign(
             if d is None:
                 continue
             d = float(d)
+            loss = float(ppl_loss_w.get(t, 0.0))
+            try:
+                d_pow = d ** q_meta
+            except Exception:
+                d_pow = d
+            primary += loss * d_pow
             sum_d += d
-            if d > max_d:
-                max_d = d
             if t in high_outliers_set:
-                loss = ppl_loss_w.get(t, 0.0)
-                outlier_ld += float(loss) * d
-        return (max_d, outlier_ld, sum_d)
+                outlier_ld += loss * d
+        return (primary, outlier_ld, sum_d)
 
     # --- Step 7b: Detect *high-sensitivity outliers* — tensors whose loss is
     # so much larger than the rest that a uniform rank-mapping would under-rate
@@ -2258,6 +2320,44 @@ def rank_quant_assign(
                 fallback_total = cand_total
 
             window_data.append(((best_idx, worst_idx), cand_assignment, cand_total))
+
+    # Greedy candidate: rank-mapping is UNIFORM (same number of tensors per
+    # qtype in the window), but greedy's per-byte cost heuristic produces a
+    # NON-UNIFORM distribution (few tensors at top quality, many at low).
+    # For models with a smooth deg curve (e.g. Qwen3.5-4B), the greedy
+    # distribution beats every rank-mapped window because it can give the
+    # most-sensitive tensors high-quality qtypes without wasting budget on
+    # 1/K of all tensors. For models with a deg cliff (e.g. gemma), greedy
+    # ends up using the catastrophic qtype for some bulk tensors, which the
+    # cliff-aware meta-score (q_meta) heavily penalises. Letting the meta
+    # decide gives a unified algorithm that works for both extremes.
+    if sortable:
+        try:
+            _greedy_tensor_quants = {t: list(allowed_map_w[t]) for t in tensors_w}
+            _g_assignment, _g_total = greedy_quant_assign(
+                tensors=list(tensors_w),
+                tensor_sizes=tensor_sizes_w,
+                ppl_loss=ppl_loss_w,
+                degradation_fn=degradation_fn,
+                tensor_quants=_greedy_tensor_quants,
+                budget_bytes=int(budget_bytes),
+                preassign_missing_ppl=preassign_missing_ppl,
+                debug=False,
+                harmonized_groups=None,
+                loss_exponent=1.0,
+            )
+            if _g_assignment and _g_total <= budget_bytes:
+                # Use sentinel window key (-1, -1) so debug print knows this
+                # came from greedy. The pool string will say "GREEDY".
+                window_data.append(((-1, -1), dict(_g_assignment), int(_g_total)))
+                if debug:
+                    print(
+                        f"[RANK] Added greedy candidate: total={_g_total/GIB:.3f} GiB",
+                        file=sys.stderr,
+                    )
+        except Exception as _e:
+            if debug:
+                print(f"[RANK] Greedy candidate failed: {_e}", file=sys.stderr)
 
     # Restrict to in-budget windows for the (p, q) sweep. If none fit, the
     # fallback assignment is used.
@@ -2444,7 +2544,13 @@ def rank_quant_assign(
             # Pick the (p, q) minimising the lexicographic meta-score.
             sweep_results.sort(key=lambda r: r[5])
             best_p, best_q, assignment, total_size, best_score, best_meta, best_window = sweep_results[0]
-            current_pool = global_pool[best_window[0]:best_window[1] + 1]
+            if best_window == (-1, -1):
+                # Greedy candidate won — assignment isn't tied to a contiguous
+                # global_pool sub-window. Report the qtypes actually used.
+                _used_qtypes = sorted(set(assignment.values()), key=lambda q: global_pool.index(q) if q in global_pool else len(global_pool))
+                current_pool = _used_qtypes
+            else:
+                current_pool = global_pool[best_window[0]:best_window[1] + 1]
             # sweep_results already contains one entry per distinct winning
             # window (deduplicated during the sweep), so re-use it.
             unique_results = list(sweep_results)
@@ -2454,19 +2560,23 @@ def rank_quant_assign(
         if debug and sweep_results:
             def _fmt_meta(m):
                 if isinstance(m, tuple):
-                    return "max_deg={:.3f} outlier_loss·deg={:.4f} sum_deg={:.1f}".format(*m)
+                    return "Σ loss·deg^{:.2f}={:.4f} outlier_loss·deg={:.4f} sum_deg={:.1f}".format(q_meta, *m)
                 return f"{m:.4f}"
+            def _pool_label(w):
+                if w == (-1, -1):
+                    return "GREEDY"
+                return str(global_pool[w[0]:w[1] + 1])
             print(
                 f"[RANK] Auto-sweep tried {n_candidates} (p,q) candidates"
                 f" ({len(unique_results)} distinct assignments). "
-                f"Best: p={best_p} q={best_q}; window={current_pool}; "
+                f"Best: p={best_p} q={best_q}; window={_pool_label(best_window)}; "
                 f"total={total_size/GIB:.3f} GiB; score={best_score:.4f}; "
                 f"meta=({_fmt_meta(best_meta)})",
                 file=sys.stderr,
             )
             # Show DISTINCT sweep results (sorted by meta) for diagnostics.
             for p_, q_, _a, t_, s_, m_, _w in unique_results:
-                pool_str = global_pool[_w[0]:_w[1] + 1]
+                pool_str = _pool_label(_w)
                 print(
                     f"[RANK] sweep  p={p_:.2f} q={q_:.2f} meta=({_fmt_meta(m_)}) "
                     f"score={s_:.4f} total={t_/GIB:.3f}GiB pool={pool_str}",
@@ -2488,7 +2598,11 @@ def rank_quant_assign(
             total_size = fallback_total if fallback_total >= 0 else 0
             best_score = float('inf')
             best_window = (0, K_full - 1)
-        current_pool = global_pool[best_window[0]:best_window[1] + 1]
+        if best_window == (-1, -1):
+            _used_qtypes = sorted(set(assignment.values()), key=lambda q: global_pool.index(q) if q in global_pool else len(global_pool))
+            current_pool = _used_qtypes
+        else:
+            current_pool = global_pool[best_window[0]:best_window[1] + 1]
         if chosen_params_out is not None:
             chosen_params_out['loss_exponent'] = float(loss_exponent)
             chosen_params_out['deg_exponent'] = float(deg_exponent)

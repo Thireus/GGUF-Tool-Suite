@@ -1,0 +1,162 @@
+## Quant mix recipe created using Thireus' GGUF Tool Suite - https://gguf.thireus.com/
+# Model name: GLM-4.7-Flash
+# Link to the original model: https://huggingface.co/zai-org/GLM-4.7-Flash
+
+## Model head & embeddings — qbits: 32 4 3 
+^output_norm\.weight$=f32
+^token_embd\.weight$=iq3_xxs
+^output\.weight$=iq4_nl
+
+## Special attention kernels — single-quant only (llama-quantize takes care of it) — qbits: 8 5 4 
+^blk\.(0|2|6|8|1[1-9]|[2-3][0-9]|4[0-6])\.attn_k_b\.weight$=iq4_nl
+^blk\.(1|3|5|7)\.attn_k_b\.weight$=q5_1
+^blk\.(4|9|10)\.attn_k_b\.weight$=q8_0
+
+## Multi-headed attention parameters — qbits: 32 8 6 4 
+^blk\.([0-9]|[1-3][0-9]|4[0-6])\.attn_norm\.weight$=f32
+^blk\.(39|43)\.attn_v_b\.weight$=iq4_nl
+^blk\.([0-2]|10)\.attn_output\.weight$=q6_K
+^blk\.([3-9]|10)\.attn_q_b\.weight$=q6_K
+^blk\.([0-2]|[5-6]|9|10)\.attn_kv_a_mqa\.weight$=q8_0
+^blk\.([0-2]|1[1-9]|[2-3][0-9]|4[0-6])\.attn_q_b\.weight$=iq4_nl
+^blk\.([0-9]|[1-3][0-9]|4[0-6])\.attn_q_a_norm\.weight$=f32
+^blk\.([2-9]|[1-2][0-9]|3[0-8]|4[0-2]|4[4-6])\.attn_v_b\.weight$=q6_K
+^blk\.([3-9]|1[1-9]|[2-3][0-9]|4[0-6])\.attn_output\.weight$=iq4_nl
+^blk\.[0-1]\.attn_v_b\.weight$=q8_0
+^blk\.([3-4]|[7-8]|1[1-9]|[2-3][0-9]|4[0-6])\.attn_kv_a_mqa\.weight$=q6_K
+^blk\.([0-9]|[1-3][0-9]|4[0-6])\.attn_q_a\.weight$=q6_K
+^blk\.([0-9]|[1-3][0-9]|4[0-6])\.attn_kv_a_norm\.weight$=f32
+
+## Dense Feed-Forward Network weights — qbits: 4 
+^blk\.0\.ffn_up\.weight$=iq4_nl
+^blk\.0\.ffn_down\.weight$=iq4_nl
+
+## MoE Gating & Routing — qbits: 32 
+^blk\.([1-9]|[1-3][0-9]|4[0-6])\.ffn_gate_inp\.weight$=f32
+^blk\.([1-9]|[1-3][0-9]|4[0-6])\.exp_probs_b\.bias$=f32
+
+## Gating network — qbits: 4 
+^blk\.0\.ffn_gate\.weight$=iq4_nl
+
+## Misc / Other tensors — qbits: 32 
+^blk\.([0-9]|[1-3][0-9]|4[0-6])\.ffn_norm\.weight$=f32
+
+## GPU-loaded - MoE Shared Experts Feed-Forward Network - ffn_*_shexp
+# ffn_down_shexp — down-projection (shared experts) — qbits: 6 4 
+^blk\.([1-9]|10)\.ffn_down_shexp\.weight$=q6_K
+^blk\.(1[1-9]|[2-3][0-9]|4[0-6])\.ffn_down_shexp\.weight$=iq4_nl
+
+# ffn_up_shexp — up-projection (shared experts) — qbits: 6 4 
+^blk\.([1-9]|10|46)\.ffn_up_shexp\.weight$=q6_K
+^blk\.(1[1-9]|[2-3][0-9]|4[0-5])\.ffn_up_shexp\.weight$=iq4_nl
+
+# ffn_gate_shexp — gating network (shared experts) — qbits: 6 4 
+^blk\.([1-9]|1[0-2])\.ffn_gate_shexp\.weight$=q6_K
+^blk\.(1[3-9]|[2-3][0-9]|4[0-6])\.ffn_gate_shexp\.weight$=iq4_nl
+
+## CPU-friendly - MoE Per-expert Feed-Forward Network - ffn_*_exps
+# ffn_down_exps — down-projection (per-expert) — qbits: 3 2 
+^blk\.1\.ffn_down_exps\.weight$=iq3_xxs
+^blk\.([2-9]|[1-3][0-9]|4[0-6])\.ffn_down_exps\.weight$=iq2_xs
+
+# ffn_up_exps — up-projection (per-expert) — qbits: 3 2 
+^blk\.7\.ffn_up_exps\.weight$=iq3_xxs
+^blk\.([1-6]|8|[1-3][0-9]|4[0-6])\.ffn_up_exps\.weight$=iq2_xs
+^blk\.9\.ffn_up_exps\.weight$=iq2_s
+
+# ffn_gate_exps — gating network (per-expert) — qbits: 3 2 
+^blk\.7\.ffn_gate_exps\.weight$=iq3_xxs
+^blk\.([1-6]|8|[1-3][0-9]|4[0-6])\.ffn_gate_exps\.weight$=iq2_xs
+^blk\.9\.ffn_gate_exps\.weight$=iq2_s
+
+## Summary of tensor sizes per class
+# GPU Total: 8.75 GiB (29.5%) | 29.65 GiB max, if all were q8_0 | 5.51 GiB min, if all were iq1_s
+
+## Summary of tensor counts and bpw per qtype
+#
+# GPU-loaded quants:
+# QTYPE		Count	BPW	Assigned GiB	% Assigned	Max GiB (all)
+# +f32       	281	32    	  0.02 GiB	-		-
+# q8_0      	12 	8.5   	  0.02 GiB	0.1%		29.62
+# q6_K      	175	6.5625	  0.31 GiB	1.4%		22.89
+# q5_1      	4  	6     	  0.01 GiB	0.0%		20.91
+# q5_K      	0  	5.5   	  0.00 GiB	0.0%		19.18
+# q5_0      	0  	5.5   	  0.00 GiB	0.0%		19.17
+# q4_1      	0  	5     	  0.00 GiB	0.0%		17.43
+# q4_K      	0  	4.5   	  0.00 GiB	0.0%		15.69
+# q4_0      	0  	4.5   	  0.00 GiB	0.0%		15.68
+# iq4_nl    	233	4.5   	  0.73 GiB	4.7%		15.68
+# iq4_xs    	0  	4.25  	  0.00 GiB	0.0%		14.81
+# q3_K      	0  	3.4375	  0.00 GiB	0.0%		11.99
+# iq3_s     	0  	3.4375	  0.00 GiB	0.0%		11.99
+# iq3_xxs   	4  	3.0625	  0.33 GiB	3.1%		10.69
+# q2_K      	0  	2.625 	  0.00 GiB	0.0%		9.17
+# iq2_s     	2  	2.5625	  0.12 GiB	1.3%		8.95
+# iq2_xs    	133	2.3125	  7.21 GiB	89.1%		8.09
+# iq2_xxs   	0  	2.0625	  0.00 GiB	0.0%		7.24
+# iq1_m     	0  	1.75  	  0.00 GiB	0.0%		6.13
+# iq1_s     	0  	1.5625	  0.00 GiB	0.0%		5.48
+#
+# -Average BPW: 2.5107
+#
+# -Notes:
+# - '+' means user-defined pre-assigned tensors, or tensor missing from csv data or f32 tensors
+# - Recipe produced on the 2026-05-24 23:54:28 BST+0100 using Thireus' GGUF tools (https://gguf.thireus.com/)
+# - Script SHA-256: 2f670002b78c65770e7cb231831c81ac4c9f350923634959bf040384545195e6
+# - Calibration dataset 'kld_results.csv' SHA-256: 076d87826a5873cb490773d7ad4964b86bf5a0a9cd59a3eb78106374459a6933
+# - Degradation dataset 'group0/kld_results.csv' SHA-256: b882bf598a2d122df681fd4cbde5304d09f3c09bf941cc333266a0f4e160b72b
+# - tensors.bf16.map SHA-256: 29fb82eb461eebe2b34bde6d7ebd62fcd5691bbf84a6367c4dd60a7ca2b1861e
+# - tensors.bf16.map model name: GLM-4.7-Flash-THIREUS-BF16-SPECIAL_TENSOR-00845-of-00845
+# - tensors.q8_0.map SHA-256: 80024980cbaffc573a6853a519837c5f64ff214873a1871677d79231ee99cff6
+# - tensors.q8_0.map model name: GLM-4.7-Flash-THIREUS-Q8_0-SPECIAL_TENSOR-00845-of-00845
+# - tensors.q6_K.map SHA-256: 999d5bf9e9b6ee1d50a27abf720202eea07c315bfa11c7a0ef0687859e65aaa6
+# - tensors.q6_K.map model name: GLM-4.7-Flash-THIREUS-Q6_K-SPECIAL_TENSOR-00845-of-00845
+# - tensors.q5_1.map SHA-256: b69920c23fa079faff694b31b903e659e20a56424d01831d5f8af873dfb5b62c
+# - tensors.q5_1.map model name: GLM-4.7-Flash-THIREUS-Q5_1-SPECIAL_TENSOR-00845-of-00845
+# - tensors.q5_K.map SHA-256: 3daf2ee32d3f95cf183d9f22771b4e2234cab9f690fc151c1754f638c93f2ae5
+# - tensors.q5_K.map model name: GLM-4.7-Flash-THIREUS-Q5_K-SPECIAL_TENSOR-00845-of-00845
+# - tensors.q5_0.map SHA-256: d75dfe5a732c571823e105d72d20dc47f1a149ffa6d0911085bbab2eff3489ab
+# - tensors.q5_0.map model name: GLM-4.7-Flash-THIREUS-Q5_0-SPECIAL_TENSOR-00845-of-00845
+# - tensors.q4_1.map SHA-256: a0532f934bbfaa6412620c6c8f16dfcd5b29b491e03c9393c4e32686a6f61841
+# - tensors.q4_1.map model name: GLM-4.7-Flash-THIREUS-Q4_1-SPECIAL_TENSOR-00845-of-00845
+# - tensors.q4_K.map SHA-256: 2463fe58ca95e5edf80eef6f168df8f870b5ce8b43b2d2b21d3c609337e0a648
+# - tensors.q4_K.map model name: GLM-4.7-Flash-THIREUS-Q4_K-SPECIAL_TENSOR-00845-of-00845
+# - tensors.q4_0.map SHA-256: 686b4b866e0735851d465b37b5e7300f2839c28f5dfd1485daae4fdbfd327e4a
+# - tensors.q4_0.map model name: GLM-4.7-Flash-THIREUS-Q4_0-SPECIAL_TENSOR-00845-of-00845
+# - tensors.iq4_nl.map SHA-256: 013028dbfa0497ca2dded971f509b13a4fa69e22c7f21ba95956d481a6bef67e
+# - tensors.iq4_nl.map model name: GLM-4.7-Flash-THIREUS-IQ4_NL-SPECIAL_TENSOR-00845-of-00845
+# - tensors.iq4_xs.map SHA-256: 571dcc85b2abcb000202d9f8bebf761a2f6306bd46644da715b11ba3d9c899d4
+# - tensors.iq4_xs.map model name: GLM-4.7-Flash-THIREUS-IQ4_XS-SPECIAL_TENSOR-00845-of-00845
+# - tensors.q3_K.map SHA-256: 738d5493c3f5ee948640975a280233f1be464f4a910fcf4e24797e7ad377a1d3
+# - tensors.q3_K.map model name: GLM-4.7-Flash-THIREUS-Q3_K-SPECIAL_TENSOR-00845-of-00845
+# - tensors.iq3_s.map SHA-256: ecde56cd1c8da606ae8d793e670d2f90d5307270f4f1ae21fe7cf1caa41c7bc8
+# - tensors.iq3_s.map model name: GLM-4.7-Flash-THIREUS-IQ3_S-SPECIAL_TENSOR-00845-of-00845
+# - tensors.iq3_xxs.map SHA-256: b241f851ff93fe3e701b67477ad8e6aa4068fe52424c32aead08ebbf4b8d93ec
+# - tensors.iq3_xxs.map model name: GLM-4.7-Flash-THIREUS-IQ3_XXS-SPECIAL_TENSOR-00845-of-00845
+# - tensors.q2_K.map SHA-256: 1c88f2fe8161761840a69be40c43d223cc97393e1218f6473f8c5dddfc91b71f
+# - tensors.q2_K.map model name: GLM-4.7-Flash-THIREUS-Q2_K-SPECIAL_TENSOR-00845-of-00845
+# - tensors.iq2_s.map SHA-256: 625c3d91795921467c6f3368ec5d5ece08325388dff294fc9bb5f27fef6a72e7
+# - tensors.iq2_s.map model name: GLM-4.7-Flash-THIREUS-IQ2_S-SPECIAL_TENSOR-00845-of-00845
+# - tensors.iq2_xs.map SHA-256: da4a6ac87a9ac2aca292d9f11e6391613485718c9e6d0e8d074b476a8b899893
+# - tensors.iq2_xs.map model name: GLM-4.7-Flash-THIREUS-IQ2_XS-SPECIAL_TENSOR-00845-of-00845
+# - tensors.iq2_xxs.map SHA-256: 111484d0aa7eca854eabf7023ea336a2cad03722437aabe80f0cec71d4152ee1
+# - tensors.iq2_xxs.map model name: GLM-4.7-Flash-THIREUS-IQ2_XXS-SPECIAL_TENSOR-00845-of-00845
+# - tensors.iq1_m_r4.map SHA-256: 3eaa3f43324b9fe2fef8bb2fe9968777c701b1cff5add664e3065c284502aa85
+# - tensors.iq1_m_r4.map model name: GLM-4.7-Flash-THIREUS-IQ1_M_R4-SPECIAL_TENSOR-00845-of-00845
+# - tensors.iq1_m.map SHA-256: 57a0674c413787f4fa10f55c36fdb747834e2b84af6d74bb3b2020b8c68596fa
+# - tensors.iq1_m.map model name: GLM-4.7-Flash-THIREUS-IQ1_M-SPECIAL_TENSOR-00845-of-00845
+# - tensors.iq1_s.map SHA-256: 6445427b6fec59d752014fb07ce5c3dc411741777fa89d6cf09586127e107b56
+# - tensors.iq1_s.map model name: GLM-4.7-Flash-THIREUS-IQ1_S-SPECIAL_TENSOR-00845-of-00845
+# - GPG signatures: PASSED
+# - Hidden parameters (not passed as CLI args):
+#   Loss exponent (p) [GPU]: 0.5
+#   Degradation exponent (q) [GPU]: 0.5
+# - Command used:
+# ./quant_assign.py kld_results.csv --gpu-tensors '.*' --gpu-quants iq1_s iq1_m iq2_xxs \
+# iq2_xs iq2_s q2_K iq3_xxs iq3_s q3_K iq4_xs iq4_nl q4_0 q4_K q4_1 q5_0 q5_K q5_1 q6_K q8_0 --gpu-tensors-max-size \
+# 29.52% --tolerance 0.01 --gpu-assign-qtype q6_K --harmonize-tensors \
+# '^blk\..*\.ffn_up_exps.*,blk\..*\.ffn_gate_exps.*' --harmonization-technique 3 --use-rank-quant-assign \
+# --quant-degradation-csv group0/kld_results.csv --quant-degradation-equation 'y = 0.120685090505 + 1.48325386086e+14 \
+# * ( x + 5.55788515814 )^(-15.3157894737)'
+
+## THE END!
