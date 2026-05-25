@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: May-24-2026 -------------------- **#
+#** --------------- Updated: May-25-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -2077,31 +2077,29 @@ def rank_quant_assign(
             return s
         return fn
 
-    # Meta-score for the auto-sweep — data-adaptive Σ loss · deg^q_meta.
+    # Meta-score for the auto-sweep — data-adaptive
+    # Σ (loss + mean_loss) · deg ** p_meta.
     #
-    # Rationale: different models have radically different shapes of group0
-    # degradation. Some (e.g. gemma-4-31B-it) have a catastrophic cliff at the
-    # low-bit end — iq1_s has deg ≈ 12.8, ~2× higher than the next qtype.
-    # Others (e.g. Qwen3.5-4B) have a smooth deg curve — iq1_s is only marginally
-    # worse than iq1_m. For cliff models we want a rank-style assignment that
-    # strictly avoids the catastrophic qtypes; for smooth models we want a
-    # greedy-style assignment that diversifies quality across many qtypes.
+    # Compute pool deg statistics AND the calibration data's max sensitivity.
+    # The user's insight: max_loss (worst per-tensor kld in the calibration
+    # data) sets the natural SCALE for what's tolerable model-wide. If a
+    # qtype's degradation is much higher than max_loss, putting ANY tensor on
+    # it contributes more damage than the model's worst tensor ever does at
+    # its best qtype — that's catastrophic.
     #
-    # The deg-exponent q_meta auto-tunes this: q_meta = max(1, log2(max_pool_deg))
-    # so a model with max_pool_deg ≈ 12 gets q_meta ≈ 3.6 (heavy nonlinear
-    # penalty on bad qtypes → rank-like) and a model with max_pool_deg ≈ 2.5
-    # gets q_meta ≈ 1.3 (nearly linear → greedy-like). The transition is smooth
-    # and data-driven; no hard-coded thresholds.
+    # We define each tensor's per-qtype cost using a NORMALISED degradation:
+    #   weight(tensor, qtype) = (1 + deg / max_loss) ** p_meta
+    # The (1 + ratio) base keeps the function smooth and always > 1, the
+    # exponent makes the penalty grow super-linearly for ratio >> 1
+    # (catastrophic qtypes) while staying gentle for ratio < 1 (safe qtypes).
     #
-    # Compute pool deg statistics using the same per-tensor degradation_fn
-    # the rest of the algorithm uses (so per-tensor scaling, if any, is
-    # respected). We need both the maximum and the SECOND-maximum to compute
-    # a "spike ratio" that captures how outlier-shaped the worst qtype is
-    # relative to the rest of the pool. Models with a sharp cliff at the
-    # low-bit end (e.g. gemma where iq1_s deg is 2.07× the next qtype) get a
-    # much larger q_meta than models with a smooth curve (e.g. Qwen3.5-4B
-    # where iq1_s deg is only 1.01× the next qtype). That's exactly what we
-    # need to interpolate smoothly between rank-like and greedy-like behavior.
+    # p_meta = log2(max_pool_deg / max_loss) auto-tunes the steepness using
+    # only ratios derived from the data — no hardcoded thresholds. Models
+    # whose worst qtype is far above max_loss (gemma: 12.83/1.65 ≈ 7.78 →
+    # p_meta ≈ 3.0) get a strong penalty on the worst qtypes. Models with
+    # similar ratios (Qwen3.5-4B: 2.60/0.27 ≈ 9.5 → p_meta ≈ 3.2) also do.
+    # The ABSOLUTE deg values can differ wildly between models, but the
+    # ratio-based scoring makes both behave consistently.
     _pool_degs: List[float] = []
     if sortable and global_pool:
         ref_t = sortable[0]
@@ -2114,40 +2112,71 @@ def rank_quant_assign(
                 _pool_degs.append(float(_d))
     _pool_degs.sort(reverse=True)
     _pool_max_deg = _pool_degs[0] if _pool_degs else 1.0
-    _pool_second_max_deg = _pool_degs[1] if len(_pool_degs) > 1 else _pool_max_deg
     if _pool_max_deg <= 0:
         _pool_max_deg = 1.0
-    if _pool_second_max_deg <= 0:
-        _pool_second_max_deg = _pool_max_deg
-    # spike_ratio ≈ 2 means the worst qtype's deg is ~2× the next; that's a
-    # cliff (gemma). spike_ratio ≈ 1 means smooth (Qwen3.5-4B).
-    _spike_ratio = _pool_max_deg / _pool_second_max_deg
-    # q_meta combines absolute scale (log2 of max) and the spike ratio. The
-    # multiplication makes the penalty grow faster when BOTH the max is large
-    # AND the spike is sharp — i.e. when low-bit quants are catastrophically
-    # worse than the rest, not merely large in absolute terms.
-    q_meta = max(1.0, math.log2(max(1.0, _pool_max_deg)) * _spike_ratio)
+    # max_loss = the worst per-tensor kld in the calibration data. Use the
+    # RAW (pre-harmonisation, pre-synergy) values so the scale is intrinsic
+    # to the model, not affected by --harmonize-tensors choices.
+    _raw_losses = [float(ppl_loss.get(t, 0.0)) for t in (tensors or [])]
+    _raw_losses = [x for x in _raw_losses if x > 0]
+    _max_loss = max(_raw_losses) if _raw_losses else 1.0
+    if _max_loss <= 0:
+        _max_loss = 1.0
+    _mean_loss = (sum(_raw_losses) / len(_raw_losses)) if _raw_losses else 1.0
+    if _mean_loss <= 0:
+        _mean_loss = 1.0
+    _deg_loss_ratio = _pool_max_deg / _max_loss
+    p_meta = max(1.0, math.log2(max(1.0, _deg_loss_ratio)))
     if debug:
         print(
-            f"[RANK] meta-score: q_meta={q_meta:.3f} (auto from max_pool_deg={_pool_max_deg:.3f}, "
-            f"spike_ratio={_spike_ratio:.3f}; large q_meta ⇒ rank-like, q_meta=1 ⇒ greedy-like)",
-            file=sys.stderr,
-        )
-    if debug:
-        print(
-            f"[RANK] meta-score: q_meta={q_meta:.3f} (auto from max_pool_deg={_pool_max_deg:.3f}; "
-            f"large q_meta ⇒ rank-like, q_meta=1 ⇒ greedy-like)",
+            f"[RANK] meta-score: max_loss={_max_loss:.4f}, mean_loss={_mean_loss:.4f}, "
+            f"max_pool_deg={_pool_max_deg:.4f}, ratio={_deg_loss_ratio:.3f}; "
+            f"p_meta={p_meta:.3f} (weight = (loss + mean_loss)·deg^p_meta); "
+            f"large p_meta ⇒ rank-like, p_meta=1 ⇒ greedy-like",
             file=sys.stderr,
         )
 
     def _meta_score(curr_assignment: Dict[str, str]) -> Tuple[float, float, float]:
-        # Primary key: Σ loss · deg^q_meta. The deg exponent makes this
-        # interpolate continuously between greedy-like (q_meta=1) and rank-
-        # like / minimax-like (q_meta >> 1) based on the model's data.
-        # Secondary key: outlier contribution (helps protect outliers among
-        # ties).
-        # Tertiary key: sum of all degradations (favours narrower distributions
-        # on ties).
+        # Primary key: Σ (loss + mean_loss) · deg ** p_meta.
+        #
+        # The contribution of a tensor t at qtype q has two parts, both
+        # weighted by deg(q)^p_meta:
+        #
+        #   1. A loss-proportional term `loss(t) · deg(q)^p_meta` — this is
+        #      the standard "expected damage" model. It rewards spreading
+        #      sensitive tensors onto low-deg qtypes and insensitive tensors
+        #      onto higher-deg qtypes, because the savings on the sensitive
+        #      tensors (high loss × big deg reduction) outweigh the costs
+        #      on the insensitive ones (low loss × small deg increase).
+        #
+        #   2. A flat per-tensor "intrinsic" term `mean_loss · deg(q)^p_meta`
+        #      — every tensor pays this just for being on q. This term is
+        #      what makes the algorithm avoid catastrophic qtypes even for
+        #      low-loss tensors. A bottom-of-pack tensor (loss ≈ 0.005)
+        #      contributes essentially nothing under the loss-proportional
+        #      term alone, so placing it on iq1_m vs iq2_xs is nearly free —
+        #      and greedy happily dumps 199 tensors on iq1_m. Adding the
+        #      intrinsic term `mean_loss · deg(iq1_m)^p ≈ 0.15 × 216 ≈ 32`
+        #      per tensor means 199 such tensors pay ~6300 extra, which
+        #      dwarfs the savings greedy gains by promoting the top tensors.
+        #
+        # Choice of α = mean_loss: this is the natural data-derived scale
+        # for "what a typical tensor's loss looks like." It makes the
+        # intrinsic term comparable to the loss-proportional term for a
+        # median tensor (so neither dominates), while ensuring that even
+        # zero-loss tensors get a meaningful "this qtype is bad" signal.
+        # No hardcoded threshold; both terms shrink/grow together with the
+        # model's loss distribution.
+        #
+        # p_meta = log2(max_pool_deg / max_loss) auto-tunes the cliff
+        # steepness: gemma (ratio ≈ 7.8 → p_meta ≈ 3) gets iq1_s weight
+        # 12.8^3 ≈ 2100, iq1_m ≈ 218, iq2_xs ≈ 92; Qwen3.5-4B (ratio ≈ 9.5
+        # → p_meta ≈ 3.25) gets a similarly steep curve relative to its
+        # smaller absolute degs.
+        #
+        # Secondary key: outlier loss·deg contribution (tie-break helps
+        # protect outliers).
+        # Tertiary key: sum of degs (tie-break favours narrower distributions).
         primary = 0.0
         outlier_ld = 0.0
         sum_d = 0.0
@@ -2164,10 +2193,10 @@ def rank_quant_assign(
             d = float(d)
             loss = float(ppl_loss_w.get(t, 0.0))
             try:
-                d_pow = d ** q_meta
+                qweight = d ** p_meta
             except Exception:
-                d_pow = d
-            primary += loss * d_pow
+                qweight = d
+            primary += (loss + _mean_loss) * qweight
             sum_d += d
             if t in high_outliers_set:
                 outlier_ld += loss * d
@@ -2332,32 +2361,71 @@ def rank_quant_assign(
     # cliff-aware meta-score (q_meta) heavily penalises. Letting the meta
     # decide gives a unified algorithm that works for both extremes.
     if sortable:
-        try:
-            _greedy_tensor_quants = {t: list(allowed_map_w[t]) for t in tensors_w}
-            _g_assignment, _g_total = greedy_quant_assign(
-                tensors=list(tensors_w),
-                tensor_sizes=tensor_sizes_w,
-                ppl_loss=ppl_loss_w,
-                degradation_fn=degradation_fn,
-                tensor_quants=_greedy_tensor_quants,
-                budget_bytes=int(budget_bytes),
-                preassign_missing_ppl=preassign_missing_ppl,
-                debug=False,
-                harmonized_groups=None,
-                loss_exponent=1.0,
-            )
-            if _g_assignment and _g_total <= budget_bytes:
-                # Use sentinel window key (-1, -1) so debug print knows this
-                # came from greedy. The pool string will say "GREEDY".
-                window_data.append(((-1, -1), dict(_g_assignment), int(_g_total)))
+        # Order the global pool by group0 degradation ASCENDING (best deg first).
+        # Use the first sortable tensor as the deg reference; this is the same
+        # convention used elsewhere in the module.
+        _ref_t = sortable[0]
+        def _deg_of(q: str) -> float:
+            try:
+                v = degradation_fn(_ref_t, q)
+            except Exception:
+                v = None
+            return float(v) if v is not None else float('inf')
+        _pool_by_deg = sorted(global_pool, key=_deg_of)
+
+        # Add constrained-greedy candidates: greedy run on TOP-k best-deg
+        # qtypes for k = 1..K. The k=K case is the unconstrained greedy. For
+        # smaller k, the worst-deg qtypes are *removed from greedy's choice
+        # set*, forcing it to spread within the safer qtypes only.
+        #
+        # Why this matters: for cliff models (gemma), unconstrained greedy
+        # dumps the least-sensitive tensors onto iq1_m/iq1_s because those
+        # qtypes have the lowest bpw — but the meta strongly disprefers
+        # those placements. Constrained greedy with the catastrophic qtypes
+        # removed produces a non-uniform but safe spread (e.g. most at
+        # iq3_xxs, a few promoted to better qtypes by greedy's size-cost
+        # heuristic). The meta then picks the *cap* k that minimises Σ loss
+        # · deg^p_meta. For smooth models (Qwen3.5-4B) the unconstrained
+        # greedy usually wins because catastrophic qtypes aren't catastrophic
+        # there. Data-driven, no hardcoded threshold.
+        for _k in range(1, len(_pool_by_deg) + 1):
+            _sub_pool = set(_pool_by_deg[:_k])
+            _sub_tensor_quants = {
+                t: [q for q in allowed_map_w[t] if q in _sub_pool]
+                for t in tensors_w
+            }
+            # Skip if any tensor has no allowed qtype in this sub-pool.
+            if any(not qs for qs in _sub_tensor_quants.values()):
+                continue
+            try:
+                _g_assignment, _g_total = greedy_quant_assign(
+                    tensors=list(tensors_w),
+                    tensor_sizes=tensor_sizes_w,
+                    ppl_loss=ppl_loss_w,
+                    degradation_fn=degradation_fn,
+                    tensor_quants=_sub_tensor_quants,
+                    budget_bytes=int(budget_bytes),
+                    preassign_missing_ppl=preassign_missing_ppl,
+                    debug=False,
+                    harmonized_groups=None,
+                    loss_exponent=1.0,
+                )
+            except Exception as _e:
                 if debug:
+                    print(f"[RANK] Greedy candidate k={_k} failed: {_e}", file=sys.stderr)
+                continue
+            if _g_assignment and _g_total <= budget_bytes:
+                # Sentinel window key (-1, _k): _k = number of qtypes in
+                # greedy's allowed pool (sorted by deg, best first). _k = K
+                # is unconstrained greedy.
+                window_data.append(((-1, _k), dict(_g_assignment), int(_g_total)))
+                if debug:
+                    _excluded = _pool_by_deg[_k:]
                     print(
-                        f"[RANK] Added greedy candidate: total={_g_total/GIB:.3f} GiB",
+                        f"[RANK] Added greedy candidate k={_k} (excluded worst-deg: {_excluded}) "
+                        f"total={_g_total/GIB:.3f} GiB",
                         file=sys.stderr,
                     )
-        except Exception as _e:
-            if debug:
-                print(f"[RANK] Greedy candidate failed: {_e}", file=sys.stderr)
 
     # Restrict to in-budget windows for the (p, q) sweep. If none fit, the
     # fallback assignment is used.
@@ -2514,9 +2582,23 @@ def rank_quant_assign(
                     if w_ not in winner_first_pq:
                         winner_first_pq[w_] = (p_, q_)
 
-                # Now compute meta exactly once per distinct winning window.
-                for win_idx, (p_, q_) in winner_first_pq.items():
+                # Compute meta for EVERY feasible window — not just the ones
+                # that win under some (p, q) score. The (p, q) sweep is only a
+                # heuristic for discovering interesting candidates; the meta
+                # ranking is the source of truth. A window like
+                # ['q3_K', 'iq3_s', 'iq3_xxs'] (no catastrophic qtypes) might
+                # never win the inner score under any (p, q) yet still have
+                # the lowest meta because it spreads cleanly without touching
+                # iq1_m/iq1_s. Without this loop, such windows are invisible
+                # to the meta and the algorithm settles for greedy (which is
+                # the only catastrophic-using candidate the (p, q) sweep
+                # tends to surface for cliff models).
+                for win_idx in range(len(window_meta)):
                     win, assign_, total_ = window_meta[win_idx]
+                    # Use a (p, q) that this window wins under if any, else
+                    # fall back to (1.0, 1.0) for score reporting only — the
+                    # actual ranking uses meta which doesn't depend on (p, q).
+                    p_, q_ = winner_first_pq.get(win_idx, (1.0, 1.0))
                     score_fn_ = _make_score_fn(p_, q_)
                     s_ = score_fn_(assign_)
                     m_ = _meta_score(assign_)
@@ -2544,7 +2626,7 @@ def rank_quant_assign(
             # Pick the (p, q) minimising the lexicographic meta-score.
             sweep_results.sort(key=lambda r: r[5])
             best_p, best_q, assignment, total_size, best_score, best_meta, best_window = sweep_results[0]
-            if best_window == (-1, -1):
+            if best_window[0] == -1:
                 # Greedy candidate won — assignment isn't tied to a contiguous
                 # global_pool sub-window. Report the qtypes actually used.
                 _used_qtypes = sorted(set(assignment.values()), key=lambda q: global_pool.index(q) if q in global_pool else len(global_pool))
@@ -2560,11 +2642,11 @@ def rank_quant_assign(
         if debug and sweep_results:
             def _fmt_meta(m):
                 if isinstance(m, tuple):
-                    return "Σ loss·deg^{:.2f}={:.4f} outlier_loss·deg={:.4f} sum_deg={:.1f}".format(q_meta, *m)
+                    return "Σ (loss+{:.4f})·deg^{:.2f}={:.4f} outlier_loss·deg={:.4f} sum_deg={:.1f}".format(_mean_loss, p_meta, *m)
                 return f"{m:.4f}"
             def _pool_label(w):
-                if w == (-1, -1):
-                    return "GREEDY"
+                if w[0] == -1:
+                    return f"GREEDY(k={w[1]})"
                 return str(global_pool[w[0]:w[1] + 1])
             print(
                 f"[RANK] Auto-sweep tried {n_candidates} (p,q) candidates"
@@ -2598,7 +2680,7 @@ def rank_quant_assign(
             total_size = fallback_total if fallback_total >= 0 else 0
             best_score = float('inf')
             best_window = (0, K_full - 1)
-        if best_window == (-1, -1):
+        if best_window[0] == -1:
             _used_qtypes = sorted(set(assignment.values()), key=lambda q: global_pool.index(q) if q in global_pool else len(global_pool))
             current_pool = _used_qtypes
         else:
