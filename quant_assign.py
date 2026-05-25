@@ -2302,6 +2302,100 @@ def rank_quant_assign(
         rows.sort(key=lambda r: r[1])
         outlier_allowed[ot] = rows
 
+    # --- Outlier TARGET cap (budget-progressive).
+    #
+    # The cap on the outlier's qtype must move smoothly through the Pareto
+    # frontier as the budget grows — otherwise the outlier "bumps" from
+    # iq3_xxs straight to q8_0 once the budget loosens, skipping every
+    # intermediate qtype. The user observation: a model with budget
+    # supporting ~q3_K for the bulk should have its outlier near q3_K too,
+    # not at q8_0 (overspending) or iq3_xxs (rank-monotonicity violation).
+    #
+    # Two components combine to set the cap:
+    #
+    #   1. max_loss target — the smallest Pareto qtype whose deg ≥ max_loss.
+    #      Reasoning: the worst per-tensor calibration loss is the natural
+    #      scale for tolerable damage; a qtype with deg ≈ max_loss damages
+    #      the most-sensitive tensor by about as much as the model's worst
+    #      tensor already gets at calibration. For gemma this lands on
+    #      iq3_xxs (deg 2.04 with max_loss 1.65).
+    #
+    #   2. budget-natural qtype — the highest-bpw Pareto qtype Q such that
+    #      assigning EVERY tensor to Q would still fit within budget. This
+    #      reflects "what the budget naturally supports as a uniform
+    #      assignment" — i.e. roughly where the bulk of non-outlier tensors
+    #      end up after greedy. For gemma at 50 % (15.19 GiB) the uniform-
+    #      q3_K assignment fits (15.11 GiB) but uniform-iq4_xs (15.55 GiB)
+    #      doesn't, so the natural qtype is q3_K.
+    #
+    # Outlier cap = whichever of {max_loss target, budget-natural qtype} has
+    # the LOWER deg (= higher bpw). At tight budgets the natural qtype is
+    # below the max_loss target, so the cap holds at the max_loss target.
+    # At loose budgets the natural qtype is above the max_loss target, so
+    # the cap moves up with the budget — exactly tracking the bulk and
+    # delivering a progressive q3_K → iq4_xs → q4_K → q5_K → q6_K → q8_0
+    # walk as the budget grows from ~50 % to ~100 %.
+    #
+    # This is a CAP, not a floor: if budget can't fit the cap qtype, the
+    # outlier falls back to a worse qtype (existing logic).
+    outlier_target_idx: Dict[str, int] = {}
+    outlier_pareto_idxs: Dict[str, List[int]] = {}
+    for ot in high_outliers:
+        rows = outlier_allowed[ot]
+        # Compute Pareto-frontier on (size, deg). Sorted ASC by deg; row i
+        # is Pareto iff sz_i < min(sz_j for j < i).
+        pareto_idxs: List[int] = []
+        min_sz = float('inf')
+        for i, (_q, _d, sz) in enumerate(rows):
+            if sz < min_sz:
+                pareto_idxs.append(i)
+                min_sz = sz
+        outlier_pareto_idxs[ot] = pareto_idxs
+
+        # Component 1: smallest Pareto qtype with deg ≥ max_loss.
+        max_loss_idx = pareto_idxs[-1] if pareto_idxs else len(rows) - 1
+        for i in pareto_idxs:
+            if rows[i][1] >= _max_loss:
+                max_loss_idx = i
+                break
+
+        # Component 2: highest-bpw Pareto qtype Q such that uniform-Q for
+        # all tensors fits the budget. Iterate Pareto in deg-ASC order (=
+        # bpw-DESC for typical curves); first qtype where uniform fits wins.
+        # If none fit (very tight budget), use the last (smallest-bpw)
+        # Pareto qtype as a marker.
+        natural_idx = pareto_idxs[-1] if pareto_idxs else len(rows) - 1
+        for i in pareto_idxs:
+            q = rows[i][0]
+            uniform_total = 0
+            feasible = True
+            for t in tensors_w:
+                if q not in tensor_sizes_w[t]:
+                    feasible = False
+                    break
+                uniform_total += int(tensor_sizes_w[t][q])
+                if uniform_total > budget_bytes:
+                    feasible = False
+                    break
+            if feasible:
+                natural_idx = i
+                break
+
+        # Final target = whichever has LOWER deg (= smaller index in deg-ASC
+        # outlier_allowed list, since pareto_idxs is also deg-ASC).
+        idx = min(max_loss_idx, natural_idx)
+        outlier_target_idx[ot] = idx
+        if debug:
+            print(
+                f"[RANK] Outlier {ot} target qtype = {rows[idx][0]} "
+                f"(deg={rows[idx][1]:.4f}); max_loss target = {rows[max_loss_idx][0]} "
+                f"(deg={rows[max_loss_idx][1]:.4f}, max_loss={_max_loss:.4f}); "
+                f"budget-natural = {rows[natural_idx][0]} "
+                f"(deg={rows[natural_idx][1]:.4f}); "
+                f"Pareto frontier: {[rows[i][0] for i in pareto_idxs]}.",
+                file=sys.stderr,
+            )
+
     # --- Window enumeration is independent of (p, q): rank_map, outlier
     # override, and per-tensor sizes do NOT depend on the loss/deg exponents.
     # So we compute (assignment, total) once per window and then iterate the
@@ -2328,13 +2422,55 @@ def rank_quant_assign(
                 running_total = non_outlier_size
                 for ot in high_outliers:
                     chosen_q: Optional[str] = None
-                    for q_, d_, sz_ in outlier_allowed[ot]:
-                        if d_ > window_first_deg:
+                    _tidx = outlier_target_idx[ot]
+                    _target_deg_local = outlier_allowed[ot][_tidx][1]
+                    _pareto_local = outlier_pareto_idxs[ot]
+                    # Pinning policy — pick the highest-deg PARETO-OPTIMAL
+                    # qtype that satisfies:
+                    #   (1) deg ≤ window_first_deg  (rank monotonicity vs
+                    #       most-sensitive non-outlier)
+                    #   (2) deg ≥ target_deg  (cap, when feasible — don't
+                    #       waste bpw on the outlier beyond what max_loss/
+                    #       budget-natural calls for)
+                    #   (3) outlier_size + non_outlier_total ≤ budget
+                    #
+                    # If (1) and (2) intersect, the qtype with the LOWEST
+                    # deg in that intersection wins (= target_deg itself
+                    # whenever possible). If they don't intersect (budget
+                    # is loose enough that monotonicity demands deg <
+                    # target), relax (2) and pick the HIGHEST-deg Pareto
+                    # qtype satisfying just (1). This delivers a smooth
+                    # walk through the Pareto frontier as budget grows:
+                    # iq3_xxs → iq4_xs → q6_K → q8_0 rather than a bump
+                    # from iq3_xxs straight to q8_0.
+                    #
+                    # Why Pareto-only? Dominated qtypes (e.g. q3_K for
+                    # token_embd) have unfavourable (size, deg) trade-offs
+                    # caused by per-row scale overhead — Phase C would
+                    # promote them to the Pareto-equivalent anyway, which
+                    # silently lifts the cap. Restricting pinning to the
+                    # Pareto frontier keeps Phase C from undoing our cap.
+                    # Try (2)+(1) first.
+                    for i in _pareto_local:  # sorted ASC by deg
+                        q_, d_, sz_ = outlier_allowed[ot][i]
+                        if d_ < _target_deg_local:
                             continue
+                        if d_ > window_first_deg:
+                            break  # ASC: further will only be worse
                         if running_total + sz_ <= budget_bytes:
                             chosen_q = q_
                             running_total += sz_
                             break
+                    # Relax (2): pick HIGHEST deg Pareto ≤ window_first_deg.
+                    if chosen_q is None:
+                        for i in reversed(_pareto_local):
+                            q_, d_, sz_ = outlier_allowed[ot][i]
+                            if d_ > window_first_deg:
+                                continue
+                            if running_total + sz_ <= budget_bytes:
+                                chosen_q = q_
+                                running_total += sz_
+                                break
                     if chosen_q is None:
                         chosen_q = cand_assignment[ot]
                         running_total += int(tensor_sizes_w[ot][chosen_q])
@@ -2439,19 +2575,45 @@ def rank_quant_assign(
             # monotonicity bound and (b) fits the remaining budget once we
             # reserve the non-outlier minimum.
             pinned_total = 0
+            # Pin each outlier to the highest-deg Pareto-optimal qtype that
+            # satisfies (1) monotonicity vs sub-pool worst, (2) the target
+            # cap when feasible, (3) budget. See the brute-force outlier
+            # override above for the full rationale of this two-phase pick
+            # (target-or-better first, monotonicity-only fallback).
             for ot in high_outliers:
                 chosen_q = None
-                for q_, d_, sz_ in outlier_allowed[ot]:
-                    if d_ > _worst_deg:
-                        # Monotonicity violation — skip.
+                target_idx_local = outlier_target_idx[ot]
+                target_deg_local = outlier_allowed[ot][target_idx_local][1]
+                pareto_local = outlier_pareto_idxs[ot]
+                # Phase 1: prefer Pareto qtype with target_deg ≤ deg ≤
+                # sub-pool worst. Pick the LOWEST deg in that range
+                # (= target_deg itself if it's Pareto and fits).
+                for i in pareto_local:  # sorted ASC by deg
+                    q_, d_, sz_ = outlier_allowed[ot][i]
+                    if d_ < target_deg_local:
                         continue
+                    if d_ > _worst_deg:
+                        break
                     if pinned_total + sz_ + min_non_outlier <= budget_bytes:
                         chosen_q = q_
                         pinned_total += sz_
                         break
+                # Phase 2: cap relaxed — pick HIGHEST-deg Pareto qtype with
+                # deg ≤ sub-pool worst (closest to target without exceeding
+                # monotonicity). This is the progressive-walk case where
+                # the budget is loose and we're moving the outlier up the
+                # Pareto frontier.
                 if chosen_q is None:
-                    # No monotonic qtype fits this budget — sub-pool can't
-                    # honour the outlier. Reject this candidate.
+                    for i in reversed(pareto_local):
+                        q_, d_, sz_ = outlier_allowed[ot][i]
+                        if d_ > _worst_deg:
+                            continue
+                        if pinned_total + sz_ + min_non_outlier <= budget_bytes:
+                            chosen_q = q_
+                            pinned_total += sz_
+                            break
+                if chosen_q is None:
+                    # No feasible Pareto qtype — reject this candidate.
                     return None, None
                 pinned[ot] = chosen_q
             return pinned, pinned_total
@@ -2834,6 +2996,13 @@ def rank_quant_assign(
         order = sorted(sortable, key=lambda t: tensor_sizes_w[t][assignment[t]])
         any_promoted = False
         for t in order:
+            # Skip outliers — they've been pinned to a specific qtype by
+            # the outlier-pinning logic (target cap + monotonicity +
+            # Pareto). Letting Phase C "promote" them (even via free
+            # Pareto upgrades with delta ≤ 0) would silently undo the cap
+            # and pull the outlier above its intended qtype.
+            if t in high_outliers_set:
+                continue
             current_q = assignment[t]
             allowed_t = allowed_map_w[t]
             try:
