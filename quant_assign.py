@@ -1695,6 +1695,19 @@ def auto_quant_assign(
          up with a strictly better qtype than a more-sensitive one).
     """
     # --- Step 0: Copy/normalize inputs to avoid mutating caller data
+    #
+    # Tolerance handling: --tolerance is a *symmetric acceptance band* around
+    # the target (target ± tolerance), NOT a one-sided overshoot allowance.
+    # The auto algorithm aims at the target center, so internally every
+    # feasibility cap below uses `budget_bytes` strictly. Without this
+    # override the brute-force / BA2 / greedy candidate filters honour
+    # `budget_bytes * (1 + tolerance)`, which lets the meta pick a window
+    # that sits at the upper edge of the band (e.g. user asks for 26.12 %
+    # with --tolerance 0.01 and the recipe lands at 26.38 % instead of
+    # close to 26.12 %). Strict-capping at budget_bytes makes the result
+    # land NEAR target — possibly leaving headroom unused for cliff
+    # models, but that trade-off is intentional.
+    tolerance = 0.0
     tensors = list(tensors)
     tensor_quants = tensor_quants or {}
     extra_outlier_qtypes = list(extra_outlier_qtypes or [])
@@ -5507,10 +5520,10 @@ def main():
         pct = (tb / (max_size * GIB)) * 100 if max_size > 0 else 0
         _tb += tb
         _pct += pct
-        print(f"#{cls.upper():>4} Total: {tb/GIB:.2f} GiB ({pct:.1f}%) | {max_size:.2f} GiB max, if all were {highest_q} | {min_size:.2f} GiB min, if all were {lowest_q}")
+        print(f"#{cls.upper():>4} Total: {tb/GIB:.2f} GiB ({pct:.2f}%) | {max_size:.2f} GiB max, if all were {highest_q} | {min_size:.2f} GiB min, if all were {lowest_q}")
 
     if cpu_quants and gpu_quants:
-        print(f"# GPU+CPU Total: {_tb/GIB:.2f} GiB ({_pct/2:.1f}%)")
+        print(f"# GPU+CPU Total: {_tb/GIB:.2f} GiB ({_pct/2:.2f}%)")
 
     # Summary tensor counts and bits-per-weight per qtype
     print("\n## Summary of tensor counts and bpw per qtype")
@@ -5670,7 +5683,7 @@ def main():
                 bytes_meas_fb = sum(e['size'] for e in meas_fb)
                 gib_meas_fb = bytes_meas_fb / GIB
                 pct_meas_fb = (bytes_meas_fb / (max_gib * GIB) * 100) if max_gib > 0 else 0
-                print(f"# *{display_qt:<9}\t{cnt_meas_fb:<3}\t{bpw_str:<6}\t{gib_meas_fb:>6.2f} GiB\t{pct_meas_fb:>3.1f}%\t\t{max_gib:.2f}")
+                print(f"# *{display_qt:<9}\t{cnt_meas_fb:<3}\t{bpw_str:<6}\t{gib_meas_fb:>6.2f} GiB\t{pct_meas_fb:>5.2f}%\t\t{max_gib:.2f}")
 
             # 5) measured non-fallback (regular, no prefix). Always emit line (possibly zero).
             cnt_meas = len(meas_nfb)
@@ -5679,7 +5692,7 @@ def main():
                 bytes_meas = sum(e['size'] for e in meas_nfb)
                 gib_meas = bytes_meas / GIB
                 pct_meas = (bytes_meas / (max_gib * GIB) * 100) if max_gib > 0 else 0
-                print(f"# {display_qt:<10}\t{cnt_meas:<3}\t{bpw_str:<6}\t{gib_meas:>6.2f} GiB\t{pct_meas:>3.1f}%\t\t{max_gib:.2f}")
+                print(f"# {display_qt:<10}\t{cnt_meas:<3}\t{bpw_str:<6}\t{gib_meas:>6.2f} GiB\t{pct_meas:>5.2f}%\t\t{max_gib:.2f}")
 
     _bytes = sum(e.get('size', 0) for lst in tensor_index.values() for e in lst)
     _elements = sum(e.get('elements', 0) for lst in tensor_index.values() for e in lst)
