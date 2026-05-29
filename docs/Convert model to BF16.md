@@ -96,7 +96,7 @@ Note: See [here](https://github.com/ikawrakow/ik_llama.cpp/issues/383#issuecomme
 
 ## Convert to BF16 GGUF
 
-Convert model to BF16 GGUF:
+Convert model to BF16 GGUF (remove the `--no-mtp` option if incompatible with current model):
 
 ```
 cd "$WORKING_DIRECTORY"

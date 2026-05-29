@@ -71,3 +71,16 @@ Important: Adjust the `-ngl` option and related `ik_llama.cpp` parameters to tak
 Note: @ubergarm wrote a more detailed guide on https://github.com/ikawrakow/ik_llama.cpp/discussions/434, check it out!
 
 The `llama-imatrix` process can take between a few hours up to a couple of days. Once completed, the imatrix file should be available at the following location: `${IMATRIX}`.
+
+## The naughty ones
+
+Some models may require a different approach and different parameters such as `gemma-4-31B-it` - especially if they don't do well without a chat template corpus. This is how I've produced the imatrix file for this model (credit goes to @ddh0 for the original idea):
+
+```
+cd "$WORKING_DIRECTORY" && \
+export PATH="$WORKING_DIRECTORY"/ik_llama.cpp/build/bin/:$PATH && \
+ulimit -n 9999 || sudo ulimit -n 9999 || echo "Warning: Could not increase file descriptor limit (ulimit -n). The model may fail to load on Linux/macOS." && \
+llama-imatrix --verbosity 1 -m ${MODEL_GGUF} -f thireus-ubergarm-imatrix-calibration-corpus-v02_chat.txt -o ${IMATRIX} -ngl 99 --layer-similarity --ctx-size 4096 --threads $(nproc) -ub 4096 -b 4096
+```
+
+You can find the `thireus-ubergarm-imatrix-calibration-corpus-v02_chat.txt` imatrix corpus file [here](https://huggingface.co/datasets/Thireus/imatrix-corpus/blob/main/thireus-ubergarm-imatrix-calibration-corpus-v02_chat.txt). It is based on `imatrix-calibration-corpus-v02.txt` and was created by asking `gemma-4-31B-it-BF16` to imagine this was a set of conversations between a user and a LLM which is missing the chat template tags and some of the system or user interactions, and that it needs to restore those tags.
