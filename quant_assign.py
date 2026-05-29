@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: May-25-2026 -------------------- **#
+#** --------------- Updated: May-29-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -1646,7 +1646,7 @@ def greedy_quant_assign(
     return assignment, total_size
 
 
-def rank_quant_assign(
+def auto_quant_assign(
     tensors: Iterable[str],
     tensor_sizes: Dict[str, Dict[str, int]],
     ppl_loss: Dict[str, float],
@@ -1737,7 +1737,7 @@ def rank_quant_assign(
     ppl_loss_raw: Dict[str, float] = {t: float(v) if v is not None else 0.0 for t, v in ppl_loss.items()}
     if synergistic_groups and synergy_strength > 0.0:
         if debug:
-            print(f"[RANK] applying synergistic adjustment (strength={synergy_strength}) to raw loss values", file=sys.stderr)
+            print(f"[AUTO] applying synergistic adjustment (strength={synergy_strength}) to raw loss values", file=sys.stderr)
         ppl_loss_raw = adjust_losses_with_synergy(
             synergistic_groups=synergistic_groups,
             loss=ppl_loss_raw,
@@ -1840,7 +1840,7 @@ def rank_quant_assign(
         assignment[t] = smallest_q
         if debug:
             print(
-                f"[RANK] outlier (kld≤{zero_kld_threshold}) {t} -> {smallest_q} "
+                f"[AUTO] outlier (kld≤{zero_kld_threshold}) {t} -> {smallest_q} "
                 f"(size={tensor_sizes_w[t][smallest_q]/GIB:.4f} GiB; picked from {candidates})",
                 file=sys.stderr,
             )
@@ -1849,7 +1849,7 @@ def rank_quant_assign(
     for t in preassigned:
         assignment[t] = allowed_map_w[t][0]
         if debug:
-            print(f"[RANK] preassigning {t} -> {allowed_map_w[t][0]} (missing ppl_loss)", file=sys.stderr)
+            print(f"[AUTO] preassigning {t} -> {allowed_map_w[t][0]} (missing ppl_loss)", file=sys.stderr)
 
     sortable = [t for t in tensors_w if t not in outlier_tensors and t not in preassigned]
 
@@ -1928,7 +1928,7 @@ def rank_quant_assign(
     # correct preconditioner and is essentially free.
     if pareto_filter:
         if debug:
-            print("[RANK] Applying per-tensor Pareto-frontier filter to allowed qtypes...", file=sys.stderr)
+            print("[AUTO] Applying per-tensor Pareto-frontier filter to allowed qtypes...", file=sys.stderr)
         total_removed = 0
         dropped_qtype_counter: Counter = Counter()
         for t in list(allowed_map_w.keys()):
@@ -1968,7 +1968,7 @@ def rank_quant_assign(
         if debug and total_removed:
             top_dropped = ", ".join(f"{q}×{c}" for q, c in dropped_qtype_counter.most_common(10))
             print(
-                f"[RANK] Pareto filter removed {total_removed} (tensor,qtype) allowed-list entries; "
+                f"[AUTO] Pareto filter removed {total_removed} (tensor,qtype) allowed-list entries; "
                 f"most-dropped qtypes: {top_dropped}",
                 file=sys.stderr,
             )
@@ -1979,7 +1979,7 @@ def rank_quant_assign(
             global_pool_set.update(allowed_map_w[t])
         global_pool = sorted(global_pool_set, key=_pool_sort_key)
         if debug:
-            print(f"[RANK] Pareto-filtered global pool ({len(global_pool)} qtypes): {global_pool}", file=sys.stderr)
+            print(f"[AUTO] Pareto-filtered global pool ({len(global_pool)} qtypes): {global_pool}", file=sys.stderr)
 
     # Build sens-rank lookup using unique sens values (ties get the same rank,
     # which means tensors with identical sensitivity map to the same qtype).
@@ -2031,8 +2031,8 @@ def rank_quant_assign(
     total_size = compute_total(assignment)
 
     if debug:
-        print(f"[RANK] initial pool ({len(current_pool)} qtypes): {current_pool}", file=sys.stderr)
-        print(f"[RANK] initial total_size = {total_size/GIB:.3f} GiB; budget = {budget_bytes/GIB:.3f} GiB", file=sys.stderr)
+        print(f"[AUTO] initial pool ({len(current_pool)} qtypes): {current_pool}", file=sys.stderr)
+        print(f"[AUTO] initial total_size = {total_size/GIB:.3f} GiB; budget = {budget_bytes/GIB:.3f} GiB", file=sys.stderr)
 
     # Helper: snapshot assignment for sortable tensors only (outliers/preassigned
     # stay put across phases).
@@ -2126,10 +2126,24 @@ def rank_quant_assign(
     if _mean_loss <= 0:
         _mean_loss = 1.0
     _deg_loss_ratio = _pool_max_deg / _max_loss
-    p_meta = max(1.0, math.log2(max(1.0, _deg_loss_ratio)))
+    # p_meta = log2(max_pool_deg / max_loss) + 1: the "+1" amplifies the
+    # exponential-badness of catastrophic qtypes one tier above the bare
+    # log2 ratio. Without it, the meta is too forgiving of placements like
+    # "many low-loss tensors on iq1_m" (the compound damage from N tensors
+    # all on the worst qtype is roughly N times the per-tensor cost — and
+    # the user's stated principle is that qtype quality should win over
+    # tensor sensitivity when many tensors are involved). The +1 lifts
+    # the deg^p ratio between adjacent catastrophic qtypes from ~2× to
+    # ~3-4×, which is enough to flip the meta from "greedy-like
+    # concentration on iq1_m" to "spread across iq2_xs with minimal
+    # iq1_m" at tight budgets — without breaking other budgets (smooth
+    # models like Qwen3.5-4B that don't have a deg cliff still pick the
+    # same greedy-like spread because the higher p simply weights
+    # catastrophic qtypes more, which they don't use anyway).
+    p_meta = max(1.0, math.log2(max(1.0, _deg_loss_ratio)) + 1.0)
     if debug:
         print(
-            f"[RANK] meta-score: max_loss={_max_loss:.4f}, mean_loss={_mean_loss:.4f}, "
+            f"[AUTO] meta-score: max_loss={_max_loss:.4f}, mean_loss={_mean_loss:.4f}, "
             f"max_pool_deg={_pool_max_deg:.4f}, ratio={_deg_loss_ratio:.3f}; "
             f"p_meta={p_meta:.3f} (weight = (loss + mean_loss)·deg^p_meta); "
             f"large p_meta ⇒ rank-like, p_meta=1 ⇒ greedy-like",
@@ -2137,36 +2151,27 @@ def rank_quant_assign(
         )
 
     def _meta_score(curr_assignment: Dict[str, str]) -> Tuple[float, float, float]:
-        # Primary key: Σ (loss + mean_loss) · deg ** p_meta.
+        # Primary key: Σ_t (loss(t) + mean_loss + count_qt) · deg(qt) ** p_meta
+        #   where count_qt = number of tensors assigned to qtype qt.
         #
-        # The contribution of a tensor t at qtype q has two parts, both
-        # weighted by deg(q)^p_meta:
+        # Three additive components, all multiplied by deg(q)^p_meta:
         #
-        #   1. A loss-proportional term `loss(t) · deg(q)^p_meta` — this is
-        #      the standard "expected damage" model. It rewards spreading
-        #      sensitive tensors onto low-deg qtypes and insensitive tensors
-        #      onto higher-deg qtypes, because the savings on the sensitive
-        #      tensors (high loss × big deg reduction) outweigh the costs
-        #      on the insensitive ones (low loss × small deg increase).
+        #   1. Loss-proportional `loss(t) · deg(q)^p_meta` — standard
+        #      "expected damage" model, rewards spreading sensitive tensors
+        #      onto low-deg qtypes.
         #
-        #   2. A flat per-tensor "intrinsic" term `mean_loss · deg(q)^p_meta`
-        #      — every tensor pays this just for being on q. This term is
-        #      what makes the algorithm avoid catastrophic qtypes even for
-        #      low-loss tensors. A bottom-of-pack tensor (loss ≈ 0.005)
-        #      contributes essentially nothing under the loss-proportional
-        #      term alone, so placing it on iq1_m vs iq2_xs is nearly free —
-        #      and greedy happily dumps 199 tensors on iq1_m. Adding the
-        #      intrinsic term `mean_loss · deg(iq1_m)^p ≈ 0.15 × 216 ≈ 32`
-        #      per tensor means 199 such tensors pay ~6300 extra, which
-        #      dwarfs the savings greedy gains by promoting the top tensors.
+        #   2. Intrinsic `mean_loss · deg(q)^p_meta` — flat per-tensor cost
+        #      so even zero-loss tensors get a "this qtype is bad" signal.
         #
-        # Choice of α = mean_loss: this is the natural data-derived scale
-        # for "what a typical tensor's loss looks like." It makes the
-        # intrinsic term comparable to the loss-proportional term for a
-        # median tensor (so neither dominates), while ensuring that even
-        # zero-loss tensors get a meaningful "this qtype is bad" signal.
-        # No hardcoded threshold; both terms shrink/grow together with the
-        # model's loss distribution.
+        #   3. Compound `count_qt · deg(q)^p_meta` — the user-observed
+        #      compound damage. N tensors on a single catastrophic qtype
+        #      cause O(N²) total compound damage (per-tensor cost grows
+        #      linearly with the count of tensors sharing that qtype, AND
+        #      there are count tensors paying it). This makes the meta
+        #      prefer a balanced "many at iq2_xs + few at iq1_m" over a
+        #      "few at mid-tier + many at iq1_m" shape — without this term
+        #      the cheap mid-tier (iq3_xxs, q2_K) lets greedy concentrate
+        #      half the model on iq1_m essentially for free.
         #
         # p_meta = log2(max_pool_deg / max_loss) auto-tunes the cliff
         # steepness: gemma (ratio ≈ 7.8 → p_meta ≈ 3) gets iq1_s weight
@@ -2180,6 +2185,14 @@ def rank_quant_assign(
         primary = 0.0
         outlier_ld = 0.0
         sum_d = 0.0
+        # First pass: count occurrences per qtype.
+        _count_per_q: Dict[str, int] = {}
+        for t in tensors_w:
+            qt = curr_assignment.get(t)
+            if qt is None:
+                continue
+            _count_per_q[qt] = _count_per_q.get(qt, 0) + 1
+        # Second pass: per-tensor accumulation with the compound count term.
         for t in tensors_w:
             qt = curr_assignment.get(t)
             if qt is None:
@@ -2196,11 +2209,44 @@ def rank_quant_assign(
                 qweight = d ** p_meta
             except Exception:
                 qweight = d
-            primary += (loss + _mean_loss) * qweight
+            _count_q = float(_count_per_q[qt])
+            primary += (loss + _mean_loss + _count_q) * qweight
             sum_d += d
             if t in high_outliers_set:
                 outlier_ld += loss * d
-        return (primary, outlier_ld, sum_d)
+        # PRIMARY lex key: outlier_excess = max over outliers of how much
+        # the outlier's actual deg exceeds its target_deg. Zero when the
+        # outlier sits at-or-below target (honors the cap), positive when
+        # it overshoots. Lex-ordering by this term first means we ALWAYS
+        # prefer candidates that honour the outlier target — even if a
+        # competitor scores a microscopic bulk-meta win, candidates that
+        # park the model's most-sensitive tensor on a worse-than-target
+        # qtype lose. Falls back to the bulk meta only as a tie-break
+        # (i.e. when all candidates honour the target equally, or all
+        # candidates equally violate it).
+        outlier_excess = 0.0
+        # Per-outlier target deg = the Pareto-step-derived target qtype's
+        # deg (see outlier_target_idx computation in Step 7d). Penalises
+        # any candidate whose outlier qtype is WORSE (higher deg) than
+        # the Pareto-walk target. Zero when at-or-below target.
+        for ot in high_outliers:
+            qt_o = curr_assignment.get(ot)
+            if qt_o is None:
+                continue
+            try:
+                d_o = float(degradation_fn(ot, qt_o))
+            except Exception:
+                d_o = None
+            if d_o is None:
+                continue
+            try:
+                target_d_o = float(outlier_allowed[ot][outlier_target_idx[ot]][1])
+            except Exception:
+                target_d_o = float('inf')
+            excess = d_o - target_d_o
+            if excess > outlier_excess:
+                outlier_excess = excess
+        return (outlier_excess, primary, outlier_ld, sum_d)
 
     # --- Step 7b: Detect *high-sensitivity outliers* — tensors whose loss is
     # so much larger than the rest that a uniform rank-mapping would under-rate
@@ -2245,18 +2291,606 @@ def rank_quant_assign(
         if len(high_outliers) > 3:
             if debug:
                 print(
-                    f"[RANK] Detected {len(high_outliers)} high-sens outliers; "
+                    f"[AUTO] Detected {len(high_outliers)} high-sens outliers; "
                     f"keeping top-3 for decoupled assignment: {high_outliers[:3]}",
                     file=sys.stderr,
                 )
             high_outliers = high_outliers[:3]
         elif debug and high_outliers:
-            print(f"[RANK] Detected high-sens outliers: {high_outliers}", file=sys.stderr)
+            print(f"[AUTO] Detected high-sens outliers: {high_outliers}", file=sys.stderr)
 
     # Rank-mapping should also place outliers (they're still part of sortable),
     # but at brute-force time we override their assignment with a decoupled
     # choice. Build a "non-outlier sortable" view for the score's tie-breaking.
     high_outliers_set = set(high_outliers)
+
+    # --- Step 7b.5: Effective-loss adjustments (rank-mapping & meta input).
+    #
+    # Three independent data-driven adjustments to per-tensor calibration
+    # loss values. Each addresses a known gap between the raw CSV signal
+    # and what hand-tuned recipes do well. Applied in this order:
+    #
+    #   (A) Tier-2 outlier demotion. The tier-1 detector (Step 7b) flags
+    #       only the most-extreme tensors (token_embd-like). Tensors that
+    #       are statistically anomalous in the bulk distribution but
+    #       don't satisfy the 1.5× gap requirement go undetected — and
+    #       they dominate the top of the rank because the loss value
+    #       drives ordering. Demoting them to the bulk Q1 (25th
+    #       percentile) drops them to the bottom quartile so BA2-style
+    #       splits put them at the bulk floor rather than the higher-
+    #       quality Q0.
+    #
+    #       Detection is data-driven (no hardcoded count):
+    #         threshold = max(Q3 + 1.5·IQR, X · median)
+    #         cap       = max(1, ⌊N · OUTLIER_FRAC⌋)
+    #       The dual threshold (IQR upper-fence AND a median-scaled
+    #       multiplier) means tight distributions (e.g. Qwen3.5-4B with
+    #       sub-millimetre IQR) don't over-trigger, and broad ones (e.g.
+    #       gemma) catch all statistical outliers. The cap is a fraction
+    #       of the bulk size, not a constant, so it scales with model
+    #       size — small models cap small, big models cap big.
+    #
+    #   (B) Class-aware scaling. Tensors are grouped by structural class
+    #       (attn_k, attn_v, attn_q, attn_output, ffn_down, ffn_up,
+    #       ffn_gate, …). Each class has a median raw loss — some classes
+    #       (e.g. attn_v in gemma) have a higher median than the global
+    #       bulk median, indicating they are uniformly more sensitive
+    #       across layers; others (e.g. attn_q, attn_k) have a lower
+    #       class median, meaning their handful of high-loss outliers are
+    #       anomalies, not class-representative.
+    #
+    #       Scale each tensor's loss by (class_median / global_median).
+    #       This lifts the entire high-median class up the rank (so attn_v
+    #       gets more spots in the higher-quality bin) and pushes the
+    #       low-median class down (so attn_q's calibration noise doesn't
+    #       grab top slots). Crucially — multiplicative scaling preserves
+    #       per-tensor variance within the class, so individual sensitivity
+    #       still differentiates within attn_v: a high-loss attn_v tensor
+    #       still ranks above a low-loss attn_v tensor.
+    #
+    #   (C) Positional prior. First and last LAYER_EDGE_FRAC of layers are
+    #       structurally critical (initial token embedding refinement and
+    #       final logit projection paths). Even tensors with low raw loss
+    #       at those layer indices contribute disproportionately to
+    #       downstream quality. Multiplicative boost lifts edge-layer
+    #       tensors into the mid-rank.
+    #
+    # All adjustments only mutate the EFFECTIVE loss used by rank-mapping
+    # and meta_score's primary key. Tier-1 outlier detection (Step 7b)
+    # already ran on raw losses, so its decoupling is unaffected.
+
+    # Configurable knobs (data-driven where possible):
+    OUTLIER_FRAC = 0.05            # tier-2 cap: max % of bulk tensors
+    OUTLIER_IQR_K = 1.5            # IQR multiplier (Tukey-standard upper fence)
+    CLASS_SCALE_ALPHA = 0.3        # class-aware scaling exponent (mild; 0 disables)
+                                   # Multiplies each tensor's loss by
+                                   # (class_median/global_median)^ALPHA. Strong
+                                   # values (≥1.0) compress cross-class variance
+                                   # and squeeze distributions at mid-budgets;
+                                   # 0.3 retains per-class signal without losing
+                                   # the rich rank-mapped spread at 33-50 %.
+    LAYER_EDGE_FRAC = 0.15         # first/last layer fraction for positional prior
+    LAYER_EDGE_BOOST = 1.2         # mild positional boost for edge layers
+                                   # Higher values (≥1.5) over-cluster edge tensors
+                                   # at the top of the rank and squeeze multi-qtype
+                                   # rank-mapped windows; 1.2 lifts edge tensors
+                                   # into mid-rank without breaking spread.
+
+    def _tensor_class(_t: str) -> str:
+        """Map a tensor name to its structural class.
+
+        blk.N.<class>.weight → <class>
+        <name>.weight (no blk) → <name>
+        """
+        _parts = _t.split('.')
+        if _parts[0] == 'blk' and len(_parts) >= 3:
+            return _parts[2]
+        if _t.endswith('.weight'):
+            return _t[:-len('.weight')]
+        return _t
+
+    if sortable:
+        _eff_loss_in = {t: float(ppl_loss_w.get(t, 0.0)) for t in sortable}
+
+        # Locate the DEG-CURVE INFLECTION — the first qtype (in deg-ASC
+        # order) whose deg exceeds the model's worst calibration loss
+        # (_max_loss). This marks the point where individual-tensor
+        # damage per qtype starts exceeding the maximum sensitivity any
+        # tensor showed in calibration: below the inflection, qtype
+        # choices stay within the "expected" damage range; above it, the
+        # tensor's loss times qtype's deg can blow past anything the
+        # calibration ever measured.
+        #
+        # Using max_loss instead of a hardcoded deg-ratio handles BOTH
+        # cliff curves (gemma — inflection lands at iq3_s, position 11
+        # / 18 ≈ 61 %) and smooth curves (Qwen3.5-4B — inflection lands
+        # later, around iq3_xxs at higher percentile) without false
+        # triggers at the top of the curve (where small absolute degs
+        # produce big ratios).
+        #
+        # The inflection's fractional position in the pool gives a
+        # model-aware percentile that replaces the hardcoded 75th for
+        # tier-2 outlier detection.
+        _ref_for_curve = sortable[0]
+        _pool_degs_for_curve: List[float] = []
+        for _q in global_pool:
+            try:
+                _d = float(degradation_fn(_ref_for_curve, _q))
+            except Exception:
+                _d = None
+            if _d is not None and _d > 0:
+                _pool_degs_for_curve.append(_d)
+        _pool_degs_for_curve.sort()
+        _inflection_pos: Optional[int] = None
+        if _max_loss > 0:
+            for _i, _d in enumerate(_pool_degs_for_curve):
+                if _d > _max_loss:
+                    _inflection_pos = _i
+                    break
+        if _inflection_pos is not None and len(_pool_degs_for_curve) >= 2:
+            _upper_pct = _inflection_pos / float(len(_pool_degs_for_curve))
+        else:
+            # No inflection found (max_loss above all degs) — fall back to Q3.
+            _upper_pct = 0.75
+        # Clamp to keep the IQR positive (upper > lower).
+        _upper_pct = max(0.55, min(0.95, _upper_pct))
+        _lower_pct = max(0.0, 1.0 - _upper_pct)
+
+        # (A) TIER-2 OUTLIER DETECTION (uses RAW losses).
+        _non_t1_losses = sorted(
+            _eff_loss_in[t] for t in sortable
+            if t not in high_outliers_set and _eff_loss_in[t] > 0
+        )
+        _tier2_outliers: List[str] = []
+        _tier2_demote_to: Optional[float] = None
+        _tier2_threshold: Optional[float] = None
+        if len(_non_t1_losses) >= 8:
+            _n_nt = len(_non_t1_losses)
+            _q1_idx = max(0, min(_n_nt - 1, int(_n_nt * _lower_pct)))
+            _q3_idx = max(0, min(_n_nt - 1, int(_n_nt * _upper_pct)))
+            _q1_nt = _non_t1_losses[_q1_idx]
+            _q3_nt = _non_t1_losses[_q3_idx]
+            _iqr_nt = _q3_nt - _q1_nt
+            if _iqr_nt > 0:
+                _tier2_threshold = _q3_nt + OUTLIER_IQR_K * _iqr_nt
+                _cap = max(1, int(_n_nt * OUTLIER_FRAC))
+                _candidates_2 = [
+                    t for t in sortable
+                    if t not in high_outliers_set
+                    and _eff_loss_in[t] > _tier2_threshold
+                ]
+                _candidates_2.sort(key=lambda t: -_eff_loss_in[t])
+                _tier2_outliers = _candidates_2[:_cap]
+                _tier2_demote_to = _q1_nt
+
+        # (B) CLASS-AWARE SCALING (uses RAW losses, excludes tier-1 + tier-2).
+        _tier2_set = set(_tier2_outliers)
+        _class_of: Dict[str, str] = {t: _tensor_class(t) for t in sortable}
+        _class_losses: Dict[str, List[float]] = {}
+        for t in sortable:
+            if t in high_outliers_set or t in _tier2_set:
+                continue
+            _v = _eff_loss_in[t]
+            if _v > 0:
+                _class_losses.setdefault(_class_of[t], []).append(_v)
+        # Compute class medians and global median.
+        _class_median: Dict[str, float] = {}
+        _all_class_values: List[float] = []
+        for _c, _vs in _class_losses.items():
+            if not _vs:
+                continue
+            _vs_sorted = sorted(_vs)
+            _class_median[_c] = _vs_sorted[len(_vs_sorted) // 2]
+            _all_class_values.extend(_vs)
+        if _all_class_values:
+            _all_class_values.sort()
+            _global_median_for_class = _all_class_values[len(_all_class_values) // 2]
+        else:
+            _global_median_for_class = 0.0
+        # Apply scaling.
+        _class_factor: Dict[str, float] = {}
+        _scaled = 0
+        if _global_median_for_class > 0:
+            for _c, _m in _class_median.items():
+                if _m > 0:
+                    _class_factor[_c] = (_m / _global_median_for_class) ** CLASS_SCALE_ALPHA
+            for t in sortable:
+                if t in high_outliers_set or t in _tier2_set:
+                    continue
+                _f = _class_factor.get(_class_of[t])
+                if _f is not None and _f != 1.0:
+                    _eff_loss_in[t] *= _f
+                    _scaled += 1
+
+        # Tier-2 outliers: demote effective loss to ZERO so they sit
+        # below ALL bulk values and naturally rank at the very bottom.
+        # This pushes them to the LAST qtype of any rank-mapped window
+        # (= bulk floor or near-floor), without removing them from the
+        # rank pool — so the bulk distribution shape is preserved while
+        # tier-2 still lands at the floor. Q1 (25th percentile) was not
+        # aggressive enough — too many other tensors had losses below
+        # Q1 already, so tier-2 ranked mid-bottom rather than bottom.
+        for t in _tier2_outliers:
+            _eff_loss_in[t] = 0.0
+
+        # (C) POSITIONAL PRIOR.
+        _layer_re = re.compile(r"^blk\.(\d+)\.")
+        _layer_idx_per_t: Dict[str, Optional[int]] = {}
+        _max_layer = -1
+        for t in sortable:
+            _m = _layer_re.match(t)
+            if _m:
+                _li = int(_m.group(1))
+                _layer_idx_per_t[t] = _li
+                if _li > _max_layer:
+                    _max_layer = _li
+            else:
+                _layer_idx_per_t[t] = None
+        _boosted = 0
+        if _max_layer >= 0:
+            _n_layers = _max_layer + 1
+            _edge_n = max(1, int(round(_n_layers * LAYER_EDGE_FRAC)))
+            _first_edge = _edge_n
+            _last_edge_start = _n_layers - _edge_n
+            for t in sortable:
+                if t in high_outliers_set:
+                    continue
+                # Don't boost demoted tier-2 — defeats the demotion.
+                if t in _tier2_set:
+                    continue
+                _li = _layer_idx_per_t.get(t)
+                if _li is None:
+                    continue
+                if _li < _first_edge or _li >= _last_edge_start:
+                    _eff_loss_in[t] *= LAYER_EDGE_BOOST
+                    _boosted += 1
+
+        # Write back and re-sort so BA2 / brute-force see the new order.
+        for t in sortable:
+            ppl_loss_w[t] = _eff_loss_in[t]
+        sortable.sort(key=lambda t: -ppl_loss_w[t])
+        sens_vals_sorted = sorted({ppl_loss_w[t] for t in sortable}, reverse=True)
+        sens_to_rank = {s: i for i, s in enumerate(sens_vals_sorted)}
+        L = len(sens_vals_sorted)
+
+        if debug:
+            _t2_str = (
+                f"{_tier2_outliers[:3]}{'...' if len(_tier2_outliers) > 3 else ''}"
+            )
+            _thresh_str = (
+                f"{_tier2_threshold:.4f}"
+                if _tier2_threshold is not None
+                else "N/A"
+            )
+            _demote_str = (
+                f"{_tier2_demote_to:.4f}"
+                if _tier2_demote_to is not None
+                else "N/A"
+            )
+            _class_factor_dbg = ", ".join(
+                f"{c}={f:.2f}"
+                for c, f in sorted(_class_factor.items(), key=lambda kv: -kv[1])
+            )
+            _infl_str = (
+                f"inflection at pos {_inflection_pos}/{len(_pool_degs_for_curve)} "
+                f"(first deg > max_loss={_max_loss:.4f}) → upper_pct={_upper_pct:.3f}"
+                if _inflection_pos is not None
+                else f"no inflection (max_loss above all degs); "
+                     f"upper_pct={_upper_pct:.3f} (fallback Q3)"
+            )
+            print(
+                f"[AUTO] Loss adjustment: deg-curve {_infl_str}. "
+                f"Tier-2 decoupled {len(_tier2_outliers)} ({_t2_str}) above "
+                f"threshold {_thresh_str} (will be pinned at bulk floor); "
+                f"scaled {_scaled} bulk tensors by class-factor "
+                f"[{_class_factor_dbg}]; boosted {_boosted} first/last-"
+                f"{int(LAYER_EDGE_FRAC * 100)}%-layer tensors by ×{LAYER_EDGE_BOOST}.",
+                file=sys.stderr,
+            )
+
+    # --- Step 7c: Lower-bound floor cap for non-outlier tensors.
+    #
+    # User-observed principle: catastrophic qtypes (group0 deg ≫ max_loss)
+    # should be FORBIDDEN for non-outliers whenever budget permits. The
+    # natural data-derived floor is the LARGEST-bpw qtype Q such that
+    # assigning ALL non-outlier tensors to Q still fits the (tolerance-
+    # aware) budget. Because all non-outliers can sit at Q, the floor is
+    # always feasible; using anything below Q is "wasted budget" — those
+    # bytes could have been spent staying at Q rather than dropping to
+    # iq1_m for the bulk while iq3_xxs holds the top-sens tail.
+    #
+    # Applying this filter removes catastrophic qtypes from non-outlier
+    # allowed lists entirely, so the brute-force / greedy candidates can
+    # never even consider e.g. parking the low-loss tail on iq1_m when
+    # iq2_xxs would also fit. Outliers keep their full allowed list — the
+    # outlier-pinning logic with its Pareto-target cap handles their
+    # progression through the frontier separately, and monotonicity vs
+    # the bulk's actual qtype usage is enforced where each candidate is
+    # built.
+    #
+    # Worked example (gemma 26.12 %, target 7.94 GiB, tolerance 1 %):
+    #   all-iq2_xs   = 8.26 GiB > 8.02 → infeasible
+    #   all-iq2_xxs  = 7.37 GiB ≤ 8.02 → FEASIBLE  ← floor
+    #   all-iq1_m    = 6.25 GiB ≤ 8.02 → also feasible (but smaller bpw,
+    #                                    so floor stays at iq2_xxs)
+    # Result: iq1_m and iq1_s are dropped from non-outlier allowed lists,
+    # so the algorithm uses iq2_xs + iq2_xxs for the bulk instead of
+    # iq2_xs + iq1_m.
+    _floor_q_for_bulk: Optional[str] = None
+    # Pre-declared so Step 8 can reference them even when Step 7c's
+    # floor-relaxation branch doesn't run.
+    outlier_allowed: Dict[str, List[Tuple[str, float, int]]] = {}
+    outlier_target_idx: Dict[str, int] = {}
+    outlier_pareto_idxs: Dict[str, List[int]] = {}
+    if sortable:
+        _budget_tol_floor = budget_bytes * (1.0 + max(0.0, float(tolerance)))
+        # We want the LARGEST-bpw qtype Q (= most quality, most bytes
+        # consumed) where all-tensors-at-Q ≤ budget. global_pool is
+        # sorted by DEGRADATION ASC, not bpw DESC, so for cliff models
+        # (gemma) qtypes like iq1_m (deg 6.02, bpw 1.75) come BEFORE
+        # iq2_xxs (deg 6.21, bpw 2.06) — even though iq2_xxs has higher
+        # bpw and is the right floor when both fit budget. Compute
+        # total_at_q for every qtype and pick the one with the MAX total
+        # bytes that still fits — that's the largest-bpw fitting qtype.
+        #
+        # Outliers are included in the sum: pinning them at a higher
+        # qtype only INCREASES bytes (better outlier qtype = bigger
+        # bpw), so "all-at-Q including outliers ≤ budget" is a
+        # conservative bound on what's actually feasible.
+        _best_fitting_total = -1
+        for _q_floor_cand in global_pool:
+            _total_at_q = 0
+            _has_all = True
+            for _t_floor in tensors_w:
+                if _q_floor_cand not in tensor_sizes_w[_t_floor]:
+                    _has_all = False
+                    break
+                _total_at_q += int(tensor_sizes_w[_t_floor][_q_floor_cand])
+            if not _has_all:
+                continue
+            if _total_at_q <= _budget_tol_floor and _total_at_q > _best_fitting_total:
+                _floor_q_for_bulk = _q_floor_cand
+                _best_fitting_total = _total_at_q
+        _strict_floor_q_for_bulk = _floor_q_for_bulk
+        _strict_floor_total_bytes = _best_fitting_total
+        if _floor_q_for_bulk is not None:
+            # --- Compute outlier_allowed + outlier_target_idx EARLY (before
+            # the bulk filter) so the floor-relaxation check below knows the
+            # outlier's target qtype and its size. These are also reused by
+            # Step 8 brute-force / BA2 / greedy pinning.
+            outlier_allowed: Dict[str, List[Tuple[str, float, int]]] = {}
+            for ot in high_outliers:
+                _o_rows: List[Tuple[str, float, int]] = []
+                for q in allowed_map_w[ot]:
+                    try:
+                        _d = degradation_fn(ot, q)
+                    except Exception:
+                        _d = None
+                    _sz = int(tensor_sizes_w[ot].get(q, 0))
+                    _o_rows.append((q, float(_d) if _d is not None else float('inf'), _sz))
+                _o_rows.sort(key=lambda r: r[1])
+                outlier_allowed[ot] = _o_rows
+
+            K_PARETO_STEPS = 3
+            outlier_target_idx: Dict[str, int] = {}
+            outlier_pareto_idxs: Dict[str, List[int]] = {}
+            for ot in high_outliers:
+                _o_rows = outlier_allowed[ot]
+                # Pareto frontier on (size, deg). Sorted ASC by deg; row i
+                # is Pareto iff sz_i < min(sz_j for j < i).
+                _pareto_idxs: List[int] = []
+                _min_sz = float('inf')
+                for _i, (_q, _d, _sz) in enumerate(_o_rows):
+                    if _sz < _min_sz:
+                        _pareto_idxs.append(_i)
+                        _min_sz = _sz
+                outlier_pareto_idxs[ot] = _pareto_idxs
+
+                # Find floor's Pareto position by SIZE matching (stable when
+                # bulk and outlier deg orderings diverge).
+                _floor_pareto_pos: Optional[int] = None
+                _floor_sz_outlier = (
+                    int(tensor_sizes_w[ot].get(_strict_floor_q_for_bulk, 0))
+                    if _strict_floor_q_for_bulk in tensor_sizes_w[ot]
+                    else 0
+                )
+                if _floor_sz_outlier > 0:
+                    _pos = None
+                    for _pi, _idx in enumerate(_pareto_idxs):
+                        if _o_rows[_idx][2] >= _floor_sz_outlier:
+                            _pos = _pi
+                        else:
+                            break
+                    if _pos is None:
+                        _pos = 0
+                    _floor_pareto_pos = _pos
+
+                if _floor_pareto_pos is not None:
+                    _target_pareto_pos = max(0, _floor_pareto_pos - K_PARETO_STEPS)
+                    _target_idx = _pareto_idxs[_target_pareto_pos] if _pareto_idxs else 0
+                else:
+                    _max_loss_idx = None
+                    for _i, (_q, _d, _sz) in enumerate(_o_rows):
+                        if _d <= _max_loss:
+                            _max_loss_idx = _i
+                        else:
+                            break
+                    if _max_loss_idx is None:
+                        _max_loss_idx = _pareto_idxs[0] if _pareto_idxs else 0
+                    _target_idx = _max_loss_idx
+
+                outlier_target_idx[ot] = _target_idx
+                if debug:
+                    _floor_label = (
+                        f"bulk_floor={_strict_floor_q_for_bulk} → outlier Pareto pos {_floor_pareto_pos} "
+                        f"− {K_PARETO_STEPS} steps"
+                        if _floor_pareto_pos is not None
+                        else f"max_loss={_max_loss:.4f} fallback"
+                    )
+                    print(
+                        f"[AUTO] Outlier {ot} target qtype = {_o_rows[_target_idx][0]} "
+                        f"(deg={_o_rows[_target_idx][1]:.4f}); rule: {_floor_label}; "
+                        f"Pareto frontier: {[_o_rows[_i][0] for _i in _pareto_idxs]}.",
+                        file=sys.stderr,
+                    )
+
+            # --- Floor RELAXATION for outlier-target feasibility.
+            #
+            # The strict floor "largest-bpw uniform that fits budget" is
+            # greedy: as the budget grows, it eats the entire gain by
+            # bumping the floor before the outlier sees any of it. This
+            # produces NON-MONOTONIC outlier qtype across budgets (e.g.
+            # gemma 33 % outlier=iq4_xs but 36 % outlier=q3_K because the
+            # 36 % floor jumped from q2_K to iq3_xxs, leaving zero room
+            # for outlier upgrade past q3_K).
+            #
+            # Fix: relax the floor so that (bulk-at-relaxed-floor +
+            # outlier-at-target) fits budget_tol. The relaxed floor is the
+            # LARGEST-bpw Q ≤ strict_floor_bpw where this combined total
+            # fits. The outlier target is computed from the STRICT floor
+            # (it stays aspirational), so relaxing the floor doesn't
+            # downgrade the target.
+            #
+            # Safety: relaxation is bounded — it never crosses into bpw
+            # territory that's lower than the strict floor by more than
+            # one "tier". Concretely, the next-below qtype must have deg
+            # ≤ 2.0 × strict_floor_deg. This blocks catastrophic relaxation
+            # (e.g. relaxing from iq2_xxs to iq1_m at very tight budgets).
+            # In practice the relaxation only fires at budget transitions
+            # where the strict floor jumps a bpw tier; it lets the bulk
+            # pool keep one cheaper qtype available so the outlier upgrade
+            # has room.
+            #
+            # Worked example (gemma 36 %, budget ≈ 11.04 GiB tol):
+            #   - strict floor iq3_xxs: all-at-iq3_xxs ≈ 11.0, outlier
+            #     q4_K extra ≈ +0.3 → 11.3 > 11.04. INFEASIBLE.
+            #   - relax 1 step → q2_K: all-at-q2_K ≈ 9.5, outlier q4_K
+            #     extra ≈ +0.4 → 9.9 ≤ 11.04. FEASIBLE.
+            #   - relaxed floor = q2_K; bulk pool now includes q2_K so
+            #     BA2 [iq3_xxs, q2_K] candidates exist; meta picks the one
+            #     with outlier at q4_K (outlier_excess = 0).
+            _outlier_extras_at_target = 0
+            for ot in high_outliers:
+                _tq = outlier_allowed[ot][outlier_target_idx[ot]][0]
+                _sz_at_target = int(tensor_sizes_w[ot].get(_tq, 0))
+                _sz_at_floor = int(tensor_sizes_w[ot].get(_strict_floor_q_for_bulk, 0))
+                _outlier_extras_at_target += (_sz_at_target - _sz_at_floor)
+
+            try:
+                _strict_floor_deg = float(degradation_fn(sortable[0], _strict_floor_q_for_bulk))
+            except Exception:
+                _strict_floor_deg = None
+            _relax_deg_cap = (
+                2.0 * _strict_floor_deg
+                if _strict_floor_deg is not None and _strict_floor_deg > 0
+                else float('inf')
+            )
+
+            # Pre-compute total_at_q for all qtypes (cached for filter too).
+            _total_at_q_cache: Dict[str, int] = {}
+            for q in global_pool:
+                _t_q_total = 0
+                _has_all_q = True
+                for _t_check in tensors_w:
+                    if q not in tensor_sizes_w[_t_check]:
+                        _has_all_q = False
+                        break
+                    _t_q_total += int(tensor_sizes_w[_t_check][q])
+                if _has_all_q:
+                    _total_at_q_cache[q] = _t_q_total
+
+            _floor_total_with_target = _strict_floor_total_bytes + _outlier_extras_at_target
+            _relaxed_floor_q = _strict_floor_q_for_bulk
+            _relaxed_floor_total_bytes = _strict_floor_total_bytes
+            if _floor_total_with_target > _budget_tol_floor and _outlier_extras_at_target > 0:
+                # Need to relax. Find the LARGEST-bpw Q (= largest total_at_q)
+                # with total_at_q < strict_total AND total_at_q + extras
+                # ≤ budget_tol AND deg(Q) ≤ relax_deg_cap.
+                _best_relax_total = -1
+                _best_relax_q = None
+                for q, _tot in _total_at_q_cache.items():
+                    if _tot >= _strict_floor_total_bytes:
+                        continue  # not a relaxation (same bpw or higher)
+                    try:
+                        _q_deg = float(degradation_fn(sortable[0], q))
+                    except Exception:
+                        _q_deg = float('inf')
+                    if _q_deg > _relax_deg_cap:
+                        continue  # too catastrophic
+                    if _tot + _outlier_extras_at_target > _budget_tol_floor:
+                        continue  # doesn't fit even with relaxation
+                    if _tot > _best_relax_total:
+                        _best_relax_total = _tot
+                        _best_relax_q = q
+                if _best_relax_q is not None:
+                    _relaxed_floor_q = _best_relax_q
+                    _relaxed_floor_total_bytes = _best_relax_total
+                    _floor_q_for_bulk = _best_relax_q  # update visible floor
+                    if debug:
+                        print(
+                            f"[AUTO] Floor RELAXED from {_strict_floor_q_for_bulk} "
+                            f"(total {_strict_floor_total_bytes/GIB:.3f} GiB + outlier "
+                            f"extras {_outlier_extras_at_target/GIB:.3f} GiB = "
+                            f"{_floor_total_with_target/GIB:.3f} GiB > budget tol "
+                            f"{_budget_tol_floor/GIB:.3f} GiB) to {_best_relax_q} "
+                            f"(total {_best_relax_total/GIB:.3f} GiB + extras = "
+                            f"{(_best_relax_total + _outlier_extras_at_target)/GIB:.3f} GiB ≤ tol). "
+                            f"Outlier target stays aspirational from strict floor.",
+                            file=sys.stderr,
+                        )
+                elif debug:
+                    print(
+                        f"[AUTO] Floor relaxation NEEDED ({_floor_total_with_target/GIB:.3f} > "
+                        f"{_budget_tol_floor/GIB:.3f}) but no non-catastrophic qtype below "
+                        f"{_strict_floor_q_for_bulk} fits (deg cap = {_relax_deg_cap:.4f}). "
+                        f"Outlier will downgrade in pickers.",
+                        file=sys.stderr,
+                    )
+
+            # Build the set of bulk-allowed qtypes = qtypes with total_at_q
+            # ≥ relaxed floor's total_at_q.
+            _floor_total_bytes = _relaxed_floor_total_bytes
+            _bulk_allowed_set = set()
+            for q, _tot in _total_at_q_cache.items():
+                if _tot >= _floor_total_bytes:
+                    _bulk_allowed_set.add(q)
+            # Filter non-outlier allowed_map_w in place.
+            _filtered_count = 0
+            for _t_floor in tensors_w:
+                if _t_floor in high_outliers_set:
+                    continue
+                _orig = allowed_map_w[_t_floor]
+                _new = [q for q in _orig if q in _bulk_allowed_set]
+                if not _new:
+                    # If a tensor would be left with no allowed qtype after
+                    # the filter (e.g. its map only has below-floor qtypes),
+                    # restore the original to avoid making it unassignable.
+                    continue
+                if len(_new) != len(_orig):
+                    allowed_map_w[_t_floor] = _new
+                    _filtered_count += 1
+            # Trim global_pool to the bulk-allowed set (preserving the
+            # deg-ASC order). The brute-force window enumeration,
+            # constrained-greedy sub_pools, and the budget-aware 2-qtype
+            # candidate generator all iterate over global_pool — trimming
+            # it here propagates the floor to all of them. Outliers are
+            # unaffected because their pinning uses outlier_allowed
+            # (built from the per-tensor allowed_map, which kept its full
+            # list above for outliers).
+            _excluded_qtypes = [q for q in global_pool if q not in _bulk_allowed_set]
+            _new_pool = [q for q in global_pool if q in _bulk_allowed_set]
+            _orig_pool_len = len(global_pool)
+            global_pool = _new_pool
+            if debug:
+                print(
+                    f"[AUTO] Bulk floor = {_floor_q_for_bulk} (largest-bpw qtype where "
+                    f"all-tensors-at-{_floor_q_for_bulk} fits budget). "
+                    f"Forbidding bulk use of: {_excluded_qtypes}. "
+                    f"Filtered {_filtered_count} non-outlier allowed lists; "
+                    f"trimmed global_pool from {_orig_pool_len} to {len(global_pool)} qtypes. "
+                    f"Outliers keep their full allowed lists (handled by outlier pinning).",
+                    file=sys.stderr,
+                )
 
     # --- Step 8: Brute-force search over (best_idx, worst_idx) windows
     #     We enumerate every contiguous sub-window of global_pool, build the
@@ -2288,113 +2922,38 @@ def rank_quant_assign(
                     return float(v)
         return float('inf')
 
-    # Pre-compute outlier allowed lists sorted by actual degradation (best→worst).
-    outlier_allowed: Dict[str, List[Tuple[str, float, int]]] = {}
-    for ot in high_outliers:
-        rows: List[Tuple[str, float, int]] = []
-        for q in allowed_map_w[ot]:
-            try:
-                d = degradation_fn(ot, q)
-            except Exception:
-                d = None
-            sz = int(tensor_sizes_w[ot].get(q, 0))
-            rows.append((q, float(d) if d is not None else float('inf'), sz))
-        rows.sort(key=lambda r: r[1])
-        outlier_allowed[ot] = rows
-
-    # --- Outlier TARGET cap (budget-progressive).
-    #
-    # The cap on the outlier's qtype must move smoothly through the Pareto
-    # frontier as the budget grows — otherwise the outlier "bumps" from
-    # iq3_xxs straight to q8_0 once the budget loosens, skipping every
-    # intermediate qtype. The user observation: a model with budget
-    # supporting ~q3_K for the bulk should have its outlier near q3_K too,
-    # not at q8_0 (overspending) or iq3_xxs (rank-monotonicity violation).
-    #
-    # Two components combine to set the cap:
-    #
-    #   1. max_loss target — the smallest Pareto qtype whose deg ≥ max_loss.
-    #      Reasoning: the worst per-tensor calibration loss is the natural
-    #      scale for tolerable damage; a qtype with deg ≈ max_loss damages
-    #      the most-sensitive tensor by about as much as the model's worst
-    #      tensor already gets at calibration. For gemma this lands on
-    #      iq3_xxs (deg 2.04 with max_loss 1.65).
-    #
-    #   2. budget-natural qtype — the highest-bpw Pareto qtype Q such that
-    #      assigning EVERY tensor to Q would still fit within budget. This
-    #      reflects "what the budget naturally supports as a uniform
-    #      assignment" — i.e. roughly where the bulk of non-outlier tensors
-    #      end up after greedy. For gemma at 50 % (15.19 GiB) the uniform-
-    #      q3_K assignment fits (15.11 GiB) but uniform-iq4_xs (15.55 GiB)
-    #      doesn't, so the natural qtype is q3_K.
-    #
-    # Outlier cap = whichever of {max_loss target, budget-natural qtype} has
-    # the LOWER deg (= higher bpw). At tight budgets the natural qtype is
-    # below the max_loss target, so the cap holds at the max_loss target.
-    # At loose budgets the natural qtype is above the max_loss target, so
-    # the cap moves up with the budget — exactly tracking the bulk and
-    # delivering a progressive q3_K → iq4_xs → q4_K → q5_K → q6_K → q8_0
-    # walk as the budget grows from ~50 % to ~100 %.
-    #
-    # This is a CAP, not a floor: if budget can't fit the cap qtype, the
-    # outlier falls back to a worse qtype (existing logic).
-    outlier_target_idx: Dict[str, int] = {}
-    outlier_pareto_idxs: Dict[str, List[int]] = {}
-    for ot in high_outliers:
-        rows = outlier_allowed[ot]
-        # Compute Pareto-frontier on (size, deg). Sorted ASC by deg; row i
-        # is Pareto iff sz_i < min(sz_j for j < i).
-        pareto_idxs: List[int] = []
-        min_sz = float('inf')
-        for i, (_q, _d, sz) in enumerate(rows):
-            if sz < min_sz:
-                pareto_idxs.append(i)
-                min_sz = sz
-        outlier_pareto_idxs[ot] = pareto_idxs
-
-        # Component 1: smallest Pareto qtype with deg ≥ max_loss.
-        max_loss_idx = pareto_idxs[-1] if pareto_idxs else len(rows) - 1
-        for i in pareto_idxs:
-            if rows[i][1] >= _max_loss:
-                max_loss_idx = i
-                break
-
-        # Component 2: highest-bpw Pareto qtype Q such that uniform-Q for
-        # all tensors fits the budget. Iterate Pareto in deg-ASC order (=
-        # bpw-DESC for typical curves); first qtype where uniform fits wins.
-        # If none fit (very tight budget), use the last (smallest-bpw)
-        # Pareto qtype as a marker.
-        natural_idx = pareto_idxs[-1] if pareto_idxs else len(rows) - 1
-        for i in pareto_idxs:
-            q = rows[i][0]
-            uniform_total = 0
-            feasible = True
-            for t in tensors_w:
-                if q not in tensor_sizes_w[t]:
-                    feasible = False
+    # outlier_allowed, outlier_target_idx, outlier_pareto_idxs were
+    # pre-computed in Step 7c (inside `if _floor_q_for_bulk is not None`).
+    # If that branch didn't run (no qtype fits uniformly), fall back to
+    # computing them here using the max_loss target rule.
+    if high_outliers and not outlier_allowed:
+        for ot in high_outliers:
+            _o_rows: List[Tuple[str, float, int]] = []
+            for q in allowed_map_w[ot]:
+                try:
+                    _d = degradation_fn(ot, q)
+                except Exception:
+                    _d = None
+                _sz = int(tensor_sizes_w[ot].get(q, 0))
+                _o_rows.append((q, float(_d) if _d is not None else float('inf'), _sz))
+            _o_rows.sort(key=lambda r: r[1])
+            outlier_allowed[ot] = _o_rows
+            _pareto_idxs: List[int] = []
+            _min_sz = float('inf')
+            for _i, (_q, _d, _sz) in enumerate(_o_rows):
+                if _sz < _min_sz:
+                    _pareto_idxs.append(_i)
+                    _min_sz = _sz
+            outlier_pareto_idxs[ot] = _pareto_idxs
+            _max_loss_idx = None
+            for _i, (_q, _d, _sz) in enumerate(_o_rows):
+                if _d <= _max_loss:
+                    _max_loss_idx = _i
+                else:
                     break
-                uniform_total += int(tensor_sizes_w[t][q])
-                if uniform_total > budget_bytes:
-                    feasible = False
-                    break
-            if feasible:
-                natural_idx = i
-                break
-
-        # Final target = whichever has LOWER deg (= smaller index in deg-ASC
-        # outlier_allowed list, since pareto_idxs is also deg-ASC).
-        idx = min(max_loss_idx, natural_idx)
-        outlier_target_idx[ot] = idx
-        if debug:
-            print(
-                f"[RANK] Outlier {ot} target qtype = {rows[idx][0]} "
-                f"(deg={rows[idx][1]:.4f}); max_loss target = {rows[max_loss_idx][0]} "
-                f"(deg={rows[max_loss_idx][1]:.4f}, max_loss={_max_loss:.4f}); "
-                f"budget-natural = {rows[natural_idx][0]} "
-                f"(deg={rows[natural_idx][1]:.4f}); "
-                f"Pareto frontier: {[rows[i][0] for i in pareto_idxs]}.",
-                file=sys.stderr,
-            )
+            if _max_loss_idx is None:
+                _max_loss_idx = _pareto_idxs[0] if _pareto_idxs else 0
+            outlier_target_idx[ot] = _max_loss_idx
 
     # --- Window enumeration is independent of (p, q): rank_map, outlier
     # override, and per-tensor sizes do NOT depend on the loss/deg exponents.
@@ -2420,54 +2979,41 @@ def rank_quant_assign(
                 )
                 non_outlier_size = base_total - outlier_current_size
                 running_total = non_outlier_size
+                _feas_budget = int(budget_bytes * (1.0 + max(0.0, float(tolerance))))
+                # Outlier pinning: pick the target qtype if it fits; if not,
+                # fall back to WORSE-quality qtypes (smaller bpw, smaller
+                # size). The meta's outlier_excess key penalises worse-than-
+                # target outcomes; the brute-force window enumeration and
+                # BA2 split candidates SHOULD produce at least one window
+                # where target fits, and that window will win the meta.
+                # Walking to BETTER-quality (lower deg, larger size) makes
+                # no sense here — better quality is always more expensive,
+                # so if target can't fit, better certainly can't either.
                 for ot in high_outliers:
                     chosen_q: Optional[str] = None
                     _tidx = outlier_target_idx[ot]
-                    _target_deg_local = outlier_allowed[ot][_tidx][1]
-                    _pareto_local = outlier_pareto_idxs[ot]
-                    # Pinning policy — pick the highest-deg PARETO-OPTIMAL
-                    # qtype that satisfies:
-                    #   (1) deg ≤ window_first_deg  (rank monotonicity vs
-                    #       most-sensitive non-outlier)
-                    #   (2) deg ≥ target_deg  (cap, when feasible — don't
-                    #       waste bpw on the outlier beyond what max_loss/
-                    #       budget-natural calls for)
-                    #   (3) outlier_size + non_outlier_total ≤ budget
-                    #
-                    # If (1) and (2) intersect, the qtype with the LOWEST
-                    # deg in that intersection wins (= target_deg itself
-                    # whenever possible). If they don't intersect (budget
-                    # is loose enough that monotonicity demands deg <
-                    # target), relax (2) and pick the HIGHEST-deg Pareto
-                    # qtype satisfying just (1). This delivers a smooth
-                    # walk through the Pareto frontier as budget grows:
-                    # iq3_xxs → iq4_xs → q6_K → q8_0 rather than a bump
-                    # from iq3_xxs straight to q8_0.
-                    #
-                    # Why Pareto-only? Dominated qtypes (e.g. q3_K for
-                    # token_embd) have unfavourable (size, deg) trade-offs
-                    # caused by per-row scale overhead — Phase C would
-                    # promote them to the Pareto-equivalent anyway, which
-                    # silently lifts the cap. Restricting pinning to the
-                    # Pareto frontier keeps Phase C from undoing our cap.
-                    # Try (2)+(1) first.
-                    for i in _pareto_local:  # sorted ASC by deg
-                        q_, d_, sz_ = outlier_allowed[ot][i]
-                        if d_ < _target_deg_local:
-                            continue
-                        if d_ > window_first_deg:
-                            break  # ASC: further will only be worse
-                        if running_total + sz_ <= budget_bytes:
-                            chosen_q = q_
-                            running_total += sz_
-                            break
-                    # Relax (2): pick HIGHEST deg Pareto ≤ window_first_deg.
+                    _t_q, _t_d, _t_sz = outlier_allowed[ot][_tidx]
+                    # Phase 1: target qtype.
+                    if (_t_d <= window_first_deg
+                            and running_total + _t_sz <= _feas_budget):
+                        chosen_q = _t_q
+                        running_total += _t_sz
+                    # Phase 2: worse-quality fallback (higher idx, larger deg,
+                    # smaller size).
                     if chosen_q is None:
-                        for i in reversed(_pareto_local):
+                        for i in range(_tidx + 1, len(outlier_allowed[ot])):
                             q_, d_, sz_ = outlier_allowed[ot][i]
                             if d_ > window_first_deg:
-                                continue
-                            if running_total + sz_ <= budget_bytes:
+                                break
+                            if running_total + sz_ <= _feas_budget:
+                                chosen_q = q_
+                                running_total += sz_
+                                break
+                    # Phase 3: monotonicity-relaxed last resort.
+                    if chosen_q is None:
+                        for i in range(len(outlier_allowed[ot]) - 1, -1, -1):
+                            q_, d_, sz_ = outlier_allowed[ot][i]
+                            if running_total + sz_ <= _feas_budget:
                                 chosen_q = q_
                                 running_total += sz_
                                 break
@@ -2485,6 +3031,155 @@ def rank_quant_assign(
                 fallback_total = cand_total
 
             window_data.append(((best_idx, worst_idx), cand_assignment, cand_total))
+
+    # --- Budget-aware 2-qtype rank-mapped candidates.
+    #
+    # Uniform rank-mapping (above) splits a 2-qtype window into N/2 tensors
+    # per qtype regardless of bpw differences. At tight budgets this is
+    # often suboptimal: a window like ['iq2_xs', 'iq1_m'] under-fills
+    # (~7.4 GiB at a 7.94-GiB target) because half the tensors end up on
+    # the bpw-cheaper qtype. Greedy fills the budget tighter but with a
+    # very low "soft floor" — it dumps the entire low-loss tail on iq1_m,
+    # well past what the budget actually requires.
+    #
+    # The fix: for every (Q0, Q1) pair from the global pool (Q0 lower deg
+    # = better, Q1 higher deg = worse), compute the *budget-tight* split:
+    # find the largest k such that the top-k most-sensitive non-outlier
+    # tensors at Q0 + the rest at Q1 (+ outliers at their cap) fits the
+    # tolerance-aware budget. This produces a non-uniform rank-monotonic
+    # assignment that uses Q1 only as much as budget genuinely demands —
+    # exactly the "minimum catastrophic" shape the meta would naturally
+    # pick from but that uniform rank-mapping doesn't enumerate.
+    #
+    # ALL pairs (not just adjacent): hand-tuned recipes often combine
+    # NON-ADJACENT qtypes — e.g. gemma at 26.12 % uses (iq3_xxs, iq2_xxs)
+    # with iq3_xxs only for the most-sensitive ~12 % of tensors and the
+    # rest at the iq2_xxs floor, skipping the intermediate q2_K and
+    # iq2_xs tiers entirely. Adjacent-only BA2 misses this shape because
+    # (iq3_xxs, iq2_xxs) isn't adjacent in the deg-ASC pool. Enumerating
+    # all O(K²) pairs (K ≈ 13-18 after floor trim) is cheap and lets the
+    # meta see these "skip-tier" candidates.
+    #
+    # Implementation: linear scan k from N (all at Q0) down to 0 (all at
+    # Q1); pick the largest k that fits.
+    if sortable and len(global_pool) >= 2:
+        # Reuse the deg-sorted pool computed below by the constrained-greedy
+        # block. Define it inline here so order-of-code doesn't matter.
+        _ref_t_ba = sortable[0]
+        def _deg_of_ba(q: str) -> float:
+            try:
+                v = degradation_fn(_ref_t_ba, q)
+            except Exception:
+                v = None
+            return float(v) if v is not None else float('inf')
+        # Pre-compute non-outlier list sorted by sensitivity DESC for stable
+        # top-k slicing. Outliers are handled separately (their qtype is
+        # decided by the outlier-pinning logic the same way the brute-force
+        # window candidates do it).
+        _non_outliers_sorted = [t for t in sortable if t not in high_outliers_set]
+        _budget_tol = int(budget_bytes * (1.0 + max(0.0, float(tolerance))))
+        # Enumerate ALL pairs (Q0 lower deg, Q1 higher deg) in deg-ASC order.
+        _pool_deg_sorted_for_ba = sorted(global_pool, key=_deg_of_ba)
+        _ba_pair_idx = -1
+        for _i_ba in range(len(_pool_deg_sorted_for_ba) - 1):
+          for _j_ba in [_i_ba + 1]:  # TEMP: adjacent only
+            _ba_pair_idx += 1
+            _Q0 = _pool_deg_sorted_for_ba[_i_ba]      # lower deg (better)
+            _Q1 = _pool_deg_sorted_for_ba[_j_ba]      # higher deg (worse)
+            # Skip if any non-outlier tensor doesn't have BOTH qtypes
+            # available in its allowed list.
+            if any(_Q0 not in tensor_sizes_w[t] or _Q1 not in tensor_sizes_w[t]
+                   for t in _non_outliers_sorted):
+                continue
+            # Outlier pinning for this pair. Treat the pair as a "window"
+            # whose first-deg = deg(Q0) for the monotonicity bound and
+            # apply the same Pareto-target / fallback logic as the brute
+            # force above.
+            _ba_window_first_deg = _deg_of_ba(_Q0)
+            _ba_pinned: Dict[str, str] = {}
+            _ba_pinned_size = 0
+            _ba_outlier_ok = True
+            for ot in high_outliers:
+                chosen_q_ba: Optional[str] = None
+                _tidx_ba = outlier_target_idx[ot]
+                _t_q_ba, _t_d_ba, _t_sz_ba = outlier_allowed[ot][_tidx_ba]
+                # Phase 1: target qtype.
+                if (_t_d_ba <= _ba_window_first_deg
+                        and _ba_pinned_size + _t_sz_ba <= _budget_tol):
+                    chosen_q_ba = _t_q_ba
+                    _ba_pinned_size += _t_sz_ba
+                if chosen_q_ba is None:
+                    for i in range(_tidx_ba + 1, len(outlier_allowed[ot])):
+                        q_, d_, sz_ = outlier_allowed[ot][i]
+                        if d_ > _ba_window_first_deg:
+                            break
+                        if _ba_pinned_size + sz_ <= _budget_tol:
+                            chosen_q_ba = q_
+                            _ba_pinned_size += sz_
+                            break
+                if chosen_q_ba is None:
+                    for i in range(len(outlier_allowed[ot]) - 1, -1, -1):
+                        q_, d_, sz_ = outlier_allowed[ot][i]
+                        if _ba_pinned_size + sz_ <= _budget_tol:
+                            chosen_q_ba = q_
+                            _ba_pinned_size += sz_
+                            break
+                if chosen_q_ba is None:
+                    _ba_outlier_ok = False
+                    break
+                _ba_pinned[ot] = chosen_q_ba
+            if not _ba_outlier_ok:
+                continue
+            # Find max k (top-k non-outliers at Q0, rest at Q1) such that
+            # _ba_pinned_size + sum_at_Q0 + sum_at_Q1 ≤ budget_tol.
+            # Linear scan from k=N down to 0 (cheap — adjacent pair test).
+            _N_no = len(_non_outliers_sorted)
+            if _N_no == 0:
+                continue
+            # Precompute sizes for each non-outlier at Q0 and Q1.
+            _sz_Q0 = [int(tensor_sizes_w[t][_Q0]) for t in _non_outliers_sorted]
+            _sz_Q1 = [int(tensor_sizes_w[t][_Q1]) for t in _non_outliers_sorted]
+            # total(k) = sum(_sz_Q0[:k]) + sum(_sz_Q1[k:])
+            # Start from k=0 (all at Q1) and increment k.
+            _total_no = sum(_sz_Q1)
+            if _ba_pinned_size + _total_no > _budget_tol:
+                # Even with all non-outliers at Q1 (lowest size), can't fit
+                # outliers' pinned sizes. Skip this pair.
+                continue
+            _best_k = 0
+            for _k_ba in range(1, _N_no + 1):
+                # Move tensor[k-1] from Q1 → Q0.
+                _delta = _sz_Q0[_k_ba - 1] - _sz_Q1[_k_ba - 1]
+                _total_no += _delta
+                if _ba_pinned_size + _total_no <= _budget_tol:
+                    _best_k = _k_ba
+                else:
+                    # Roll back and stop (any larger k will also exceed).
+                    _total_no -= _delta
+                    break
+            if _best_k == 0:
+                # Degenerate: all non-outliers at Q1. Same as 1-qtype Q1
+                # window — already enumerated by brute force.
+                continue
+            if _best_k == _N_no:
+                # All non-outliers at Q0. Same as 1-qtype Q0 window —
+                # already enumerated.
+                continue
+            # Build the assignment.
+            _ba_assignment: Dict[str, str] = {}
+            for _idx, t in enumerate(_non_outliers_sorted):
+                _ba_assignment[t] = _Q0 if _idx < _best_k else _Q1
+            _ba_assignment.update(_ba_pinned)
+            _ba_total = _ba_pinned_size + _total_no
+            # Sentinel window key (-2, pair_idx) so debug/pool_label knows.
+            window_data.append(((-2, _ba_pair_idx), _ba_assignment, int(_ba_total)))
+            if debug:
+                print(
+                    f"[AUTO] Added budget-aware 2-qtype candidate "
+                    f"[{_Q0}, {_Q1}] k={_best_k}/{_N_no} at {_Q0} (rest at {_Q1}); "
+                    f"pinned outliers: {_ba_pinned}; total={_ba_total/GIB:.3f} GiB",
+                    file=sys.stderr,
+                )
 
     # Greedy candidate: rank-mapping is UNIFORM (same number of tensors per
     # qtype in the window), but greedy's per-byte cost heuristic produces a
@@ -2580,35 +3275,29 @@ def rank_quant_assign(
             # cap when feasible, (3) budget. See the brute-force outlier
             # override above for the full rationale of this two-phase pick
             # (target-or-better first, monotonicity-only fallback).
+            _gp_budget = int(budget_bytes * (1.0 + max(0.0, float(tolerance))))
             for ot in high_outliers:
                 chosen_q = None
-                target_idx_local = outlier_target_idx[ot]
-                target_deg_local = outlier_allowed[ot][target_idx_local][1]
-                pareto_local = outlier_pareto_idxs[ot]
-                # Phase 1: prefer Pareto qtype with target_deg ≤ deg ≤
-                # sub-pool worst. Pick the LOWEST deg in that range
-                # (= target_deg itself if it's Pareto and fits).
-                for i in pareto_local:  # sorted ASC by deg
-                    q_, d_, sz_ = outlier_allowed[ot][i]
-                    if d_ < target_deg_local:
-                        continue
-                    if d_ > _worst_deg:
-                        break
-                    if pinned_total + sz_ + min_non_outlier <= budget_bytes:
-                        chosen_q = q_
-                        pinned_total += sz_
-                        break
-                # Phase 2: cap relaxed — pick HIGHEST-deg Pareto qtype with
-                # deg ≤ sub-pool worst (closest to target without exceeding
-                # monotonicity). This is the progressive-walk case where
-                # the budget is loose and we're moving the outlier up the
-                # Pareto frontier.
+                _tidx_gp = outlier_target_idx[ot]
+                _t_q_gp, _t_d_gp, _t_sz_gp = outlier_allowed[ot][_tidx_gp]
+                # Phase 1: target qtype.
+                if (_t_d_gp <= _worst_deg
+                        and pinned_total + _t_sz_gp + min_non_outlier <= _gp_budget):
+                    chosen_q = _t_q_gp
+                    pinned_total += _t_sz_gp
                 if chosen_q is None:
-                    for i in reversed(pareto_local):
+                    for i in range(_tidx_gp + 1, len(outlier_allowed[ot])):
                         q_, d_, sz_ = outlier_allowed[ot][i]
                         if d_ > _worst_deg:
-                            continue
-                        if pinned_total + sz_ + min_non_outlier <= budget_bytes:
+                            break
+                        if pinned_total + sz_ + min_non_outlier <= _gp_budget:
+                            chosen_q = q_
+                            pinned_total += sz_
+                            break
+                if chosen_q is None:
+                    for i in range(len(outlier_allowed[ot]) - 1, -1, -1):
+                        q_, d_, sz_ = outlier_allowed[ot][i]
+                        if pinned_total + sz_ + min_non_outlier <= _gp_budget:
                             chosen_q = q_
                             pinned_total += sz_
                             break
@@ -2638,7 +3327,7 @@ def rank_quant_assign(
             if _pinned is None:
                 continue
             _non_outliers = [t for t in tensors_w if t not in _pinned]
-            _remaining_budget = budget_bytes - _pinned_size
+            _remaining_budget = int(budget_bytes * (1.0 + max(0.0, float(tolerance)))) - _pinned_size
             if _remaining_budget < 0:
                 continue
             _no_tensor_sizes = {t: tensor_sizes_w[t] for t in _non_outliers}
@@ -2659,7 +3348,7 @@ def rank_quant_assign(
                 )
             except Exception as _e:
                 if debug:
-                    print(f"[RANK] Greedy candidate k={_k} failed: {_e}", file=sys.stderr)
+                    print(f"[AUTO] Greedy candidate k={_k} failed: {_e}", file=sys.stderr)
                 continue
             if _g_assignment is None:
                 continue
@@ -2667,7 +3356,7 @@ def rank_quant_assign(
             _full_assignment = dict(_g_assignment)
             _full_assignment.update(_pinned)
             _full_total = int(_g_total) + int(_pinned_size)
-            if _full_total <= budget_bytes:
+            if _full_total <= int(budget_bytes * (1.0 + max(0.0, float(tolerance)))):
                 # Sentinel window key (-1, _k): _k = number of qtypes in
                 # greedy's allowed pool (sorted by deg, best first). _k = K
                 # is unconstrained greedy.
@@ -2676,14 +3365,24 @@ def rank_quant_assign(
                     _excluded = _pool_by_deg[_k:]
                     _pin_str = ', '.join(f"{t}={q}" for t, q in _pinned.items()) if _pinned else "none"
                     print(
-                        f"[RANK] Added greedy candidate k={_k} (excluded worst-deg: {_excluded}; "
+                        f"[AUTO] Added greedy candidate k={_k} (excluded worst-deg: {_excluded}; "
                         f"pinned outliers: {_pin_str}) total={_full_total/GIB:.3f} GiB",
                         file=sys.stderr,
                     )
 
     # Restrict to in-budget windows for the (p, q) sweep. If none fit, the
     # fallback assignment is used.
-    feasible_windows = [(w, a, t_) for (w, a, t_) in window_data if t_ <= budget_bytes]
+    #
+    # Budget here is `budget_bytes * (1 + tolerance)` — strict-by-default
+    # (tolerance defaults to 0) but if the user passed --tolerance >0 we
+    # honour it for candidate FEASIBILITY. Without this, windows like
+    # ['q2_K', 'iq2_xs'] that produce a rank-mapped total slightly over
+    # the strict target get rejected, leaving only candidates that
+    # crash-fit by piling onto iq1_m for the low-loss bulk. With tolerance
+    # applied, the meta gets to consider the slightly-over windows and
+    # often picks one that avoids catastrophic qtypes entirely.
+    _feas_budget = int(budget_bytes * (1.0 + max(0.0, float(tolerance))))
+    feasible_windows = [(w, a, t_) for (w, a, t_) in window_data if t_ <= _feas_budget]
 
     def _pick_best_for(score_fn: Callable[[Dict[str, str]], float]):
         best_a, best_t, best_s, best_w = None, -1, float('inf'), (0, K_full - 1)
@@ -2864,7 +3563,7 @@ def rank_quant_assign(
             # No in-budget windows — fall back to the smallest-size assignment.
             if debug:
                 print(
-                    f"[RANK] Warning: no window fits budget {budget_bytes/GIB:.3f} GiB. "
+                    f"[AUTO] Warning: no window fits budget {budget_bytes/GIB:.3f} GiB. "
                     f"Falling back to smallest-size assignment ({fallback_total/GIB:.3f} GiB).",
                     file=sys.stderr,
                 )
@@ -2872,7 +3571,7 @@ def rank_quant_assign(
             total_size = fallback_total if fallback_total >= 0 else 0
             current_pool = list(global_pool)
             best_p = best_q = 1.0
-            best_meta = _meta_score(assignment) if assignment else (0.0, 0.0, 0.0)
+            best_meta = _meta_score(assignment) if assignment else (0.0, 0.0, 0.0, 0.0)
             best_score = float('inf')
             best_window = (0, K_full - 1)
             unique_results = []
@@ -2880,9 +3579,10 @@ def rank_quant_assign(
             # Pick the (p, q) minimising the lexicographic meta-score.
             sweep_results.sort(key=lambda r: r[5])
             best_p, best_q, assignment, total_size, best_score, best_meta, best_window = sweep_results[0]
-            if best_window[0] == -1:
-                # Greedy candidate won — assignment isn't tied to a contiguous
-                # global_pool sub-window. Report the qtypes actually used.
+            if best_window[0] < 0:
+                # Greedy or budget-aware-2-qtype candidate won — assignment
+                # isn't tied to a contiguous global_pool sub-window. Report
+                # the qtypes actually used.
                 _used_qtypes = sorted(set(assignment.values()), key=lambda q: global_pool.index(q) if q in global_pool else len(global_pool))
                 current_pool = _used_qtypes
             else:
@@ -2896,14 +3596,20 @@ def rank_quant_assign(
         if debug and sweep_results:
             def _fmt_meta(m):
                 if isinstance(m, tuple):
-                    return "Σ (loss+{:.4f})·deg^{:.2f}={:.4f} outlier_loss·deg={:.4f} sum_deg={:.1f}".format(_mean_loss, p_meta, *m)
+                    return "outlier_excess={:.4f} Σ (loss+{:.4f}+count)·deg^{:.2f}={:.4g} outlier_loss·deg={:.4f} sum_deg={:.1f}".format(m[0], _mean_loss, p_meta, m[1], m[2], m[3])
                 return f"{m:.4f}"
             def _pool_label(w):
                 if w[0] == -1:
                     return f"GREEDY(k={w[1]})"
+                if w[0] == -2:
+                    # Budget-aware 2-qtype candidate (pair_idx, _).
+                    _i_lbl = w[1]
+                    if 0 <= _i_lbl < len(_pool_by_deg) - 1:
+                        return f"BA2[{_pool_by_deg[_i_lbl]},{_pool_by_deg[_i_lbl + 1]}]"
+                    return f"BA2(pair_idx={_i_lbl})"
                 return str(global_pool[w[0]:w[1] + 1])
             print(
-                f"[RANK] Auto-sweep tried {n_candidates} (p,q) candidates"
+                f"[AUTO] Auto-sweep tried {n_candidates} (p,q) candidates"
                 f" ({len(unique_results)} distinct assignments). "
                 f"Best: p={best_p} q={best_q}; window={_pool_label(best_window)}; "
                 f"total={total_size/GIB:.3f} GiB; score={best_score:.4f}; "
@@ -2914,7 +3620,7 @@ def rank_quant_assign(
             for p_, q_, _a, t_, s_, m_, _w in unique_results:
                 pool_str = _pool_label(_w)
                 print(
-                    f"[RANK] sweep  p={p_:.2f} q={q_:.2f} meta=({_fmt_meta(m_)}) "
+                    f"[AUTO] sweep  p={p_:.2f} q={q_:.2f} meta=({_fmt_meta(m_)}) "
                     f"score={s_:.4f} total={t_/GIB:.3f}GiB pool={pool_str}",
                     file=sys.stderr,
                 )
@@ -2927,7 +3633,7 @@ def rank_quant_assign(
         else:
             if debug:
                 print(
-                    f"[RANK] Warning: no window fits budget {budget_bytes/GIB:.3f} GiB.",
+                    f"[AUTO] Warning: no window fits budget {budget_bytes/GIB:.3f} GiB.",
                     file=sys.stderr,
                 )
             assignment = fallback_assignment or {}
@@ -2944,7 +3650,7 @@ def rank_quant_assign(
             chosen_params_out['deg_exponent'] = float(deg_exponent)
         if debug:
             print(
-                f"[RANK] Best window (p={loss_exponent}, q={deg_exponent}): "
+                f"[AUTO] Best window (p={loss_exponent}, q={deg_exponent}): "
                 f"{current_pool}; total={total_size/GIB:.3f} GiB; score={best_score:.6f}",
                 file=sys.stderr,
             )
@@ -2976,14 +3682,14 @@ def rank_quant_assign(
 
     # Budget for phase C — strict: never exceed budget_bytes. (`tolerance` is
     # only a hint that small over/undershoot is acceptable for OTHER methods;
-    # the rank method already finds the best window within budget via the
+    # the auto method already finds the best window within budget via the
     # brute-force search, so Phase C should only fill the leftover headroom
     # rather than spend any of the user's tolerance allowance.)
     headroom_budget = budget_bytes
 
     if debug:
         print(
-            f"[RANK] Phase C: starting promotions "
+            f"[AUTO] Phase C: starting promotions "
             f"(headroom = {(headroom_budget - total_size)/GIB:.3f} GiB up to "
             f"{headroom_budget/GIB:.3f} GiB)",
             file=sys.stderr,
@@ -3038,7 +3744,7 @@ def rank_quant_assign(
             promotions += 1
             if debug:
                 print(
-                    f"[RANK] Phase C: promoted {t} {current_q} -> {new_q} "
+                    f"[AUTO] Phase C: promoted {t} {current_q} -> {new_q} "
                     f"(+{delta/GIB:.4f} GiB; total={total_size/GIB:.3f} GiB)",
                     file=sys.stderr,
                 )
@@ -3047,7 +3753,7 @@ def rank_quant_assign(
 
     if debug:
         print(
-            f"[RANK] Phase C: {promotions} promotions performed. "
+            f"[AUTO] Phase C: {promotions} promotions performed. "
             f"Final total_size = {total_size/GIB:.3f} GiB",
             file=sys.stderr,
         )
@@ -3713,22 +4419,25 @@ def main():
                             'Values are applied element-wise per layer across the matched tensors.'
                             'Max ensures calibration data measurement is not negatively degraded. Min will degrade calibration data accuracy but appears to give the best results. Mean is a compromise in-between. Disabled means harmonization is disabled.'))
     parser.add_argument('--use-greedy-quant-assign', action='store_true', help='Use greedy priority-queue quant assignment instead of default spread/midpoint method. The method tries to minimize overall degradation by prioritizing quant downgrades that yield the least degradation per byte saved. This method requires per-tensor degradation data (e.g. KLD) to be present in the csv_file - perplexity data only works suboptimally. It also requires per quant type degradation estimates which can be supplied either via --quant-degradation-csv - if not present hardcoded Qwen3-4B-Thinking-2507 degradation values are used. override with --quant-degradation-csv. It is recommended to use --exponential-factor between 1.0 and 5.0 when using this method to try to map per-tensor degradation values into a more linear space.')
-    parser.add_argument('--use-rank-quant-assign', action='store_true',
-                        help=('Use the rank-preserving "exhaustive-window" quant assignment instead of the greedy or default spread/midpoint methods. '
-                              'The method strictly preserves the sensitivity rank order of tensors (the most-sensitive tensor never gets a worse qtype than a less-sensitive one), '
-                              'identifies zero-kld outliers (tensors unused by the model) and assigns them the smallest-size qtype, '
-                              'then projects the sensitivity rank onto every contiguous sub-window of the qtype pool (sorted by degradation best→worst) and picks the window that minimizes total Σ loss·deg while fitting the size budget. '
-                              'A final promotion pass lifts the smallest tensors first to consume any remaining headroom while still preserving rank monotonicity. '
-                              'Designed to work well out-of-the-box without tweaking --exponential-factor / --per-tensor-degradation-scaling / --harmonize-tensors / --synergistic-tensors — those parameters remain available for advanced users. '
-                              'Requires --quant-degradation-csv (recommended) or falls back to hardcoded defaults.'))
-    parser.add_argument('--rank-no-pareto-filter', action='store_true',
-                        help=('Only valid with --use-rank-quant-assign. By default the rank method drops per-tensor allowed qtypes that are Pareto-dominated on the (size, degradation) plane '
+    parser.add_argument('--use-auto-quant-assign', action='store_true',
+                        help=('Use the data-adaptive "auto" quant assignment instead of the greedy or default spread/midpoint methods. '
+                              'Everything is tuned from the data — no need to hand-pick --exponential-factor, --per-tensor-degradation-scaling, or a window of qtypes. The auto method: '
+                              '(1) detects zero-kld outliers and pins them at the smallest qtype; '
+                              '(2) detects high-sensitivity outliers (e.g. token_embd) via IQR and pins each to a budget-progressive Pareto target derived from max_loss and the budget-natural qtype, so the most-sensitive tensors walk smoothly through the Pareto frontier as the budget grows; '
+                              '(3) enumerates every contiguous sub-window of the qtype pool and rank-maps tensors uniformly across each window; '
+                              '(4) adds constrained-greedy candidates that exclude the worst-deg qtypes one tier at a time, letting the meta pick the optimal "cap k" from the data; '
+                              '(5) auto-tunes the score exponents (p, q) over a fine grid; '
+                              '(6) ranks all candidates with a data-tuned meta Σ (loss + mean_loss) · deg^p_meta where p_meta = log2(max_pool_deg / max_loss) auto-adjusts cliff-aware penalty steepness; '
+                              '(7) runs a final promotion pass (Phase C) on non-outlier tensors to consume leftover headroom. '
+                              'Requires --quant-degradation-csv (strongly recommended) or falls back to hardcoded defaults.'))
+    parser.add_argument('--auto-no-pareto-filter', action='store_true',
+                        help=('Only valid with --use-auto-quant-assign. By default the auto method drops per-tensor allowed qtypes that are Pareto-dominated on the (size, degradation) plane '
                               '— a qtype that is BOTH larger AND more-degrading than another available qtype is never preferable, so filtering it eliminates wasted budget. '
                               'Pass this flag to disable Pareto filtering (e.g. if you deliberately want to use qtypes that look "objectively worse" by group0 stats but behave better at inference time on your specific hardware).'))
-    parser.add_argument('--rank-deg-exponent', type=float, default=None,
-                        help=('Only valid with --use-rank-quant-assign. Degradation exponent q in the rank method\'s score function Σ loss^p · deg^q. '
+    parser.add_argument('--auto-deg-exponent', type=float, default=None,
+                        help=('Only valid with --use-auto-quant-assign. Pins the degradation exponent q in the auto method\'s candidate-selection score Σ loss^p · deg^q. '
                               'q > 1 amplifies the badness of high-degradation qtypes (e.g. iq1_s) and pushes the recipe to avoid using them; q = 1 is the linear regime. '
-                              'When neither --exponential-factor (p) nor --rank-deg-exponent (q) are provided, the rank method auto-sweeps a small grid of (p, q) and selects the pair whose chosen assignment minimises the worst per-tensor loss·degradation product — and reports the selection in the recipe\'s hidden-parameters footer. '
+                              'When neither --exponential-factor (p) nor --auto-deg-exponent (q) are provided, the auto method sweeps a fine (p, q) grid internally and picks the pair whose chosen assignment minimises the meta-score — and reports the selection in the recipe\'s hidden-parameters footer. '
                               'Override only if you know what you\'re doing.'))
     parser.add_argument('--quant-degradation-csv', type=str, help='Path to CSV file containing quant degradation values for use by greedy quant assign method (optional). If not provided, hardcoded Qwen3-4B-Thinking-2507 degradation values are used, and you will need to tweak --exponential-factor. ')
     parser.add_argument('--quant-degradation-equation', type=str,
@@ -3773,38 +4482,38 @@ def main():
     if args.compute_missing_map and args.compute_all_map:
         parser.error("--compute-missing-map and --compute-all-map are mutually exclusive")
 
-    # --use-greedy-quant-assign and --use-rank-quant-assign are mutually exclusive
-    if args.use_greedy_quant_assign and args.use_rank_quant_assign:
-        parser.error("--use-greedy-quant-assign and --use-rank-quant-assign are mutually exclusive")
+    # --use-greedy-quant-assign and --use-auto-quant-assign are mutually exclusive
+    if args.use_greedy_quant_assign and args.use_auto_quant_assign:
+        parser.error("--use-greedy-quant-assign and --use-auto-quant-assign are mutually exclusive")
 
     # Convenience: a single flag indicating whether ANY degradation-aware
     # assignment method is in use. The same auxiliary options (--quant-degradation-csv,
     # --synergistic-tensors, --per-tensor-degradation-scaling) apply to both.
-    using_degradation_method = bool(args.use_greedy_quant_assign or args.use_rank_quant_assign)
+    using_degradation_method = bool(args.use_greedy_quant_assign or args.use_auto_quant_assign)
 
-    # Enforce: --quant-degradation-csv only valid with greedy/rank methods
+    # Enforce: --quant-degradation-csv only valid with greedy/auto methods
     if args.quant_degradation_csv and not using_degradation_method:
-        parser.error("--quant-degradation-csv may only be used with --use-greedy-quant-assign or --use-rank-quant-assign")
+        parser.error("--quant-degradation-csv may only be used with --use-greedy-quant-assign or --use-auto-quant-assign")
 
-    # Enforce: --synergistic-tensors only valid with greedy/rank methods
+    # Enforce: --synergistic-tensors only valid with greedy/auto methods
     if args.synergistic_tensors and not using_degradation_method:
-        parser.error("--synergistic-tensors may only be used with --use-greedy-quant-assign or --use-rank-quant-assign")
+        parser.error("--synergistic-tensors may only be used with --use-greedy-quant-assign or --use-auto-quant-assign")
 
     # Enforce: --synergy-strength is only valid when using --synergistic-tensors
     if args.synergy_strength and args.synergy_strength > 0 and not args.synergistic_tensors:
         parser.error("--synergy-strength may only be used with --synergistic-tensors")
 
-    # Enforce: --per-tensor-degradation-scaling only valid with greedy/rank methods
+    # Enforce: --per-tensor-degradation-scaling only valid with greedy/auto methods
     if args.per_tensor_degradation_scaling and args.per_tensor_degradation_scaling > 0 and not using_degradation_method:
-        parser.error("--per-tensor-degradation-scaling may only be used with --use-greedy-quant-assign or --use-rank-quant-assign")
+        parser.error("--per-tensor-degradation-scaling may only be used with --use-greedy-quant-assign or --use-auto-quant-assign")
 
-    # Enforce: --rank-no-pareto-filter only valid with --use-rank-quant-assign
-    if args.rank_no_pareto_filter and not args.use_rank_quant_assign:
-        parser.error("--rank-no-pareto-filter may only be used with --use-rank-quant-assign")
+    # Enforce: --auto-no-pareto-filter only valid with --use-auto-quant-assign
+    if args.auto_no_pareto_filter and not args.use_auto_quant_assign:
+        parser.error("--auto-no-pareto-filter may only be used with --use-auto-quant-assign")
 
-    # Enforce: --rank-deg-exponent only valid with --use-rank-quant-assign
-    if args.rank_deg_exponent is not None and not args.use_rank_quant_assign:
-        parser.error("--rank-deg-exponent may only be used with --use-rank-quant-assign")
+    # Enforce: --auto-deg-exponent only valid with --use-auto-quant-assign
+    if args.auto_deg_exponent is not None and not args.use_auto_quant_assign:
+        parser.error("--auto-deg-exponent may only be used with --use-auto-quant-assign")
     
     if not args.per_tensor_degradation_scaling:
         per_tensor_degradation_scaling_final = 0.0 # Default value
@@ -3974,7 +4683,7 @@ def main():
     # harmonize_groups is now a list-of-lists of regex strings (or empty list to disable)
 
     # --- Disable harmonization here when using greedy or rank quant assign — both methods handle harmonization internally ---
-    if not (args.use_greedy_quant_assign or args.use_rank_quant_assign):
+    if not (args.use_greedy_quant_assign or args.use_auto_quant_assign):
         try:
             # Provide df columns (excluding QTYPE) so the helper can match against available tensor names
             harmonize_row(row, [c for c in df.columns if c != 'QTYPE'], harmonize_groups, args.harmonization_technique)
@@ -4037,16 +4746,16 @@ def main():
             print(f"[Info] Exponential-factor value set by the user: {exp_factor_final}", file=sys.stderr)
     else:
         # Not specified by user
-        if args.use_rank_quant_assign:
+        if args.use_auto_quant_assign:
             # Rank method scores assignments by Σ loss^p · deg^q. When the user
             # leaves --exponential-factor unset, we run an internal auto-sweep
-            # over a small (p, q) grid inside rank_quant_assign and pick the
+            # over a small (p, q) grid inside auto_quant_assign and pick the
             # pair whose chosen assignment minimises the worst per-tensor
             # loss·degradation product. exp_factor_final is left at 1.0 here
             # purely as a fallback / display value — the real chosen p will
             # come back via chosen_params_out.
             if INFO:
-                print(f"[Info] --exponential-factor not specified for --use-rank-quant-assign: enabling internal (p, q) auto-sweep.", file=sys.stderr)
+                print(f"[Info] --exponential-factor not specified for --use-auto-quant-assign: enabling internal (p, q) auto-sweep.", file=sys.stderr)
             exp_factor_final = 1.0
         elif args.use_greedy_quant_assign and args.quant_degradation_csv:
             if INFO:
@@ -4342,7 +5051,7 @@ def main():
                         if INFO:
                             print(f"[Info] Assigned {desc} quant {assigned_q} to outlier {nm}, size={size_harmonized/GIB:.3f} GiB (harmonized group {group_idx})", file=sys.stderr)
 
-        if not (args.use_greedy_quant_assign or args.use_rank_quant_assign):
+        if not (args.use_greedy_quant_assign or args.use_auto_quant_assign):
             # process low and high outliers (lowest quant = quants[-1], highest quant = quants[0])
             _process_outliers_list(out_low, quants[-1], "lowest")
             _process_outliers_list(out_high, quants[0], "highest")
@@ -4393,7 +5102,7 @@ def main():
                 [lowest_q], None, class_vals)
             total_bytes = sum(sizes.values())
         elif max_arg_bytes:
-            if args.use_greedy_quant_assign or args.use_rank_quant_assign:
+            if args.use_greedy_quant_assign or args.use_auto_quant_assign:
                 # Build tensor_quants mapping (default to cls-specific quants)
                 tensor_quants_local = {n: (gpu_quants if cls == 'gpu' else cpu_quants) for n in names_to_assign}
 
@@ -4442,8 +5151,8 @@ def main():
                     for n in names_to_assign
                 }
 
-                if args.use_rank_quant_assign:
-                    # The rank method also benefits from being told about the
+                if args.use_auto_quant_assign:
+                    # The auto method also benefits from being told about the
                     # class-default assign-qtype so that zero-kld outliers can be
                     # assigned to the smallest-size qtype across the full set the
                     # user has allowed (gpu/cpu quants + the class assign-qtype).
@@ -4464,7 +5173,7 @@ def main():
                         except Exception:
                             pass
 
-                    # The rank method uses *label* degradation (the tabulated
+                    # The auto method uses *label* degradation (the tabulated
                     # deg for the qtype the recipe will list), not the actual
                     # fallback-storage deg. Reasons:
                     #   - The user reads recipes by label; "no iq1_s entries"
@@ -4477,20 +5186,20 @@ def main():
                     #     actual fallback bytes), so budget is correct even
                     #     though the labeled deg is a slight pessimism.
 
-                    # Auto-sweep (p, q) inside the rank method ONLY when the
+                    # Auto-sweep (p, q) inside the auto method ONLY when the
                     # user hasn't pinned both exponents. If --exponential-factor
                     # is set, the user has expressed a preference for p; if
-                    # --rank-deg-exponent is also set, both are pinned and we
+                    # --auto-deg-exponent is also set, both are pinned and we
                     # skip the sweep. Otherwise we sweep and report the chosen
                     # (p, q) in the recipe's hidden-parameters footer.
                     _auto_sweep = (args.exponential_factor is None)
-                    _user_q = args.rank_deg_exponent if args.rank_deg_exponent is not None else 1.0
-                    if args.rank_deg_exponent is not None:
+                    _user_q = args.auto_deg_exponent if args.auto_deg_exponent is not None else 1.0
+                    if args.auto_deg_exponent is not None:
                         # User pinned q — still skip sweep only when p is also
                         # pinned (avoid surprising behaviour).
                         _auto_sweep = _auto_sweep and (args.exponential_factor is None and False)
-                    chosen_rank_params: Dict[str, float] = {}
-                    assignment, total_bytes = rank_quant_assign(
+                    chosen_auto_params: Dict[str, float] = {}
+                    assignment, total_bytes = auto_quant_assign(
                         tensors=names_to_assign,
                         tensor_sizes=tensor_sizes_local,
                         ppl_loss=class_vals,
@@ -4506,13 +5215,13 @@ def main():
                         synergy_strength=args.synergy_strength,
                         tolerance=args.tolerance,
                         extra_outlier_qtypes=_extra_outlier_qtypes,
-                        pareto_filter=not args.rank_no_pareto_filter,
-                        chosen_params_out=chosen_rank_params,
+                        pareto_filter=not args.auto_no_pareto_filter,
+                        chosen_params_out=chosen_auto_params,
                     )
                     # Stash the chosen (p, q) onto args so the hidden-parameter
                     # footer can include them in the recipe.
-                    if chosen_rank_params:
-                        args.__dict__.setdefault('_rank_chosen_params', {})[cls] = chosen_rank_params
+                    if chosen_auto_params:
+                        args.__dict__.setdefault('_auto_chosen_params', {})[cls] = chosen_auto_params
                 else:
                     # ---- Call greedy quant assignment with all parameters ----
                     assignment, total_bytes = greedy_quant_assign(
@@ -5090,14 +5799,14 @@ def main():
         print(f"# - GPG signatures: DISABLED")
 
     # List some important parameters that would otherwise be hard to guess (because dynamic or changing over versions or arg-dependant and complex)
-    rank_chosen = args.__dict__.get('_rank_chosen_params', {}) or {}
-    if not args.exponential_factor or not args.per_tensor_degradation_scaling or rank_chosen:
+    auto_chosen = args.__dict__.get('_auto_chosen_params', {}) or {}
+    if not args.exponential_factor or not args.per_tensor_degradation_scaling or auto_chosen:
         print(f"# - Hidden parameters (not passed as CLI args):")
         if not args.exponential_factor:
-            if args.use_rank_quant_assign and rank_chosen:
-                # The rank method auto-sweeps (p, q). Report the chosen values
+            if args.use_auto_quant_assign and auto_chosen:
+                # The auto method auto-sweeps (p, q). Report the chosen values
                 # per class (loss_exponent = p, deg_exponent = q).
-                for _cls, _params in rank_chosen.items():
+                for _cls, _params in auto_chosen.items():
                     p_v = _params.get('loss_exponent')
                     q_v = _params.get('deg_exponent')
                     if p_v is not None:
