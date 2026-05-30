@@ -4393,7 +4393,7 @@ def main():
     parser.add_argument('--debug', action='store_true', help='Show debug logs')
     parser.add_argument('--info', action='store_true', help='Show info logs')
     parser.add_argument('--tolerance', type=float, default=0.05,
-                        help='Relative GiB tolerance for size optimization')
+                        help='Relative GiB tolerance for size optimization. NOTE: ignored when --use-auto-quant-assign is set — the auto method always aims for the exact target size (a warning is printed to stderr if --tolerance is passed alongside --use-auto-quant-assign).')
     parser.add_argument('--cpu-irq-k', type=float, default=1.5,
                         help='IQR multiplier k for CPU-friendly outlier detection')
     parser.add_argument('--gpu-irq-k', type=float, default=1.5,
@@ -4498,6 +4498,20 @@ def main():
     # --use-greedy-quant-assign and --use-auto-quant-assign are mutually exclusive
     if args.use_greedy_quant_assign and args.use_auto_quant_assign:
         parser.error("--use-greedy-quant-assign and --use-auto-quant-assign are mutually exclusive")
+
+    # --tolerance is ignored under --use-auto-quant-assign: the auto method
+    # aims at the exact target size (it strict-caps at budget_bytes
+    # internally — see auto_quant_assign Step 0). Warn the user if they
+    # passed --tolerance explicitly so they know it has no effect.
+    if args.use_auto_quant_assign and any(
+        a == '--tolerance' or a.startswith('--tolerance=') for a in sys.argv[1:]
+    ):
+        print(
+            f"[Warning] --tolerance {args.tolerance} is ignored when "
+            f"--use-auto-quant-assign is set: the auto method always aims "
+            f"for the exact target size.",
+            file=sys.stderr,
+        )
 
     # Convenience: a single flag indicating whether ANY degradation-aware
     # assignment method is in use. The same auxiliary options (--quant-degradation-csv,
