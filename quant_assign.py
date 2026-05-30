@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: May-29-2026 -------------------- **#
+#** --------------- Updated: May-30-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -5116,8 +5116,49 @@ def main():
             total_bytes = sum(sizes.values())
         elif max_arg_bytes:
             if args.use_greedy_quant_assign or args.use_auto_quant_assign:
-                # Build tensor_quants mapping (default to cls-specific quants)
-                tensor_quants_local = {n: (gpu_quants if cls == 'gpu' else cpu_quants) for n in names_to_assign}
+                # ---- Exclude PHANTOM qtypes ----
+                # A requested qtype is "phantom" for this class when NONE of the
+                # tensors-to-assign actually materialise at it: every tensor in
+                # that qtype's tensors.<q>.map falls back to a different stored
+                # dtype. Example: iq2_s on gemma — no tensor can be quantised to
+                # iq2_s, so the map stores every tensor as iq2_xs. The phantom
+                # then carries iq2_xs's *sizes* but iq2_s's own (better) tabulated
+                # degradation, so on the (size, deg) Pareto frontier it spuriously
+                # dominates the real qtype it aliases (here both iq2_xs and q2_K),
+                # corrupting the bulk assignment AND the outlier-target rung count
+                # (observed: token_embd jumping q3_K → iq4_xs at 26.12% purely
+                # because iq2_s collapsed two frontier rungs). Drop such qtypes
+                # up-front so they never enter the pool, the allowed lists, or the
+                # size table.
+                _class_quants_raw = gpu_quants if cls == 'gpu' else cpu_quants
+                _class_quants_eff = []
+                for _q in _class_quants_raw:
+                    try:
+                        _, _actual_q, _ = get_map_sizes_and_elements(_q)
+                    except Exception:
+                        _class_quants_eff.append(_q)  # can't determine → keep
+                        continue
+                    _q_norm = transform_q_suffix(str(_q)).lower()
+                    _materialised = any(
+                        transform_q_suffix(str(_actual_q.get(n, ''))).lower() == _q_norm
+                        for n in names_to_assign
+                    )
+                    if _materialised:
+                        _class_quants_eff.append(_q)
+                    elif DEBUG or INFO:
+                        print(
+                            f"[Info] Excluding phantom qtype {_q!r} for {cls.upper()}: "
+                            f"no tensor-to-assign materialises at it (every tensor in its "
+                            f"map falls back to another dtype).",
+                            file=sys.stderr,
+                        )
+                # Safety: never drop everything (pathological all-phantom case).
+                if not _class_quants_eff:
+                    _class_quants_eff = list(_class_quants_raw)
+
+                # Build tensor_quants mapping (default to cls-specific quants,
+                # minus any phantom qtypes excluded above).
+                tensor_quants_local = {n: list(_class_quants_eff) for n in names_to_assign}
 
                 # ---- Expand CLI regex groups into concrete per-layer lists restricted to this class' tensors ----
                 # Harmonization groups
@@ -5156,8 +5197,10 @@ def main():
                     # No scaling – just wrap the old lookup as a two-argument callable
                     degradation_fn = lambda tensor, qtype: quant_deg_lookup(qtype)
 
-                # Build the per-tensor sizes mapping used by both methods
-                _quants_for_class = gpu_quants if cls == 'gpu' else cpu_quants
+                # Build the per-tensor sizes mapping used by both methods.
+                # Use the phantom-filtered quant list so excluded qtypes never
+                # appear in the size table / pool.
+                _quants_for_class = _class_quants_eff
                 tensor_sizes_local = {
                     n: {q: get_map_sizes_and_elements(q)[0].get(n, 0)
                         for q in _quants_for_class}
