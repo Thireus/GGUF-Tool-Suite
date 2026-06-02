@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: May-30-2026 -------------------- **#
+#** --------------- Updated: Jun-02-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -1646,6 +1646,37 @@ def greedy_quant_assign(
     return assignment, total_size
 
 
+# ---- Greedy 2nd-pass combo numbering (for --auto-force-combo and footer disclosure) ----
+# Canonical bitmask over the alteration toggles applied in the greedy second pass.
+# Matches the default adaptive lattice (ADAPT_LATTICE=class,pos,tier2):
+#   0=none 1=class 2=pos 3=class+pos 4=tier2 5=class+tier2 6=pos+tier2 7=class+pos+tier2
+#   bit 0=class(1)  bit 1=pos(2)  bit 2=tier2(4)  bit 3=pareto(8)
+#   0..7  = the 8 DISTINCT combos (no pareto); the adaptive selector only ever picks these.
+#   8..15 = the same 8 combos + pareto, which is INERT (identical recipe), so they are
+#           pareto-duplicates of 0..7 kept only for completeness.
+_COMBO_TOGGLES = ('class', 'pos', 'tier2', 'pareto')   # bit order (defines the number)
+_COMBO_DISPLAY = ('pareto', 'class', 'pos', 'tier2')   # name order (conventional, pareto first)
+_COMBO_MAX = (1 << len(_COMBO_TOGGLES)) - 1            # 15
+
+def _combo_num_to_set(n):
+    """Bitmask int -> set of toggle names (bits outside the toggle list are ignored)."""
+    return set(t for i, t in enumerate(_COMBO_TOGGLES) if (int(n) >> i) & 1)
+
+def _combo_set_to_num(s):
+    """Set of toggle names -> bitmask int, or None if it contains a non-canonical toggle."""
+    if set(s) - set(_COMBO_TOGGLES):
+        return None
+    return sum(1 << i for i, t in enumerate(_COMBO_TOGGLES) if t in s)
+
+def _combo_name(s):
+    """Set of toggles -> canonical name ('none' / 'class' / 'pareto+class+pos' / ...)."""
+    return '+'.join(t for t in _COMBO_DISPLAY if t in s) or 'none'
+
+def _combo_num_from_name(name):
+    """Combo name -> bitmask int (or None)."""
+    return _combo_set_to_num(set() if name == 'none' else set(name.split('+')))
+
+
 def auto_quant_assign(
     tensors: Iterable[str],
     tensor_sizes: Dict[str, Dict[str, int]],
@@ -1667,6 +1698,7 @@ def auto_quant_assign(
     extra_outlier_qtypes: Optional[List[str]] = None,
     pareto_filter: bool = True,
     chosen_params_out: Optional[Dict[str, float]] = None,
+    force_combo: Optional[int] = None,
 ) -> Tuple[Dict[str, str], int]:
     """
     Rank-preserving "shrinking-pool" quant assignment.
@@ -1707,10 +1739,27 @@ def auto_quant_assign(
     # close to 26.12 %). Strict-capping at budget_bytes makes the result
     # land NEAR target — possibly leaving headroom unused for cliff
     # models, but that trade-off is intentional.
+    _orig_tolerance = float(tolerance)  # user --tolerance, before strict override
     tolerance = 0.0
     tensors = list(tensors)
     tensor_quants = tensor_quants or {}
     extra_outlier_qtypes = list(extra_outlier_qtypes or [])
+    # Pristine copies of the caller inputs, captured before any of the
+    # preliminary operations (loss adjustment, floor cap, outlier pinning)
+    # mutate the working views. Used to re-run an UNRESTRICTED pure greedy
+    # if the auto-sweep ends up selecting a greedy candidate (see the
+    # greedy-winner re-run just before Phase C).
+    _pristine_tensor_quants = (
+        {t: list(v) for t, v in tensor_quants.items()} if tensor_quants else {}
+    )
+    _pristine_ppl_loss = dict(ppl_loss)
+    # Captured alteration parameters (set during the preliminary passes
+    # below) so the greedy second-pass can optionally re-apply a chosen
+    # subset of them. Used for the ablation that finds which alterations
+    # are least-damaging to apply in the greedy-selected round.
+    _alt_class_factor: Dict[str, float] = {}
+    _alt_tier2_w: set = set()
+    _alt_bulk_allowed: Optional[set] = None
 
     # --- Step 1: Build per-tensor allowed-qtype map (sorted best→worst by degradation)
     allowed_map: Dict[str, List[str]] = {}
@@ -2558,6 +2607,10 @@ def auto_quant_assign(
                     _eff_loss_in[t] *= LAYER_EDGE_BOOST
                     _boosted += 1
 
+        # Capture alteration params for the greedy second-pass ablation.
+        _alt_class_factor = dict(_class_factor)
+        _alt_tier2_w = set(_tier2_outliers)
+
         # Write back and re-sort so BA2 / brute-force see the new order.
         for t in sortable:
             ppl_loss_w[t] = _eff_loss_in[t]
@@ -2867,6 +2920,7 @@ def auto_quant_assign(
             for q, _tot in _total_at_q_cache.items():
                 if _tot >= _floor_total_bytes:
                     _bulk_allowed_set.add(q)
+            _alt_bulk_allowed = set(_bulk_allowed_set)  # capture for 2nd-pass ablation
             # Filter non-outlier allowed_map_w in place.
             _filtered_count = 0
             for _t_floor in tensors_w:
@@ -3668,6 +3722,417 @@ def auto_quant_assign(
                 file=sys.stderr,
             )
 
+    # --- Step 8.5: Greedy-winner unrestricted re-run (meta-guarded) -------
+    #
+    # When the auto-sweep selects a GREEDY candidate (best_window[0] == -1),
+    # the winning greedy ran on the RESTRICTED working state: the bulk-floor-
+    # capped pool (below-floor qtypes removed), the class-scaled / tier-2-
+    # demoted / positionally-boosted effective losses, and with tier-1/tier-2
+    # outliers pre-pinned out of greedy's reach. Those restrictions protect
+    # cliff models (gemma) from catastrophic-qtype overuse — but on a model
+    # that genuinely benefits from the full pool (Qwen3.5-35B MoE, where the
+    # floor cap forbids the efficient iq1_kt trellis quant) they handicap it
+    # (~0.85 PPL worse than --use-greedy-quant-assign).
+    #
+    # So when greedy wins, re-run a PURE greedy on the PRISTINE inputs (full
+    # pool, raw losses, no floor cap / outlier pinning) — exactly as
+    # --use-greedy-quant-assign would — but ADOPT it ONLY IF it is genuinely
+    # better under the meta's *primary* term (the compound size-weighted
+    # damage Σ (loss + mean + count)·deg^p). greedy "winning" the sweep is NOT
+    # by itself a reliable signal that unrestricted greedy is wanted — it wins
+    # on gemma too, where lifting the floor cap reintroduces iq1_m (319/191/…
+    # tensors). On gemma the unrestricted greedy's iq1_m usage (deg ≫
+    # everything) blows up the primary term, so the constrained result is
+    # kept; on Qwen35 the iq1_kt spread lowers the primary term, so it is
+    # adopted. The primary term — not the full meta tuple — is the arbiter,
+    # because the tuple's leading outlier_excess key reflects auto's outlier-
+    # pinning policy that pure greedy intentionally does not follow, and would
+    # otherwise falsely veto the legitimate Qwen35 improvement.
+    if best_window and best_window[0] == -1:
+        # === Greedy-winner second pass: ADAPTIVE combo selection ============
+        # When greedy wins the sweep, re-run pure greedy on the PRISTINE inputs
+        # and, instead of one hard-coded alteration set, ENUMERATE a small
+        # lattice of alteration combos {class,pos,tier2} and auto-select the
+        # predicted-best SAFE one with a verified 3-veto + regime-gated selector
+        # (see to_benchmark_combinations/analysis/). Patterns learned from PPL
+        # benchmarks of 38 combo recipes (GLM-4.7-Flash + Qwen3.5 0.8B/122B/397B):
+        #   * predicted_damage = Σ sens·curve predicts PPL for Qwen but is
+        #     INVERTED for GLM tier2 (its sensitivity data over-rates the
+        #     outliers tier2 demotes; crushing them frees budget → −1.2 PPL).
+        #   * the disasters share recipe signatures (token_embd crushed; a top-
+        #     sensitivity tensor crushed; or floor-demotion into a TIGHT body,
+        #     std_bpw/range_bpw < 0.275 = "starvation"); three vetoes catch them
+        #     with ≥2× redundancy. A regime gate (HBR = (sens[token_embd]+
+        #     sens[output]) / max(other sens) < 5) plus a clean-floor-pusher
+        #     shape promotes the GLM-style tier2 WIN. The promoter only ever
+        #     runs on veto SURVIVORS, so it can never select a disaster
+        #     (verified: forcing the gate open keeps 0/6 unsafe; regret 0.048).
+        #   Models that don't trigger greedy-win (e.g. gemma → normal auto
+        #   window flow) never reach here; the whole Qwen family has HBR≥5 so it
+        #   stays conservative; only GLM-style (greedy-win + HBR<5) is promoted.
+        # Overrides: ADAPT=0 → legacy single-combo path; SP_ALTS=<subset>
+        # (+SP_FORCE=1) → legacy single-combo ablation (disables adaptive);
+        # ADAPT_LATTICE=a,b,c → toggles to enumerate (default class,pos,tier2);
+        # ADAPT_NO_TIER2=1 → disable the win-promoter (conservative-only).
+        _pure_assignment = None
+        _pure_total = None
+        _feas_cap = int(budget_bytes * (1.0 + max(0.0, _orig_tolerance)))
+
+        # tier-2 (merged names) → original tensors, shared by every combo build.
+        _tier2_orig = set()
+        for _tw in _alt_tier2_w:
+            if merged and group_defs and _tw in group_defs:
+                _tier2_orig.update(group_defs[_tw])
+            else:
+                _tier2_orig.add(_tw)
+
+        def _sp_build(_sp_alts):
+            """Build (ppl_loss, tensor_quants) for a given alteration subset."""
+            _pl = dict(_pristine_ppl_loss)
+            _qz = {
+                t: list(_pristine_tensor_quants.get(t) or list(tensor_sizes.get(t, {}).keys()))
+                for t in tensors
+            }
+            if _sp_alts:
+                # (pareto) per-tensor Pareto-frontier filter on (size, deg).
+                if 'pareto' in _sp_alts:
+                    for t in tensors:
+                        _al = _qz[t]
+                        if len(_al) <= 1:
+                            continue
+                        _sd = []
+                        for q in _al:
+                            try:
+                                _d = float(degradation_fn(t, q))
+                            except Exception:
+                                _d = float('inf')
+                            _sd.append((q, int(tensor_sizes.get(t, {}).get(q, 0)), _d))
+                        _sd.sort(key=lambda x: (x[1], x[2]))
+                        _kept, _mind = [], float('inf')
+                        for q, _sz, _d in _sd:
+                            if _d < _mind:
+                                _kept.append(q); _mind = _d
+                        _ks = set(_kept)
+                        _qz[t] = [q for q in _al if q in _ks]
+                # (floor) restrict bulk (non-tier-1/2) tensors to bulk-allowed.
+                if 'floor' in _sp_alts and _alt_bulk_allowed:
+                    for t in tensors:
+                        if t in high_outliers_set or t in _tier2_orig:
+                            continue
+                        _new = [q for q in _qz[t] if q in _alt_bulk_allowed]
+                        if _new:
+                            _qz[t] = _new
+                # (class) multiply bulk losses by class factor.
+                if 'class' in _sp_alts and _alt_class_factor:
+                    for t in tensors:
+                        if t in high_outliers_set or t in _tier2_orig:
+                            continue
+                        _f = _alt_class_factor.get(_tensor_class(t))
+                        if _f and _f != 1.0 and t in _pl:
+                            _pl[t] = float(_pl[t]) * _f
+                # (tier2) demote tier-2 losses to zero.
+                if 'tier2' in _sp_alts:
+                    for t in _tier2_orig:
+                        if t in _pl:
+                            _pl[t] = 0.0
+                # (pos) positional boost on first/last LAYER_EDGE_FRAC layers.
+                if 'pos' in _sp_alts:
+                    _lre = re.compile(r"^blk\.(\d+)\.")
+                    _maxl = -1
+                    _lidx = {}
+                    for t in tensors:
+                        _m = _lre.match(t)
+                        _lidx[t] = int(_m.group(1)) if _m else None
+                        if _lidx[t] is not None and _lidx[t] > _maxl:
+                            _maxl = _lidx[t]
+                    if _maxl >= 0:
+                        _nl = _maxl + 1
+                        _en = max(1, int(round(_nl * LAYER_EDGE_FRAC)))
+                        for t in tensors:
+                            if t in high_outliers_set or t in _tier2_orig:
+                                continue
+                            _li = _lidx.get(t)
+                            if _li is None:
+                                continue
+                            if (_li < _en or _li >= _nl - _en) and t in _pl:
+                                _pl[t] = float(_pl[t]) * LAYER_EDGE_BOOST
+            return _pl, _qz
+
+        def _sp_greedy(_pl, _qz):
+            try:
+                return greedy_quant_assign(
+                    tensors=tensors,
+                    tensor_sizes=tensor_sizes,
+                    ppl_loss=_pl,
+                    degradation_fn=degradation_fn,
+                    tensor_quants=_qz,
+                    budget_bytes=int(budget_bytes),
+                    preassign_missing_ppl=preassign_missing_ppl,
+                    debug=False,
+                    harmonized_groups=harmonized_groups,
+                    loss_exponent=loss_exponent,
+                    synergistic_groups=synergistic_groups,
+                    synergy_strength=synergy_strength,
+                )
+            except Exception as _e:
+                if debug:
+                    print(f"[AUTO] greedy combo run failed ({_e}).", file=sys.stderr)
+                return None, None
+
+        def _sp_fold(_assign):
+            """Fold an EXPANDED greedy assignment into the merged view (tensors_w)
+            so it can be scored by _meta_score alongside `assignment`."""
+            _m: Dict[str, str] = {}
+            for _t in tensors_w:
+                if merged and group_defs and _t in group_defs:
+                    _q = None
+                    for _g in group_defs[_t]:
+                        if _g in _assign:
+                            _q = _assign[_g]; break
+                    if _q is None:
+                        return None
+                    _m[_t] = _q
+                elif _t in _assign:
+                    _m[_t] = _assign[_t]
+                else:
+                    return None
+            return _m
+
+        _sp_alts_env = os.environ.get('SP_ALTS')
+        # --auto-force-combo (param) / AUTO_FORCE_COMBO (env): force ONE combo & disable adaptive.
+        _force_combo = force_combo
+        if _force_combo is None:
+            _fc_env = os.environ.get('AUTO_FORCE_COMBO')
+            if _fc_env not in (None, ''):
+                try:
+                    _force_combo = int(_fc_env)
+                except ValueError:
+                    _force_combo = None
+        _adapt = (os.environ.get('ADAPT', '1').strip().lower()
+                  not in ('0', 'false', 'no')) and (_force_combo is None)
+
+        if _force_combo is not None:
+            # ---- user-FORCED combo (adaptive selection DISABLED; troubleshooting) ----
+            _alts = _combo_num_to_set(_force_combo)
+            _nm = _combo_name(_alts)
+            print(f"[AUTO] --auto-force-combo {_force_combo} (={_nm}): forcing this greedy "
+                  f"2nd-pass alteration set; ADAPTIVE selection DISABLED.", file=sys.stderr)
+            _fpl, _fqz = _sp_build(_alts)
+            _fa, _ft = _sp_greedy(_fpl, _fqz)
+            if _fa is not None and _ft is not None and int(_ft) <= _feas_cap:
+                if chosen_params_out is not None:
+                    chosen_params_out['combo'] = int(_force_combo)
+                    chosen_params_out['combo_name'] = _nm
+                    chosen_params_out['combo_forced'] = True
+                return _fa, int(_ft)
+            elif debug:
+                print(f"[AUTO] forced combo {_force_combo} infeasible (> feas cap); "
+                      f"keeping constrained result.", file=sys.stderr)
+        elif _adapt and _sp_alts_env is None:
+            # -------- ADAPTIVE: enumerate the combo lattice and auto-select ----
+            import itertools as _itertools
+            import statistics as _statistics
+            _toggles = [x.strip() for x in
+                        os.environ.get('ADAPT_LATTICE', 'class,pos,tier2').split(',') if x.strip()]
+            _allow_promote = os.environ.get('ADAPT_NO_TIER2', '0').strip().lower() in ('0', 'false', 'no')
+
+            # selector constants (validated; see analysis/ README)
+            _TE_FLOOR, _K_CRIT, _REL_THR, _ABS_THR = 0.5, 15, 1.5, 0.05
+            _SR_THRESH, _FLOOR_ABS, _EPS_PD = 0.275, 2.0, 0.001
+            _HBR_THR, _SKEW_GATE, _LT25_GATE = 5.0, 0.5, 0.12
+            _sens = _pristine_ppl_loss
+
+            def _deg(t, q):
+                try:
+                    v = degradation_fn(t, q)
+                    return float(v) if v is not None else 0.0
+                except Exception:
+                    return 0.0
+
+            def _qbpw(q):
+                if q is None:
+                    return None
+                u = str(q).upper()
+                if u in BPW_TABLE:
+                    return BPW_TABLE[u]
+                if u in ('F32', 'BF16', 'F16'):
+                    return BPW_TABLE.get(u, 32.0)
+                return BPW_TABLE.get(re.sub(r'_(R4|R8)$', '', u))
+
+            def _bpws(a):
+                return [b for b in (_qbpw(a[t]) for t in a) if b is not None]
+
+            def _pdam(a):
+                return sum(_sens.get(t, 0.0) * _deg(t, a[t]) for t in a)
+
+            def _swbpw(a):
+                _n = _d = 0.0
+                for t, q in a.items():
+                    b = _qbpw(q); s = abs(_sens.get(t, 0.0))
+                    if b is not None:
+                        _n += s * b; _d += s
+                return _n / _d if _d else 0.0
+
+            def _shape(a, floor):
+                bs = _bpws(a)
+                if not bs:
+                    return None
+                mn = min(bs); rng = max(bs) - mn
+                sd = _statistics.pstdev(bs) if len(bs) > 1 else 0.0
+                med = _statistics.median(bs); mean = sum(bs) / len(bs)
+                return {
+                    'SR': (sd / rng if rng > 0 else 1.0),
+                    'SKEW': med - mean,
+                    'ATFLOOR': (mn <= floor + 1e-9 and floor < _FLOOR_ABS),
+                    'flt25': sum(b < 2.5 for b in bs) / len(bs),
+                    'flt2': sum(b < 2.0 for b in bs) / len(bs),
+                }
+
+            # enumerate the powerset of toggles → {name: (assignment, total)}
+            _combos: Dict[str, Tuple[Dict[str, str], int]] = {}
+            for _r in range(len(_toggles) + 1):
+                for _sub in _itertools.combinations(_toggles, _r):
+                    _name = '+'.join(_sub) if _sub else 'none'
+                    _pl, _qz = _sp_build(set(_sub))
+                    _asg, _tot = _sp_greedy(_pl, _qz)
+                    if _asg is not None and _tot is not None and int(_tot) <= _feas_cap:
+                        _combos[_name] = (_asg, int(_tot))
+
+            if 'none' in _combos:
+                _base = _combos['none'][0]
+                _pd_none = _pdam(_base)
+                _floor = min(min(_bpws(a)) for a, _ in _combos.values())
+                _topK = set(sorted(_sens, key=lambda t: abs(_sens.get(t, 0.0)),
+                                   reverse=True)[:_K_CRIT])
+                _te = abs(_sens.get('token_embd.weight', 0.0))
+                _ou = abs(_sens.get('output.weight', 0.0))
+                _others = [abs(v) for k, v in _sens.items()
+                           if k not in ('token_embd.weight', 'output.weight')]
+                _HBR = (_te + _ou) / max(_others) if _others else 1e9
+
+                def _veto(a):
+                    _bn = _qbpw(_base.get('token_embd.weight'))
+                    _bc = _qbpw(a.get('token_embd.weight'))
+                    if _bn is not None and _bc is not None and _bn - _bc > _TE_FLOOR:
+                        return 'V1'                          # token_embd crush
+                    _mi = 0.0
+                    for t in _topK:
+                        _qn = _base.get(t); _qc = a.get(t)
+                        if not _qn or not _qc:
+                            continue
+                        _b1 = _qbpw(_qn); _b2 = _qbpw(_qc)
+                        if _b1 is None or _b2 is None or _b2 >= _b1:
+                            continue                         # demotions only
+                        _inc = _sens.get(t, 0.0) * (_deg(t, _qc) - _deg(t, _qn))
+                        if _inc > _mi:
+                            _mi = _inc
+                    if _pd_none > 0 and _mi / _pd_none > _REL_THR and _mi > _ABS_THR:
+                        return 'V2'                          # critical-tensor damage
+                    _s = _shape(a, _floor)
+                    if _s and _s['ATFLOOR'] and _s['SR'] < _SR_THRESH:
+                        return 'V3'                          # starvation shape
+                    return None
+
+                _vlog = {n: _veto(a) for n, (a, _t) in _combos.items()}
+                _surv = {n: a for n, (a, _t) in _combos.items() if not _vlog[n]}
+                if not _surv:
+                    _surv = {'none': _base}
+
+                _pick = None; _mode = 'conservative'
+                # Tier 2A — regime-gated tier2 WIN promotion (GLM-style free win).
+                # Prefer the GENTLEST winshape survivor: fewest toggles (→ plain
+                # 'tier2', the canonical validated win) then fewest sub-2.0
+                # tensors. The most-aggressive variants (pos/class+tier2) can, at
+                # tight budgets, push into iq1_m — recipes we have NO PPL for and
+                # that don't load on every build — so they must not be preferred.
+                if _allow_promote and _HBR < _HBR_THR:
+                    _wc = []
+                    for n, a in _surv.items():
+                        _s = _shape(a, _floor)
+                        if _s and _s['ATFLOOR'] and _s['SKEW'] > _SKEW_GATE and _s['flt25'] < _LT25_GATE:
+                            _ntog = 1 + n.count('+') if n != 'none' else 0
+                            _wc.append((_ntog, _s['flt2'], -_s['SKEW'], n))
+                    if _wc:
+                        _pick = sorted(_wc)[0][3]; _mode = 'win-promote'
+                # Tier 2B — conservative selector (default)
+                if _pick is None:
+                    _pds = {n: _pdam(a) for n, a in _surv.items()}
+                    _mn = min(_pds.values())
+                    _win = [n for n in _surv if _pds[n] <= _mn + _EPS_PD]
+                    _pick = sorted(_win, key=lambda n: (-_swbpw(_surv[n]),
+                                                        0 if n == 'none' else 1, n))[0]
+
+                _pure_assignment, _pure_total = _combos[_pick]
+                if debug:
+                    print(
+                        f"[AUTO] adaptive selector: HBR={_HBR:.3f} "
+                        f"combos={sorted(_combos)} "
+                        f"vetoed={ {n: v for n, v in _vlog.items() if v} } "
+                        f"→ '{_pick}' ({_mode}; pred_damage={_pdam(_pure_assignment):.4g}; "
+                        f"{_pure_total/GIB:.3f} GiB).",
+                        file=sys.stderr,
+                    )
+
+                def _record_combo():
+                    if chosen_params_out is not None:
+                        chosen_params_out['combo'] = _combo_num_from_name(_pick)
+                        chosen_params_out['combo_name'] = _pick
+                        chosen_params_out['combo_forced'] = False
+                if _mode == 'win-promote':
+                    # GLM-style free win: adopt directly (bypass the meta-guard,
+                    # as SP_FORCE did for validation). Safe: reachable only on
+                    # greedy-win + HBR<5 + a veto-surviving clean floor-pusher.
+                    _record_combo()
+                    return _pure_assignment, int(_pure_total)
+                # Conservative pick: keep the meta-guard so any cliff model that
+                # DOES reach here (pure greedy worse than the constrained
+                # candidate) is still protected — adopt only if it beats it.
+                _pure_merged = _sp_fold(_pure_assignment)
+                if _pure_merged is not None:
+                    if _meta_score(_pure_merged)[1] < _meta_score(assignment)[1]:
+                        _record_combo()
+                        return _pure_assignment, int(_pure_total)
+                    elif debug:
+                        print(
+                            "[AUTO] adaptive conservative pick scored WORSE than "
+                            "constrained (primary); keeping constrained result.",
+                            file=sys.stderr,
+                        )
+            # 'none' infeasible (or merged-fold failed) → fall through (keep constrained).
+
+        else:
+            # -------- LEGACY single-combo path (ablation / explicit override) --
+            _sp_alts = set(x.strip() for x in (_sp_alts_env or '').split(',') if x.strip())
+            _sp_ppl, _sp_quants = _sp_build(_sp_alts)
+            _pure_assignment, _pure_total = _sp_greedy(_sp_ppl, _sp_quants)
+            if (_pure_assignment is not None and _pure_total is not None
+                    and int(_pure_total) <= _feas_cap):
+                _pure_merged = _sp_fold(_pure_assignment)
+                if _pure_merged is not None:
+                    _pure_meta = _meta_score(_pure_merged)
+                    _constrained_meta = _meta_score(assignment)
+                    # SP_FORCE=1 bypasses the meta-guard (ablation: measure each
+                    # alteration's recipe directly).
+                    _sp_force = bool(os.environ.get('SP_FORCE'))
+                    if _sp_force or _pure_meta[1] < _constrained_meta[1]:
+                        if debug:
+                            _alts_lbl = ",".join(sorted(_sp_alts)) if _sp_alts else "none"
+                            print(
+                                f"[AUTO] GREEDY won → greedy 2nd-pass (alts={_alts_lbl}) "
+                                f"adopted (primary {_pure_meta[1]:.4g} < "
+                                f"{_constrained_meta[1]:.4g}). total {total_size/GIB:.3f} → "
+                                f"{_pure_total/GIB:.3f} GiB.",
+                                file=sys.stderr,
+                            )
+                        return _pure_assignment, int(_pure_total)
+                    elif debug:
+                        print(
+                            f"[AUTO] GREEDY won but pure greedy scored WORSE "
+                            f"(primary {_pure_meta[1]:.4g} ≥ {_constrained_meta[1]:.4g}); "
+                            f"keeping constrained result.",
+                            file=sys.stderr,
+                        )
+
     # --- Step 9: Phase C — promote individual sortable tensors with headroom,
     #     respecting rank monotonicity. Smallest current-size tensors go first
     #     because each promotion costs less, so we get more quality per byte.
@@ -4447,6 +4912,25 @@ def main():
                         help=('Only valid with --use-auto-quant-assign. By default the auto method drops per-tensor allowed qtypes that are Pareto-dominated on the (size, degradation) plane '
                               '— a qtype that is BOTH larger AND more-degrading than another available qtype is never preferable, so filtering it eliminates wasted budget. '
                               'Pass this flag to disable Pareto filtering (e.g. if you deliberately want to use qtypes that look "objectively worse" by group0 stats but behave better at inference time on your specific hardware).'))
+    parser.add_argument('--auto-force-combo', type=int, default=None, metavar='N',
+                        help=('Only valid with --use-auto-quant-assign. Troubleshooting only. When the auto method '
+                              'selects greedy, it runs a second pass that enumerates alteration combos and ADAPTIVELY '
+                              'picks the best safe one. Pass --auto-force-combo N to instead FORCE a specific combo and '
+                              'DISABLE adaptive selection. N is a bitmask over the toggles {class=1, pos=2, tier2=4, '
+                              'pareto=8}. The combinations are: '
+                              '0=none (pure greedy), 1=class, 2=pos, 3=class+pos, 4=tier2, 5=class+tier2, '
+                              '6=pos+tier2, 7=class+pos+tier2, '
+                              '8=pareto, 9=pareto+class, 10=pareto+pos, 11=pareto+class+pos, 12=pareto+tier2, '
+                              '13=pareto+class+tier2, 14=pareto+pos+tier2, 15=pareto+class+pos+tier2. '
+                              'NOTE: pareto is INERT (it never changes the recipe), so combos 8-15 are identical to '
+                              '0-7 respectively — in practice use 0-7. '
+                              'Toggle meanings: "class" scales bulk per-tensor losses by their per-class factor; '
+                              '"pos" boosts first/last edge-layer tensors; "tier2" demotes tier-2 outlier tensors to '
+                              'the floor (the GLM-style "free win" when the calibration data over-rates them); '
+                              '"pareto" prunes Pareto-dominated qtypes. '
+                              'Only affects the greedy second pass (i.e. when greedy wins the auto sweep). '
+                              'When NOT set, the adaptive selector picks automatically and discloses the chosen combo '
+                              'number per class in the recipe\'s hidden-parameters footer.'))
     parser.add_argument('--auto-deg-exponent', type=float, default=None,
                         help=('Only valid with --use-auto-quant-assign. Pins the degradation exponent q in the auto method\'s candidate-selection score Σ loss^p · deg^q. '
                               'q > 1 amplifies the badness of high-degradation qtypes (e.g. iq1_s) and pushes the recipe to avoid using them; q = 1 is the linear regime. '
@@ -4498,6 +4982,15 @@ def main():
     # --use-greedy-quant-assign and --use-auto-quant-assign are mutually exclusive
     if args.use_greedy_quant_assign and args.use_auto_quant_assign:
         parser.error("--use-greedy-quant-assign and --use-auto-quant-assign are mutually exclusive")
+
+    # --auto-force-combo must be a valid combo bitmask (0..15) and only applies to the auto method.
+    if args.auto_force_combo is not None:
+        if not (0 <= args.auto_force_combo <= _COMBO_MAX):
+            parser.error(f"--auto-force-combo must be between 0 and {_COMBO_MAX} "
+                         f"(bitmask of class=1, pos=2, tier2=4, pareto=8); got {args.auto_force_combo}")
+        if not args.use_auto_quant_assign:
+            parser.error("--auto-force-combo only applies to --use-auto-quant-assign (it forces the "
+                         "greedy second-pass combo).")
 
     # --tolerance is ignored under --use-auto-quant-assign: the auto method
     # aims at the exact target size (it strict-caps at budget_bytes
@@ -5287,6 +5780,7 @@ def main():
                         extra_outlier_qtypes=_extra_outlier_qtypes,
                         pareto_filter=not args.auto_no_pareto_filter,
                         chosen_params_out=chosen_auto_params,
+                        force_combo=args.auto_force_combo,
                     )
                     # Stash the chosen (p, q) onto args so the hidden-parameter
                     # footer can include them in the recipe.
@@ -5870,8 +6364,19 @@ def main():
 
     # List some important parameters that would otherwise be hard to guess (because dynamic or changing over versions or arg-dependant and complex)
     auto_chosen = args.__dict__.get('_auto_chosen_params', {}) or {}
+    # Was a greedy 2nd-pass combo auto-selected (not forced by --auto-force-combo)? If so, disclose
+    # its number per class so it can be reproduced/overridden via --auto-force-combo.
+    _auto_combo = any(v.get('combo') is not None and not v.get('combo_forced')
+                      for v in auto_chosen.values())
     if not args.exponential_factor or not args.per_tensor_degradation_scaling or auto_chosen:
         print(f"# - Hidden parameters (not passed as CLI args):")
+        if _auto_combo:
+            for _cls, _params in auto_chosen.items():
+                _cnum = _params.get('combo')
+                if _cnum is not None and not _params.get('combo_forced'):
+                    _cnm = _params.get('combo_name', '?')
+                    print(f"#   Greedy 2nd-pass combo [{_cls.upper()}]: {_cnum} ({_cnm}) "
+                          f"— adaptively selected; reproduce/override with --auto-force-combo {_cnum}")
         if not args.exponential_factor:
             if args.use_auto_quant_assign and auto_chosen:
                 # The auto method auto-sweeps (p, q). Report the chosen values

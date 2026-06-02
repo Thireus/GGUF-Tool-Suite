@@ -64,6 +64,7 @@ DEFAULTS: Dict[str, Any] = {
     "use_auto_quant_assign": False,
     "auto_no_pareto_filter": False,
     "auto_deg_exponent": None,
+    "auto_force_combo": None,
     "quant_degradation_csv": "",
     "quant_degradation_equation": "",
     "synergistic_tensors": [],
@@ -277,6 +278,8 @@ def emit_parameters(params: Dict[str, Any]) -> str:
     lines.append(f'auto_no_pareto_filter = {params["auto_no_pareto_filter"]}  #@param {{type:"boolean"}}')
     lines.append("# Degradation exponent q in the auto method's score function Σ loss^p · deg^q (only valid with use_auto_quant_assign=True). Leave empty for auto-sweep.")
     lines.append(f'auto_deg_exponent = {params["auto_deg_exponent"]}  #@param {{type:"number"}}')
+    lines.append("# Troubleshooting: force the greedy 2nd-pass combo (only valid with use_auto_quant_assign=True; disables adaptive selection). Bitmask {class=1,pos=2,tier2=4,pareto=8}: 0=none, 1=class, 2=pos, 3=class+pos, 4=tier2, 5=class+tier2, 6=pos+tier2, 7=class+pos+tier2 (8-15 add inert pareto, identical to 0-7). Leave empty for adaptive selection.")
+    lines.append(f'auto_force_combo = {params["auto_force_combo"]}  #@param {{type:"number"}}')
     lines.append("# Optional path to CSV with quant degradation values. Only valid when use_greedy_quant_assign=True or use_auto_quant_assign=True.")
     lines.append(f'quant_degradation_csv = "{params["quant_degradation_csv"]}"     #@param {{type:"string"}}')
     lines.append("# Optional equation to compute degradation from bpw. Only valid when use_greedy_quant_assign=True or use_auto_quant_assign=True.")
@@ -429,6 +432,7 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
             '--per-tensor-degradation-scaling': 'per_tensor_degradation_scaling',
             '--synergy-strength': 'synergy_strength',
             '--auto-deg-exponent': 'auto_deg_exponent',
+            '--auto-force-combo': 'auto_force_combo',
         }
         i = 0
         while i < len(tokens):
@@ -542,6 +546,11 @@ def parse_recipe_to_params(recipe_text: str) -> Dict[str, Any]:
     if 'auto_deg_exponent' in params:
         try:
             params['auto_deg_exponent'] = float(params['auto_deg_exponent'])
+        except Exception:
+            pass
+    if 'auto_force_combo' in params:
+        try:
+            params['auto_force_combo'] = int(params['auto_force_combo'])
         except Exception:
             pass
     if 'synergy_strength' in params:

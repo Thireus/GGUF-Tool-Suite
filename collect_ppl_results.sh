@@ -5,7 +5,7 @@
 #** benchmark PPL and KLD results of benchmark_each_tensor.sh **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Dec-28-2025 -------------------- **#
+#** --------------- Updated: May-08-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -18,7 +18,7 @@
 #**    /    o―ヽニニフ))             · · ɪǫ3_xxs      ~·°        **#
 #**    し―-J                                                   **#
 #**                                                           **#
-#** Copyright © 2025 - Thireus.     ₙₒ𝓌 𝓌ᵢₜₕ ₑₓₜᵣₐ ₕₐₗₗᵤ𝒸ᵢₙₐₜᵢₒₙₛ **#
+#** Copyright © 2026 - Thireus.     ₙₒ𝓌 𝓌ᵢₜₕ ₑₓₜᵣₐ ₕₐₗₗᵤ𝒸ᵢₙₐₜᵢₒₙₛ **#
 #***************************************************************#
 #**PLEASE REFER TO THE README FILE FOR ADDITIONAL INFORMATION!**#
 #***************************************************************#
@@ -513,6 +513,13 @@ extract_ppl_from_file() {
     [[ -n "$val" ]] && { echo "$val"; return; }
   fi
 
+  # Fallback: any "PPL:" followed by a number
+  val=$(grep 'PPL: *[0-9]' "$file" | head -n 1)
+  if [[ -n "$val" ]]; then
+    val=$(echo "$val" | sed -nE 's/.*PPL:[[:space:]]*([0-9]+(\.[0-9]+)?).*/\1/p')
+    [[ -n "$val" ]] && { echo "$val"; return; }
+  fi
+
   # Fallback: any " +/-" after a number
   val=$(grep '[0-9] *+/-' "$file" | head -n 1)
   if [[ -n "$val" ]]; then
@@ -537,6 +544,13 @@ extract_kld_from_file() {
   val=$(grep 'KLD:' "$file" | head -n 1)
   if [[ -n "$val" ]]; then
     val=$(echo "$val" | sed -E 's/.*KLD:[[:space:]]*([0-9]+(\.[0-9]+)?).*/\1/')
+    [[ -n "$val" ]] && { echo "$val"; return; }
+  fi
+
+  # Fallback: any "KL Divergence:" followed by a number (tabs or spaces)
+  val=$(grep 'KL Divergence:' "$file" | head -n 1)
+  if [[ -n "$val" ]]; then
+    val=$(echo "$val" | sed -E 's/.*KL Divergence:[[:space:]]*([0-9]+(\.[0-9]+)?).*/\1/')
     [[ -n "$val" ]] && { echo "$val"; return; }
   fi
 }

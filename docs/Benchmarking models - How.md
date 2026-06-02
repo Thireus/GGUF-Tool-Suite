@@ -113,10 +113,10 @@ Finally, we need to edit the `PPL_COMMAND_TEMPLATE` found in the `benchmark_each
 ulimit -n 9999 || sudo ulimit -n 9999 || echo "Warning: Could not increase file descriptor limit (ulimit -n). The model may fail to load on Linux/macOS." && \
 MODEL_FILE=$(ls "$MODEL"-*-SPECIAL_TENSOR-00001-of-*.gguf) && \
 CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0,2,1 llama-perplexity \
--m $MODEL_FILE -mla 3 -fa on -amb 1024 -ctk f16 -c 512 -ngl 99 \
+-m $MODEL_FILE -mla 3 -fa on -amb 1024 -ctk f16 -ngl 99 \
 -ot "blk\.(3|4|5)\.ffn_.*=CUDA0" -ot "blk\.(6|7|8)\.ffn_.*=CUDA1" -ot "blk\.(9|10)\.ffn_.*=CUDA2" \
 -ot exps=CPU -b 512 -ub 512 --warmup-batch --no-mmap --threads $(nproc) --main-gpu 0 --seed 1337 \
--f imatrix-calibration-corpus-v02.txt --chunks 250
+-f imatrix-calibration-corpus-v02.txt -c 512 --chunks 250
 ```
 
 You will see in the logs the ETA, the aim being to reduce that ETA as much as possible:
@@ -137,10 +137,10 @@ Open the script with your favourite editor, locate the line that states `# 9. PP
 
 ```
 PPL_COMMAND_TEMPLATE='CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0,2,1 llama-perplexity \
--m {MODEL_FILE} -mla 3 -fa on -amb 1024 -ctk f16 -c 512 -ngl 99 \
+-m {MODEL_FILE} -mla 3 -fa on -amb 1024 -ctk f16 -ngl 99 \
 -ot "blk\.(3|4|5)\.ffn_.*=CUDA0" -ot "blk\.(6|7|8)\.ffn_.*=CUDA1" -ot "blk\.(9|10)\.ffn_.*=CUDA2" \
 -ot exps=CPU -b 512 -ub 512 --warmup-batch --no-mmap --threads 36 --main-gpu 0 --seed 1337 \
--f imatrix-calibration-corpus-v02.txt --chunks ${PPL_COMMAND_CHUNKS_TO_PROCESS}'
+-f imatrix-calibration-corpus-v02.txt -c ${PPL_COMMAND_CONTEXT_TO_PROCESS} --chunks ${PPL_COMMAND_CHUNKS_TO_PROCESS}'
 ```
 
 Make sure you get this `PPL_COMMAND_TEMPLATE` right. If you plan on tweaking it later in the middle of a benchmarking session, you will likely have to redo benchmarking from the beginning because different parameters likely lead to slightly different metrics - which is going to corrupt the calibration data.
@@ -297,7 +297,7 @@ Use the following command to identify which benchmark files are corrupted (becau
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
 cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
-grep -L -E 'KL divergence statistics|Final estimate: PPL over' bench_*result\.*.txt
+grep -L -E 'KL divergence statistics|KL Divergence:|Final estimate:' bench_*result\.*.txt
 ```
 
 If you've identified that some benchmark files are missing or that you've had to delete some, you must run the same `benchmark_each_tensor.sh` with the exact same parameters to resume benchmarking the remaining tensors/groups.

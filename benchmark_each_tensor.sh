@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Apr-15-2026 -------------------- **#
+#** --------------- Updated: May-06-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -78,11 +78,13 @@ Options:
   --benchmark-worst-tensors-from-qtype QTYPE   qtype row to read from CSV when using --benchmark-worst-tensors
   --qtypes QTYPE [...]                         One or more qtypes to iterate (nargs)
   --chunks N                                   Number of chunks to use for PPL/KLD benchmarking (default is 250)
+  --no-chunk-limit                             Let llama-perplexity compute the ideal chunk size (result filenames will be written as .0.txt)
+  --ctx-size-sweep N                           Max context for SWEEP (default is 8192, previously --context)
+  --ctx-size-ppl N                             Max context for PPL (default is 512)
   --skip-gpg                                   Skip GPG signature verification (sets SKIP_GPG=true)
   --group-tensors REGEX,...                    One or more comma-separated group regex specs (nargs)
   --benchmark-groups-only                      Only benchmark groups (requires --group-tensors)
   --mode N                                     Benchmark mode: 0 = PPL+KLD only (default), 1 = SWEEP only, 2 = PPL+KLD then SWEEP
-  --context N                                  Max context for SWEEP (default is 8192)
   --infinite-loop                              Run continuously (useful when some bench files need to be removed because invalid)
   --no-kld                                     Do not benchmark KLD
   --allow-impure-quant                         Allow benchmarking even when some tensors have a different dtype than the
@@ -169,8 +171,10 @@ BENCH_CSV=""
 BENCH_FROM_QTYPE=""
 CUSTOM_QTYPES=()
 CUSTOM_CHUNKS=""
-CUSTOM_CONTEXT=""
+CUSTOM_CONTEXT_SWEEP=""
+CUSTOM_CONTEXT_PPL=""
 SKIP_GPG=false # If true, skip the gpg signature verification of the signed files
+NO_CHUNK_LIMIT=false # If true, removes --chunks from PPL command
 
 # GROUP_TENSORS_RAW: array of group specifications, each element is a comma-separated
 # list of regexes that define that group (e.g. 'a1,a2' or 'blk\..*\.ffn_up_exps.*,blk\..*\.ffn_gate_exps.*')
@@ -233,8 +237,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --mode)
       BENCH_MODE="$2"; shift 2;;
-    --context)
-      CUSTOM_CONTEXT="$2"; shift 2;;
+    --ctx-size-sweep)
+      CUSTOM_CONTEXT_SWEEP="$2"; shift 2;;
+    --ctx-size-ppl)
+      CUSTOM_CONTEXT_PPL="$2"; shift 2;;
+    --no-chunk-limit)
+      NO_CHUNK_LIMIT=true
+      shift
+      ;;
     --infinite-loop)
       INFINITE_LOOP=true
       shift
@@ -393,8 +403,9 @@ N_THREADS=8
 # 5. Number of chunks to process for PPL+KLD:
 PPL_COMMAND_CHUNKS_TO_PROCESS=${CUSTOM_CHUNKS:-250}
 
-# 6. Max context size for SWEEP:
-BENCH_COMMAND_CONTEXT_TO_PROCESS=${CUSTOM_CONTEXT:-8192}
+# 6. Max context size:
+PPL_COMMAND_CONTEXT_TO_PROCESS=${CUSTOM_CONTEXT_PPL:-512}
+SWEEP_COMMAND_CONTEXT_TO_PROCESS=${CUSTOM_CONTEXT_SWEEP:-8192}
 
 # 7. List of qtypes to process in the loop - it is recommended to assess the tensors.map of these as the quant of some tensors may differ:
 # If iq1_s_* is chosen, know that the bench of some tensors like token_embd will be faulty (will be using a higher qtype)
@@ -408,16 +419,16 @@ BASELINE_QTYPE="iq3_xxs"
 # 9. PPL command template:
 # Do not add KLD parameters, they will be automatically added if necessary at the end of this template - See "Add KLD parameter placeholder" section
 PPL_COMMAND_TEMPLATE='CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0,2,1 ~/ik_llama-main-b3833-65dd65c-bin-win-cuda-12.8-x64/llama-perplexity \
--m {MODEL_FILE} -mla 3 -fa on -amb 1024 -ctk f16 -c 512 -ngl 99 \
+-m {MODEL_FILE} -mla 3 -fa on -amb 1024 -ctk f16 -ngl 99 \
 -ot "blk\.(3|4|5)\.ffn_.*=CUDA0" -ot "blk\.(6|7|8)\.ffn_.*=CUDA1" -ot "blk\.(9|10)\.ffn_.*=CUDA2" \
 -ot exps=CPU -b 512 -ub 512 --warmup-batch --no-mmap --threads 36 --main-gpu 0 --seed 1337 \
--f imatrix-calibration-corpus-v02.txt --chunks ${PPL_COMMAND_CHUNKS_TO_PROCESS}'
+-f imatrix-calibration-corpus-v02.txt -c ${PPL_COMMAND_CONTEXT_TO_PROCESS} --chunks ${PPL_COMMAND_CHUNKS_TO_PROCESS}'
 
 # 10. SWEEP command template
 SWEEP_COMMAND_TEMPLATE='CUDA_DEVICE_ORDER=PCI_BUS_ID CUDA_VISIBLE_DEVICES=0 ~/ik_llama-main-b4123-ee719cc-bin-win-cuda-12.8-x64-avx512/llama-sweep-bench \
 -m {MODEL_FILE} -mla 3 -fa on -amb 1024 -ctk f16 -ngl 99 \
 -b 4096 -ub 4096 --warmup-batch --no-mmap --threads 36 --main-gpu 0 --seed 1337 \
--c ${BENCH_COMMAND_CONTEXT_TO_PROCESS}'
+-c ${SWEEP_COMMAND_CONTEXT_TO_PROCESS}'
 
 # 11. Pattern to identify the main model shard in LOCAL_MODEL_DIR.
 MAIN_SHARD_PATTERN="*-00001-of-*.gguf"
@@ -434,6 +445,12 @@ else
   PLUS_KLD=''
   _kld=''
   #echo "[$(timestamp)] KLD computation disabled. (--no_kld=true)"
+fi
+
+# Remove --chunks parameter if --no-chunk-limit is set
+if [[ "$NO_CHUNK_LIMIT" == "true" ]]; then
+  PPL_COMMAND_TEMPLATE="$(echo "$PPL_COMMAND_TEMPLATE" | sed -E 's/ --chunks [^ ]+//')"
+  PPL_COMMAND_CHUNKS_TO_PROCESS="0"
 fi
 
 # Verify gpg readiness
@@ -1136,16 +1153,16 @@ fi
 
 # Baseline for SWEEP if sweep is enabled
 if [[ "$BENCH_MODE" -eq 1 || "$BENCH_MODE" -eq 2 ]]; then
-  sweep_baseline_result_file="bench_sweep_result.baseline.${BASELINE_QTYPE}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
+  sweep_baseline_result_file="bench_sweep_result.baseline.${BASELINE_QTYPE}.${SWEEP_COMMAND_CONTEXT_TO_PROCESS}.txt"
   if [[ ! -f "$sweep_baseline_result_file" ]]; then
-      echo "[$(timestamp)] Running baseline SWEEP benchmark for BASELINE_QTYPE='$BASELINE_QTYPE', context=$BENCH_COMMAND_CONTEXT_TO_PROCESS."
+      echo "[$(timestamp)] Running baseline SWEEP benchmark for BASELINE_QTYPE='$BASELINE_QTYPE', context=$SWEEP_COMMAND_CONTEXT_TO_PROCESS."
       main_model_file=$(find_main_model_file) || { echo "Error: main model file not found for sweep baseline." >&2; [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"; exit 1; }
       sweep_baseline_cmd="${SWEEP_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
-      # Ensure ${BENCH_COMMAND_CONTEXT_TO_PROCESS} expands in the command by using eval
+      # Ensure ${SWEEP_COMMAND_CONTEXT_TO_PROCESS} expands in the command by using eval
       eval "$sweep_baseline_cmd" > "$sweep_baseline_result_file" 2>&1 < /dev/null
-      echo "Baseline SWEEP benchmark completed for context=$BENCH_COMMAND_CONTEXT_TO_PROCESS."
+      echo "Baseline SWEEP benchmark completed for context=$SWEEP_COMMAND_CONTEXT_TO_PROCESS."
   else
-      echo "Baseline SWEEP benchmark already exists for BASELINE_QTYPE='$BASELINE_QTYPE', context=$BENCH_COMMAND_CONTEXT_TO_PROCESS."
+      echo "Baseline SWEEP benchmark already exists for BASELINE_QTYPE='$BASELINE_QTYPE', context=$SWEEP_COMMAND_CONTEXT_TO_PROCESS."
   fi
 fi
 
@@ -1168,7 +1185,8 @@ if [[ "$NO_KLD" == "true" ]]; then
 else
   echo "KLD benchmarking: ENABLED"
 fi
-echo "Sweep context (-c): $BENCH_COMMAND_CONTEXT_TO_PROCESS"
+echo "Sweep context (-c): $SWEEP_COMMAND_CONTEXT_TO_PROCESS"
+echo "PPL context (-c): $PPL_COMMAND_CONTEXT_TO_PROCESS"
 echo "Quant downloader options: ${QUANT_DOWNLOADER_OPTIONS:-'(empty)'}"
 echo "Allow impure quant: $ALLOW_IMPURE_QUANT"
 ALL_GROUP_IDS=()
@@ -1591,7 +1609,7 @@ run_main_loop() {
             if (( ${#tmp_members_group[@]} )); then
               # check files for both PPL and SWEEP as required by BENCH_MODE
               ppl_group_file="bench_ppl${_kld}_result.group${gidx}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
-              sweep_group_file="bench_sweep_result.group${gidx}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
+              sweep_group_file="bench_sweep_result.group${gidx}.${qtype}.${SWEEP_COMMAND_CONTEXT_TO_PROCESS}.txt"
 
               ppl_done=false; sweep_done=false
               if need_run_ppl; then [[ -f "$ppl_group_file" ]] && ppl_done=true || ppl_done=false; else ppl_done=true; fi
@@ -1616,7 +1634,7 @@ run_main_loop() {
           for t in "${!tensor_to_shard[@]}"; do
             if [[ -z "${PROCESSED_TENSOR[$t]:-}" ]]; then
               ppl_indf="bench_ppl${_kld}_result.${t}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
-              sweep_indf="bench_sweep_result.${t}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
+              sweep_indf="bench_sweep_result.${t}.${qtype}.${SWEEP_COMMAND_CONTEXT_TO_PROCESS}.txt"
 
               ppl_done=false; sweep_done=false
               if need_run_ppl; then [[ -f "$ppl_indf" ]] && ppl_done=true || ppl_done=false; else ppl_done=true; fi
@@ -1919,7 +1937,7 @@ run_main_loop() {
 
                     # Run benchmark(s) for the group depending on mode
                     group_result_file_ppl="bench_ppl${_kld}_result.group${group_idx_for_tensor}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
-                    group_result_file_sweep="bench_sweep_result.group${group_idx_for_tensor}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
+                    group_result_file_sweep="bench_sweep_result.group${group_idx_for_tensor}.${qtype}.${SWEEP_COMMAND_CONTEXT_TO_PROCESS}.txt"
 
                     # Run PPL+KLD first if required
                     if need_run_ppl; then
@@ -2002,7 +2020,7 @@ run_main_loop() {
                 # Fallback to original single-tensor behaviour
                 # Recompute per-tensor result_file (non-group)
                 result_file_ppl="bench_ppl${_kld}_result.${tensor_name}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
-                result_file_sweep="bench_sweep_result.${tensor_name}.${qtype}.${BENCH_COMMAND_CONTEXT_TO_PROCESS}.txt"
+                result_file_sweep="bench_sweep_result.${tensor_name}.${qtype}.${SWEEP_COMMAND_CONTEXT_TO_PROCESS}.txt"
 
                 # If both required results are already present, skip
                 ppl_done=false; sweep_done=false
