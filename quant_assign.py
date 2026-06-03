@@ -660,7 +660,7 @@ def select_qtype(df, qtype_arg):
     """
     if qtype_arg:
         if qtype_arg not in df['QTYPE'].values:
-            print(f"Error: qtype '{qtype_arg}' not found in CSV.")
+            print(f"Error: qtype '{qtype_arg}' not found in CSV.", file=sys.stderr)
             sys.exit(1)
         return df[df['QTYPE'] == qtype_arg].iloc[0]
 
@@ -812,19 +812,22 @@ def fetch_map_for_qtype(qtype: str):
         print(
             f"[Warning] qtype={qtype!r} does not match the canonical pattern r'^q.*K$'. "
             "Q-types are case-sensitive and there are specific ones that start with lowercase 'q' "
-            "and end with uppercase 'K' (e.g. 'q3_K')."
+            "and end with uppercase 'K' (e.g. 'q3_K').",
+            file=sys.stderr,
         )
     # If it matches q…kv (any case) but not exactly q…KV, warn
     if _INSPECT_KV_RE.match(qtype) and not _CANONICAL_KV_RE.match(qtype):
         print(
             f"[Warning] qtype={qtype!r} does not match the canonical pattern r'^q.*KV$'. "
-            "Q-types ending with 'KV' must use uppercase 'KV' (e.g. 'q8_KV')."
+            "Q-types ending with 'KV' must use uppercase 'KV' (e.g. 'q8_KV').",
+            file=sys.stderr,
         )
     # Warn if it's fully capitalized
     if qtype.isupper():
         print(
             f"[Warning] qtype={qtype!r} is fully capitalized. "
-            "Q-types are case-sensitive and there are no known quant types that are entirely uppercase."
+            "Q-types are case-sensitive and there are no known quant types that are entirely uppercase.",
+            file=sys.stderr,
         )
     local_map = os.path.join(TMP_DIR, f"tensors.{qtype}.map")
     cmd = ["bash", tensor_downloader, qtype.upper(), "0", TMP_DIR, f"tensors.{qtype}.map"]
@@ -869,7 +872,7 @@ def fetch_map_for_qtype(qtype: str):
                     else:
                         if INFO: print(f"[Info] gpg signature of tensors.{qtype}.map succesful.", file=sys.stderr)
                 except subprocess.CalledProcessError as e:
-                    print(f"[Warning] failed to fetch tensors.map.sig: {e}")
+                    print(f"[Warning] failed to fetch tensors.map.sig: {e}", file=sys.stderr)
                     ALL_GPG_SIGS_VALID = False
                     return False
             else:
@@ -948,7 +951,7 @@ def get_map_sizes_and_elements(qtype, collect_raw = False):
         # If caller asked for 'f32' we will probe 'bf16' and then return that result under the 'f32' key.
         probe = 'bf16' if qtype == 'f32' else qtype
         if not fetch_map_for_qtype(probe):
-            print(f"Error: Fetching valid map for qtype: {probe} was unsuccessful.")
+            print(f"Error: Fetching valid map for qtype: {probe} was unsuccessful.", file=sys.stderr)
             sys.exit(8)
         # parse_map_file now returns tuple
         _quant_maps[qtype] = parse_map_file(qtype, collect_raw)
@@ -5182,7 +5185,7 @@ def main():
     if INFO: print(f"[Info] Loading CSV: {args.csv_file}", file=sys.stderr)
     df = pd.read_csv(args.csv_file)
     if 'QTYPE' not in df.columns:
-        print("Error: CSV must have 'QTYPE' as first column.")
+        print("Error: CSV must have 'QTYPE' as first column.", file=sys.stderr)
         sys.exit(1)
 
     #reduction_factors = load_sample_ppl_table(args.sample_ppl)
@@ -5223,7 +5226,7 @@ def main():
                 raise ValueError(f"Could not find any row in df with QTYPE == {row['QTYPE']!r} to update.")
             if len(matches) > 1:
                 # warning; choose first. Adjust if you prefer to update all matches.
-                print(f"[Warning] Multiple rows with QTYPE == {row['QTYPE']!r}; updating the first match.")
+                print(f"[Warning] Multiple rows with QTYPE == {row['QTYPE']!r}; updating the first match.", file=sys.stderr)
             idx = matches[0]
 
         # Update columns one-by-one (avoids type-checker issues and is explicit)
@@ -5236,7 +5239,7 @@ def main():
 
     # Pre-fetch maps
     if not fetch_map_for_qtype(qtype):
-        print(f"Error: Fetching valid map for qtype: {qtype} was unsuccessful.")
+        print(f"Error: Fetching valid map for qtype: {qtype} was unsuccessful.", file=sys.stderr)
         sys.exit(8)
     _, items, _ = get_map_sizes_and_elements(qtype, True)
     _, items_f32, _ = get_map_sizes_and_elements('f32', True)
@@ -5382,7 +5385,7 @@ def main():
             raw = row[name]
             conv = _convert_value(raw)
             if np.isnan(conv):
-                print(f"Error: could not parse numeric value for tensor {name!r}: {raw!r}")
+                print(f"Error: could not parse numeric value for tensor {name!r}: {raw!r}", file=sys.stderr)
                 sys.exit(1)
 
             values[name] = conv
@@ -6411,7 +6414,7 @@ def main():
     print('\n'.join(formatted_lines))
 
     if all(tb == 0 for tb in totals.values()):
-        print("\n[Warning] All tensor sizes are zero—did you fetch the map files correctly?")
+        print("\n[Warning] All tensor sizes are zero—did you fetch the map files correctly?", file=sys.stderr)
 
 if __name__ == '__main__':
     main()
