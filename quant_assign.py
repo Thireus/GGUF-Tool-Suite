@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jun-03-2026 -------------------- **#
+#** --------------- Updated: Jun-05-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -64,6 +64,14 @@ def clear_all_caches():
 
 # Global default quants list
 DEFAULT_QUANTS = ['q8_0', 'q4_0']
+
+# ---- Adaptive greedy 2nd-pass selector defaults (hardcoded; edit here to change) ----
+# These configure the greedy-winner second pass (Step 8.5). To force a specific combo
+# at runtime use the --auto-force-combo CLI flag (no environment variables are used).
+ADAPT_ENABLED        = True                       # run the adaptive combo selector
+ADAPT_LATTICE        = ['class', 'pos', 'tier2']  # combos the selector enumerates
+ADAPT_ALLOW_TIER2    = True                       # allow the tier2 win-promotion
+ADAPT_ALLOW_CLASSPOS = True                       # allow the gated class+pos conservative upgrade
 
 # Default reducing factors when data not available
 DEFAULT_REDUCE = {
@@ -3773,10 +3781,9 @@ def auto_quant_assign(
         #   Models that don't trigger greedy-win (e.g. gemma → normal auto
         #   window flow) never reach here; the whole Qwen family has HBR≥5 so it
         #   stays conservative; only GLM-style (greedy-win + HBR<5) is promoted.
-        # Overrides: ADAPT=0 → legacy single-combo path; SP_ALTS=<subset>
-        # (+SP_FORCE=1) → legacy single-combo ablation (disables adaptive);
-        # ADAPT_LATTICE=a,b,c → toggles to enumerate (default class,pos,tier2);
-        # ADAPT_NO_TIER2=1 → disable the win-promoter (conservative-only).
+        # Config: the ADAPT_* module constants at the top of the file (ADAPT_ENABLED,
+        # ADAPT_LATTICE, ADAPT_ALLOW_TIER2, ADAPT_ALLOW_CLASSPOS). To force one specific
+        # combo for troubleshooting, pass the --auto-force-combo CLI flag.
         _pure_assignment = None
         _pure_total = None
         _feas_cap = int(budget_bytes * (1.0 + max(0.0, _orig_tolerance)))
@@ -3901,18 +3908,9 @@ def auto_quant_assign(
                     return None
             return _m
 
-        _sp_alts_env = os.environ.get('SP_ALTS')
-        # --auto-force-combo (param) / AUTO_FORCE_COMBO (env): force ONE combo & disable adaptive.
+        # --auto-force-combo CLI flag forces ONE combo & disables adaptive selection.
         _force_combo = force_combo
-        if _force_combo is None:
-            _fc_env = os.environ.get('AUTO_FORCE_COMBO')
-            if _fc_env not in (None, ''):
-                try:
-                    _force_combo = int(_fc_env)
-                except ValueError:
-                    _force_combo = None
-        _adapt = (os.environ.get('ADAPT', '1').strip().lower()
-                  not in ('0', 'false', 'no')) and (_force_combo is None)
+        _adapt = ADAPT_ENABLED and (_force_combo is None)
 
         if _force_combo is not None:
             # ---- user-FORCED combo (adaptive selection DISABLED; troubleshooting) ----
@@ -3931,18 +3929,19 @@ def auto_quant_assign(
             elif debug:
                 print(f"[AUTO] forced combo {_force_combo} infeasible (> feas cap); "
                       f"keeping constrained result.", file=sys.stderr)
-        elif _adapt and _sp_alts_env is None:
+        elif _adapt:
             # -------- ADAPTIVE: enumerate the combo lattice and auto-select ----
             import itertools as _itertools
             import statistics as _statistics
-            _toggles = [x.strip() for x in
-                        os.environ.get('ADAPT_LATTICE', 'class,pos,tier2').split(',') if x.strip()]
-            _allow_promote = os.environ.get('ADAPT_NO_TIER2', '0').strip().lower() in ('0', 'false', 'no')
+            _toggles = list(ADAPT_LATTICE)
+            _allow_promote = ADAPT_ALLOW_TIER2
+            _allow_classpos = ADAPT_ALLOW_CLASSPOS
 
             # selector constants (validated; see analysis/ README)
             _TE_FLOOR, _K_CRIT, _REL_THR, _ABS_THR = 0.5, 15, 1.5, 0.05
             _SR_THRESH, _FLOOR_ABS, _EPS_PD = 0.275, 2.0, 0.001
             _HBR_THR, _SKEW_GATE, _LT25_GATE = 5.0, 0.5, 0.12
+            _CP_RELCRIT = 0.05   # class+pos upgrade: max rel_crit (also requires pool floor < _FLOOR_ABS)
             _sens = _pristine_ppl_loss
 
             def _deg(t, q):
@@ -4057,6 +4056,33 @@ def auto_quant_assign(
                             _wc.append((_ntog, _s['flt2'], -_s['SKEW'], n))
                     if _wc:
                         _pick = sorted(_wc)[0][3]; _mode = 'win-promote'
+                # Tier 2A.5 — opportunistic gated class+pos upgrade. class+pos is the
+                # best conservative combo on several models (GLM-2.5107, Qwen122B,
+                # Qwen3.6-27B at tight budgets) but a disaster on a few (Qwen0.8B,
+                # DeepSeek) where it survives the vetoes. pred_damage can't tell them
+                # apart (≈identical), but two per-class features cleanly do:
+                #   * rel_crit — does it crush a critical tensor? (excludes Qwen0.8B)
+                #   * the quant-pool floor (_floor) — class+pos only helps in the tight
+                #     regime that actually uses sub-2-bit quants; high-bpw-pool models
+                #     like DeepSeek have floor >= _FLOOR_ABS, so they are excluded.
+                # Both are computed per class, so this holds for split (CPU/GPU) recipes
+                # too. Prefer class+pos only when both gates pass; else fall through.
+                # (Verified live: +4 net "beats greedy", 0 regression on Qwen0.8B/DeepSeek.)
+                if (_pick is None and _allow_classpos and 'class+pos' in _surv
+                        and _floor < _FLOOR_ABS):
+                    _cp = _surv['class+pos']
+                    _mi = 0.0
+                    for t in _topK:
+                        _qn = _base.get(t); _qc = _cp.get(t)
+                        if not _qn or not _qc:
+                            continue
+                        _b1 = _qbpw(_qn); _b2 = _qbpw(_qc)
+                        if _b1 is None or _b2 is None or _b2 >= _b1:
+                            continue
+                        _mi = max(_mi, _sens.get(t, 0.0) * (_deg(t, _qc) - _deg(t, _qn)))
+                    _relc = (_mi / _pd_none) if _pd_none > 0 else 0.0
+                    if _relc < _CP_RELCRIT:
+                        _pick = 'class+pos'; _mode = 'conservative(class+pos)'
                 # Tier 2B — conservative selector (default)
                 if _pick is None:
                     _pds = {n: _pdam(a) for n, a in _surv.items()}
@@ -4104,37 +4130,21 @@ def auto_quant_assign(
             # 'none' infeasible (or merged-fold failed) → fall through (keep constrained).
 
         else:
-            # -------- LEGACY single-combo path (ablation / explicit override) --
-            _sp_alts = set(x.strip() for x in (_sp_alts_env or '').split(',') if x.strip())
-            _sp_ppl, _sp_quants = _sp_build(_sp_alts)
+            # -------- ADAPT_ENABLED is False: faithful pure-greedy 'none' fallback ----
+            # No adaptive selection — re-run pure greedy and adopt it only if it beats
+            # the constrained candidate on the meta primary (the pre-adaptive behaviour).
+            _sp_ppl, _sp_quants = _sp_build(set())
             _pure_assignment, _pure_total = _sp_greedy(_sp_ppl, _sp_quants)
             if (_pure_assignment is not None and _pure_total is not None
                     and int(_pure_total) <= _feas_cap):
                 _pure_merged = _sp_fold(_pure_assignment)
-                if _pure_merged is not None:
-                    _pure_meta = _meta_score(_pure_merged)
-                    _constrained_meta = _meta_score(assignment)
-                    # SP_FORCE=1 bypasses the meta-guard (ablation: measure each
-                    # alteration's recipe directly).
-                    _sp_force = bool(os.environ.get('SP_FORCE'))
-                    if _sp_force or _pure_meta[1] < _constrained_meta[1]:
-                        if debug:
-                            _alts_lbl = ",".join(sorted(_sp_alts)) if _sp_alts else "none"
-                            print(
-                                f"[AUTO] GREEDY won → greedy 2nd-pass (alts={_alts_lbl}) "
-                                f"adopted (primary {_pure_meta[1]:.4g} < "
-                                f"{_constrained_meta[1]:.4g}). total {total_size/GIB:.3f} → "
-                                f"{_pure_total/GIB:.3f} GiB.",
-                                file=sys.stderr,
-                            )
-                        return _pure_assignment, int(_pure_total)
-                    elif debug:
-                        print(
-                            f"[AUTO] GREEDY won but pure greedy scored WORSE "
-                            f"(primary {_pure_meta[1]:.4g} ≥ {_constrained_meta[1]:.4g}); "
-                            f"keeping constrained result.",
-                            file=sys.stderr,
-                        )
+                if (_pure_merged is not None
+                        and _meta_score(_pure_merged)[1] < _meta_score(assignment)[1]):
+                    if debug:
+                        print(f"[AUTO] adaptive disabled → pure greedy adopted. "
+                              f"total {total_size/GIB:.3f} → {_pure_total/GIB:.3f} GiB.",
+                              file=sys.stderr)
+                    return _pure_assignment, int(_pure_total)
 
     # --- Step 9: Phase C — promote individual sortable tensors with headroom,
     #     respecting rank monotonicity. Smallest current-size tensors go first
