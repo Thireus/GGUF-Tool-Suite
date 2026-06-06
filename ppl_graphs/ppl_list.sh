@@ -289,6 +289,40 @@ for f in "${files[@]}"; do
       [ "$ret" -eq 0 ]
     }
 
+    # Detect a degenerate (flat / "wall at the edge") fit. The curve d + a*(x-c)^(-p)
+    # is only a meaningful lower envelope when its pole x=c sits safely BELOW the
+    # lowest fitted bpw; then it rises smoothly through the steep low-bpw region. When
+    # the good-recipe data lacks low-bpw spread (e.g. all points clustered near the
+    # plateau), the fitter parks the pole at/above the data, giving a flat plateau with
+    # an unconstrained vertical wall that says nothing about the region it must predict.
+    # We refuse to emit such curves (the caller skips the model rather than guessing).
+    # Returns 0 (true) when degenerate. Equations are always identity-form here.
+    is_degenerate() {
+      local equation=$1 rhs
+      rhs="${equation#*=}"
+      awk -F',' -v bcol=$((bpw_idx + 1)) -v eq="$rhs" -v margin=0.10 '
+        BEGIN {
+          if (match(eq, /\([ \t]*x[ \t]*[+-][ \t]*[0-9.eE+-]+[ \t]*\)/)) {
+            term = substr(eq, RSTART, RLENGTH)
+            if (term ~ /x[ \t]*\+/) sgn = 1; else sgn = -1
+            n = term; sub(/.*x[ \t]*[+-][ \t]*/, "", n); sub(/[ \t]*\).*/, "", n)
+            cval = n + 0
+            pole = (sgn == 1) ? -cval : cval   # pole location on the x (bpw) axis
+            haspole = 1
+          }
+        }
+        NR > 1 {
+          b = $bcol; gsub(/["[:space:]\r]/, "", b)
+          if (b != "") { v = b + 0; if (!seen || v < m) { m = v; seen = 1 } }
+        }
+        END {
+          if (!haspole || !seen) exit 1          # cannot determine -> treat as ok
+          if (pole >= m - margin) exit 0         # pole not below data -> degenerate
+          exit 1
+        }
+      ' "$cur_f"
+    }
+
     score_equation() {
       local equation=$1
       local rhs sum="0" count=0 x_val y_val y_eq diff
@@ -530,6 +564,16 @@ for f in "${files[@]}"; do
       fi
     fi
 
+    # Degeneracy guard: discard a flat/wall fit rather than emit a misleading curve.
+    # We prefer NO equation, and we do NOT fall back to the base CSV ("others"): if the
+    # toolsuite's own good recipes don't span the low-bpw region, wait for better ones.
+    degenerate_skip=0
+    if [ -n "$equation" ] && is_degenerate "$equation"; then
+      echo "Discarding degenerate (flat) equation for '$cur_f': pole is not below the lowest bpw, i.e. insufficient low-bpw good-recipe coverage."
+      equation=""
+      degenerate_skip=1
+    fi
+
     if [ -n "$equation" ]; then
       echo "Chosen equation from --ignore-outliers $chosen_outliers (avg abs error on bpw<4: ${score0:-n/a} / ${score5:-n/a})"
     else
@@ -539,6 +583,11 @@ for f in "${files[@]}"; do
     if [ -n "$equation" ]; then
       printf '%s:%s\n' "$model_name" "$equation" >> "$OUTFILE"
       echo "Saved: $model_name"
+      processed_models[$model_name]=1
+      break
+    elif [ "$degenerate_skip" = "1" ]; then
+      echo "Skipping '$model_name' (no reliable low-bpw fit from good recipes; not falling back to 'others')."
+      # Mark processed so the base CSV (which contains 'others') is NOT tried later.
       processed_models[$model_name]=1
       break
     else
