@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jun-05-2026 -------------------- **#
+#** --------------- Updated: Jun-06-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -72,6 +72,16 @@ ADAPT_ENABLED        = True                       # run the adaptive combo selec
 ADAPT_LATTICE        = ['class', 'pos', 'tier2']  # combos the selector enumerates
 ADAPT_ALLOW_TIER2    = True                       # allow the tier2 win-promotion
 ADAPT_ALLOW_CLASSPOS = True                       # allow the gated class+pos conservative upgrade
+# Ultra-tight "starvation" degenerate regime: when EVERY combo floor-demotes into a
+# tight body, the V3 starvation veto fires on all of them and the lattice / meta-score
+# become uninformative (predicted_damage is INVERTED there — the lowest-damage recipe
+# has the WORST PPL). Falling back to plain 'none' (under-protective greedy) is a poor
+# default at sub-~1.75bpw. Instead adopt a sensitivity-PROTECTED greedy: per-tensor
+# degradation scaling (loss/mean)^k, the measured win for ultra-tight MoE budgets
+# (Qwen3.6-35B-A3B 1.7030bpw: 'none' 10.49 ppl -> pts 10.06 ppl). Set 0 to disable
+# (faithful 'none' fallback). Only reachable when ALL combos are vetoed, which no
+# previously-validated recipe hits -> those stay byte-identical.
+ADAPT_STARVE_PTS     = 0.4                         # per-tensor-degradation-scaling k for the all-vetoed branch
 
 # Default reducing factors when data not available
 DEFAULT_REDUCE = {
@@ -3889,6 +3899,44 @@ def auto_quant_assign(
                     print(f"[AUTO] greedy combo run failed ({_e}).", file=sys.stderr)
                 return None, None
 
+        def _sp_greedy_pts(_pl, _qz, _k):
+            """Like _sp_greedy but with per-tensor degradation scaling (loss/mean)^k,
+            replicating `--use-greedy-quant-assign --per-tensor-degradation-scaling k`
+            (greedy+CSV default loss_exponent=1.0). Used ONLY in the ultra-tight
+            starvation regime (all combos vetoed) where the lattice / meta-score are
+            uninformative and the protected greedy is the measured win."""
+            _vals = {t: float(_pristine_ppl_loss.get(t, 0.0)) for t in tensors}
+            _mean = (sum(_vals.values()) / len(_vals)) if _vals else 0.0
+            if _mean <= 0:
+                return _sp_greedy(_pl, _qz)
+
+            def _dfn(_t, _q):
+                _b = degradation_fn(_t, _q)
+                if _b is None:
+                    return None
+                _l = _vals.get(_t)
+                return _b * ((_l / _mean) ** _k) if _l is not None else _b
+
+            try:
+                return greedy_quant_assign(
+                    tensors=tensors,
+                    tensor_sizes=tensor_sizes,
+                    ppl_loss=_pl,
+                    degradation_fn=_dfn,
+                    tensor_quants=_qz,
+                    budget_bytes=int(budget_bytes),
+                    preassign_missing_ppl=preassign_missing_ppl,
+                    debug=False,
+                    harmonized_groups=harmonized_groups,
+                    loss_exponent=1.0,
+                    synergistic_groups=synergistic_groups,
+                    synergy_strength=synergy_strength,
+                )
+            except Exception as _e:
+                if debug:
+                    print(f"[AUTO] pts greedy run failed ({_e}).", file=sys.stderr)
+                return None, None
+
         def _sp_fold(_assign):
             """Fold an EXPANDED greedy assignment into the merged view (tensors_w)
             so it can be scored by _meta_score alongside `assignment`."""
@@ -4038,6 +4086,37 @@ def auto_quant_assign(
                 _vlog = {n: _veto(a) for n, (a, _t) in _combos.items()}
                 _surv = {n: a for n, (a, _t) in _combos.items() if not _vlog[n]}
                 if not _surv:
+                    # DEGENERATE ULTRA-TIGHT "starvation" regime: every combo floor-
+                    # demotes into a tight body so V3 vetoes them ALL, leaving the
+                    # lattice with no signal. predicted_damage is INVERTED here (the
+                    # lowest-damage recipe has the WORST PPL), so the conservative
+                    # selector + meta-guard would just pick the under-protective
+                    # 'none' greedy. Instead adopt a sensitivity-PROTECTED greedy
+                    # (per-tensor degradation scaling), the measured win for ultra-
+                    # tight MoE budgets (Qwen3.6-35B-A3B 1.7030: 10.49 -> 10.06).
+                    # Reachable ONLY when ALL combos are vetoed — no previously-
+                    # validated recipe hits this, so they stay byte-identical.
+                    if ADAPT_STARVE_PTS and ADAPT_STARVE_PTS > 0:
+                        _pl0, _qz0 = _sp_build(set())
+                        _spa, _spt = _sp_greedy_pts(_pl0, _qz0, ADAPT_STARVE_PTS)
+                        if (_spa is not None and _spt is not None
+                                and int(_spt) <= _feas_cap):
+                            if debug:
+                                print(
+                                    f"[AUTO] adaptive selector: all {len(_combos)} "
+                                    f"combos starvation-vetoed (ultra-tight budget); "
+                                    f"adopting sensitivity-protected greedy "
+                                    f"(pts={ADAPT_STARVE_PTS:g}; "
+                                    f"pred_damage={_pdam(_spa):.4g}; "
+                                    f"{_spt/GIB:.3f} GiB).",
+                                    file=sys.stderr,
+                                )
+                            if chosen_params_out is not None:
+                                chosen_params_out['combo'] = _combo_num_from_name('none')
+                                chosen_params_out['combo_name'] = (
+                                    f'none+pts{ADAPT_STARVE_PTS:g}')
+                                chosen_params_out['combo_forced'] = False
+                            return _spa, int(_spt)
                     _surv = {'none': _base}
 
                 _pick = None; _mode = 'conservative'

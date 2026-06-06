@@ -298,6 +298,7 @@ When greedy wins, re-running *pure* greedy on the pristine inputs is usually bes
 - `ADAPT_LATTICE = ['class','pos','tier2']` — which toggles the selector enumerates.
 - `ADAPT_ALLOW_TIER2 = True` — allow the `tier2` win-promotion.
 - `ADAPT_ALLOW_CLASSPOS = True` — allow the gated `class+pos` upgrade.
+- `ADAPT_STARVE_PTS = 0.4` — the **ultra-tight "starvation" fallback**. At very low budgets (sub-~1.75 bpw on some MoE models) the budget is so tight that *every* combo floor-demotes into a tight body and the V3 starvation veto fires on all of them. In that degenerate all-vetoed case the lattice and `predicted_damage` become uninformative (the lowest-damage recipe can have the *worst* PPL), so instead of falling back to the under-protective `none` greedy the selector adopts a **sensitivity-protected greedy** — per-tensor degradation scaling `(loss/mean)^ADAPT_STARVE_PTS` (equivalent to `--use-greedy-quant-assign --per-tensor-degradation-scaling`). The footer then discloses the combo as `none+pts<k>`. Set `0` to restore the plain `none` fallback. This branch is reachable *only* when all combos are vetoed, so recipes that have any surviving combo are unaffected. (Measured: Qwen3.6-35B-A3B 1.7030bpw `none` 10.49 ppl → `pts` 10.06 ppl.)
 
 To override one combo at runtime without editing source, use `--auto-force-combo N`.
 
@@ -553,7 +554,7 @@ Run `python quant_assign.py --help` for the authoritative, always-current text. 
 
 ### Hardcoded module constants (edit source to change)
 
-`ADAPT_ENABLED`, `ADAPT_LATTICE`, `ADAPT_ALLOW_TIER2`, `ADAPT_ALLOW_CLASSPOS` — near the top of `quant_assign.py`; control the auto method's adaptive combo selector (see §5.2).
+`ADAPT_ENABLED`, `ADAPT_LATTICE`, `ADAPT_ALLOW_TIER2`, `ADAPT_ALLOW_CLASSPOS`, `ADAPT_STARVE_PTS` — near the top of `quant_assign.py`; control the auto method's adaptive combo selector and the ultra-tight starvation fallback (see §5.2).
 
 ---
 
