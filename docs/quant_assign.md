@@ -372,7 +372,7 @@ The selector was validated by generating every combo and measuring real PPL. **A
 | tier2 | **32.478** 💥 (V2/V3 vetoed) | **4.3515** 💥 (V1/V3 vetoed) |
 | pos+tier2 | 33.206 💥 | 4.3520 💥 |
 
-The vetoes removed every `tier2` blow-up; the conservative selector then picked the genuinely-best safe combo. (See `helpers/auto_vs_greedy_WHY.md` and `to_benchmark_qwen36_27b/FINE_TUNE_RESULT.md` for the full analysis.)
+The vetoes removed every `tier2` blow-up; the conservative selector then picked the genuinely-best safe combo.
 
 ---
 
