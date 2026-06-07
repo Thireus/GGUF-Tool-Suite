@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regex entries.       **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Apr-24-2026 -------------------- **#
+#** --------------- Updated: Jun-07-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -2547,7 +2547,10 @@ declare -A T_HASHES SHARD_ID
 declare -A T_SKIP_HASH=()
 set_t_hash() { local key="${1,,}::${2,,}"; T_HASHES["$key"]="$3"; DEBUG "set_t_hash T_HASHES[${key}]=${T_HASHES["$key"]}"; 
   # Detect all-zero hash (64 zeros) and mark this tensor to skip hash verification.
-  local _norm="$(printf '%s' "$3" | tr '[:upper:]' '[:lower:]' | tr -d '[:space:]')"
+  # Pure-bash normalization (lowercase + strip whitespace) — avoids a $(printf|tr|tr)
+  # subshell + 3-process pipeline on every tensor line (huge win on Windows/MSYS where
+  # each fork is very expensive). Equivalent to: printf '%s' "$3" | tr A-Z a-z | tr -d '[:space:]'.
+  local _norm="${3,,}"; _norm="${_norm//[[:space:]]/}"
   if [[ "$_norm" =~ ^0{64}$ ]]; then
     T_SKIP_HASH["$key"]=1
     DEBUG "set_t_hash: detected all-zero hash for $key -> marking to skip per-tensor hash verification"
@@ -2891,6 +2894,30 @@ declare -A ADDITIONAL_SCALE_FACTOR_TABLE=(
   [Q8_KV_R8]=4
 )
 
+# Integer-scaled copy of BPW_TABLE (value * 10000) so the hot tensors.map parsing loop can
+# do exact fixed-point arithmetic in pure bash instead of spawning awk for every tensor line.
+# NOTE: this assumes every BPW_TABLE value has at most 4 decimal places (true for all current
+# entries); a value with more decimals would be silently truncated here, so keep BPW_TABLE
+# values to <= 4 decimals (or widen the *10000 scaling below and the 80000/tolerance in
+# adjust_tensor_bytes accordingly).
+declare -A BPW_SCALED_TABLE=()
+_bpw_build_scaled_table() {
+  local _k _v _ip _fp
+  for _k in "${!BPW_TABLE[@]}"; do
+    _v="${BPW_TABLE[$_k]}"
+    _ip="${_v%%.*}"
+    if [[ "$_v" == *.* ]]; then _fp="${_v#*.}"; else _fp=""; fi
+    _fp="${_fp}0000"; _fp="${_fp:0:4}"
+    BPW_SCALED_TABLE["$_k"]=$(( 10#${_ip:-0} * 10000 + 10#${_fp} ))
+  done
+}
+_bpw_build_scaled_table
+
+# Result holders for the pure-bash helpers below (returned via globals instead of $()
+# command substitution, to avoid a subshell fork per tensor line in the hot parsing loop).
+ADJUSTED_BYTES=""
+SHAPE_TAIL_PRODUCT=""
+
 shape_tail_product() {
   local shape="$1"
   local -a dims=()
@@ -2908,39 +2935,50 @@ shape_tail_product() {
     prod=$((prod * d))
   done
 
-  echo "$prod"
+  # Return via global (no echo/$()) to avoid a subshell fork per tensor line.
+  SHAPE_TAIL_PRODUCT="$prod"
 }
 
+# Result is returned in the global ADJUSTED_BYTES (not echoed) so the hot parsing loop
+# can call this without a $() command substitution (one fewer subshell fork per line).
 adjust_tensor_bytes() {
   local dtype="$1"
   local elements="$2"
   local bytes="$3"
   local shape="$4"
   local dtype_upper="${dtype^^}"
-  local bpw="${BPW_TABLE[$dtype_upper]:-}"
+  local bpw_scaled="${BPW_SCALED_TABLE[$dtype_upper]:-}"
   local scale_factor="${ADDITIONAL_SCALE_FACTOR_TABLE[$dtype_upper]:-}"
 
   # If we do not know this dtype, keep the original bytes value.
-  if [[ -z "$bpw" ]]; then
-    echo "$bytes"
+  if [[ -z "$bpw_scaled" ]]; then
+    ADJUSTED_BYTES="$bytes"
     return 0
   fi
-
-  local base_bytes
-  base_bytes="$(awk -v e="$elements" -v b="$bpw" 'BEGIN{printf "%.10f", (e*b)/8.0}')"
 
   # If the bytes match the base equation and this dtype has an extra scale factor,
   # add the per-row scale bump using dim2*dim3*dim4... (tail product).
-  if [[ -n "$scale_factor" ]] && awk -v a="$bytes" -v b="$base_bytes" 'BEGIN{d=a-b; if (d<0) d=-d; exit(d <= 0.0001 ? 0 : 1)}'; then
-    local tail_product bump adjusted
-    tail_product="$(shape_tail_product "$shape")"
-    bump=$(( scale_factor * tail_product ))
-    adjusted=$(( bytes + bump ))
-    echo "$adjusted"
-    return 0
+  #
+  # Original (float) test was:  base_bytes = elements*bpw/8 ; adjust if |bytes-base_bytes| <= 0.0001
+  # This is the exact integer equivalent (bytes & elements are integers, bpw_scaled = bpw*10000):
+  #   multiply both sides by 80000 (= 8*10000)  ->  |bytes*80000 - elements*bpw_scaled| <= 8
+  # so it needs no awk and no floating point. (Non-numeric elements/bytes are coerced to 0,
+  # matching awk's old implicit-numeric behaviour; real map data is always integer.)
+  if [[ -n "$scale_factor" ]]; then
+    local e="$elements" b="$bytes" diff
+    [[ "$e" =~ ^[0-9]+$ ]] || e=0
+    [[ "$b" =~ ^[0-9]+$ ]] || b=0
+    diff=$(( b * 80000 - e * bpw_scaled ))
+    diff=$(( diff < 0 ? -diff : diff ))
+    if (( diff <= 8 )); then
+      shape_tail_product "$shape"
+      ADJUSTED_BYTES=$(( bytes + scale_factor * SHAPE_TAIL_PRODUCT ))
+      return 0
+    fi
   fi
 
-  echo "$bytes"
+  ADJUSTED_BYTES="$bytes"
+  return 0
 }
 
 # ------------------ FETCH MAPS & COLLECT ----------------
@@ -3282,7 +3320,8 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
         # Additional-scale aware adjustment:
         # If the dtype is one of the qtypes with an extra per-row scale and the raw bytes
         # still match elements * bpw / 8, then add the missing scale-row bump before storing.
-        adjusted_bytes="$(adjust_tensor_bytes "${local_dtype}" "${local_elements}" "${local_bytes}" "${local_shape}")"
+        adjust_tensor_bytes "${local_dtype}" "${local_elements}" "${local_bytes}" "${local_shape}"
+        adjusted_bytes="$ADJUSTED_BYTES"
 
         if [[ "${adjusted_bytes}" != "${local_bytes}" && -z "${WARNED_ADJUSTED_BYTES[$qtype]:-}" ]]; then
           echo "⚠️  Warning: ${qtype} tensors in this tensors.map appear to miss the per-row scale bump in bytes; applying adjustment before storing." >&2
