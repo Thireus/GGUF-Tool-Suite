@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jun-06-2026 -------------------- **#
+#** --------------- Updated: Jun-12-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -82,6 +82,122 @@ ADAPT_ALLOW_CLASSPOS = True                       # allow the gated class+pos co
 # (faithful 'none' fallback). Only reachable when ALL combos are vetoed, which no
 # previously-validated recipe hits -> those stay byte-identical.
 ADAPT_STARVE_PTS     = 0.4                         # per-tensor-degradation-scaling k for the all-vetoed branch
+# Cross-budget consistency guard (auto method). A sensitive tensor's qtype should be
+# monotonic-ish with the size budget: a HIGHER target must not give it a LOWER qtype
+# than a LOWER target would. The auto method can violate this when a different
+# candidate path (window vs greedy) wins at one budget — e.g. GLM-5.1 `output` =
+# q8_0 at 1.93/1.99/2.55/2.98 bpw but iq3_xxs at 2.13. To catch it, after computing
+# the recipe at the target the script also computes it at a slightly LOWER and
+# slightly HIGHER target (maps already loaded → cheap) and, for each sensitive
+# tensor, if its qtype sits CATASTROPHICALLY below what BOTH neighbours give it,
+# pins it to the lower neighbour's qtype and re-fits. Requiring BOTH neighbours to
+# agree avoids false positives, so monotonic series are untouched (byte-identical).
+CONSISTENCY_GUARD       = True   # enable the cross-budget sensitive-tensor guard (auto only)
+CONSISTENCY_PROBE_DELTA = 0.15   # probe targets at ±15% of the budget
+CONSISTENCY_TOPK        = 16     # guard the top-K most-sensitive tensors (+ token_embd / output)
+CONSISTENCY_MARGIN_BPW  = 2.0    # only correct a CATASTROPHIC dip ≥ this many bpw below the lower
+                                 # neighbour (≈2+ quant tiers). A 0.5 threshold also fired on benign
+                                 # single-tier wobble (e.g. Qwen3.6-35B-A3B token_embd iq5_k vs q6_k,
+                                 # 1.06 bpw) and rewrote a validated recipe; 2.0 catches only true
+                                 # collapses like GLM-5.1 output q8_0→iq3_xxs (5.44 bpw).
+
+# Small-class protection (auto method). Single-tensor-drop kld under-measures
+# small-but-heavily-reused classes (attention etc.): their absolute kld is
+# comparable to the huge MoE experts yet they are 30-500x smaller, so they are
+# cheap to keep high — but the rank-based allocation crushes them, costing PPL
+# (GLM-5.1 1.928bpw: auto 4.7027 vs floored 4.6333, beating a hand-tuned 4.6654).
+# Detection is data-only & architecture-agnostic: classes whose mean parameter
+# count is < SIZE_FRAC of the largest class AND that have measured kld. Such
+# classes get a per-tensor FLOOR (minimum allowed qtype) at min(K*target_bpw,
+# CAP). A FLOOR (not a forced value) is self-limiting: it only LIFTS crushed
+# classes; where the auto already exceeds the floor it is a no-op -> regression
+# -safe. BAKED INTO the auto method (always on — no CLI flag): the rank-based
+# allocation otherwise crushes these classes on any model where their kld is
+# suppressed relative to their structural role. UNIFORM floor beat kld-scaled
+# variants in testing (over-protecting small classes steals budget from experts).
+AUTO_PROTECT_SMALL      = True    # baked-in default for the auto method (no CLI flag)
+AUTO_PROTECT_K          = 3.0     # floor bpw = K * target_bpw ...
+AUTO_PROTECT_CAP_BPW    = 6.5625  # ... capped here (~iq6_k); avoids q8_0 over-protection
+AUTO_PROTECT_SIZE_FRAC  = 0.10    # a class is "small" if mean params < FRAC * largest class
+AUTO_PROTECT_FLAT_MAX   = 12.0    # floor applies only if max/min measured class-mean kld < this
+                                  # (flat = uninformative calibration; see _small_class_floor_plan)
+# Job-level regime lock. The cost gate depends on the budget, but one job
+# evaluates the auto at several internal budgets (window-sweep stages, the
+# consistency guard's lo/hi probes) — near the threshold the gate would flip
+# between stages and produce hybrid recipes matching neither regime. main()
+# decides ONCE per class at the requested budget and locks it here; the plan
+# honours the lock for contrast models (flat models are budget-independent).
+AUTO_REGIME_LOCK = None
+AUTO_PROTECT_COST_MAX   = 0.042   # on CONTRAST-calibration models the floor (and the GLM-style
+                                  # selector regime) still engages when it is near-FREE:
+                                  # protected_mass_frac * (floor_bpw - target_bpw)/target_bpw < this.
+                                  # Empirical separation (validation suite, floored-vs-legacy PPL):
+                                  # GOOD <= 0.041 (35B-A3B 3.4060 -0.013; Flash 4.767 -0.19, 6.06 -0.1)
+                                  # BAD  >= 0.045 (Flash 3.4836 +1.20; 35B 2.5545 +0.10; 27B always).
+                                  # Flat models BYPASS this gate (they need the floor even when
+                                  # expensive: GLM-5.1 1.928bpw proxy 0.06 is its biggest win).
+# Adaptive-selector V1 veto (token_embd-crush) gate. V1 blocks any combo that
+# crushes token_embd, which normally protects the embedding — but when token_embd
+# is NOT a genuine high-sensitivity outlier (its kld ≈ the bulk) it is safe to
+# crush (PPL-confirmed on GLM-5.1: token_embd/bulk ≈ 1.09, and the tier2 combo
+# that crushes it WINS — 3.1095 vs 3.2007). So V1 only fires when token_embd's
+# kld exceeds the bulk by this factor; below it, the beneficial tier2 win-promote
+# is allowed. Data-driven (kld ratio); no architecture names.
+AUTO_TE_OUTLIER_THR     = 1.5     # token_embd is "protectable" only if kld > THR * max bulk kld
+# tier2 win-promote minimum budget. tier2 demotes the over-rated heads/experts to
+# fund/rebalance the genuinely-important classes; that trade only PAYS OFF with
+# enough budget headroom. Below this (SIZE-WEIGHTED) recipe bpw the freed budget
+# can't reach the experts and protecting the head outliers wins (GLM-5.1 1.928bpw:
+# tier2 4.6706 vs the head-protecting 4.5965). At/above it tier2 wins or ties the
+# best auto option across the whole tested range (1.998→3.649: 4.3249/3.4690/3.1095
+# /2.9336 — all ≤ the conservative pick; 2.976 even beats a hand-tuned recipe). NOTE:
+# the per-tensor MEAN bpw is much higher (many small protected tensors), so the
+# size-weighted value is required. GLM-5.1-derived; revisit on cross-model regression.
+AUTO_TIER2_MIN_BPW      = 1.96    # win-promote fires only at/above this recipe bpw
+# High-budget tier2 taming (win-promote only). At plentiful budgets the tier2
+# greedy over-funds the highest-kld bulk-expert class and leaves the demoted
+# outliers at pool-min when budget affords better — both PPL-measured losses on
+# GLM-5.1 @3.649 (tier2 2.9336 vs hand-balanced 2.8641; ratio sweep optimum:
+# down/(gate-up) 1.37@2.976 decaying to ~1.30@3.649, tier2 makes 1.49).
+# M2: cap eff-bpw(highest-kld bulk class)/eff-bpw(sibling bulk) at
+#     r*(b) = clamp(BASE − SLOPE·(b − ANCHOR), MIN, MAX), budget-neutral swaps,
+#     siblings raised UNIFORMLY (strong edge-weighting measured worse).
+# M1: leftover freed bytes lift demoted MEASURED outliers (never 0-kld unused)
+#     back toward their pre-demotion qtype.
+# Fires only when the size-weighted recipe bpw ≥ SAT — all PPL-validated lower
+# budgets (≤2.976) are below it and stay byte-identical.
+AUTO_T2_SAT_BPW         = 3.20
+AUTO_T2_RATIO_ANCHOR    = 2.976
+AUTO_T2_RATIO_BASE      = 1.37
+AUTO_T2_RATIO_SLOPE     = 0.10
+AUTO_T2_RATIO_MIN       = 1.28
+AUTO_T2_RATIO_MAX       = 1.45
+# Refill-ladder noise gate: a bigger rung must beat the previous one by this
+# relative degradation margin. Small (tie-breaker) by design: it prunes rungs
+# that are bigger for no real gain, while keeping the ladder FINE-GRAINED so the
+# 2-tier fills stay gentle — a large margin (0.15 tried) coarsened the ladder
+# (iq3_kt jumping to iq4_kt, a 0.6bpw spread) and that measured worse than the
+# gentle iq3_kt→iq3_k mix (2.8677, the validated AB_TRIM shape).
+AUTO_LADDER_EPS         = 0.02
+# Statistical-tie pruning for the refill ladder. group0 is a SINGLE measurement
+# per qtype; when two rungs are nearly the same SIZE (bytes within TIE_BYTES)
+# and their measured deg differs by less than TIE_DEG, the comparison is a coin
+# flip that does NOT transfer (PPL-proven twice on GLM-5.1: group0 preferred
+# q6_K over iq6_k by 8% and iq3_kt over iq3_ks by 12%, both WRONG — fixing them
+# was worth 0.006/0.016 PPL @3.649). Within a tie prefer the non-trellis ik
+# quant over legacy/trellis. This is a preference over the QUANTIZER'S OWN
+# qtype vocabulary (identical across all models) — not tensor names.
+AUTO_LADDER_TIE_DEG     = 0.20
+AUTO_LADDER_TIE_BYTES   = 0.03
+# Tensors the high-budget rebalance intentionally trimmed BELOW the small-class
+# floor (auxiliary-FFN one-rung-below rule). The floor-enforcement post-pass
+# must not "rescue" them back up.
+AUTO_T2_SUBFLOOR: set = set()
+# High-budget head trim (M3). The rank allocation pushes measured non-bulk
+# classes (attention/shexp/dense heads) to q8_0/q6_K patchwork the data can't
+# justify; PPL shows lean heads beat fat heads by ~0.012 at 3.649 (2.8677 vs
+# 2.8820). Inside the rebalance, classes above the small-class floor CAP are
+# uniformized DOWN to the cap rung and the freed bytes flow to the experts.
 
 # Default reducing factors when data not available
 DEFAULT_REDUCE = {
@@ -1332,6 +1448,87 @@ def adjust_losses_with_synergy(
 
     return adjusted_loss
 
+def _small_class_floor_plan(tensors, tensor_sizes, ppl_loss, tensor_quants, budget_bytes):
+    """Compute (protected_classes:set, floor_bpw:float) for the small-class
+    protection floor. PURE — no mutation. Shared by auto_quant_assign's Step-0
+    (which restricts tensor_quants to >= floor) and the floor-enforcement fallback
+    (which detects when an internal phase crushed a protected tensor below it).
+    A class is 'protected' if its mean parameter count is < SIZE_FRAC of the
+    largest class AND it has measured kld (purely data-driven; no architecture).
+    Applies ONLY when the calibration is FLAT (uninformative): measured
+    class-mean klds spanning < AUTO_PROTECT_FLAT_MAX. Flat calibration is the
+    regime where the rank allocation degenerates and crushes small classes
+    (GLM-5.1: span ~7.7x -> floor wins up to -0.13 ppl). When the calibration
+    has real contrast the allocation should be TRUSTED — applying the floor
+    there regressed every tight budget (validation suite: Qwen3.6-35B-A3B span
+    65x, 1.7030bpw 10.06->19.14; GLM-4.7-Flash span 30x, 3.4836 9.45->10.65;
+    Qwen3.6-27B span 254x, 3.4009 +0.046)."""
+    tensors = list(tensors)
+    if not (AUTO_PROTECT_SMALL and budget_bytes and len(tensors) >= 8):
+        return set(), 0.0
+    _cm: Dict[str, List[float]] = {}
+    for _t in tensors:
+        _v = float((ppl_loss or {}).get(_t, 0.0) or 0.0)
+        if _v > 0:
+            _cm.setdefault(re.sub(r'\.(weight|bias)$', '',
+                                  re.sub(r'^blk\.\d+\.', '', _t)), []).append(_v)
+    _means = [sum(v) / len(v) for v in _cm.values() if v]
+    if not _means or min(_means) <= 0:
+        return set(), 0.0
+    _flat_cal = (max(_means) / min(_means)) < AUTO_PROTECT_FLAT_MAX
+    def _bpw_safe(_q):
+        try: return float(get_bpw(_q))
+        except Exception: return 0.0
+    def _avail(_t):
+        _sz = tensor_sizes.get(_t, {}); _pool = (tensor_quants or {}).get(_t)
+        return [q for q in (_pool if _pool else _sz.keys()) if q in _sz]
+    def _params(_t):
+        for _q, _b in tensor_sizes.get(_t, {}).items():
+            bw = _bpw_safe(_q)
+            if bw > 0 and _b > 0: return _b * 8.0 / bw
+        return 0.0
+    def _ckey(_t):
+        return re.sub(r'\.(weight|bias)$', '', re.sub(r'^blk\.\d+\.', '', _t))
+    _params_t = {t: _params(t) for t in tensors}
+    _total = sum(_params_t.values())
+    if _total <= 0:
+        return set(), 0.0
+    _target_bpw = budget_bytes * 8.0 / _total
+    _csz: Dict[str, List[float]] = {}; _ckld: Dict[str, bool] = {}
+    for t in tensors:
+        c = _ckey(t); _csz.setdefault(c, []).append(_params_t.get(t, 0.0))
+        if float(ppl_loss.get(t, 0.0) or 0.0) > 0.0: _ckld[c] = True
+    _cmean = {c: sum(v) / len(v) for c, v in _csz.items() if v}
+    _maxc = max(_cmean.values()) if _cmean else 0.0
+    _protect = {c for c in _cmean
+                if _maxc > 0 and _cmean[c] < AUTO_PROTECT_SIZE_FRAC * _maxc and _ckld.get(c)}
+    _floor_bpw = min(AUTO_PROTECT_K * _target_bpw, AUTO_PROTECT_CAP_BPW)
+    if not _flat_cal:
+        # Contrast calibration: engage only when the floor is near-FREE
+        # (see AUTO_PROTECT_COST_MAX). main() locks the decision per job so
+        # internal stage/probe budgets can't flip it (AUTO_REGIME_LOCK).
+        if AUTO_REGIME_LOCK is not None:
+            if not AUTO_REGIME_LOCK:
+                return set(), 0.0
+        else:
+            _pmass = sum(sum(_csz[c]) for c in _protect) / _total if _total else 1.0
+            _proxy = (_pmass * (_floor_bpw - _target_bpw) / _target_bpw
+                      if _floor_bpw > _target_bpw else 0.0)
+            if _proxy >= AUTO_PROTECT_COST_MAX:
+                return set(), 0.0
+    def _minb(_t, _fl):
+        _sz = tensor_sizes.get(_t, {})
+        _hi = [q for q in _avail(_t) if _bpw_safe(q) >= _fl - 1e-9]
+        return min((_sz[q] for q in (_hi or _avail(_t))), default=0)
+    _others = sum(min((tensor_sizes.get(t, {}).get(q, 0) for q in _avail(t)), default=0)
+                  for t in tensors if _ckey(t) not in _protect)
+    _smallest = min((_bpw_safe(q) for t in tensors for q in _avail(t)), default=0.0)
+    while _floor_bpw > _smallest:
+        _need = sum(_minb(t, _floor_bpw) for t in tensors if _ckey(t) in _protect)
+        if _others + _need <= budget_bytes: break
+        _floor_bpw *= 0.9
+    return _protect, _floor_bpw
+
 def greedy_quant_assign(
     tensors: Iterable[str],
     tensor_sizes: Dict[str, Dict[str, int]],
@@ -1765,6 +1962,38 @@ def auto_quant_assign(
     tensors = list(tensors)
     tensor_quants = tensor_quants or {}
     extra_outlier_qtypes = list(extra_outlier_qtypes or [])
+
+    # --- Small-class protection FLOOR (see AUTO_PROTECT_* constants) ---
+    # Restrict tensor_quants for small, structurally-critical classes (attention
+    # etc.: kld comparable to the bulk but far smaller -> cheap to keep high, yet
+    # the rank allocation crushes them). Applied HERE, before the pristine
+    # snapshots and allowed_map, so EVERY downstream path inherits the floor —
+    # the window pass, the greedy 2nd-pass (which re-runs from _pristine_tensor_
+    # quants), and the consistency-guard re-fits. (Restricting only allowed_map
+    # let the greedy winner bypass it and re-collapse attention, e.g. GLM-5.1 @
+    # 2.126bpw 5.50ppl.) A floor only LIFTS crushed classes; where the recipe
+    # already exceeds it, dropping the unused low qtypes is a no-op (self-limiting).
+    if AUTO_PROTECT_SMALL and budget_bytes and len(tensors) >= 8:
+        _protect, _floor_bpw = _small_class_floor_plan(tensors, tensor_sizes, ppl_loss, tensor_quants, budget_bytes)
+        if _protect and _floor_bpw > 0:
+            def _bpw_safe(_q):
+                try: return float(get_bpw(_q))
+                except Exception: return 0.0
+            def _avail(_t):
+                _sz = tensor_sizes.get(_t, {}); _pool = tensor_quants.get(_t)
+                return [q for q in (_pool if _pool else _sz.keys()) if q in _sz]
+            def _ckey(_t):
+                return re.sub(r'\.(weight|bias)$', '', re.sub(r'^blk\.\d+\.', '', _t))
+            _nf = 0
+            for t in tensors:
+                if _ckey(t) in _protect:
+                    _hi = [q for q in _avail(t) if _bpw_safe(q) >= _floor_bpw - 1e-9]
+                    if _hi and (t not in tensor_quants or len(_hi) < len(tensor_quants[t])):
+                        tensor_quants[t] = _hi; _nf += 1
+            if debug:
+                print(f"[AUTO] small-class floor >= {_floor_bpw:.2f}bpw on {sorted(_protect)} "
+                      f"({_nf} tensors)", file=sys.stderr)
+
     # Pristine copies of the caller inputs, captured before any of the
     # preliminary operations (loss adjustment, floor cap, outlier pinning)
     # mutate the working views. Used to re-run an UNRESTRICTED pure greedy
@@ -1802,6 +2031,9 @@ def auto_quant_assign(
             return v if v is not None else float('inf')
         allowed.sort(key=_deg_key)
         allowed_map[t] = allowed
+    # (Small-class protection FLOOR is applied to tensor_quants in Step 0, so
+    # allowed_map already inherits it here — and so do the pristine snapshots and
+    # the greedy 2nd-pass, which is what makes the floor hold at every budget.)
 
     # Per-tensor "outlier qtype candidates": union of allowed_map[t] and the
     # extra_outlier_qtypes the caller passed (e.g. --gpu/--cpu-assign-qtype). We
@@ -1933,6 +2165,14 @@ def auto_quant_assign(
         assignment[t] = allowed_map_w[t][0]
         if debug:
             print(f"[AUTO] preassigning {t} -> {allowed_map_w[t][0]} (missing ppl_loss)", file=sys.stderr)
+
+    # Snapshot of the outlier (zero-kld → smallest) and pre-assigned pins over the
+    # working set. Used as a fallback at return (Step 10) so these tensors are
+    # NEVER dropped from the result: a dropped tensor is otherwise re-inferred to
+    # the class-default --*-assign-qtype at recipe-write time, which silently
+    # inflates the recipe past its size budget (GLM-5.1 blk.78 experts / indexer
+    # at 2.13 bpw were crushed by the optimizer but written as q6_K → +8 GiB).
+    _pinned_snapshot = dict(assignment)
 
     sortable = [t for t in tensors_w if t not in outlier_tensors and t not in preassigned]
 
@@ -4023,19 +4263,29 @@ def auto_quant_assign(
                         _n += s * b; _d += s
                 return _n / _d if _d else 0.0
 
-            def _shape(a, floor):
+            def _shape(a, floor, exclude=None):
                 bs = _bpws(a)
                 if not bs:
                     return None
                 mn = min(bs); rng = max(bs) - mn
                 sd = _statistics.pstdev(bs) if len(bs) > 1 else 0.0
                 med = _statistics.median(bs); mean = sum(bs) / len(bs)
+                # Body-over-crush fractions (flt25/flt2) optionally EXCLUDE the bulk
+                # expert tensors: on MoE models the routed experts are legitimately
+                # crushed (they are the low-priority bulk), so counting them makes a
+                # healthy recipe look over-crushed and wrongly blocks the tier2
+                # win-promote. Excluding them measures the real (non-expert) body.
+                _body = bs
+                if exclude:
+                    _bb = [b for b in (_qbpw(a[t]) for t in a if t not in exclude) if b is not None]
+                    if _bb:
+                        _body = _bb
                 return {
                     'SR': (sd / rng if rng > 0 else 1.0),
                     'SKEW': med - mean,
                     'ATFLOOR': (mn <= floor + 1e-9 and floor < _FLOOR_ABS),
-                    'flt25': sum(b < 2.5 for b in bs) / len(bs),
-                    'flt2': sum(b < 2.0 for b in bs) / len(bs),
+                    'flt25': sum(b < 2.5 for b in _body) / len(_body),
+                    'flt2': sum(b < 2.0 for b in _body) / len(_body),
                 }
 
             # enumerate the powerset of toggles → {name: (assignment, total)}
@@ -4059,12 +4309,46 @@ def auto_quant_assign(
                 _others = [abs(v) for k, v in _sens.items()
                            if k not in ('token_embd.weight', 'output.weight')]
                 _HBR = (_te + _ou) / max(_others) if _others else 1e9
+                # token_embd is only a "protectable" outlier if its kld clearly
+                # exceeds the bulk; when ≈ bulk (GLM-5.1: 1.09) it is safe to crush,
+                # so V1 must not block the beneficial tier2 demotion.
+                _te_ratio = (_te / max(_others)) if _others else 1e9
+                # size-weighted recipe bpw (the ACTUAL bpw, not the unweighted
+                # per-tensor mean — the many small protected tensors inflate that).
+                def _elem_sel(t):
+                    for _q, _b in tensor_sizes.get(t, {}).items():
+                        _bw = _qbpw(_q)
+                        if _bw and _b:
+                            return _b * 8.0 / _bw
+                    return 0.0
+                _den0 = sum(_elem_sel(t) for t in _base)
+                _num0 = sum(_qbpw(_base[t]) * _elem_sel(t) for t in _base if _qbpw(_base[t]))
+                _mbpw0 = (_num0 / _den0) if _den0 else 0.0
+                # GLM-style regime gate — driven by the SAME plan as the floor so
+                # the floor and the selector machinery always engage as a BUNDLE
+                # (a floored model needs the V1/V3 exemptions or the floor-
+                # compressed shape false-fires the vetoes; an unfloored model must
+                # keep the byte-exact legacy selector, validated across 14
+                # recipes). The plan opens for FLAT calibration (GLM-5.1: 7.6x
+                # span) at any budget, and for contrast models only when the
+                # floor is near-free (AUTO_PROTECT_COST_MAX).
+                _flat = bool(_small_class_floor_plan(
+                    tensors, tensor_sizes, _sens,
+                    _pristine_tensor_quants, int(budget_bytes))[0])
+                # win-promote regime: the tier2-win models (GLM-style). V3's
+                # starvation veto exists for OUT-of-regime disasters (Qwen 397B /
+                # 0.8B); on FLAT models the baked-in floor compresses the bpw
+                # spread so SR<thresh false-fires at high budgets — there the
+                # win-promote winshape gates are the guard instead.
+                _promote_regime = (_flat and _allow_promote and _HBR < _HBR_THR
+                                   and _mbpw0 >= AUTO_TIER2_MIN_BPW)
 
                 def _veto(a):
                     _bn = _qbpw(_base.get('token_embd.weight'))
                     _bc = _qbpw(a.get('token_embd.weight'))
-                    if _bn is not None and _bc is not None and _bn - _bc > _TE_FLOOR:
-                        return 'V1'                          # token_embd crush
+                    if (_bn is not None and _bc is not None and _bn - _bc > _TE_FLOOR
+                            and (not _flat or _te_ratio > AUTO_TE_OUTLIER_THR)):
+                        return 'V1'                          # token_embd crush (flat: genuine outlier only)
                     _mi = 0.0
                     for t in _topK:
                         _qn = _base.get(t); _qc = a.get(t)
@@ -4079,8 +4363,9 @@ def auto_quant_assign(
                     if _pd_none > 0 and _mi / _pd_none > _REL_THR and _mi > _ABS_THR:
                         return 'V2'                          # critical-tensor damage
                     _s = _shape(a, _floor)
-                    if _s and _s['ATFLOOR'] and _s['SR'] < _SR_THRESH:
-                        return 'V3'                          # starvation shape
+                    if (not _promote_regime
+                            and _s and _s['ATFLOOR'] and _s['SR'] < _SR_THRESH):
+                        return 'V3'                          # starvation shape (out-of-regime only)
                     return None
 
                 _vlog = {n: _veto(a) for n, (a, _t) in _combos.items()}
@@ -4119,6 +4404,337 @@ def auto_quant_assign(
                             return _spa, int(_spt)
                     _surv = {'none': _base}
 
+                def _t2_rebalance(a, total, bulk, ckey, csm, mxc, mbpw0, elem_of):
+                    """High-budget tier2 taming (M1+M2, see AUTO_T2_* constants).
+                    Budget-neutral: demotes the over-funded highest-kld bulk-expert
+                    class to the r*(b) ratio cap, lifts demoted measured outliers
+                    toward their pre-demotion qtype, then raises the sibling bulk
+                    classes uniformly (mild edge preference). Never raises 0-kld
+                    unused tensors; never exceeds the incoming total."""
+                    a = dict(a)
+                    _grp: Dict[str, tuple] = {}
+                    for _g in (harmonized_groups or []):
+                        for _t in _g:
+                            _grp[_t] = tuple(_g)
+                    def _members(t):
+                        return [m for m in _grp.get(t, (t,)) if m in a]
+                    def _allowed(t):
+                        _pool = _pristine_tensor_quants.get(t)
+                        _qs = [q for q in tensor_sizes.get(t, {})
+                               if (not _pool or q in _pool) and _qbpw(q)]
+                        return sorted(_qs, key=_qbpw)
+                    def _byt(t, q):
+                        return tensor_sizes.get(t, {}).get(q, 0)
+                    def _abpw(t, q):
+                        # ACTUAL bpw from the advertised map size — a qtype with no
+                        # real map for t falls back to a larger one (e.g. q4_1 →
+                        # q6_K for token_embd), so nominal bpw under-states it.
+                        _el = elem_of(t)
+                        return (_byt(t, q) * 8.0 / _el) if _el else 0.0
+                    def _dg(t, q):
+                        try:
+                            return float(_deg(t, q) or 0.0)
+                        except Exception:
+                            return 0.0
+                    # Bulk classes must be MULTI-tensor (the repeated experts);
+                    # giant single-tensor classes (output/token_embd on models with
+                    # small experts, e.g. GLM-4.7-Flash) must never be picked.
+                    _cnt: Dict[str, int] = {}
+                    for t in a:
+                        _cnt[ckey(t)] = _cnt.get(ckey(t), 0) + 1
+                    _mxc_m = max((csm[c] for c in csm if _cnt.get(c, 0) >= 8), default=0)
+                    _bcls = {c for c in csm
+                             if _cnt.get(c, 0) >= 8 and _mxc_m > 0
+                             and csm[c] >= 0.5 * _mxc_m}
+                    _ckld: Dict[str, List[float]] = {}
+                    for t in a:
+                        c = ckey(t)
+                        if c in _bcls and float(_sens.get(t, 0.0) or 0.0) > 0:
+                            _ckld.setdefault(c, []).append(float(_sens[t]))
+                    _ckm = {c: sum(v) / len(v) for c, v in _ckld.items() if v}
+                    if len(_ckm) < 2:
+                        return a, total
+                    _hicls = max(_ckm, key=lambda c: _ckm[c])
+                    _hit = [t for t in a if ckey(t) == _hicls]
+                    _sib = [t for t in a if ckey(t) in _bcls and ckey(t) != _hicls
+                            and float(_sens.get(t, 0.0) or 0.0) > 0]
+                    if not _hit or not _sib:
+                        return a, total
+                    # If the hi class is HARMONIZED with a sibling class (e.g. the
+                    # gate<->up pairing when gate is the highest-kld class), the
+                    # imbalance is structurally impossible to trade — skip.
+                    _sibset = set(_sib)
+                    for t in _hit:
+                        if any(m in _sibset for m in _grp.get(t, ())):
+                            return a, total
+                    def _ladder(ts, full=False):
+                        # class-canonical qtype ladder by ACTUAL class bytes
+                        # (fallback-aware), min-deg name per size, noise-gated.
+                        # full=True ignores the (floor-restricted) pristine pool —
+                        # used by the aux-FFN trim to step below the floor.
+                        _cand: Dict[int, str] = {}
+                        for q in (list(tensor_sizes.get(ts[0], {}).keys()) if full
+                                  else _allowed(ts[0])):
+                            if not all(q in tensor_sizes.get(t, {}) for t in ts):
+                                continue
+                            _tb = sum(_byt(t, q) for t in ts)
+                            if _tb <= 0:
+                                continue
+                            if _tb not in _cand or _dg(ts[0], q) < _dg(ts[0], _cand[_tb]):
+                                _cand[_tb] = q
+                        _lad = sorted(_cand.items())
+                        # statistical-tie pruning (see AUTO_LADDER_TIE_* comment):
+                        # near-equal size + near-equal deg = coin flip; keep the
+                        # preferred qtype family (non-trellis ik > legacy > trellis).
+                        def _famrank(q):
+                            if q.lower().endswith('kt'):
+                                return 2
+                            if q.lower().startswith('iq'):
+                                return 0
+                            return 1
+                        _tied: List[Tuple[int, str]] = []
+                        for _b, _q in _lad:
+                            if _tied:
+                                _pb, _pq = _tied[-1]
+                                _d0 = _dg(ts[0], _pq)
+                                _d1 = _dg(ts[0], _q)
+                                if (abs(_b - _pb) <= AUTO_LADDER_TIE_BYTES * max(_b, _pb)
+                                        and min(_d0, _d1) > 0
+                                        and abs(_d0 - _d1) <= AUTO_LADDER_TIE_DEG * max(_d0, _d1)):
+                                    if (_famrank(_q), _d1) < (_famrank(_pq), _d0):
+                                        _tied[-1] = (_b, _q)
+                                    continue
+                            _tied.append((_b, _q))
+                        _lad = _tied
+                        _plad: List[Tuple[int, str]] = []
+                        _mind = None
+                        for _b, _q in _lad:
+                            _d = _dg(ts[0], _q)
+                            if _mind is None or _d < _mind * (1.0 - AUTO_LADDER_EPS):
+                                _plad.append((_b, _q))
+                                _mind = _d
+                        return _plad or _lad
+                    # --- M3 head trim: measured non-bulk classes above the floor
+                    # CAP are uniformized DOWN to the cap rung (lean heads beat the
+                    # rank-allocation's q8_0/q6_K patchwork by ~0.012 PPL); freed
+                    # bytes flow to the experts via the ratio math below. ---
+                    _T = 0
+                    _nb: Dict[str, List[str]] = {}
+                    for t in a:
+                        c = ckey(t)
+                        if c in _bcls or t in bulk:
+                            continue
+                        if float(_sens.get(t, 0.0) or 0.0) <= 0:
+                            continue
+                        _nb.setdefault(c, []).append(t)
+                    for c, ts in _nb.items():
+                        _el = sum(elem_of(t) for t in ts)
+                        if _el <= 0:
+                            continue
+                        _cur = sum(_byt(t, a[t]) for t in ts)
+                        _capb = _el * AUTO_PROTECT_CAP_BPW / 8.0
+                        if _cur <= _capb * 1.02:
+                            continue
+                        # Data-only split (kld_results.csv, no tensor names): a
+                        # protected class whose mean kld does NOT exceed the bulk
+                        # experts' own mean kld earned its floor STRUCTURALLY (small
+                        # size), not by measured sensitivity — at high budget it sits
+                        # one rung BELOW the cap (PPL delta ~0.011 @3.649), and its
+                        # ladder ignores the floor-restricted pool (full=True) since
+                        # the floor's rescue role doesn't apply up here. Classes with
+                        # kld ABOVE the bulk's (genuinely measured-sensitive) keep
+                        # the cap rung.
+                        _aux = (sum(float(_sens.get(t, 0.0) or 0.0) for t in ts) / len(ts)
+                                < _ckm[_hicls])
+                        _lad2 = _ladder(ts, full=_aux)
+                        _ci2 = None
+                        for _i2, (_b, _q) in enumerate(_lad2):
+                            if _b <= _capb * 1.02:
+                                _ci2 = _i2
+                        if _ci2 is None:
+                            continue
+                        if _aux and _ci2 > 0:
+                            _ci2 -= 1
+                        _pick2 = _lad2[_ci2]
+                        if _pick2[0] >= _cur:
+                            continue
+                        for t in ts:
+                            a[t] = _pick2[1]
+                        if _aux:
+                            AUTO_T2_SUBFLOOR.update(ts)
+                        _T += _cur - _pick2[0]
+                    def _ebpw(ts):
+                        _el = sum(elem_of(t) for t in ts)
+                        return (sum(_byt(t, a[t]) * 8.0 for t in ts) / _el) if _el else 0.0
+                    _rstar = min(max(AUTO_T2_RATIO_BASE
+                                     - AUTO_T2_RATIO_SLOPE * (mbpw0 - AUTO_T2_RATIO_ANCHOR),
+                                     AUTO_T2_RATIO_MIN), AUTO_T2_RATIO_MAX)
+                    _r0 = _ebpw(_hit) / _ebpw(_sib) if _ebpw(_sib) else 0.0
+                    # Solve the demotion volume so the POST-respend ratio lands on r*
+                    # (freed bytes flow to the siblings, raising their eff-bpw):
+                    # (D−x)/eD = r*·(G+x)/eG  →  x = (D·eG − r*·eD·G)/(eG + r*·eD)
+                    _eD = sum(elem_of(t) for t in _hit)
+                    _eG = sum(elem_of(t) for t in _sib)
+                    _Db = sum(_byt(t, a[t]) * 8.0 for t in _hit)
+                    _Gb = sum(_byt(t, a[t]) * 8.0 for t in _sib)
+                    _x = (_Db * _eG - _rstar * _eD * (_Gb + _T * 8.0)) / (_eG + _rstar * _eD)
+                    _x_bytes = _x / 8.0
+                    # UNIFORM 2-level refill (the PPL-validated bulk shape). The
+                    # greedy patchwork mixes qtypes within an expert class — the
+                    # within-class kld spread is noise, and every measured winner
+                    # at high budget is uniform-per-class (2.8641/2.8650/2.8780)
+                    # while every patchwork lost (+0.06-0.07: 2.9208/2.9249/2.9336).
+                    # Refill each side as: base qtype + edge-first layer upgrades
+                    # (mild edge preference, validated; strong edge measured worse).
+                    def _layS(t):
+                        _m = re.search(r'blk\.(\d+)\.', t)
+                        return int(_m.group(1)) if _m else -1
+                    def _fill(ts, target_bytes):
+                        _lg: Dict[int, List[str]] = {}
+                        for t in ts:
+                            _lg.setdefault(_layS(t), []).append(t)
+                        _Ls = sorted(_lg)
+                        _loL, _hiL = _Ls[0], _Ls[-1]
+                        _lad = _ladder(ts)
+                        if not _lad:
+                            return sum(_byt(t, a[t]) for t in ts)
+                        _bi = 0
+                        for _i, (_b, _q) in enumerate(_lad):
+                            if _b <= target_bytes:
+                                _bi = _i
+                        _bq = _lad[_bi][1]
+                        for t in ts:
+                            a[t] = _bq
+                        _used = _lad[_bi][0]
+                        if _bi + 1 < len(_lad):
+                            _uq = _lad[_bi + 1][1]
+                            for L in sorted(_Ls, key=lambda x: (min(x - _loL, _hiL - x), x)):
+                                _c = sum(_byt(t, _uq) - _byt(t, a[t]) for t in _lg[L])
+                                if _c <= 0 or _used + _c > target_bytes:
+                                    continue
+                                for t in _lg[L]:
+                                    a[t] = _uq
+                                _used += _c
+                        return _used
+                    _Dby = _Db / 8.0
+                    _Gby = _Gb / 8.0
+                    _uh = _fill(_hit, _Dby - _x_bytes)
+                    # spend up to the actual stage budget, not just the incoming
+                    # total — the greedy often arrives a few tenths of a GiB short
+                    _freed = _Dby - _uh + _T + max(0, int(budget_bytes) - int(total))
+                    # M1: lift demoted MEASURED outliers toward their 'none' qtype.
+                    _outs = [t for t in a
+                             if ckey(t) not in _bcls and t not in bulk
+                             and float(_sens.get(t, 0.0) or 0.0) > 0
+                             and _qbpw(a[t]) is not None
+                             and _qbpw(_base.get(t)) is not None
+                             and _qbpw(a[t]) < _qbpw(_base[t]) - 1e-9]
+                    _outs.sort(key=lambda t: -float(_sens.get(t, 0.0) or 0.0))
+                    for t in _outs:
+                        _guard = 0
+                        while _guard < 100:
+                            _guard += 1
+                            qs = _allowed(t)
+                            if a[t] not in qs:
+                                break
+                            i = qs.index(a[t])
+                            # nearest higher-bpw step (skip same-bpw ties)
+                            _q2 = None
+                            for j in range(i + 1, len(qs)):
+                                if _qbpw(qs[j]) > _qbpw(a[t]) + 1e-9:
+                                    _q2 = qs[j]
+                                    break
+                            if _q2 is None:
+                                break
+                            # cap the lift at min(pre-demotion level, ~1.25x budget bpw)
+                            # — measured: lifting heads to bulk-mean-ish (iq4_k) wins;
+                            # all the way back to q6_k+ wastes sibling budget. Cap on
+                            # the ACTUAL map bpw so qtypes that fall back to a larger
+                            # map (q4_1 → q6_K) don't sneak past.
+                            _cap = min((_qbpw(_base.get(t)) or 0.0), mbpw0 * 1.25 + 0.45)
+                            if _abpw(t, _q2) > _cap + 1e-9:
+                                break
+                            _cost = sum(_byt(m, _q2) - _byt(m, a[m]) for m in _members(t)
+                                        if _q2 in tensor_sizes.get(m, {}))
+                            if _cost > _freed:
+                                break
+                            for m in _members(t):
+                                if _q2 in tensor_sizes.get(m, {}):
+                                    a[m] = _q2
+                            _freed -= max(0, _cost)
+                    # Sibling uniform refill with everything the hi-side + M1 left.
+                    _us = _fill(_sib, _Gby + _freed)
+                    _freed = _Gby + _freed - _us
+                    # Leftover pass: layer-group granularity leaves sub-group change;
+                    # spend it lifting non-bulk measured tensors toward their 'none'
+                    # level, best sens-benefit per byte first (never 0-kld unused).
+                    _guard = 0
+                    while _freed > 0 and _guard < 2000:
+                        _guard += 1
+                        _bestl = None
+                        for t in a:
+                            if ckey(t) in _bcls or t in bulk:
+                                continue
+                            if float(_sens.get(t, 0.0) or 0.0) <= 0:
+                                continue
+                            _bb = _qbpw(_base.get(t))
+                            if not _bb:
+                                continue
+                            # same cap as the M1 lift — never above ~1.25x budget bpw
+                            _bb = min(_bb, mbpw0 * 1.25 + 0.45)
+                            if (_qbpw(a[t]) or 0.0) >= _bb - 1e-9:
+                                continue
+                            qs = _allowed(t)
+                            if a[t] not in qs:
+                                continue
+                            i = qs.index(a[t])
+                            _q2 = None
+                            for j in range(i + 1, len(qs)):
+                                if _qbpw(qs[j]) > _qbpw(a[t]) + 1e-9:
+                                    _q2 = qs[j]
+                                    break
+                            if _q2 is None or _abpw(t, _q2) > _bb + 1e-9:
+                                continue
+                            _cost = sum(_byt(m, _q2) - _byt(m, a[m]) for m in _members(t)
+                                        if _q2 in tensor_sizes.get(m, {}))
+                            if _cost > _freed:
+                                continue
+                            _ben = float(_sens.get(t, 0.0) or 0.0) * max(
+                                0.0, _dg(t, a[t]) - _dg(t, _q2))
+                            _key = (-(_ben / _cost) if _cost > 0 else -float('inf'), t)
+                            if _bestl is None or _key < _bestl[0]:
+                                _bestl = (_key, _cost, t, _q2)
+                        if _bestl is None:
+                            break
+                        _, _cost, _t0, _q2 = _bestl
+                        for m in _members(_t0):
+                            if _q2 in tensor_sizes.get(m, {}):
+                                a[m] = _q2
+                        _freed -= max(0, _cost)
+                    # Spend any remaining budget back into the bulk: re-fill with a
+                    # larger target (re-basing keeps each class within base+1 rung —
+                    # never the >=2-rung spread that measured worse). Sib first
+                    # (under-funded side), then hi.
+                    for _rp in range(3):
+                        if _freed <= 0:
+                            break
+                        _u2 = _fill(_sib, _us + _freed)
+                        _freed -= max(0, _u2 - _us)
+                        _us = _u2
+                        if _freed <= 0:
+                            break
+                        _u3 = _fill(_hit, _uh + _freed)
+                        _freed -= max(0, _u3 - _uh)
+                        _uh = _u3
+                    _ntot = sum(_byt(t, a[t]) for t in a)
+                    if debug:
+                        print(f"[AUTO] t2-rebalance: r {_r0:.3f}→"
+                              f"{(_ebpw(_hit)/_ebpw(_sib)) if _ebpw(_sib) else 0:.3f} "
+                              f"(r*={_rstar:.3f}, hi='{_hicls}'); "
+                              f"total {total/GIB:.2f}→{_ntot/GIB:.2f} GiB",
+                              file=sys.stderr)
+                    return a, int(_ntot)
+
                 _pick = None; _mode = 'conservative'
                 # Tier 2A — regime-gated tier2 WIN promotion (GLM-style free win).
                 # Prefer the GENTLEST winshape survivor: fewest toggles (→ plain
@@ -4126,7 +4742,38 @@ def auto_quant_assign(
                 # tensors. The most-aggressive variants (pos/class+tier2) can, at
                 # tight budgets, push into iq1_m — recipes we have NO PPL for and
                 # that don't load on every build — so they must not be preferred.
-                if _allow_promote and _HBR < _HBR_THR:
+                if _promote_regime:
+                    # Body-over-crush gate measures only the ACTIVE body. Exclude
+                    # (a) the bulk experts (largest classes — legitimately crushed on
+                    # MoE) and (b) the unused 0-kld tensors (indexer/nextn — also
+                    # legitimately crushed). Counting either makes a healthy MoE
+                    # recipe look over-crushed and wrongly blocks the tier2 win-
+                    # promote. Data-driven: size + kld, no architecture names.
+                    def _ck(t):
+                        return re.sub(r'\.(weight|bias)$', '', re.sub(r'^blk\.\d+\.', '', t))
+                    _szc: Dict[str, List[float]] = {}
+                    for t in tensors:
+                        _szc.setdefault(_ck(t), []).append(
+                            max(tensor_sizes.get(t, {}).values(), default=0))
+                    _csm = {c: sum(v) / len(v) for c, v in _szc.items() if v}
+                    _mxc = max(_csm.values()) if _csm else 0
+                    _bulk = {t for t in tensors
+                             if (_mxc > 0 and _csm.get(_ck(t), 0) >= 0.5 * _mxc)   # bulk experts
+                             or float(_sens.get(t, 0.0) or 0.0) <= 0.0}            # unused (0-kld)
+                    _wc = []
+                    for n, a in _surv.items():
+                        if 'tier2' not in n:   # win-promote is the tier2-WIN path
+                            continue
+                        _s = _shape(a, _floor, exclude=_bulk)
+                        if _s and _s['ATFLOOR'] and _s['SKEW'] > _SKEW_GATE and _s['flt25'] < _LT25_GATE:
+                            _ntog = 1 + n.count('+') if n != 'none' else 0
+                            _wc.append((_ntog, _s['flt2'], -_s['SKEW'], n))
+                    if _wc:
+                        _pick = sorted(_wc)[0][3]; _mode = 'win-promote'
+                elif _allow_promote and _HBR < _HBR_THR:
+                    # LEGACY win-promote (contrast-calibration models): full-body
+                    # shape, all veto survivors — byte-identical to the validated
+                    # behavior (docs §5.4, 14 recipes).
                     _wc = []
                     for n, a in _surv.items():
                         _s = _shape(a, _floor)
@@ -4190,6 +4837,14 @@ def auto_quant_assign(
                     # GLM-style free win: adopt directly (bypass the meta-guard,
                     # as SP_FORCE did for validation). Safe: reachable only on
                     # greedy-win + HBR<5 + a veto-surviving clean floor-pusher.
+                    # High-budget taming gates on the JOB-level target bpw, not the
+                    # stage candidate's size-weighted bpw — window-sweep stages can
+                    # run tolerance-inflated budgets that would falsely trip SAT.
+                    _tbpw_job = (budget_bytes * 8.0 / _den0) if _den0 else 0.0
+                    if _flat and _promote_regime and _tbpw_job >= AUTO_T2_SAT_BPW:
+                        _pure_assignment, _pure_total = _t2_rebalance(
+                            _pure_assignment, int(_pure_total), _bulk, _ck,
+                            _csm, _mxc, _tbpw_job, _elem_sel)
                     _record_combo()
                     return _pure_assignment, int(_pure_total)
                 # Conservative pick: keep the meta-guard so any cliff model that
@@ -4329,10 +4984,15 @@ def auto_quant_assign(
         )
 
     # --- Step 10: Expand harmonized groups back to original tensor names
+    _ndrop_restored = 0
     if merged and group_defs:
         expanded: Dict[str, str] = {}
         for gid, members in group_defs.items():
             q = assignment.get(gid)
+            if q is None:
+                q = _pinned_snapshot.get(gid)   # restore a dropped group pin
+                if q is not None:
+                    _ndrop_restored += len(members)
             if q is None:
                 continue
             for m in members:
@@ -4344,9 +5004,37 @@ def auto_quant_assign(
                 continue
             val = assignment.get(t)
             if val is None:
+                val = _pinned_snapshot.get(t)    # restore a dropped tensor pin
+                if val is not None:
+                    _ndrop_restored += 1
+            if val is None:
                 continue
             expanded[t] = val
         assignment = expanded
+
+    # Completeness: never DROP an input tensor. Any tensor still missing (e.g. a
+    # zero-kld outlier the winning candidate didn't carry forward) keeps its
+    # pinned/crushed qtype instead of being re-inferred to the class-default
+    # assign-qtype at recipe-write time (which silently blows the size budget).
+    for _t in tensors:
+        if _t in assignment:
+            continue
+        _fb = _pinned_snapshot.get(_t)
+        if _fb is None and _t in allowed_map_w and allowed_map_w.get(_t):
+            # last resort: a dropped tensor is ~always a zero-kld/insignificant one
+            # → crush to its smallest-size qtype, never inflate to the default.
+            try:
+                _fb = min(allowed_map_w[_t], key=lambda q: tensor_sizes_w[_t].get(q, 0))
+            except Exception:
+                _fb = None
+        if _fb is not None:
+            assignment[_t] = _fb
+            _ndrop_restored += 1
+
+    if _ndrop_restored and (debug or INFO):
+        print(f"[AUTO] no-drop: restored {_ndrop_restored} tensor(s) the winning "
+              f"candidate dropped (kept their pinned/crushed qtype instead of the "
+              f"class-default).", file=sys.stderr)
 
     return assignment, total_size
 
@@ -5425,6 +6113,64 @@ def main():
     subclasses_to_assign = {'cpu': [], 'gpu': []}
     subclasses_assigned = {'cpu': [], 'gpu': []}
 
+    # --- 404 (unmeasured) kld inheritance --------------------------------------
+    # A cell value of exactly "404" marks a tensor whose kld was NOT measured (e.g.
+    # a tensor type benchmarked with no imatrix data — GLM-5.1's indexer.attn_k,
+    # attn_kv_a_mqa and one ffn_up_exps). It must NOT be parsed as a literal
+    # sensitivity of 404.0: that makes the tensor look MAXIMALLY important and
+    # protects it at the highest qtype (q8_0), stealing budget from genuinely
+    # critical tensors (token_embd/output get crushed as a result). Instead inherit
+    # the kld of MEASURED tensors of the same TYPE (same name across layers), else
+    # the same CLASS (first path component, e.g. the whole "indexer" group). If the
+    # class has no measured tensor at all, leave it to the normal missing-data path
+    # (the user's --cpu/gpu-assign-qtype, which is exactly that param's role). No
+    # previously-validated model contains any "404" cell, so this is a no-op there.
+    def _tensor_type_key(n):
+        m = re.match(r'^blk\.\d+\.(.+)$', n)
+        return m.group(1) if m else n            # e.g. "indexer.attn_k.weight"
+    def _tensor_class_key(n):
+        return _tensor_type_key(n).split('.')[0]  # e.g. "indexer", "output", "attn_k_b"
+    def _is_404_marker(v):
+        # "404" can arrive as str, int64 or float depending on how pandas typed
+        # the column; treat all of them as the unmeasured sentinel.
+        if isinstance(v, str):
+            return v.strip() in ('404', '404.0', '404%', '404.0%')
+        try:
+            return float(v) == 404.0
+        except (TypeError, ValueError):
+            return False
+    _is_404 = set()
+    _meas_by_type: Dict[str, list] = {}
+    _meas_by_class: Dict[str, list] = {}
+    for _n in list(row.index):
+        _raw = row.at[_n]
+        if _is_404_marker(_raw):
+            _is_404.add(_n)
+            continue
+        try:
+            _missing = bool(pd.isna(_raw))
+        except (TypeError, ValueError):
+            _missing = False
+        if not _missing:
+            _cv = _convert_value(_raw)
+            if not (isinstance(_cv, float) and np.isnan(_cv)):
+                _meas_by_type.setdefault(_tensor_type_key(_n), []).append(_cv)
+                _meas_by_class.setdefault(_tensor_class_key(_n), []).append(_cv)
+    _kld_404: Dict[str, Optional[float]] = {}
+    for _n in _is_404:
+        _tk = _tensor_type_key(_n); _ck = _tensor_class_key(_n)
+        if _meas_by_type.get(_tk):
+            _kld_404[_n] = sum(_meas_by_type[_tk]) / len(_meas_by_type[_tk])
+        elif _meas_by_class.get(_ck):
+            _kld_404[_n] = sum(_meas_by_class[_ck]) / len(_meas_by_class[_ck])
+        else:
+            _kld_404[_n] = None                  # no class measurement → assign-qtype fallback
+    if _is_404 and INFO:
+        _inh = sum(1 for v in _kld_404.values() if v is not None)
+        print(f"[Info] 404/unmeasured tensors: {len(_is_404)} found; {_inh} inherited "
+              f"same-type/class kld, {len(_is_404) - _inh} fall back to --*-assign-qtype.",
+              file=sys.stderr)
+
     # Build values dict, converting strings (e.g. '0.0653%') properly and pre-assign tensors that haven't been measured
     values = {}
     pre_assignments = {}
@@ -5469,6 +6215,25 @@ def main():
                 if INFO: print(f"[Info] Assigning {name!r} → {pre_assignments[name]!r} (missing metrics)", file=sys.stderr)
 
                 # jump to next tensor
+                continue
+
+            # 404 (unmeasured) → inherit same-type/class kld, else assign-qtype fallback
+            elif name in _is_404:
+                _inh = _kld_404.get(name)
+                if _inh is not None:
+                    # inherited a real kld → optimise this tensor normally with it
+                    values[name] = _inh
+                    subclasses_to_assign[cls].append(name)
+                    if INFO: print(f"[Info] {name!r}: '404' → inherited kld {_inh:.6f} "
+                                   f"(measured same-type/class)", file=sys.stderr)
+                else:
+                    # whole class unmeasured → fall back to --*-assign-qtype
+                    if name in f32_names:
+                        continue
+                    pre_assignments[name] = _assign_qtype[name]
+                    subclasses_assigned[cls].append(name)
+                    if INFO: print(f"[Info] Assigning {name!r} → {pre_assignments[name]!r} "
+                                   f"('404', no measured tensor in class → assign-qtype)", file=sys.stderr)
                 continue
 
             # got a raw value → convert and store
@@ -5855,26 +6620,156 @@ def main():
                         # pinned (avoid surprising behaviour).
                         _auto_sweep = _auto_sweep and (args.exponential_factor is None and False)
                     chosen_auto_params: Dict[str, float] = {}
-                    assignment, total_bytes = auto_quant_assign(
-                        tensors=names_to_assign,
-                        tensor_sizes=tensor_sizes_local,
-                        ppl_loss=class_vals,
-                        degradation_fn=degradation_fn,
-                        tensor_quants=tensor_quants_local,
-                        budget_bytes=int(max_arg_bytes),
-                        debug=DEBUG,
-                        harmonized_groups=expanded_harmonize_groups,
-                        loss_exponent=exp_factor_final,
-                        deg_exponent=_user_q,
-                        auto_sweep=_auto_sweep,
-                        synergistic_groups=expanded_synergistic_groups,
-                        synergy_strength=args.synergy_strength,
-                        tolerance=args.tolerance,
-                        extra_outlier_qtypes=_extra_outlier_qtypes,
-                        pareto_filter=not args.auto_no_pareto_filter,
-                        chosen_params_out=chosen_auto_params,
-                        force_combo=args.auto_force_combo,
-                    )
+
+                    def _auto_at(_budget, _tq, _params_out=None):
+                        return auto_quant_assign(
+                            tensors=names_to_assign,
+                            tensor_sizes=tensor_sizes_local,
+                            ppl_loss=class_vals,
+                            degradation_fn=degradation_fn,
+                            tensor_quants=_tq,
+                            budget_bytes=int(_budget),
+                            debug=DEBUG,
+                            harmonized_groups=expanded_harmonize_groups,
+                            loss_exponent=exp_factor_final,
+                            deg_exponent=_user_q,
+                            auto_sweep=_auto_sweep,
+                            synergistic_groups=expanded_synergistic_groups,
+                            synergy_strength=args.synergy_strength,
+                            tolerance=args.tolerance,
+                            extra_outlier_qtypes=_extra_outlier_qtypes,
+                            pareto_filter=not args.auto_no_pareto_filter,
+                            chosen_params_out=_params_out,
+                            force_combo=args.auto_force_combo,
+                        )
+
+                    # Lock the GLM-regime decision at the JOB budget so internal
+                    # stage/probe budgets can't flip it (see AUTO_REGIME_LOCK).
+                    global AUTO_REGIME_LOCK
+                    AUTO_REGIME_LOCK = None
+                    AUTO_REGIME_LOCK = bool(_small_class_floor_plan(
+                        names_to_assign, tensor_sizes_local, class_vals,
+                        tensor_quants_local, int(max_arg_bytes))[0])
+                    assignment, total_bytes = _auto_at(max_arg_bytes, tensor_quants_local, chosen_auto_params)
+
+                    # ---- Cross-budget consistency guard (sensitive tensors) ----
+                    # See CONSISTENCY_* constants near the top of the file. Re-run at
+                    # ±CONSISTENCY_PROBE_DELTA of the budget (maps already loaded → cheap);
+                    # if a sensitive tensor dips ≥ CONSISTENCY_MARGIN_BPW below BOTH
+                    # neighbours, pin it to the lower neighbour's qtype and re-fit.
+                    if (CONSISTENCY_GUARD and max_arg_bytes and class_vals
+                            and args.auto_force_combo is None):
+                        # Effective (fallback-accurate) bpw from the actual size table,
+                        # NOT the label's static bpw: a tensor labelled e.g. iq4_ks but
+                        # STORED as iq5_k (map fallback — common for token_embd/output)
+                        # must compare as iq5_k, otherwise a benign single-tier wobble
+                        # looks like a catastrophic multi-tier dip and the guard rewrites
+                        # a validated recipe (observed on Qwen3.6-35B-A3B 3.4060).
+                        try:
+                            _, _, _elem = get_map_sizes_and_elements('bf16')
+                        except Exception:
+                            _elem = {}
+                        def _bpw_of(_q, _t=None):
+                            if _t is not None:
+                                _sz = tensor_sizes_local.get(_t, {}).get(_q)
+                                _el = _elem.get(_t)
+                                if _sz and _el:
+                                    return _sz * 8.0 / _el
+                            try:
+                                return float(get_bpw(_q, tensor_name=_t) if _t else get_bpw(_q))
+                            except Exception:
+                                return None
+                        _sorted = sorted(class_vals, key=lambda t: class_vals[t], reverse=True)
+                        _sens_set = set(_sorted[:max(0, CONSISTENCY_TOPK)])
+                        for _io in ('token_embd.weight', 'output.weight'):
+                            if assignment and _io in assignment:
+                                _sens_set.add(_io)
+                        _lo_b = int(max_arg_bytes * (1.0 - CONSISTENCY_PROBE_DELTA))
+                        _hi_b = int(max_arg_bytes * (1.0 + CONSISTENCY_PROBE_DELTA))
+                        try:
+                            _a_lo, _ = _auto_at(_lo_b, tensor_quants_local)
+                            _a_hi, _ = _auto_at(_hi_b, tensor_quants_local)
+                        except Exception as _e:
+                            _a_lo = _a_hi = None
+                            if DEBUG: print(f"[AUTO] consistency probe failed ({_e}); guard skipped.", file=sys.stderr)
+                        _restrict = {}
+                        if _a_lo and _a_hi:
+                            for _t in _sens_set:
+                                _qT, _qlo, _qhi = assignment.get(_t), _a_lo.get(_t), _a_hi.get(_t)
+                                if not (_qT and _qlo and _qhi):
+                                    continue
+                                _bT, _blo, _bhi = _bpw_of(_qT, _t), _bpw_of(_qlo, _t), _bpw_of(_qhi, _t)
+                                if None in (_bT, _blo, _bhi):
+                                    continue
+                                _floor_b = min(_blo, _bhi)   # both neighbours must agree
+                                if _bT < _floor_b - CONSISTENCY_MARGIN_BPW:
+                                    _restrict[_t] = _floor_b
+                        if _restrict:
+                            _tq2 = {n: list(v) for n, v in tensor_quants_local.items()}
+                            for _t, _fb in _restrict.items():
+                                _allowed = [q for q in _tq2.get(_t, []) if (_bpw_of(q, _t) or 0.0) >= _fb - 1e-9]
+                                if _allowed:
+                                    _tq2[_t] = _allowed
+                            if INFO:
+                                _msg = ", ".join(f"{t}≥{_restrict[t]:.3g}bpw" for t in sorted(_restrict))
+                                print(f"[AUTO] {cls.upper()} consistency guard: {len(_restrict)} sensitive "
+                                      f"tensor(s) dipped below BOTH ±{int(CONSISTENCY_PROBE_DELTA*100)}% neighbours; "
+                                      f"re-fitting with {_msg}.", file=sys.stderr)
+                            chosen_auto_params.clear()
+                            assignment, total_bytes = _auto_at(max_arg_bytes, _tq2, chosen_auto_params)
+
+                    # Floor-enforcement fallback (see AUTO_PROTECT_*). A deep
+                    # internal auto phase can crush a protected small-class tensor
+                    # below the floor at certain budgets (observed at 25% / GLM-5.1
+                    # 2.126bpw: attention collapsed to iq2_k → 5.50ppl). The window
+                    # pass / pristine-greedy / no-drop all individually honour the
+                    # floored tensor_quants, but the selected path can still emit a
+                    # below-floor assignment. greedy_quant_assign PROVABLY honours
+                    # tensor_quants, so when a violation is detected we re-fit via a
+                    # floored greedy. No-op when the floor already holds (1.928/1.998).
+                    if AUTO_PROTECT_SMALL:
+                        _pf_protect, _pf_floor = _small_class_floor_plan(
+                            names_to_assign, tensor_sizes_local, class_vals,
+                            tensor_quants_local, int(max_arg_bytes))
+                        if _pf_protect and _pf_floor > 0:
+                            def _ckey3(_t):
+                                return re.sub(r'\.(weight|bias)$', '', re.sub(r'^blk\.\d+\.', '', _t))
+                            def _bpw3(_q):
+                                try: return float(get_bpw(_q))
+                                except Exception: return 0.0
+                            _viol = [t for t in names_to_assign
+                                     if _ckey3(t) in _pf_protect and t in assignment
+                                     and t not in AUTO_T2_SUBFLOOR
+                                     and _bpw3(assignment[t]) < _pf_floor - 1e-6]
+                            if _viol:
+                                # Build a tensor_quants floored for the protected set,
+                                # independent of whether tensor_quants_local was mutated.
+                                _tqf = {t: list(v) for t, v in (tensor_quants_local or {}).items()}
+                                for t in names_to_assign:
+                                    if _ckey3(t) in _pf_protect:
+                                        _src = _tqf.get(t) or list(tensor_sizes_local.get(t, {}).keys())
+                                        _hi = [q for q in _src
+                                               if q in tensor_sizes_local.get(t, {}) and _bpw3(q) >= _pf_floor - 1e-9]
+                                        if _hi:
+                                            _tqf[t] = _hi
+                                if INFO:
+                                    print(f"[AUTO] {cls.upper()} small-class floor enforcement: "
+                                          f"{len(_viol)} protected tensor(s) ended below {_pf_floor:.2f}bpw; "
+                                          f"re-fitting via floored greedy.", file=sys.stderr)
+                                assignment, total_bytes = greedy_quant_assign(
+                                    tensors=names_to_assign,
+                                    tensor_sizes=tensor_sizes_local,
+                                    ppl_loss=class_vals,
+                                    degradation_fn=degradation_fn,
+                                    tensor_quants=_tqf,
+                                    budget_bytes=int(max_arg_bytes),
+                                    debug=DEBUG,
+                                    harmonized_groups=expanded_harmonize_groups,
+                                    loss_exponent=exp_factor_final,
+                                    synergistic_groups=expanded_synergistic_groups,
+                                    synergy_strength=args.synergy_strength,
+                                )
+
                     # Stash the chosen (p, q) onto args so the hidden-parameter
                     # footer can include them in the recipe.
                     if chosen_auto_params:

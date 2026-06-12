@@ -108,6 +108,7 @@ The single required positional argument. Each **row** is a measured reference qt
 - **`ppl_results.csv`** — perplexity per tensor. The older format; still works but is suboptimal.
 - `--qtype` selects which row (reference qtype) to read; by default the lowest quant (smallest numeric prefix, e.g. `iq1_*` before `iq2_*`) that does **not** end in `_bn`.
 - `--tensors-from-csv` makes the tensor list come from the CSV columns; by default the tensor list comes from the `.map` file instead (so tensors present in the map but missing from the CSV are still handled, via the assign-qtype fallback).
+- **`0.0` vs `404` cells.** A cell of exactly `0.0` means the tensor *was measured* and has no effect → it is genuinely safe to crush to the smallest qtype. A cell of **`404`** is the **unmeasured** sentinel (a tensor type benchmarked with no imatrix data — e.g. a brand-new architecture's `indexer.*` / `nextn.*`). A `404` is **not** read as a literal sensitivity of 404; it inherits the kld of measured tensors of the same **type** (same name across layers), else the same **class** (first path component, e.g. the whole `indexer` group), and only if the whole class is unmeasured does it fall back to `--cpu/gpu-assign-qtype`. This prevents an unmeasured tensor from being mistaken for the most-important tensor in the model and hogging budget that belongs to `token_embd`/`output`.
 
 > Generating a calibration CSV takes **days of GPU+CPU time** for large models — this is why the repo ships pre-computed CSVs under `models/<model>/`.
 
@@ -377,6 +378,39 @@ The vetoes removed every `tier2` blow-up; the conservative selector then picked 
 
 ---
 
+### 5.5 Small-class protection floor (baked into the auto)
+
+Single-tensor-drop kld **under-measures small, heavily-reused tensor classes** (attention projections, shared experts, dense FFN): their *absolute* kld is comparable to the giant MoE experts, yet they are 30–500× smaller — so they are *cheap* to keep at a high qtype, but the rank-based allocation crushes them and pours the budget into the experts. On models with a lightning-indexer / MLA attention block (e.g. GLM-5.1) this is catastrophic at tight budgets.
+
+This is **baked into the auto method** (no flag), but **gated on calibration flatness**: it applies only when the measured class-mean klds span less than `AUTO_PROTECT_FLAT_MAX` (12×) — i.e. when the calibration is too *flat* to rank classes (GLM-5.1: 7.6×). On models whose calibration has real contrast (GLM-4.7-Flash 30×, Qwen3.6 87–252×) the rank allocation is trustworthy and the **entire legacy selector is kept byte-identical** — validation showed the floor regresses such models badly at tight budgets (Qwen3.6-35B-A3B 1.70 bpw: 10.06 → 19.14; Flash 3.48: 9.45 → 10.65). The same flatness gate covers every other mechanism in §5.5/§5.6 (V1 te-ratio exemption, V3 regime-skip, reworked win-promote, rebalance).
+
+When the gate is open, the auto detects protected classes **purely from data** — a class whose mean parameter count is `< AUTO_PROTECT_SIZE_FRAC` (0.10) of the largest class **and** that has measured kld — and **floors** their allowed qtypes at `min(AUTO_PROTECT_K · target_bpw, AUTO_PROTECT_CAP_BPW)` (K = 3.0, cap ≈ iq6_k). No architecture names, no per-model knob; `target_bpw` makes it self-scaling across budgets. Tune via the `AUTO_PROTECT_*` module constants.
+
+Key properties:
+- **Self-limiting.** A *floor* only lifts crushed classes; where the recipe already exceeds it, dropping the unused low qtypes is a no-op — so well-calibrated models are unaffected.
+- **Robust by construction.** The floor restricts `tensor_quants` *before* the pristine snapshots, so the window pass, the greedy 2nd-pass and the consistency-guard re-fits all inherit it. As a backstop, a **floor-enforcement** step re-fits via a floored greedy if any protected tensor still ends below the floor (a deep internal phase can violate it at isolated budgets, e.g. 25%).
+- **Unused-tensor crushing is fallback-aware.** 0-kld (and same-class-inherited-0 404) tensors are pinned to the qtype with the smallest *advertised map size*, which already accounts for qtype→qtype fallback (see §7).
+
+Measured (GLM-5.1, 565-chunk PPL): at 1.928 bpw the plain auto = 4.7027; with the floor = **4.5965**, *beating a hand-tuned recipe (4.6654)* fully automatically. K = 3.0 is the empirical optimum (K = 2.5 → 4.6162, K = 3.5 → 4.6124).
+
+**Scope.** The floor addresses budgets where *attention* is the limiting class (tight budgets). At higher budgets (≥ `AUTO_T2_SAT_BPW` = 3.2 size-weighted bpw) a separate mechanism takes over — the high-budget rebalance (§5.6).
+
+### 5.6 High-budget tier2 rebalance (flat-calibration models, win-promote path)
+
+At plentiful budgets the tier2 greedy wins the selector but mis-shapes the recipe in ways that were each isolated and PPL-measured on GLM-5.1 @3.649 bpw (565 chunks). The rebalance (`_t2_rebalance`, fires only on **flat-calibration models** (§5.5 gate) inside the win-promote regime when the **job-level** size-weighted bpw ≥ 3.2, so all validated lower budgets and all contrast-calibration models are byte-identical) applies, in order:
+
+1. **Expert-ratio cap (M2).** The kld-driven imbalance between the highest-kld bulk-expert class and its siblings overshoots with budget; the measured optimum decays as `r*(b) = clamp(1.37 − 0.10·(b − 2.976), 1.28, 1.45)` (ratio sweep: 1.49 → 2.9336, 1.32 → 2.8641). The demotion volume is solved analytically so the **post-respend** ratio lands on r*.
+2. **Uniform 2-tier refill.** Within a bulk class the kld spread is noise; every measured winner is uniform-per-class while every greedy patchwork lost by ~0.06. Each side is refilled as one base qtype + edge-first layer upgrades to the next rung (mild edge preference — *stronger* edge-weighting measured worse).
+3. **Head trim (M3).** The rank allocation pushes measured non-bulk classes to a q8_0/q6_K patchwork the data can't justify (~0.012 PPL). They are uniformized down to the floor-cap rung; classes whose **mean kld does not exceed the bulk experts' own** were floored structurally (small size), not by sensitivity, and sit one rung lower still (sub-floor; `AUTO_T2_SUBFLOOR` keeps the floor-enforcement from undoing it). Purely kld-based — no tensor names.
+4. **Outlier lift (M1).** tier2-demoted *measured* outliers (e.g. token_embd) are lifted back toward their pre-demotion qtype, capped at ~1.25× budget bpw using **actual map sizes** (so fallback qtypes can't bypass the cap). 0-kld unused tensors stay crushed.
+5. **Refill ladder hygiene.** The per-class qtype ladder uses actual map bytes (fallback-aware), the lowest-degradation name per size, and **statistical-tie pruning**: group0 is a single measurement per qtype, and when two rungs sit within `AUTO_LADDER_TIE_BYTES` (3%) in size and `AUTO_LADDER_TIE_DEG` (20%) in degradation the comparison is a coin flip that does not transfer (PPL-proven twice: q6_K-over-iq6_k and iq3_kt-over-iq3_ks were both wrong, costing 0.006/0.016). Within a tie the non-trellis ik quant is preferred over legacy/trellis — a preference over the quantizer's fixed qtype vocabulary, never over tensor names.
+
+Guards: the rebalance requires ≥2 multi-tensor (≥8 members) bulk classes and skips when the highest-kld bulk class is harmonized with a sibling (e.g. GLM-4.7-Flash's gate↔up) — Flash's documented recipes regenerate byte-identically.
+
+Measured (GLM-5.1 @3.649): plain tier2 2.9336 → rebalance iterations 2.9208/2.8820/2.8803 → final **2.8620**, beating the best hand-tuned recipe (2.8780) and the best manually-balanced reference (2.8641). With §5.5 + §5.6 the auto wins all seven validated GLM-5.1 budgets against hand-tuned recipes.
+
+---
+
 ## 6. Harmonization & synergy
 
 Two complementary features that couple related tensors. **Harmonization** can *force* identical qtypes; **synergy** only *nudges* losses to encourage similar qtypes.
@@ -555,6 +589,8 @@ Run `python quant_assign.py --help` for the authoritative, always-current text. 
 ### Hardcoded module constants (edit source to change)
 
 `ADAPT_ENABLED`, `ADAPT_LATTICE`, `ADAPT_ALLOW_TIER2`, `ADAPT_ALLOW_CLASSPOS`, `ADAPT_STARVE_PTS` — near the top of `quant_assign.py`; control the auto method's adaptive combo selector and the ultra-tight starvation fallback (see §5.2).
+
+`CONSISTENCY_GUARD`, `CONSISTENCY_PROBE_DELTA`, `CONSISTENCY_TOPK`, `CONSISTENCY_MARGIN_BPW` — the **cross-budget consistency guard** (auto only). After computing the recipe at the target, the auto method also computes it at a slightly lower and higher target (`±CONSISTENCY_PROBE_DELTA`; maps are already loaded so this is cheap). If a sensitive tensor (the top-`CONSISTENCY_TOPK` by sensitivity, plus `token_embd`/`output`) is assigned a qtype ≥ `CONSISTENCY_MARGIN_BPW` bpw **below what BOTH neighbours give it**, that is a budget-non-monotonic anomaly (e.g. a tensor sitting high at a lower *and* a higher budget but collapsing at one in between); it is pinned to the lower neighbour's qtype and the recipe is re-fit. Requiring both neighbours to agree means monotonic series are left byte-identical. Set `CONSISTENCY_GUARD = False` to disable (it costs two extra assignment passes per recipe).
 
 ---
 
