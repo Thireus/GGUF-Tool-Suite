@@ -143,7 +143,7 @@
 #   Loss exponent (p) [GPU]: 0.5
 #   Degradation exponent (q) [GPU]: 0.5
 # - Command used:
-# ./quant_assign.py --gpu-tensors '.*' --gpu-quants iq1_s iq1_m iq2_xxs \
+# ./quant_assign.py kld_results.csv --gpu-tensors '.*' --gpu-quants iq1_s iq1_m iq2_xxs \
 # iq2_xs iq2_s q2_K iq3_xxs iq3_s q3_K iq4_xs iq4_nl q4_0 q4_K q4_1 q5_0 q5_K q5_1 q6_K q8_0 --gpu-tensors-max-size \
 # 29.52% --tolerance 0.01 --gpu-assign-qtype q6_K --harmonize-tensors \
 # '^blk\..*\.ffn_up_exps.*,blk\..*\.ffn_gate_exps.*' --harmonization-technique 3 --use-auto-quant-assign \
