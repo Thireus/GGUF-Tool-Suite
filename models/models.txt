@@ -16,6 +16,7 @@ Kimi-K2-Instruct-0905:https://huggingface.co/moonshotai/Kimi-K2-Instruct-0905
 Kimi-K2-Thinking:https://huggingface.co/moonshotai/Kimi-K2-Thinking
 Kimi-K2.5:https://huggingface.co/moonshotai/Kimi-K2.5
 Kimi-K2.6:https://huggingface.co/moonshotai/Kimi-K2.6
+Kimi-K2.7-Code:https://huggingface.co/moonshotai/Kimi-K2.7-Code
 mmproj-Qwen3-VL-235B-A22B-Instruct:https://huggingface.co/Qwen/Qwen3-VL-235B-A22B-Instruct
 mmproj-Qwen3-VL-235B-A22B-Thinking:https://huggingface.co/Qwen/Qwen3-235B-A22B-Thinking-2507
 Qwen3-235B-A22B-Instruct-2507:https://huggingface.co/Qwen/Qwen3-235B-A22B-Instruct-2507
