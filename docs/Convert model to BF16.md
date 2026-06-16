@@ -138,6 +138,7 @@ python fp8_cast_bf16.py \
 cp /"$WORKING_DIRECTORY"/huggingface/"$MODEL"-FP8/config.json /"$WORKING_DIRECTORY"/huggingface/"$MODEL"/
 cp /"$WORKING_DIRECTORY"/huggingface/"$MODEL"-FP8/generation_config.json /"$WORKING_DIRECTORY"/huggingface/"$MODEL"/
 cp /"$WORKING_DIRECTORY"/huggingface/"$MODEL"-FP8/tokenizer_config.json /"$WORKING_DIRECTORY"/huggingface/"$MODEL"/
+cp /"$WORKING_DIRECTORY"/huggingface/"$MODEL"-FP8/preprocessor_config.json /"$WORKING_DIRECTORY"/huggingface/"$MODEL"/
 cp /"$WORKING_DIRECTORY"/huggingface/"$MODEL"-FP8/*.py /"$WORKING_DIRECTORY"/huggingface/"$MODEL"/
 cp /"$WORKING_DIRECTORY"/huggingface/"$MODEL"-FP8/*.model /"$WORKING_DIRECTORY"/huggingface/"$MODEL"/
 ```
