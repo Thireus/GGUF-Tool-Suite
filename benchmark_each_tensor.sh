@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: May-06-2026 -------------------- **#
+#** --------------- Updated: Jul-13-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -87,6 +87,14 @@ Options:
   --mode N                                     Benchmark mode: 0 = PPL+KLD only (default), 1 = SWEEP only, 2 = PPL+KLD then SWEEP
   --infinite-loop                              Run continuously (useful when some bench files need to be removed because invalid)
   --no-kld                                     Do not benchmark KLD
+  --hotswap                                    Keep a single persistent llama-perplexity process alive and hot-swap
+                                               only the tensors that change between benchmarks (huge time saver: the
+                                               model is loaded once instead of once per benchmark). Requires a
+                                               llama-perplexity built with on-demand tensor reload signal support
+                                               (Thireus fork, th/kld-perplexity-tensor-reloader or later). Only
+                                               valid with --mode 0 (PPL+KLD). Without this flag the script behaves
+                                               exactly as before (one llama-perplexity run per benchmark), which
+                                               remains compatible with older llama-perplexity builds.
   --allow-impure-quant                         Allow benchmarking even when some tensors have a different dtype than the
                                                target qtype or that the fallback qtype is again a mismatch (use only if
                                                you really know what you are doing, as it may affect calibration data
@@ -195,6 +203,11 @@ INFINITE_LOOP=false
 # Defines if Kullback–Leibler divergence (KLD) must not be computed (defaults to false)
 NO_KLD=false
 
+# If true, use a single persistent llama-perplexity process and hot-swap tensors
+# between benchmarks instead of restarting (and thus reloading the entire model)
+# for every benchmark (defaults to false = previous behaviour)
+HOTSWAP=false
+
 # If true, allow benchmarking even when some tensors have a different dtype than the target qtype
 ALLOW_IMPURE_QUANT=false
 
@@ -253,6 +266,10 @@ while [[ $# -gt 0 ]]; do
       NO_KLD=true
       shift
       ;;
+    --hotswap)
+      HOTSWAP=true
+      shift
+      ;;
     --allow-impure-quant)
       ALLOW_IMPURE_QUANT=true
       shift
@@ -289,6 +306,20 @@ if ! [[ "$BENCH_MODE" =~ ^[0-2]$ ]]; then
   echo "Error: --mode must be 0 (PPL+KLD), 1 (SWEEP), or 2 (PPL+KLD then SWEEP)." >&2
   exit 1
 fi
+
+# Validate --hotswap: only supported with --mode 0 (PPL+KLD). Mode 1 (SWEEP) does
+# not use llama-perplexity at all, and in mode 2 the persistent llama-perplexity
+# process would keep holding VRAM while llama-sweep-bench runs, corrupting the
+# speed measurements (or failing to allocate memory altogether).
+if [[ "$HOTSWAP" == "true" && "$BENCH_MODE" -ne 0 ]]; then
+  echo "Error: --hotswap is only supported with --mode 0 (PPL+KLD)." >&2
+  exit 1
+fi
+
+# Make sure one-shot llama-perplexity invocations (e.g. the baseline benchmark)
+# never inherit hot-swap environment variables from the calling shell; they are
+# set explicitly and only for the persistent hot-swap process.
+unset LLAMA_HOTSWAP_ENABLED LLAMA_HOTSWAP_CONTROL_FILE LLAMA_HOTSWAP_STATUS_FILE
 
 # ================= USER CONFIGURATION =================
 
@@ -1126,6 +1157,320 @@ else
 fi
 # ----------------------------------------------------------------
 
+# ----------------------------------------------------------------
+# HOTSWAP mode (--hotswap): drive a single persistent llama-perplexity process
+# instead of restarting it (and reloading the whole model) for every benchmark.
+#
+# The persistent process is started with LLAMA_HOTSWAP_ENABLED=1 plus two file
+# paths used for signalling (plain files, no POSIX signals involved - works
+# identically on Windows, macOS and Linux):
+#   - control file (written by us, consumed by llama-perplexity):
+#       "<command> <seq>"  with command one of: reload | compute | exit
+#   - status file (written by llama-perplexity, read by us):
+#       "<state> <iter> <seq>" with state one of:
+#       computing | done | reload_failed | exiting
+# <seq> increases by 1 for every command we send; llama-perplexity ignores
+# commands whose seq it has already accepted, which makes delivery race-proof.
+# <iter> is the 1-based index of the computation; it only advances when a
+# reload/compute command is accepted.
+#
+# All process output goes into one session log; each benchmark's individual
+# log is extracted from it via byte offsets, so per-tensor result files look
+# exactly like the ones produced by the previous one-process-per-benchmark
+# behaviour.
+# ----------------------------------------------------------------
+HOTSWAP_PID=""
+HOTSWAP_LOG=""
+# Per-session signalling paths ($$ = this script's PID) so an orphaned
+# llama-perplexity from a previous session can never consume this session's
+# commands or clobber its status file
+HOTSWAP_CTRL=".hotswap_control.$$"
+HOTSWAP_STATUS=".hotswap_status.$$"
+HOTSWAP_PIDFILE=".hotswap_pid"
+HOTSWAP_ITER=0             # iteration index of the last captured computation
+HOTSWAP_CMD_SEQ=0          # sequence number of the last command sent
+HOTSWAP_PENDING_CHANGES=0  # number of shard swaps/restores since the last reload
+HOTSWAP_VERIFY_TENSORS=()  # tensors expected to appear as "reloaded tensor '...'" in the next benchmark log
+HOTSWAP_PENDING_RESTORE_TENSORS=() # tensors restored to baseline whose reload must also be verified
+PPL_CMD_BUILT=""           # set by build_ppl_cmd
+
+hotswap_is_alive() {
+  [[ -n "$HOTSWAP_PID" ]] && kill -0 "$HOTSWAP_PID" 2>/dev/null
+}
+
+# Record that a model shard file was swapped or restored on disk. The counter
+# decides whether the next benchmark needs a "reload" (pending changes) or just
+# a "compute" (nothing changed on disk, e.g. tensor already at target qtype).
+hotswap_note_change() {
+  HOTSWAP_PENDING_CHANGES=$((HOTSWAP_PENDING_CHANGES + 1))
+}
+
+# Atomically publish a command for the persistent process.
+hotswap_send_cmd() {
+  local cmd="$1"
+  HOTSWAP_CMD_SEQ=$((HOTSWAP_CMD_SEQ + 1))
+  printf '%s %s\n' "$cmd" "$HOTSWAP_CMD_SEQ" > "${HOTSWAP_CTRL}.tmp"
+  local attempts=0
+  # mv can transiently fail on Windows while llama-perplexity polls the file
+  until mv -f "${HOTSWAP_CTRL}.tmp" "$HOTSWAP_CTRL" 2>/dev/null; do
+    attempts=$((attempts + 1))
+    if (( attempts >= 50 )); then
+      echo "[$(timestamp)] ⚠️  Warning: could not publish hotswap command '$cmd' after $attempts attempts." >&2
+      return 1
+    fi
+    sleep 0.2
+  done
+  return 0
+}
+
+# Wait until the persistent process reports "done <expected_iter>".
+# Returns 0 on success, 1 if the process died/exited, 2 if the process reported
+# reload_failed for the command we just sent (nothing changed on disk).
+hotswap_wait_done() {
+  local expected_iter="$1"
+  local sent_seq="${2:-}"
+  local line state iter seq
+  while true; do
+    line="$(head -n1 "$HOTSWAP_STATUS" 2>/dev/null || true)"
+    line="${line//$'\r'/}"
+    if [[ -n "$line" ]]; then
+      IFS=' ' read -r state iter seq _ <<< "$line"
+      case "${state:-}" in
+        done)
+          [[ "${iter:-}" == "$expected_iter" ]] && return 0
+          ;;
+        reload_failed)
+          if [[ -n "$sent_seq" && "${seq:-}" == "$sent_seq" ]]; then
+            return 2
+          fi
+          ;;
+        exiting)
+          return 1
+          ;;
+      esac
+    fi
+    if ! hotswap_is_alive; then
+      # Re-check the status once: it may have been published right before death
+      line="$(head -n1 "$HOTSWAP_STATUS" 2>/dev/null || true)"
+      line="${line//$'\r'/}"
+      IFS=' ' read -r state iter seq _ <<< "$line"
+      if [[ "${state:-}" == "done" && "${iter:-}" == "$expected_iter" ]]; then
+        return 0
+      fi
+      return 1
+    fi
+    sleep 1
+  done
+}
+
+# Start the persistent llama-perplexity process. $1 = fully built PPL command.
+hotswap_start() {
+  local cmd="$1"
+  HOTSWAP_LOG="bench_hotswap_session.$(date +%Y%m%d_%H%M%S).log"
+
+  # Best-effort cleanup of an orphaned persistent process left behind by a
+  # previous session that died without running its EXIT trap (kill -9,
+  # terminal hangup, ...). An orphan would keep holding VRAM/RAM.
+  if [[ -f "$HOTSWAP_PIDFILE" ]]; then
+    local old_pid
+    old_pid="$(head -n1 "$HOTSWAP_PIDFILE" 2>/dev/null || true)"
+    old_pid="${old_pid//[^0-9]/}"
+    if [[ -n "$old_pid" ]] && kill -0 "$old_pid" 2>/dev/null; then
+      if ps -p "$old_pid" 2>/dev/null | grep -qi "perplexity"; then
+        echo "[$(timestamp)] ⚠️  Warning: found orphaned llama-perplexity (PID $old_pid) from a previous session; killing it." >&2
+        kill "$old_pid" 2>/dev/null || true
+        sleep 3
+        if kill -0 "$old_pid" 2>/dev/null; then
+          kill -9 "$old_pid" 2>/dev/null || true
+        fi
+      else
+        echo "[$(timestamp)] ⚠️  Warning: stale $HOTSWAP_PIDFILE points at PID $old_pid which does not look like llama-perplexity; not touching it." >&2
+      fi
+    fi
+    rm -f "$HOTSWAP_PIDFILE"
+  fi
+  # Clean up signalling files from this and any previous session
+  rm -f .hotswap_control.* .hotswap_status.* 2>/dev/null || true
+
+  HOTSWAP_ITER=0
+  HOTSWAP_PENDING_CHANGES=0
+  HOTSWAP_PENDING_RESTORE_TENSORS=() # the fresh process loads the restored state from disk
+  echo "[$(timestamp)] 🔥 Starting persistent llama-perplexity (hotswap mode). Session log: $HOTSWAP_LOG"
+  echo "[$(timestamp)] Model loading can take a long time; subsequent benchmarks will only reload the swapped tensors."
+  # The control/status file paths are relative, so the native binary resolves
+  # them against the same working directory as this script.
+  eval "LLAMA_HOTSWAP_ENABLED=1 LLAMA_HOTSWAP_CONTROL_FILE=\"$HOTSWAP_CTRL\" LLAMA_HOTSWAP_STATUS_FILE=\"$HOTSWAP_STATUS\" $cmd > \"\$HOTSWAP_LOG\" 2>&1 < /dev/null &"
+  HOTSWAP_PID=$!
+  LLAMA_PID="$HOTSWAP_PID"
+  disown "$HOTSWAP_PID" 2>/dev/null || true
+  printf '%s\n' "$HOTSWAP_PID" > "$HOTSWAP_PIDFILE"
+  echo "[$(timestamp)] Persistent llama-perplexity started (PID $HOTSWAP_PID)."
+}
+
+# Stop the persistent process (graceful exit command first, then kill).
+hotswap_stop() {
+  if hotswap_is_alive; then
+    echo "[$(timestamp)] Stopping persistent llama-perplexity (PID $HOTSWAP_PID)..."
+    hotswap_send_cmd "exit" || true
+    local waited=0
+    while hotswap_is_alive && (( waited < 60 )); do
+      sleep 1
+      waited=$((waited + 1))
+    done
+    if hotswap_is_alive; then
+      echo "[$(timestamp)] ⚠️  Warning: persistent llama-perplexity did not exit gracefully; killing it." >&2
+      kill "$HOTSWAP_PID" 2>/dev/null || true
+      sleep 3
+      if hotswap_is_alive; then
+        kill -9 "$HOTSWAP_PID" 2>/dev/null || true
+      fi
+    fi
+    echo "[$(timestamp)] Persistent llama-perplexity stopped."
+  fi
+  HOTSWAP_PID=""
+  LLAMA_PID=""
+  rm -f "$HOTSWAP_CTRL" "${HOTSWAP_CTRL}.tmp" "$HOTSWAP_STATUS" "${HOTSWAP_STATUS}.tmp" "$HOTSWAP_PIDFILE" 2>/dev/null || true
+}
+
+# Always clean up the persistent process on exit (no-op when not running).
+trap 'hotswap_stop' EXIT
+
+# Build the PPL command from the template, resolving {MODEL_FILE} and
+# {KLD_PARAMETER}. Sets PPL_CMD_BUILT. Exits on missing KLD baseline (same
+# behaviour/exit codes as the previous inline code).
+build_ppl_cmd() {
+  local cmd="${PPL_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
+  if [[ "$NO_KLD" == "false" ]]; then
+    if [[ -z "${baseline_kld_file:-}" ]]; then
+      echo "[$(timestamp)] ❌ Error: KLD baseline file var not defined or empty." >&2; exit 10
+    elif [[ ! -f "$baseline_kld_file" ]]; then
+      echo "[$(timestamp)] ❌ Error: KLD baseline file '$baseline_kld_file' not found." >&2; exit 11
+    else
+      cmd="${cmd//\{KLD_PARAMETER\}/--kl-divergence-base \"$baseline_kld_file\" --kl-divergence}"
+    fi
+  fi
+  PPL_CMD_BUILT="$cmd"
+}
+
+# Run one PPL(+KLD) benchmark via the persistent hotswap process, capturing
+# this iteration's portion of the session log into $1.
+# Expects the shard swaps for this benchmark to already be in place, and
+# HOTSWAP_VERIFY_TENSORS to list the tensors whose shards were replaced.
+# Returns 0 on success; on failure the captured log is saved to "$1.failed",
+# "$1" is not created, and the persistent process is stopped so that the next
+# benchmark restarts it from a clean state.
+hotswap_run_benchmark() {
+  local result_file="$1"
+  local offset=0 expected rc sent_seq fresh_start=false
+
+  if ! hotswap_is_alive; then
+    fresh_start=true
+    hotswap_start "$PPL_CMD_BUILT"
+  else
+    offset=$(wc -c < "$HOTSWAP_LOG" 2>/dev/null || echo 0)
+    if (( HOTSWAP_PENDING_CHANGES > 0 )); then
+      if ! hotswap_send_cmd "reload"; then
+        hotswap_stop
+        return 1
+      fi
+    else
+      echo "[$(timestamp)] No shard changed on disk since the last computation; requesting recompute without reload."
+      if ! hotswap_send_cmd "compute"; then
+        hotswap_stop
+        return 1
+      fi
+    fi
+    HOTSWAP_PENDING_CHANGES=0
+  fi
+  expected=$((HOTSWAP_ITER + 1))
+  sent_seq=$HOTSWAP_CMD_SEQ
+
+  set +e
+  hotswap_wait_done "$expected" "$sent_seq"
+  rc=$?
+  set -e
+
+  # A reload_failed when no tensor actually needs reloading (no new swap for
+  # this benchmark and no pending restore) means the loaded model already
+  # matches the on-disk state - e.g. after a net-zero swap+revert of a failed
+  # group replace. A plain recompute is then a correct benchmark.
+  if (( rc == 2 )) && (( ${#HOTSWAP_VERIFY_TENSORS[@]} == 0 )) && (( ${#HOTSWAP_PENDING_RESTORE_TENSORS[@]} == 0 )); then
+    echo "[$(timestamp)] Reload found no changed tensor and none was required; recomputing without reload."
+    if hotswap_send_cmd "compute"; then
+      sent_seq=$HOTSWAP_CMD_SEQ
+      set +e
+      hotswap_wait_done "$expected" "$sent_seq"
+      rc=$?
+      set -e
+    fi
+  fi
+
+  # Extract this iteration's portion of the session log
+  tail -c +"$((offset + 1))" "$HOTSWAP_LOG" > "$result_file" 2>/dev/null || true
+
+  if (( rc == 0 )); then
+    HOTSWAP_ITER=$expected
+    local ok=true t
+    # The captured log must contain a final result...
+    if ! grep -qE 'KL divergence statistics|Final estimate:' "$result_file"; then
+      echo "[$(timestamp)] ⚠️  Warning: hotswap benchmark produced no final result (evaluation failure?). See ${result_file}.failed" >&2
+      ok=false
+    fi
+    # ...and every swapped tensor - as well as every tensor restored to its
+    # baseline shard since the previous computation - must have actually been
+    # reloaded (skipped on a fresh start: the on-disk state was then part of
+    # the initial model load).
+    if [[ "$fresh_start" != "true" ]]; then
+      for t in "${HOTSWAP_VERIFY_TENSORS[@]:-}" "${HOTSWAP_PENDING_RESTORE_TENSORS[@]:-}"; do
+        [[ -z "$t" ]] && continue
+        if ! grep -qF "reloaded tensor '$t'" "$result_file"; then
+          echo "[$(timestamp)] ⚠️  Warning: tensor '$t' was not reloaded by llama-perplexity (see ${result_file}.failed); result would be invalid." >&2
+          ok=false
+        fi
+      done
+    fi
+    if [[ "$ok" != "true" ]]; then
+      mv -f "$result_file" "${result_file}.failed"
+      echo "[$(timestamp)] ⚠️  Warning: benchmark discarded; the persistent llama-perplexity process will be restarted for the next benchmark." >&2
+      hotswap_stop
+      return 1
+    fi
+    HOTSWAP_PENDING_RESTORE_TENSORS=() # verified as reloaded (or none pending)
+    return 0
+  fi
+
+  mv -f "$result_file" "${result_file}.failed" 2>/dev/null || true
+  if (( rc == 2 )); then
+    echo "[$(timestamp)] ⚠️  Warning: llama-perplexity detected no changed tensor after the shard swap (reload_failed). See ${result_file}.failed" >&2
+  else
+    echo "[$(timestamp)] ⚠️  Warning: persistent llama-perplexity died or never reported status. See ${result_file}.failed" >&2
+    echo "[$(timestamp)]    Hint: --hotswap requires a llama-perplexity build with hot-swap signal support." >&2
+  fi
+  hotswap_stop
+  return 1
+}
+
+# Run one PPL(+KLD) benchmark, capturing its full log into $1.
+# Dispatches to the persistent hotswap process when --hotswap is enabled,
+# otherwise runs a one-shot llama-perplexity exactly like before.
+run_ppl_bench() {
+  local result_file="$1"
+  local rc=0
+
+  build_ppl_cmd # sets PPL_CMD_BUILT (exits on missing KLD baseline)
+
+  if [[ "$HOTSWAP" != "true" ]]; then
+    set +e
+    eval "$PPL_CMD_BUILT" > "$result_file" 2>&1 < /dev/null
+    rc=$?
+    set -e
+    return $rc
+  fi
+
+  hotswap_run_benchmark "$result_file"
+}
+# ---------------- end HOTSWAP helpers ---------------------------------------
+
 # Baseline benchmark (PPL+KLD baseline) — only run if PPL+KLD is enabled (mode == 0 or 2)
 # We'll set a flag when baseline exists/done and later inject a PROCESSED_GROUP_COMBOS entry
 BASELINE_BENCHMARK_DONE=0
@@ -1184,6 +1529,11 @@ if [[ "$NO_KLD" == "true" ]]; then
   echo "KLD benchmarking: DISABLED"
 else
   echo "KLD benchmarking: ENABLED"
+fi
+if [[ "$HOTSWAP" == "true" ]]; then
+  echo "Hotswap mode: ENABLED (single persistent llama-perplexity process; requires hot-swap capable build)"
+else
+  echo "Hotswap mode: DISABLED (one llama-perplexity process per benchmark)"
 fi
 echo "Sweep context (-c): $SWEEP_COMMAND_CONTEXT_TO_PROCESS"
 echo "PPL context (-c): $PPL_COMMAND_CONTEXT_TO_PROCESS"
@@ -1918,6 +2268,7 @@ run_main_loop() {
                         backups_made["$original_file"]="$backup_file"
                         # Move downloaded file into place
                         mv -f "${LOCAL_DOWNLOAD_DIR}/${s}" "$original_file"
+                        hotswap_note_change
                         echo "[$(timestamp)] Replaced original shard $original_file with downloaded shard for group #${group_idx_for_tensor}."
                       else
                         echo "[$(timestamp)] ⚠️  Warning: Could not extract suffix from shard '$s'. Aborting group #${group_idx_for_tensor}." >&2
@@ -1930,6 +2281,12 @@ run_main_loop() {
                       # restore any backups
                       for orig in "${!backups_made[@]}"; do
                         mv -f "${backups_made[$orig]}" "$orig"
+                        # Net no-op for the hotswap process (no reload happened
+                        # in between and mv preserves mtimes): cancel the swap's
+                        # pending-change count instead of adding another one
+                        if (( HOTSWAP_PENDING_CHANGES > 0 )); then
+                          HOTSWAP_PENDING_CHANGES=$((HOTSWAP_PENDING_CHANGES - 1))
+                        fi
                         echo "[$(timestamp)] Restored $orig from backup after failed group #${group_idx_for_tensor} replace."
                       done
                       continue
@@ -1942,17 +2299,21 @@ run_main_loop() {
                     # Run PPL+KLD first if required
                     if need_run_ppl; then
                       echo "[$(timestamp)] Running PPL$PLUS_KLD for group #${group_idx_for_tensor} -> $group_result_file_ppl"
-                      cmd="${PPL_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
-                      if [[ "$NO_KLD" == "false" ]]; then
-                        if [[ -z "${baseline_kld_file:-}" ]]; then
-                          echo "[$(timestamp)] ❌ Error: KLD baseline file var not defined or empty." >&2; exit 10
-                        elif [[ ! -f "$baseline_kld_file" ]]; then
-                          echo "[$(timestamp)] ❌ Error: KLD baseline file '$baseline_kld_file' not found." >&2; exit 11
-                        else
-                          cmd="${cmd//\{KLD_PARAMETER\}/--kl-divergence-base \"$baseline_kld_file\" --kl-divergence}"
-                        fi
+                      # In hotswap mode, verify that every group member whose shard
+                      # was actually replaced gets reloaded by llama-perplexity
+                      HOTSWAP_VERIFY_TENSORS=()
+                      if [[ "$HOTSWAP" == "true" ]] && (( ${#shards_to_replace[@]} > 0 )); then
+                        for _hs_t in "${group_members[@]}"; do
+                          _hs_s="${tensor_to_shard[$_hs_t]}"
+                          for _hs_r in "${shards_to_replace[@]}"; do
+                            if [[ "$_hs_s" == "$_hs_r" ]]; then
+                              HOTSWAP_VERIFY_TENSORS+=("$_hs_t")
+                              break
+                            fi
+                          done
+                        done
                       fi
-                      if eval "$cmd" > "$group_result_file_ppl" 2>&1 < /dev/null; then
+                      if run_ppl_bench "$group_result_file_ppl"; then
                         echo "[$(timestamp)] Group #${group_idx_for_tensor} PPL$PLUS_KLD finished and saved to $group_result_file_ppl"
                         count_group_ppl_bench_success=$((count_group_ppl_bench_success + 1))
                       else
@@ -1996,8 +2357,14 @@ run_main_loop() {
                     # Restore originals from backups
                     for orig in "${!backups_made[@]}"; do
                       mv -f "${backups_made[$orig]}" "$orig"
+                      hotswap_note_change
                       echo "[$(timestamp)] Restored original shard $orig from backup for group #${group_idx_for_tensor}."
                     done
+                    # In hotswap mode, the restored tensors must be verified as
+                    # reloaded during the next benchmark's reload
+                    if [[ "$HOTSWAP" == "true" ]] && (( ${#backups_made[@]} > 0 )) && (( ${#HOTSWAP_VERIFY_TENSORS[@]} > 0 )); then
+                      HOTSWAP_PENDING_RESTORE_TENSORS+=("${HOTSWAP_VERIFY_TENSORS[@]}")
+                    fi
 
                     # Clean up any leftover temp files
                     for df in "${downloaded_shards[@]:-}"; do rm -f "$df"; done
@@ -2151,6 +2518,7 @@ run_main_loop() {
 
                   # Move downloaded shard into place
                   mv -f "$local_shard_tmp" "$original_file"
+                  hotswap_note_change
                   echo "[$(timestamp)] Replaced original shard with downloaded shard."
                 fi
 
@@ -2158,17 +2526,13 @@ run_main_loop() {
                 # PPL+KLD:
                 if need_run_ppl; then
                   echo "[$(timestamp)] Running PPL$PLUS_KLD command for tensor='$tensor_name', qtype='$qtype'... output into $result_file_ppl"
-                  cmd="${PPL_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
-                  if [[ "$NO_KLD" == "false" ]]; then
-                    if [[ -z "${baseline_kld_file:-}" ]]; then
-                      echo "[$(timestamp)] ❌ Error: KLD baseline file var not defined or empty." >&2; exit 10
-                    elif [[ ! -f "$baseline_kld_file" ]]; then
-                      echo "[$(timestamp)] ❌ Error: KLD baseline file '$baseline_kld_file' not found." >&2; exit 11
-                    else
-                      cmd="${cmd//\{KLD_PARAMETER\}/--kl-divergence-base \"$baseline_kld_file\" --kl-divergence}"
-                    fi
+                  # In hotswap mode, verify the benchmarked tensor gets reloaded
+                  # by llama-perplexity (unless its shard was already in place)
+                  HOTSWAP_VERIFY_TENSORS=()
+                  if [[ "$HOTSWAP" == "true" && "$SKIP_REPLACE" == "false" ]]; then
+                    HOTSWAP_VERIFY_TENSORS=("$tensor_name")
                   fi
-                  if eval "$cmd" > "$result_file_ppl" 2>&1 < /dev/null; then
+                  if run_ppl_bench "$result_file_ppl"; then
                     echo "[$(timestamp)] 👀 PPL$PLUS_KLD output (stdout+stderr) saved to $result_file_ppl"
                     count_individual_ppl_bench_success=$((count_individual_ppl_bench_success + 1))
                   else
@@ -2204,6 +2568,12 @@ run_main_loop() {
                 # Restore original shard if we replaced it
                 if [[ "$SKIP_REPLACE" == "false" ]]; then
                   mv -f "$backup_file" "$original_file"
+                  hotswap_note_change
+                  # In hotswap mode, the restored tensor must be verified as
+                  # reloaded during the next benchmark's reload
+                  if [[ "$HOTSWAP" == "true" ]]; then
+                    HOTSWAP_PENDING_RESTORE_TENSORS+=("$tensor_name")
+                  fi
                   echo "[$(timestamp)] Restored original shard from backup."
                 fi
 

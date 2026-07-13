@@ -107,6 +107,8 @@ cp -f "$WORKING_DIRECTORY"/imatrix-calibration-corpus-v02.txt .
 
 You will also need ik_llama.cpp's `llama-perplexity` binary which can be found pre-compiled at [Thireus' fork of ik_llama.cpp](https://github.com/Thireus/ik_llama.cpp/tags) - look for the `main*` tags. Alternatively, compile it yourself as instructed [here](https://github.com/ikawrakow/ik_llama.cpp/blob/main/docs/build.md), but make sure you use the `-DGGML_MAX_CONTEXTS=2048` cmake option which lifts the limit of the number of .gguf shards ik_llama.cpp can load at once - not using this compilation option (combined with `ulimit -n 9999`) will result in sharded models failing to load.
 
+Note: If you plan on using the highly recommended `--hotswap` mode of `benchmark_each_tensor.sh` (see the `Speed up benchmarking with --hotswap` section below), your `llama-perplexity` build must include the on-demand tensor reload signal mode (Thireus fork branch `th/kld-perplexity-tensor-reloader` or any later release that includes it). Older builds keep working as long as you don't pass `--hotswap`.
+
 Finally, we need to edit the `PPL_COMMAND_TEMPLATE` found in the `benchmark_each_tensor.sh` script. This template is what the script will use to execute `llama-perplexity` and compute the [KLD](https://en.wikipedia.org/wiki/Kullback%E2%80%93Leibler_divergence) and [PPL](https://en.wikipedia.org/wiki/Perplexity) metrics of the model after each tensor quantization gets dropped from `BASELINE_QTYPE` to `TARGET_QTYPE`. To find the best template to use you must identify which `llama-perplexity` parameters give you the fastest benchmarking speed. I recommend to play around with the parameters of ik_llama.cpp's `llama-perplexity` and the curent `$MODEL` you've downloaded. For example, with trial and error I found that the best benchmarking speed for my hardware for the `$MODEL` were achieved when using the following `llama-perplexity` parameters (with both GPU and CPU offloading):
 
 ```
@@ -253,7 +255,31 @@ Note: If you also identified tensors that can be benchmarked together from the o
 
 Important: I strongly advise against reducing the chunks to a value below `250`. This value was [assessed](https://github.com/Thireus/GGUF-Tool-Suite/issues/34#issuecomment-3519158063) to be the general minimum decent KLD/PPL that won't hurt the calibration data. However, I recommend bumping this value to towards its maximum if possible.
 
-It will take time... and could be optimised if we had a `llama-perplexity` binary that could only swap the necessary tensors after each benchmark round instead of unloading/reloading the entire model... I have opened [an issue](https://github.com/Thireus/GGUF-Tool-Suite/issues/30) in this regard if someone is willing to create a PR.
+It will take time...
+
+## (recommended) Speed up benchmarking with `--hotswap`
+
+Historically, every benchmark round required unloading and reloading the entire model just to change a single tensor - on large models this wastes 10-20 minutes per round (see [issue #30](https://github.com/Thireus/GGUF-Tool-Suite/issues/30)). This is now solved: with a hot-swap capable `llama-perplexity` build (see the note in the `Configure the benchmark script` section), append `--hotswap` to the benchmark command:
+
+```
+ulimit -n 9999 || sudo ulimit -n 9999 || echo "Warning: Could not increase file descriptor limit (ulimit -n). The model may fail to load on Linux/macOS." && \
+cd "$WORKING_DIRECTORY" && \
+cd "$MODEL"-BENCH && \
+export PATH="$WORKING_DIRECTORY"/"$MODEL"-BENCH/:$PATH && \
+cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
+benchmark_each_tensor.sh --allow-impure-quant --qtypes "$TARGET_QTYPE" --chunks 250 --hotswap
+```
+
+In this mode the script keeps a **single persistent `llama-perplexity` process** alive for the whole session: the model is loaded once, and between rounds only the tensors whose shards changed on disk (the previous round's restore plus the new round's swap) are reloaded before the PPL/KLD is recomputed. The signalling works identically on Windows, Linux and macOS. The individual `bench_ppl(_kld)_result.*.txt` files are produced exactly as before, so resuming, validation and `collect_ppl_results.sh` are unaffected.
+
+Notes about `--hotswap`:
+
+* It is **opt-in**: without the flag the script behaves exactly as before (one `llama-perplexity` run per round), which remains compatible with older `llama-perplexity` builds.
+* It is only valid with `--mode 0` (the default PPL+KLD mode). SWEEP benchmarking (`--mode 1`/`--mode 2`) launches `llama-sweep-bench`, which cannot share the GPU with a persistent `llama-perplexity` process.
+* The baseline benchmark still runs as a separate one-shot `llama-perplexity` invocation before the persistent process starts (it needs different KLD parameters, as it *produces* the baseline logits file).
+* The script verifies for every round that the swapped (and restored) tensors were actually reloaded and that the log contains final results. If anything looks off, the round's log is quarantined to `bench_ppl(_kld)_result.*.txt.failed`, no result file is produced (so the tensor will be retried), and the persistent process is automatically restarted from a clean state.
+* New files you will see: `bench_hotswap_session.<timestamp>.log` (the full session log - keep it around for diagnosis), transient `.hotswap_control.*` / `.hotswap_status.*` / `.hotswap_pid` signalling files, and the `.failed` quarantine files described above.
+* I recommend **against** using `--hotswap` for the group0 degradation benchmark (see the relevant section below): those rounds swap virtually every tensor of the model, and since the originally loaded tensors stay resident while swapped tensors are moved to newly allocated buffers, the memory footprint can nearly double.
 
 Once benchmarking is completed you will see the following message appear:
 
@@ -299,6 +325,8 @@ cd "$MODEL"-BENCH && \
 cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
 grep -L -E 'KL divergence statistics|KL Divergence:|Final estimate:' bench_*result\.*.txt
 ```
+
+Note: When benchmarking with `--hotswap`, invalid rounds are detected automatically and quarantined to `*.txt.failed` files instead of producing corrupted result files, so this check should come back clean; the quarantined tensors are simply retried on the next run. The check remains essential for benchmarks produced without `--hotswap`.
 
 If you've identified that some benchmark files are missing or that you've had to delete some, you must run the same `benchmark_each_tensor.sh` with the exact same parameters to resume benchmarking the remaining tensors/groups.
 
@@ -403,6 +431,8 @@ benchmark_each_tensor.sh --chunks 250 --group-tensors '.*' --benchmark-groups-on
 ```
 
 Note: Trim the list of qtypes to the qtypes your hardware can handle, otherwise you will end up with empty benchmark results for these qtypes.
+
+Note: Do not use `--hotswap` for this group0 benchmark. Each round swaps virtually every tensor of the model, and since the persistent process keeps the originally loaded tensors resident while allocating new buffers for the swapped ones, the memory footprint can nearly double - a full unload/reload per round is the safer choice here (and the time savings would be marginal anyway, as almost the whole model changes every round).
 
 Once benchmarking is completed you will see the following message appear:
 
