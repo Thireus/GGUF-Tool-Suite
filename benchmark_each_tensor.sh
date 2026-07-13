@@ -1192,7 +1192,18 @@ HOTSWAP_CMD_SEQ=0          # sequence number of the last command sent
 HOTSWAP_PENDING_CHANGES=0  # number of shard swaps/restores since the last reload
 HOTSWAP_VERIFY_TENSORS=()  # tensors expected to appear as "reloaded tensor '...'" in the next benchmark log
 HOTSWAP_PENDING_RESTORE_TENSORS=() # tensors restored to baseline whose reload must also be verified
+HOTSWAP_LAUNCH_CMD=""      # full command (env vars included) of the persistent process
 PPL_CMD_BUILT=""           # set by build_ppl_cmd
+
+# Writes a header into "$1" recording the exact command "$2" that produced the
+# file's content, before anything else is written (helps troubleshooting)
+write_cmd_header() {
+  {
+    echo "=== Command used to generate this file (recorded: $(timestamp)) ==="
+    echo "$2"
+    echo "=== End of command header ==="
+  } > "$1"
+}
 
 hotswap_is_alive() {
   [[ -n "$HOTSWAP_PID" ]] && kill -0 "$HOTSWAP_PID" 2>/dev/null
@@ -1299,7 +1310,8 @@ hotswap_start() {
   echo "[$(timestamp)] Model loading can take a long time; subsequent benchmarks will only reload the swapped tensors."
   # The control/status file paths are relative, so the native binary resolves
   # them against the same working directory as this script.
-  eval "LLAMA_HOTSWAP_ENABLED=1 LLAMA_HOTSWAP_CONTROL_FILE=\"$HOTSWAP_CTRL\" LLAMA_HOTSWAP_STATUS_FILE=\"$HOTSWAP_STATUS\" $cmd > \"\$HOTSWAP_LOG\" 2>&1 < /dev/null &"
+  HOTSWAP_LAUNCH_CMD="LLAMA_HOTSWAP_ENABLED=1 LLAMA_HOTSWAP_CONTROL_FILE=\"$HOTSWAP_CTRL\" LLAMA_HOTSWAP_STATUS_FILE=\"$HOTSWAP_STATUS\" $cmd"
+  eval "$HOTSWAP_LAUNCH_CMD > \"\$HOTSWAP_LOG\" 2>&1 < /dev/null &"
   HOTSWAP_PID=$!
   LLAMA_PID="$HOTSWAP_PID"
   disown "$HOTSWAP_PID" 2>/dev/null || true
@@ -1361,7 +1373,7 @@ build_ppl_cmd() {
 # benchmark restarts it from a clean state.
 hotswap_run_benchmark() {
   local result_file="$1"
-  local offset=0 expected rc sent_seq fresh_start=false
+  local offset=0 expected rc sent_seq fresh_start=false trigger="fresh start (model loaded from disk)"
 
   if ! hotswap_is_alive; then
     fresh_start=true
@@ -1369,12 +1381,14 @@ hotswap_run_benchmark() {
   else
     offset=$(wc -c < "$HOTSWAP_LOG" 2>/dev/null || echo 0)
     if (( HOTSWAP_PENDING_CHANGES > 0 )); then
+      trigger="reload command"
       if ! hotswap_send_cmd "reload"; then
         hotswap_stop
         return 1
       fi
     else
       echo "[$(timestamp)] No shard changed on disk since the last computation; requesting recompute without reload."
+      trigger="compute command (no shard changed)"
       if ! hotswap_send_cmd "compute"; then
         hotswap_stop
         return 1
@@ -1396,6 +1410,7 @@ hotswap_run_benchmark() {
   # group replace. A plain recompute is then a correct benchmark.
   if (( rc == 2 )) && (( ${#HOTSWAP_VERIFY_TENSORS[@]} == 0 )) && (( ${#HOTSWAP_PENDING_RESTORE_TENSORS[@]} == 0 )); then
     echo "[$(timestamp)] Reload found no changed tensor and none was required; recomputing without reload."
+    trigger="reload command (no change detected) + compute fallback"
     if hotswap_send_cmd "compute"; then
       sent_seq=$HOTSWAP_CMD_SEQ
       set +e
@@ -1405,8 +1420,11 @@ hotswap_run_benchmark() {
     fi
   fi
 
-  # Extract this iteration's portion of the session log
-  tail -c +"$((offset + 1))" "$HOTSWAP_LOG" > "$result_file" 2>/dev/null || true
+  # Record how this benchmark was produced, then extract this iteration's
+  # portion of the session log
+  write_cmd_header "$result_file" "$HOTSWAP_LAUNCH_CMD
+(persistent hotswap process, session log: ${HOTSWAP_LOG:-?}, iteration: $expected, trigger: $trigger)"
+  tail -c +"$((offset + 1))" "$HOTSWAP_LOG" >> "$result_file" 2>/dev/null || true
 
   if (( rc == 0 )); then
     HOTSWAP_ITER=$expected
@@ -1460,8 +1478,9 @@ run_ppl_bench() {
   build_ppl_cmd # sets PPL_CMD_BUILT (exits on missing KLD baseline)
 
   if [[ "$HOTSWAP" != "true" ]]; then
+    write_cmd_header "$result_file" "$PPL_CMD_BUILT"
     set +e
-    eval "$PPL_CMD_BUILT" > "$result_file" 2>&1 < /dev/null
+    eval "$PPL_CMD_BUILT" >> "$result_file" 2>&1 < /dev/null
     rc=$?
     set -e
     return $rc
@@ -1484,7 +1503,11 @@ if [[ "$BENCH_MODE" -eq 0 || "$BENCH_MODE" -eq 2 ]]; then
       main_model_file=$(find_main_model_file) || { echo "Error: main model file not found for baseline." >&2; [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"; exit 1; }
       baseline_cmd="${PPL_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}" # Replace model placeholder by actual model file path
       [[ "$NO_KLD" == "false" ]] && baseline_cmd="${baseline_cmd//\{KLD_PARAMETER\}/--kl-divergence-base $baseline_kld_file}" # Replace kld placeholder by actual kld parameter
-      eval "$baseline_cmd" > "$baseline_result_file" 2>&1 < /dev/null
+      write_cmd_header "$baseline_result_file" "$baseline_cmd"
+      if ! eval "$baseline_cmd" >> "$baseline_result_file" 2>&1 < /dev/null; then
+        echo "[$(timestamp)] ❌ Error: baseline PPL$PLUS_KLD command exited non-zero. See $baseline_result_file for details." >&2
+        exit 15
+      fi
       estimate=$(grep "Final estimate" "$baseline_result_file" || true)
       echo "Baseline PPL$PLUS_KLD benchmark completed for chunks=$PPL_COMMAND_CHUNKS_TO_PROCESS: $estimate"
   else
@@ -1504,7 +1527,8 @@ if [[ "$BENCH_MODE" -eq 1 || "$BENCH_MODE" -eq 2 ]]; then
       main_model_file=$(find_main_model_file) || { echo "Error: main model file not found for sweep baseline." >&2; [ -n "$GNUPG_TMPDIR" ] && rm -rf "$GNUPG_TMPDIR"; exit 1; }
       sweep_baseline_cmd="${SWEEP_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
       # Ensure ${SWEEP_COMMAND_CONTEXT_TO_PROCESS} expands in the command by using eval
-      eval "$sweep_baseline_cmd" > "$sweep_baseline_result_file" 2>&1 < /dev/null
+      write_cmd_header "$sweep_baseline_result_file" "$sweep_baseline_cmd"
+      eval "$sweep_baseline_cmd" >> "$sweep_baseline_result_file" 2>&1 < /dev/null
       echo "Baseline SWEEP benchmark completed for context=$SWEEP_COMMAND_CONTEXT_TO_PROCESS."
   else
       echo "Baseline SWEEP benchmark already exists for BASELINE_QTYPE='$BASELINE_QTYPE', context=$SWEEP_COMMAND_CONTEXT_TO_PROCESS."
@@ -2326,7 +2350,8 @@ run_main_loop() {
                     if need_run_sweep; then
                       echo "[$(timestamp)] Running SWEEP for group #${group_idx_for_tensor} -> $group_result_file_sweep"
                       cmd="${SWEEP_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
-                      if eval "$cmd" > "$group_result_file_sweep" 2>&1 < /dev/null; then
+                      write_cmd_header "$group_result_file_sweep" "$cmd"
+                      if eval "$cmd" >> "$group_result_file_sweep" 2>&1 < /dev/null; then
                         echo "[$(timestamp)] Group #${group_idx_for_tensor} SWEEP finished and saved to $group_result_file_sweep"
                         count_group_sweep_bench_success=$((count_group_sweep_bench_success + 1))
                       else
@@ -2545,7 +2570,8 @@ run_main_loop() {
                 if need_run_sweep; then
                   echo "[$(timestamp)] Running SWEEP command for tensor='$tensor_name', qtype='$qtype'..."
                   cmd="${SWEEP_COMMAND_TEMPLATE//\{MODEL_FILE\}/$main_model_file}"
-                  if eval "$cmd" > "$result_file_sweep" 2>&1 < /dev/null; then
+                  write_cmd_header "$result_file_sweep" "$cmd"
+                  if eval "$cmd" >> "$result_file_sweep" 2>&1 < /dev/null; then
                     echo "[$(timestamp)] 👀 SWEEP output (stdout+stderr) saved to $result_file_sweep"
                     count_individual_sweep_bench_success=$((count_individual_sweep_bench_success + 1))
                   else
