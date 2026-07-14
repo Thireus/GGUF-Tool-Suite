@@ -107,7 +107,7 @@ cp -f "$WORKING_DIRECTORY"/imatrix-calibration-corpus-v02.txt .
 
 You will also need ik_llama.cpp's `llama-perplexity` binary which can be found pre-compiled at [Thireus' fork of ik_llama.cpp](https://github.com/Thireus/ik_llama.cpp/tags) - look for the `main*` tags. Alternatively, compile it yourself as instructed [here](https://github.com/ikawrakow/ik_llama.cpp/blob/main/docs/build.md), but make sure you use the `-DGGML_MAX_CONTEXTS=2048` cmake option which lifts the limit of the number of .gguf shards ik_llama.cpp can load at once - not using this compilation option (combined with `ulimit -n 9999`) will result in sharded models failing to load.
 
-Note: If you plan on using the highly recommended `--hotswap` mode of `benchmark_each_tensor.sh` (see the `Speed up benchmarking with --hotswap` section below), your `llama-perplexity` build must include the on-demand tensor reload signal mode (Thireus fork branch `th/kld-perplexity-tensor-reloader` or any later release that includes it). Older builds keep working as long as you don't pass `--hotswap`.
+Note: The individual tensors benchmark below uses the `--hotswap` mode of `benchmark_each_tensor.sh` by default (see the `About the --hotswap mode` section below), which requires a `llama-perplexity` build that includes [ik_llama.cpp PR #2131](https://github.com/ikawrakow/ik_llama.cpp/pull/2131) (on-demand tensor reload signal mode). Older builds keep working as long as you don't pass `--hotswap`.
 
 Finally, we need to edit the `PPL_COMMAND_TEMPLATE` found in the `benchmark_each_tensor.sh` script. This template is what the script will use to execute `llama-perplexity` and compute the [KLD](https://en.wikipedia.org/wiki/Kullback%E2%80%93Leibler_divergence) and [PPL](https://en.wikipedia.org/wiki/Perplexity) metrics of the model after each tensor quantization gets dropped from `BASELINE_QTYPE` to `TARGET_QTYPE`. To find the best template to use you must identify which `llama-perplexity` parameters give you the fastest benchmarking speed. I recommend to play around with the parameters of ik_llama.cpp's `llama-perplexity` and the curent `$MODEL` you've downloaded. For example, with trial and error I found that the best benchmarking speed for my hardware for the `$MODEL` were achieved when using the following `llama-perplexity` parameters (with both GPU and CPU offloading):
 
@@ -248,33 +248,24 @@ cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
 export PATH="$WORKING_DIRECTORY"/"$MODEL"-BENCH/:$PATH && \
 cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
-benchmark_each_tensor.sh --allow-impure-quant --qtypes "$TARGET_QTYPE" --chunks 250
+benchmark_each_tensor.sh --allow-impure-quant --qtypes "$TARGET_QTYPE" --chunks 250 --hotswap
 ```
 
 Note: If you also identified tensors that can be benchmarked together from the optional `Reduce benchmarking costs` section, make sure to append to the `benchmark_each_tensor.sh` parameters the additional `--group-tensors` parameter.
 
 Important: I strongly advise against reducing the chunks to a value below `250`. This value was [assessed](https://github.com/Thireus/GGUF-Tool-Suite/issues/34#issuecomment-3519158063) to be the general minimum decent KLD/PPL that won't hurt the calibration data. However, I recommend bumping this value to towards its maximum if possible.
 
-It will take time...
+It will take time... although much less than it used to, thanks to `--hotswap`!
 
-## (recommended) Speed up benchmarking with `--hotswap`
+## About the `--hotswap` mode
 
-Historically, every benchmark round required unloading and reloading the entire model just to change a single tensor - on large models this wastes 10-20 minutes per round (see [issue #30](https://github.com/Thireus/GGUF-Tool-Suite/issues/30)). This is now solved: with a hot-swap capable `llama-perplexity` build (see the note in the `Configure the benchmark script` section), append `--hotswap` to the benchmark command:
-
-```
-ulimit -n 9999 || sudo ulimit -n 9999 || echo "Warning: Could not increase file descriptor limit (ulimit -n). The model may fail to load on Linux/macOS." && \
-cd "$WORKING_DIRECTORY" && \
-cd "$MODEL"-BENCH && \
-export PATH="$WORKING_DIRECTORY"/"$MODEL"-BENCH/:$PATH && \
-cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
-benchmark_each_tensor.sh --allow-impure-quant --qtypes "$TARGET_QTYPE" --chunks 250 --hotswap
-```
+Historically, every benchmark round required unloading and reloading the entire model just to change a single tensor - on large models this wastes 10-20 minutes per round (see [issue #30](https://github.com/Thireus/GGUF-Tool-Suite/issues/30)). This is now solved by the `--hotswap` mode used in the benchmark command above, available since [ik_llama.cpp PR #2131](https://github.com/ikawrakow/ik_llama.cpp/pull/2131) (make sure your `llama-perplexity` build includes it).
 
 In this mode the script keeps a **single persistent `llama-perplexity` process** alive for the whole session: the model is loaded once, and between rounds only the tensors whose shards changed on disk (the previous round's restore plus the new round's swap) are reloaded before the PPL/KLD is recomputed. The signalling works identically on Windows, Linux and macOS. The individual `bench_ppl(_kld)_result.*.txt` files are produced exactly as before, so resuming, validation and `collect_ppl_results.sh` are unaffected.
 
 Notes about `--hotswap`:
 
-* It is **opt-in**: without the flag the script behaves exactly as before (one `llama-perplexity` run per round), which remains compatible with older `llama-perplexity` builds.
+* It is **optional**: if your `llama-perplexity` build predates [PR #2131](https://github.com/ikawrakow/ik_llama.cpp/pull/2131), simply omit `--hotswap` from the benchmark command - the script then behaves exactly as it always did (one `llama-perplexity` run per round).
 * It is only valid with `--mode 0` (the default PPL+KLD mode). SWEEP benchmarking (`--mode 1`/`--mode 2`) launches `llama-sweep-bench`, which cannot share the GPU with a persistent `llama-perplexity` process.
 * The baseline benchmark still runs as a separate one-shot `llama-perplexity` invocation before the persistent process starts (it needs different KLD parameters, as it *produces* the baseline logits file).
 * The script verifies for every round that the swapped (and restored) tensors were actually reloaded and that the log contains final results. If anything looks off, the round's log is quarantined to `bench_ppl(_kld)_result.*.txt.failed`, no result file is produced (so the tensor will be retried), and the persistent process is automatically restarted from a clean state.
