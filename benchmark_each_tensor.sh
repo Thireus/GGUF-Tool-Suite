@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-13-2026 -------------------- **#
+#** --------------- Updated: Jul-16-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -1216,6 +1216,62 @@ hotswap_note_change() {
   HOTSWAP_PENDING_CHANGES=$((HOTSWAP_PENDING_CHANGES + 1))
 }
 
+# Tensors the loaded model ignores (logged as "model has unused tensor" at
+# load time, e.g. NextN/MTP layers that llama-perplexity does not consume).
+# Swapping them has no effect on PPL/KLD: they are never registered for
+# reload, so they can neither be hot-swapped nor meaningfully benchmarked.
+declare -A HOTSWAP_UNUSED_TENSORS=()
+
+# Harvest the unused-tensor list from the persistent process's load log
+hotswap_harvest_unused_tensors() {
+  local t
+  while IFS= read -r t; do
+    t="${t//$'\r'/}"
+    [[ -n "$t" ]] && HOTSWAP_UNUSED_TENSORS["$t"]=1
+  done < <(sed -n 's/.*model has unused tensor \([^ ]*\) (size.*/\1/p' "$HOTSWAP_LOG" 2>/dev/null || true)
+}
+
+hotswap_is_unused_tensor() {
+  [[ -n "${HOTSWAP_UNUSED_TENSORS[${1}]:-}" ]]
+}
+
+# Record tensors restored to their baseline shard so the next benchmark can
+# verify they were reloaded. Tensors ignored by the model are excluded: no
+# reload will ever be logged for them.
+hotswap_note_restored_tensors() {
+  local t
+  for t in "$@"; do
+    [[ -z "$t" ]] && continue
+    hotswap_is_unused_tensor "$t" && continue
+    HOTSWAP_PENDING_RESTORE_TENSORS+=("$t")
+  done
+}
+
+# Guarantee an mtime change for a swapped/restored shard. Downloads preserve
+# the remote file's timestamp (curl -R in tensor_downloader.sh), so two
+# different shards can carry the exact same mtime, which would make the swap
+# invisible to llama-perplexity's mtime-based reload detection.
+hotswap_touch_file() {
+  if [[ "$HOTSWAP" == "true" ]]; then
+    touch "$1" 2>/dev/null || true
+  fi
+}
+
+# Quarantine note for a benchmark whose target tensors are all ignored by the
+# model. $1 = result file, remaining args = the unused tensors.
+hotswap_write_unused_note() {
+  local out="$1"; shift
+  {
+    echo "=== Benchmark skipped (recorded: $(timestamp)) ==="
+    echo "All target tensors of this benchmark are ignored by the loaded model"
+    echo "(reported as 'model has unused tensor' at load time, e.g. NextN/MTP layers)."
+    echo "Swapping them has no effect on PPL/KLD, so no meaningful result can be produced."
+    echo "Consider locking these tensors in USER_REGEX:"
+    printf '  - %s\n' "$@"
+    echo "=== End of note ==="
+  } > "$out"
+}
+
 # Atomically publish a command for the persistent process.
 hotswap_send_cmd() {
   local cmd="$1"
@@ -1375,6 +1431,28 @@ hotswap_run_benchmark() {
   local result_file="$1"
   local offset=0 expected rc sent_seq fresh_start=false trigger="fresh start (model loaded from disk)"
 
+  # Tensors the model ignores can never be reloaded nor benchmarked. Skip the
+  # benchmark entirely (without wasting a computation) when every target
+  # tensor is unused; for mixed groups, only verify the used members.
+  # (The unused list is only known once a persistent process has loaded the
+  # model at least once; the very first benchmark is re-checked after start.)
+  local _hv_used=() _hv_unused=() t
+  for t in "${HOTSWAP_VERIFY_TENSORS[@]:-}"; do
+    [[ -z "$t" ]] && continue
+    if hotswap_is_unused_tensor "$t"; then _hv_unused+=("$t"); else _hv_used+=("$t"); fi
+  done
+  if (( ${#_hv_unused[@]} > 0 )); then
+    for t in "${_hv_unused[@]}"; do
+      echo "[$(timestamp)] ⚠️  Warning: tensor '$t' is not used by this model (reported as unused at load time); it cannot be benchmarked - consider locking it in USER_REGEX." >&2
+    done
+    if (( ${#_hv_used[@]} == 0 )); then
+      hotswap_write_unused_note "${result_file}.unused" "${_hv_unused[@]}"
+      echo "[$(timestamp)] ⚠️  Warning: benchmark skipped (no computation was run); see ${result_file}.unused" >&2
+      return 1
+    fi
+    HOTSWAP_VERIFY_TENSORS=("${_hv_used[@]}")
+  fi
+
   if ! hotswap_is_alive; then
     fresh_start=true
     hotswap_start "$PPL_CMD_BUILT"
@@ -1428,6 +1506,33 @@ hotswap_run_benchmark() {
 
   if (( rc == 0 )); then
     HOTSWAP_ITER=$expected
+
+    # A fresh start is the first opportunity to learn which tensors the model
+    # ignores; re-check the benchmark's target tensors against that list
+    if [[ "$fresh_start" == "true" ]]; then
+      hotswap_harvest_unused_tensors
+      _hv_used=(); _hv_unused=()
+      for t in "${HOTSWAP_VERIFY_TENSORS[@]:-}"; do
+        [[ -z "$t" ]] && continue
+        if hotswap_is_unused_tensor "$t"; then _hv_unused+=("$t"); else _hv_used+=("$t"); fi
+      done
+      if (( ${#_hv_unused[@]} > 0 )); then
+        for t in "${_hv_unused[@]}"; do
+          echo "[$(timestamp)] ⚠️  Warning: tensor '$t' is not used by this model (reported as unused at load time); it cannot be benchmarked - consider locking it in USER_REGEX." >&2
+        done
+        if (( ${#_hv_used[@]} == 0 )); then
+          # The computation measured an unchanged model; quarantine it. The
+          # persistent process itself is healthy - keep it for the next round.
+          hotswap_write_unused_note "${result_file}.unused" "${_hv_unused[@]}"
+          cat "$result_file" >> "${result_file}.unused" 2>/dev/null || true
+          rm -f "$result_file"
+          echo "[$(timestamp)] ⚠️  Warning: benchmark discarded; see ${result_file}.unused" >&2
+          return 1
+        fi
+        HOTSWAP_VERIFY_TENSORS=("${_hv_used[@]}")
+      fi
+    fi
+
     local ok=true t
     # The captured log must contain a final result...
     if ! grep -qE 'KL divergence statistics|Final estimate:' "$result_file"; then
@@ -1441,6 +1546,7 @@ hotswap_run_benchmark() {
     if [[ "$fresh_start" != "true" ]]; then
       for t in "${HOTSWAP_VERIFY_TENSORS[@]:-}" "${HOTSWAP_PENDING_RESTORE_TENSORS[@]:-}"; do
         [[ -z "$t" ]] && continue
+        hotswap_is_unused_tensor "$t" && continue
         if ! grep -qF "reloaded tensor '$t'" "$result_file"; then
           echo "[$(timestamp)] ⚠️  Warning: tensor '$t' was not reloaded by llama-perplexity (see ${result_file}.failed); result would be invalid." >&2
           ok=false
@@ -2292,6 +2398,7 @@ run_main_loop() {
                         backups_made["$original_file"]="$backup_file"
                         # Move downloaded file into place
                         mv -f "${LOCAL_DOWNLOAD_DIR}/${s}" "$original_file"
+                        hotswap_touch_file "$original_file"
                         hotswap_note_change
                         echo "[$(timestamp)] Replaced original shard $original_file with downloaded shard for group #${group_idx_for_tensor}."
                       else
@@ -2382,13 +2489,14 @@ run_main_loop() {
                     # Restore originals from backups
                     for orig in "${!backups_made[@]}"; do
                       mv -f "${backups_made[$orig]}" "$orig"
+                      hotswap_touch_file "$orig"
                       hotswap_note_change
                       echo "[$(timestamp)] Restored original shard $orig from backup for group #${group_idx_for_tensor}."
                     done
                     # In hotswap mode, the restored tensors must be verified as
                     # reloaded during the next benchmark's reload
                     if [[ "$HOTSWAP" == "true" ]] && (( ${#backups_made[@]} > 0 )) && (( ${#HOTSWAP_VERIFY_TENSORS[@]} > 0 )); then
-                      HOTSWAP_PENDING_RESTORE_TENSORS+=("${HOTSWAP_VERIFY_TENSORS[@]}")
+                      hotswap_note_restored_tensors "${HOTSWAP_VERIFY_TENSORS[@]}"
                     fi
 
                     # Clean up any leftover temp files
@@ -2543,6 +2651,7 @@ run_main_loop() {
 
                   # Move downloaded shard into place
                   mv -f "$local_shard_tmp" "$original_file"
+                  hotswap_touch_file "$original_file"
                   hotswap_note_change
                   echo "[$(timestamp)] Replaced original shard with downloaded shard."
                 fi
@@ -2594,11 +2703,12 @@ run_main_loop() {
                 # Restore original shard if we replaced it
                 if [[ "$SKIP_REPLACE" == "false" ]]; then
                   mv -f "$backup_file" "$original_file"
+                  hotswap_touch_file "$original_file"
                   hotswap_note_change
                   # In hotswap mode, the restored tensor must be verified as
                   # reloaded during the next benchmark's reload
                   if [[ "$HOTSWAP" == "true" ]]; then
-                    HOTSWAP_PENDING_RESTORE_TENSORS+=("$tensor_name")
+                    hotswap_note_restored_tensors "$tensor_name"
                   fi
                   echo "[$(timestamp)] Restored original shard from backup."
                 fi
