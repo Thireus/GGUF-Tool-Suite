@@ -5,7 +5,7 @@
 #** the S_PP and S_TG values from bench_sweep_result.* files. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Dec-28-2025 -------------------- **#
+#** --------------- Updated: Jul-16-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -58,6 +58,11 @@ Options:
   --qtypes Q1,Q2,...                    Comma-separated list of qtypes to use (overrides auto-discovery)
   --no-percentage                       Disable percent-delta computation (emit raw values; baseline values will be injected as-is)
   -h, --help                            Show this help message and exit
+
+Note: bench_sweep_result.*.txt.unused quarantine files (tensors ignored by the
+      model, produced by benchmark_each_tensor.sh --hotswap) are accepted by
+      default when the normal .txt result is absent, and collected as
+      baseline-equivalent results (PP/TG=baseline).
 EOF
 }
 
@@ -361,6 +366,21 @@ bench_files_list=$(
 )
 all_bench_sweep_result_files=$(printf '%s\n' "$bench_files_list" | grep -E "^bench_sweep_result\..*\.${CONTEXT}\.txt$" 2>/dev/null || true)
 
+# Also gather .txt.unused quarantine files (tensors ignored by the model, see
+# benchmark_each_tensor.sh --hotswap). These are accepted by default: swapping
+# such tensors has no effect on the model, so their speed metrics equal the
+# baseline's - which is a valid and useful data point.
+bench_unused_files_list=$(
+  for f in ./bench_sweep_*.txt.unused; do
+    [ -e "$f" ] || continue    # skip non-matching globs
+    [ -f "$f" ] && printf '%s\n' "${f##*/}"
+  done 2>/dev/null
+)
+all_bench_sweep_unused_result_files=$(printf '%s\n' "$bench_unused_files_list" | grep -E "^bench_sweep_result\..*\.${CONTEXT}\.txt\.unused$" 2>/dev/null || true)
+if [[ -n "$all_bench_sweep_unused_result_files" ]]; then
+  echo "[$(timestamp) Found $(printf '%s\n' "$all_bench_sweep_unused_result_files" | wc -l | tr -d ' ') .txt.unused result file(s) (tensors ignored by the model); they will be collected as baseline-equivalent results."
+fi
+
 # find_group_indexes_for_tensor <tensor> -> prints zero-or-more group indices (one per line)
 find_group_indexes_for_tensor() {
   local tensor="$1"
@@ -556,8 +576,17 @@ for qtype in "${QTYPES[@]}"; do
         proc_key="${qtype}|${group_idx_for_tensor}"
         # Look for group result file: bench_sweep_result.group{group_idx_for_tensor}.{qtype}.{CONTEXT}.txt
         group_result_filename="bench_sweep_result.group${group_idx_for_tensor}.${qtype}.${CONTEXT}.txt"
+        # Accept the .txt.unused quarantine variant when the normal result is
+        # absent (group members ignored by the model: metrics are the
+        # baseline's by definition)
+        group_result_is_unused=false
+        if ! grep -qF -- "$group_result_filename" <<< "$all_bench_sweep_result_files" \
+           && grep -qF -- "${group_result_filename}.unused" <<< "$all_bench_sweep_unused_result_files"; then
+          group_result_filename="${group_result_filename}.unused"
+          group_result_is_unused=true
+        fi
         # confirm it exists in directory listing
-        if ! grep -qF -- "$group_result_filename" <<< "$all_bench_sweep_result_files"; then
+        if [[ "$group_result_is_unused" == "false" ]] && ! grep -qF -- "$group_result_filename" <<< "$all_bench_sweep_result_files"; then
           # Only log the "missing group file" message once per (qtype, group).
           if [[ -z "${PROCESSED_GROUP_QTYPE[$proc_key]:-}" ]]; then
             echo "[$(timestamp) No group sweep result file found for group #${group_idx_for_tensor}, qtype=${qtype}: expected '$group_result_filename'. Will fall back to individual tensor files (unless --groups-only is enabled)."
@@ -583,6 +612,10 @@ for qtype in "${QTYPES[@]}"; do
             SPP_VAL="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$SPP_VAL")"
             STG_VAL="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$STG_VAL")"
             echo "[$(timestamp) Extracted group #${group_idx_for_tensor} (qtype=${qtype}): S_PP=$SPP_VAL, S_TG=$STG_VAL"
+          elif [[ "$group_result_is_unused" == "true" && ( -n "${BASELINE_PP:-}" || -n "${BASELINE_TG:-}" ) ]]; then
+            SPP_VAL="${BASELINE_PP:-404}"
+            STG_VAL="${BASELINE_TG:-404}"
+            echo "[$(timestamp) Group #${group_idx_for_tensor} (qtype=${qtype}) is unused by the model; injecting baseline S_PP=$SPP_VAL, S_TG=$STG_VAL"
           else
             echo "[$(timestamp) Warning: no row with N_KV=${N_KV} found in $result_file. Marking 404 for entire group."
             SPP_VAL="404"
@@ -628,12 +661,22 @@ for qtype in "${QTYPES[@]}"; do
     regex="^bench_sweep_result\.${tensor_name}\..*\.${CONTEXT}\.txt$"
     bench_match=$(printf '%s\n' "$all_bench_sweep_result_files" | grep -m1 -E "$regex" 2>/dev/null || true)
 
+    result_is_unused=false
     if [[ -z "$bench_match" ]]; then
-      # no individual file: leave empty (maybe other qtypes have it)
-      continue
+      # Accept the .txt.unused quarantine variant (tensor ignored by the
+      # model: metrics are the baseline's by definition)
+      unused_regex="^bench_sweep_result\.${tensor_name}\..*\.${CONTEXT}\.txt\.unused$"
+      bench_match=$(printf '%s\n' "$all_bench_sweep_unused_result_files" | grep -m1 -E "$unused_regex" 2>/dev/null || true)
+      if [[ -n "$bench_match" ]]; then
+        result_is_unused=true
+      else
+        # no individual file: leave empty (maybe other qtypes have it)
+        continue
+      fi
     fi
 
     echo "[$(timestamp) Found sweep result file for tensor '$tensor_name': $bench_match"
+    [[ "$result_is_unused" == "true" ]] && echo "[$(timestamp) Note: '$tensor_name' is unused by the model; its speed metrics equal the baseline's."
 
     # ensure included if hide-empty true
     [[ "$HIDE_EMPTY" == true ]] && TENSOR_SET["$tensor_name"]=1
@@ -656,7 +699,7 @@ for qtype in "${QTYPES[@]}"; do
         # trim each field
         for(i=1;i<=NF;i++) $i=trim($i)
         # check we have at least 8 columns and the 4th column equals nkv (and column 2 is numeric)
-        if (NF >= 8 && $2 ~ /^[0-9]+$/ && $4 == nk) {
+        if (NF >= 8 && $2 ~ /^[0-9]+$/ && $4 == nkv) {
           # print S_PP and S_TG separated by |
           gsub(/^[ \t]+|[ \t]+$/, "", $6)
           gsub(/^[ \t]+|[ \t]+$/, "", $8)
@@ -673,6 +716,10 @@ for qtype in "${QTYPES[@]}"; do
       SPP_VAL="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$SPP_VAL")"
       STG_VAL="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$STG_VAL")"
       echo "[$(timestamp) Extracted for tensor='$tensor_name', qtype='$qtype': S_PP=$SPP_VAL, S_TG=$STG_VAL"
+    elif [[ "$result_is_unused" == "true" && ( -n "${BASELINE_PP:-}" || -n "${BASELINE_TG:-}" ) ]]; then
+      SPP_VAL="${BASELINE_PP:-404}"
+      STG_VAL="${BASELINE_TG:-404}"
+      echo "[$(timestamp) Tensor '$tensor_name' (qtype=${qtype}) is unused by the model; injecting baseline S_PP=$SPP_VAL, S_TG=$STG_VAL"
     else
       echo "[$(timestamp) Warning: no row with N_KV=${N_KV} found in $result_file. Marking 404."
       SPP_VAL="404"

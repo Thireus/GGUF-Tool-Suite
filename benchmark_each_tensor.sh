@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-16-2026 -------------------- **#
+#** --------------- Updated: Jul-20-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -482,6 +482,35 @@ fi
 if [[ "$NO_CHUNK_LIMIT" == "true" ]]; then
   PPL_COMMAND_TEMPLATE="$(echo "$PPL_COMMAND_TEMPLATE" | sed -E 's/ --chunks [^ ]+//')"
   PPL_COMMAND_CHUNKS_TO_PROCESS="0"
+fi
+
+# When hotswapping, refuse llama-perplexity flags that transform or merge
+# weights at load time in ways the hot-swap machinery cannot follow - the
+# reloads would be refused or produce inconsistent results:
+#   -mqkv/--merge-qkv             : wq/wk/wv become views into a merged tensor
+#   -muge/--merge-up-gate-experts : ffn_up/gate_exps merged into one tensor
+#                                   (and re-interleaved per expert)
+#   -rtr/--run-time-repack        : tensors repacked in place; a restored
+#                                   tensor cannot reproduce the repacked state
+#   -khad/--k-cache-hadamard      : Hadamard transform folded into the MLA
+#                                   weights in place
+if [[ "$HOTSWAP" == "true" ]]; then
+  _tpl_flat=" $(tr '\\\n' '  ' <<< "$PPL_COMMAND_TEMPLATE") "
+  for _flag in "-mqkv" "--merge-qkv" "-muge" "--merge-up-gate-experts" "-rtr" "--run-time-repack" "-khad" "--k-cache-hadamard"; do
+    if [[ "$_tpl_flat" == *" ${_flag} "* ]]; then
+      echo "❌ Error: PPL_COMMAND_TEMPLATE contains '${_flag}', which is incompatible with --hotswap." >&2
+      echo "   This flag transforms/merges weights at load time, so hot-swapped tensors would be refused" >&2
+      echo "   by llama-perplexity or produce inconsistent benchmark results." >&2
+      echo "   Remove '${_flag}' from PPL_COMMAND_TEMPLATE, or run without --hotswap." >&2
+      exit 16
+    fi
+  done
+  if [[ "$_tpl_flat" != *" --no-mmap "* ]]; then
+    echo "⚠️  Warning: PPL_COMMAND_TEMPLATE does not contain '--no-mmap'. With mmap enabled, same-quant" >&2
+    echo "   tensor swaps cannot be refreshed in place and the affected benchmarks will fall back to a" >&2
+    echo "   full model reload each time. Adding --no-mmap is strongly recommended with --hotswap." >&2
+  fi
+  unset _tpl_flat
 fi
 
 # Verify gpg readiness
@@ -1235,16 +1264,49 @@ hotswap_is_unused_tensor() {
   [[ -n "${HOTSWAP_UNUSED_TENSORS[${1}]:-}" ]]
 }
 
+# Tensors the reload machinery refuses to hot-swap because they were fused,
+# merged or transformed at load time (logged by llama-perplexity as
+# "hotswap: tensor '...' cannot be hot-swapped"). Once a tensor is known to be
+# unswappable, benchmarks touching it go straight to a full model reload
+# instead of wasting a computation on a doomed hot-swap attempt.
+declare -A HOTSWAP_UNSWAPPABLE_TENSORS=()
+
+hotswap_harvest_unswappable_tensors() {
+  local f="$1" t
+  while IFS= read -r t; do
+    t="${t//$'\r'/}"
+    [[ -z "$t" ]] && continue
+    if [[ -z "${HOTSWAP_UNSWAPPABLE_TENSORS[$t]:-}" ]]; then
+      HOTSWAP_UNSWAPPABLE_TENSORS["$t"]=1
+      echo "[$(timestamp)] ℹ️  Tensor '$t' cannot be hot-swapped (fused/transformed at load time); benchmarks touching it will use a full model reload." >&2
+    fi
+  done < <(sed -n "s/.*hotswap: tensor '\([^']*\)' cannot be hot-swapped.*/\1/p" "$f" 2>/dev/null || true)
+}
+
+hotswap_is_unswappable_tensor() {
+  [[ -n "${HOTSWAP_UNSWAPPABLE_TENSORS[${1}]:-}" ]]
+}
+
 # Record tensors restored to their baseline shard so the next benchmark can
 # verify they were reloaded. Tensors ignored by the model are excluded: no
-# reload will ever be logged for them.
+# reload will ever be logged for them. Restored tensors that cannot be
+# hot-swapped force a stop of the persistent process: only a full model
+# reload can bring them back to their baseline state.
 hotswap_note_restored_tensors() {
-  local t
+  local t stop_needed=false
   for t in "$@"; do
     [[ -z "$t" ]] && continue
     hotswap_is_unused_tensor "$t" && continue
+    if hotswap_is_unswappable_tensor "$t"; then
+      stop_needed=true
+      continue
+    fi
     HOTSWAP_PENDING_RESTORE_TENSORS+=("$t")
   done
+  if [[ "$stop_needed" == "true" ]] && hotswap_is_alive; then
+    echo "[$(timestamp)] Restored tensor(s) cannot be hot-swapped back to baseline; stopping the persistent llama-perplexity so the next benchmark reloads the full model."
+    hotswap_stop
+  fi
 }
 
 # Guarantee an mtime change for a swapped/restored shard. Downloads preserve
@@ -1453,6 +1515,20 @@ hotswap_run_benchmark() {
     HOTSWAP_VERIFY_TENSORS=("${_hv_used[@]}")
   fi
 
+  # Benchmarks targeting tensors the reload machinery refuses to hot-swap go
+  # straight to a full model reload (correct by construction: every load-time
+  # derivation/fusion re-runs at load with the swapped data on disk)
+  for t in "${HOTSWAP_VERIFY_TENSORS[@]:-}"; do
+    [[ -z "$t" ]] && continue
+    if hotswap_is_unswappable_tensor "$t"; then
+      echo "[$(timestamp)] Tensor '$t' cannot be hot-swapped; using a full model reload for this benchmark."
+      if hotswap_is_alive; then
+        hotswap_stop
+      fi
+      break
+    fi
+  done
+
   if ! hotswap_is_alive; then
     fresh_start=true
     hotswap_start "$PPL_CMD_BUILT"
@@ -1504,6 +1580,12 @@ hotswap_run_benchmark() {
 (persistent hotswap process, session log: ${HOTSWAP_LOG:-?}, iteration: $expected, trigger: $trigger)"
   tail -c +"$((offset + 1))" "$HOTSWAP_LOG" >> "$result_file" 2>/dev/null || true
 
+  # Learn which tensors llama-perplexity refused to hot-swap (fused/merged/
+  # transformed at load time) so future benchmarks skip the doomed attempt
+  if [[ "$fresh_start" != "true" ]]; then
+    hotswap_harvest_unswappable_tensors "$result_file"
+  fi
+
   if (( rc == 0 )); then
     HOTSWAP_ITER=$expected
 
@@ -1537,6 +1619,12 @@ hotswap_run_benchmark() {
     # The captured log must contain a final result...
     if ! grep -qE 'KL divergence statistics|Final estimate:' "$result_file"; then
       echo "[$(timestamp)] ⚠️  Warning: hotswap benchmark produced no final result (evaluation failure?). See ${result_file}.failed" >&2
+      ok=false
+    fi
+    # ...and load-time-derived tensors (e.g. attn_kv_b computed from
+    # attn_k_b/attn_v_b in MLA models) must have been refreshed after the reload
+    if grep -qF "failed to refresh derived tensor" "$result_file"; then
+      echo "[$(timestamp)] ⚠️  Warning: derived tensor(s) could not be refreshed after the reload; the computed metrics would be stale. See ${result_file}.failed" >&2
       ok=false
     fi
     # ...and every swapped tensor - as well as every tensor restored to its
@@ -1592,7 +1680,33 @@ run_ppl_bench() {
     return $rc
   fi
 
-  hotswap_run_benchmark "$result_file"
+  if hotswap_run_benchmark "$result_file"; then
+    return 0
+  fi
+
+  # Fallback: retry once with a full model reload. A fresh llama-perplexity
+  # loads the swapped shards straight from disk, so every load-time
+  # derivation/fusion (MLA, merges, scaling, ...) re-runs with the new data -
+  # correct by construction, at the cost of one full model load.
+  # Skipped when the target tensors are ignored by the model (a reload cannot
+  # help) and when a termination was requested.
+  if [[ -f "${result_file}.unused" ]]; then
+    return 1
+  fi
+  if [[ "${EXIT_PENDING:-0}" -eq 1 ]]; then
+    echo "[$(timestamp)] Termination requested; skipping the full-model-reload retry for this benchmark." >&2
+    return 1
+  fi
+  echo "[$(timestamp)] 🔁 Hot-swap benchmark failed; retrying with a full model reload (fresh llama-perplexity)."
+  if hotswap_is_alive; then
+    hotswap_stop
+  fi
+  if hotswap_run_benchmark "$result_file"; then
+    # the quarantined first attempt is superseded by this successful full run
+    rm -f "${result_file}.failed"
+    return 0
+  fi
+  return 1
 }
 # ---------------- end HOTSWAP helpers ---------------------------------------
 

@@ -5,7 +5,7 @@
 #** benchmark PPL and KLD results of benchmark_each_tensor.sh **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: May-08-2026 -------------------- **#
+#** --------------- Updated: Jul-16-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -58,6 +58,12 @@ Options:
   --no-kld                              Disable kld collection
   --no-percentage                       Disable percent-delta computation (emit raw values; baseline values will be injected as-is)
   -h, --help                            Show this help message and exit
+
+Note: bench_*_result.*.txt.unused quarantine files (tensors ignored by the model,
+      produced by benchmark_each_tensor.sh --hotswap) are accepted by default when
+      the normal .txt result is absent, and collected as baseline-equivalent
+      results (KLD=0, PPL=baseline) - showing that lowering the quant of these
+      tensors has no effect.
 EOF
 }
 
@@ -457,6 +463,22 @@ else
   fi
 fi
 
+# Also gather .txt.unused quarantine files produced by benchmark_each_tensor.sh
+# --hotswap for tensors the model ignores at load time ("model has unused
+# tensor", e.g. NextN/MTP layers). These are accepted by default: lowering the
+# quant of such tensors has no effect on the model, so their metrics equal the
+# baseline's (KLD=0, PPL=baseline) - which is a valid and useful data point.
+bench_unused_files_list=$(
+  for f in ./bench_ppl_*.txt.unused; do
+    [ -e "$f" ] || continue    # skip non-matching globs
+    [ -f "$f" ] && printf '%s\n' "${f##*/}"
+  done 2>/dev/null
+)
+all_bench_ppl_unused_result_files=$(printf '%s\n' "$bench_unused_files_list" | grep -E "^bench_ppl${_kld}_result\..*\.${PPL_CHUNKS}\.txt\.unused$" 2>/dev/null || true)
+if [[ -n "$all_bench_ppl_unused_result_files" ]]; then
+  echo "[$(timestamp)] Found $(printf '%s\n' "$all_bench_ppl_unused_result_files" | wc -l | tr -d ' ') .txt.unused result file(s) (tensors ignored by the model); they will be collected as baseline-equivalent results."
+fi
+
 # find_group_indexes_for_tensor <tensor> -> prints zero-or-more group indices (one per line)
 find_group_indexes_for_tensor() {
   local tensor="$1"
@@ -847,8 +869,17 @@ for qtype in "${QTYPES[@]}"; do
         proc_key="${qtype}|${group_idx_for_tensor}"
         # Look for group result file: bench_ppl${_kld}_result.group{group_idx_for_tensor}.{qtype}.{PPL_CHUNKS}.txt
         group_result_filename="bench_ppl${_kld}_result.group${group_idx_for_tensor}.${qtype}.${PPL_CHUNKS}.txt"
+        # Accept the .txt.unused quarantine variant when the normal result is
+        # absent (group members ignored by the model: metrics are the
+        # baseline's by definition)
+        group_result_is_unused=false
+        if ! grep -qF -- "$group_result_filename" <<< "$all_bench_ppl_result_files" \
+           && grep -qF -- "${group_result_filename}.unused" <<< "$all_bench_ppl_unused_result_files"; then
+          group_result_filename="${group_result_filename}.unused"
+          group_result_is_unused=true
+        fi
         # confirm it exists in directory listing
-        if ! grep -qF -- "$group_result_filename" <<< "$all_bench_ppl_result_files"; then
+        if [[ "$group_result_is_unused" == "false" ]] && ! grep -qF -- "$group_result_filename" <<< "$all_bench_ppl_result_files"; then
           # Only log the "missing group file" message once per (qtype, group).
           if [[ -z "${PROCESSED_GROUP_QTYPE[$proc_key]:-}" ]]; then
             echo "[$(timestamp)] No group PPL result file found for group #${group_idx_for_tensor}, qtype=${qtype}: expected '$group_result_filename'. Will fall back to individual tensor files (unless --groups-only is enabled)."
@@ -871,8 +902,13 @@ for qtype in "${QTYPES[@]}"; do
             val_ppl=$(extract_ppl_from_file "$result_file" || true)
           fi
           if [[ -z "${val_ppl:-}" ]]; then
-            echo "[$(timestamp)] Warning: Could not extract PPL from $result_file. Marking 404 for group."
-            val_ppl="404"
+            if [[ "$group_result_is_unused" == "true" && -n "${BASELINE_PPL_VALUE:-}" ]]; then
+              val_ppl="$BASELINE_PPL_VALUE"
+              echo "[$(timestamp)] Group #${group_idx_for_tensor} (qtype=${qtype}) is unused by the model; injecting baseline PPL=$val_ppl"
+            else
+              echo "[$(timestamp)] Warning: Could not extract PPL from $result_file. Marking 404 for group."
+              val_ppl="404"
+            fi
           else
             echo "[$(timestamp)] Extracted group #${group_idx_for_tensor} (qtype=${qtype}): PPL=$val_ppl"
           fi
@@ -884,8 +920,13 @@ for qtype in "${QTYPES[@]}"; do
               val_kld=$(extract_kld_from_file "$result_file" || true)
             fi
             if [[ -z "${val_kld:-}" ]]; then
-              echo "[$(timestamp)] Warning: Could not extract KLD from $result_file. Marking 404 for group."
-              val_kld="404"
+              if [[ "$group_result_is_unused" == "true" ]]; then
+                val_kld="0"
+                echo "[$(timestamp)] Group #${group_idx_for_tensor} (qtype=${qtype}) is unused by the model; injecting KLD=0 (identical to baseline by definition)"
+              else
+                echo "[$(timestamp)] Warning: Could not extract KLD from $result_file. Marking 404 for group."
+                val_kld="404"
+              fi
             else
               echo "[$(timestamp)] Extracted group #${group_idx_for_tensor} (qtype=${qtype}): KLD=$val_kld"
             fi
@@ -898,8 +939,13 @@ for qtype in "${QTYPES[@]}"; do
               val_regex=$(extract_regex_from_file "$result_file" || true)
             fi
             if [[ -z "${val_regex:-}" ]]; then
-              echo "[$(timestamp)] Warning: Could not extract REGEX from $result_file. Marking 404 for group."
-              val_regex="404"
+              if [[ "$group_result_is_unused" == "true" && -n "${BASELINE_REGEX_VALUE:-}" ]]; then
+                val_regex="$BASELINE_REGEX_VALUE"
+                echo "[$(timestamp)] Group #${group_idx_for_tensor} (qtype=${qtype}) is unused by the model; injecting baseline REGEX=$val_regex"
+              else
+                echo "[$(timestamp)] Warning: Could not extract REGEX from $result_file. Marking 404 for group."
+                val_regex="404"
+              fi
             else
               echo "[$(timestamp)] Extracted group #${group_idx_for_tensor} (qtype=${qtype}): REGEX=$val_regex"
             fi
@@ -942,12 +988,21 @@ for qtype in "${QTYPES[@]}"; do
     # If we reach here: either grouping disabled, tensor not in group, OR group file not present -> handle per-tensor file
 
     result_file="bench_ppl${_kld}_result.${tensor_name}.${qtype}.${PPL_CHUNKS}.txt"
+    result_is_unused=false
     if ! grep -qF -- "$result_file" <<< "$all_bench_ppl_result_files"; then
-      # no individual file: leave empty
-      continue
+      # Accept the .txt.unused quarantine variant (tensor ignored by the
+      # model: metrics are the baseline's by definition)
+      if grep -qF -- "${result_file}.unused" <<< "$all_bench_ppl_unused_result_files"; then
+        result_file="${result_file}.unused"
+        result_is_unused=true
+      else
+        # no individual file: leave empty
+        continue
+      fi
     fi
 
     echo "[$(timestamp)] Found bench results for tensor_name: $tensor_name (qtype=${qtype})"
+    [[ "$result_is_unused" == "true" ]] && echo "[$(timestamp)] Note: '$tensor_name' is unused by the model (collected from ${result_file}); its metrics equal the baseline's."
     # ensure included if hide-empty true
     [[ "$HIDE_EMPTY" == true ]] && TENSOR_SET["$tensor_name"]=1
 
@@ -956,6 +1011,9 @@ for qtype in "${QTYPES[@]}"; do
       if [[ -n "${val_ppl:-}" ]]; then
         PPL_VALUES["${qtype}|${tensor_name}"]="$val_ppl"
         echo "[$(timestamp)] Extracted PPL: $val_ppl for ${tensor_name}.${qtype}"
+      elif [[ "$result_is_unused" == "true" && -n "${BASELINE_PPL_VALUE:-}" ]]; then
+        PPL_VALUES["${qtype}|${tensor_name}"]="$BASELINE_PPL_VALUE"
+        echo "[$(timestamp)] Injected baseline PPL=$BASELINE_PPL_VALUE for unused tensor ${tensor_name}.${qtype}"
       else
         PPL_VALUES["${qtype}|${tensor_name}"]="404"
         echo "[$(timestamp)] Warning: No matching PPL line found in $result_file. Using PPL=404."
@@ -965,6 +1023,9 @@ for qtype in "${QTYPES[@]}"; do
         if [[ -n "${val_kld:-}" ]]; then
           KLD_VALUES["${qtype}|${tensor_name}"]="$val_kld"
           echo "[$(timestamp)] Extracted KLD: $val_kld for ${tensor_name}.${qtype}"
+        elif [[ "$result_is_unused" == "true" ]]; then
+          KLD_VALUES["${qtype}|${tensor_name}"]="0"
+          echo "[$(timestamp)] Injected KLD=0 for unused tensor ${tensor_name}.${qtype} (identical to baseline by definition)"
         else
           KLD_VALUES["${qtype}|${tensor_name}"]="404"
           echo "[$(timestamp)] Warning: No matching KLD line found in $result_file. Using KLD=404."
@@ -975,6 +1036,9 @@ for qtype in "${QTYPES[@]}"; do
         if [[ -n "${val_regex:-}" ]]; then
           REGEX_VALUES["${qtype}|${tensor_name}"]="$val_regex"
           echo "[$(timestamp)] Extracted REGEX: $val_regex for ${tensor_name}.${qtype}"
+        elif [[ "$result_is_unused" == "true" && -n "${BASELINE_REGEX_VALUE:-}" ]]; then
+          REGEX_VALUES["${qtype}|${tensor_name}"]="$BASELINE_REGEX_VALUE"
+          echo "[$(timestamp)] Injected baseline REGEX=$BASELINE_REGEX_VALUE for unused tensor ${tensor_name}.${qtype}"
         else
           REGEX_VALUES["${qtype}|${tensor_name}"]="404"
           echo "[$(timestamp)] Warning: No matching REGEX line found in $result_file. Using REGEX=404."
