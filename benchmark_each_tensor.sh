@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-20-2026 -------------------- **#
+#** --------------- Updated: Jul-21-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -2843,6 +2843,52 @@ run_main_loop() {
 
         # Optionally remove local_tensors_map if you don't need to keep it
         # rm -f "$local_tensors_map"
+
+        # ------------------------------------------------------------------
+        # Coverage audit: some rounds can be skipped with only a console
+        # warning (most commonly shard download failures: "Could not fetch
+        # shard ... Skipping this tensor"), which would otherwise let a run
+        # end with "All qtypes processed" while tensors remain unbenchmarked.
+        # List every scheduled tensor/group that has neither a result file
+        # nor a .failed/.unused quarantine file.
+        # ------------------------------------------------------------------
+        if need_run_ppl; then
+          local n_missing=0
+          local missing_report="bench_ppl${_kld}_missing.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+          : > "${missing_report}.tmp"
+          for gidx in "${ALL_GROUP_IDS[@]:-}"; do
+            [[ -z "$gidx" ]] && continue
+            gf="bench_ppl${_kld}_result.group${gidx}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+            if [[ ! -f "$gf" && ! -f "${gf}.failed" && ! -f "${gf}.unused" ]]; then
+              echo "group${gidx}" >> "${missing_report}.tmp"
+              n_missing=$((n_missing + 1))
+            fi
+          done
+          if [[ "$BENCH_GROUPS_ONLY" != "true" ]]; then
+            for t in "${!tensor_to_shard[@]}"; do
+              mapfile -t _cov_gi < <(find_group_indexes_for_tensor "$t")
+              (( ${#_cov_gi[@]} > 0 )) && continue # covered by the group audit above
+              tf="bench_ppl${_kld}_result.${t}.${qtype}.${PPL_COMMAND_CHUNKS_TO_PROCESS}.txt"
+              if [[ ! -f "$tf" && ! -f "${tf}.failed" && ! -f "${tf}.unused" ]]; then
+                echo "$t" >> "${missing_report}.tmp"
+                n_missing=$((n_missing + 1))
+              fi
+            done
+          fi
+          if (( n_missing > 0 )); then
+            sort "${missing_report}.tmp" > "$missing_report"
+            rm -f "${missing_report}.tmp"
+            echo "[$(timestamp)] ⚠️⚠️  Coverage audit: $n_missing scheduled tensor(s)/group(s) were NOT benchmarked for qtype='$qtype' (no result, .failed or .unused file)." >&2
+            echo "[$(timestamp)]     Most common cause: shard download failures (look for 'Could not fetch shard' / 'Failed to fetch valid shard' above)." >&2
+            echo "[$(timestamp)]     Full list written to: $missing_report - re-run with the same parameters to retry them." >&2
+            sed 's/^/    - /' "$missing_report" | head -20 >&2
+            (( n_missing > 20 )) && echo "    ... ($((n_missing - 20)) more, see $missing_report)" >&2
+          else
+            rm -f "${missing_report}.tmp"
+            rm -f "$missing_report"
+            echo "[$(timestamp)] ✅ Coverage audit: every scheduled tensor/group has a result (or quarantine) file for qtype='$qtype'."
+          fi
+        fi
 
         # Summary of benchmarks for this qtype (each line prefixed with timestamp)
         total_all=$((count_group_ppl_bench_success + count_group_ppl_bench_failure + \

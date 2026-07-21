@@ -5,7 +5,7 @@
 #** the S_PP and S_TG values from bench_sweep_result.* files. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-16-2026 -------------------- **#
+#** --------------- Updated: Jul-21-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -876,3 +876,4 @@ echo "[$(timestamp) Writing TG CSV to $OUTPUT_TG_CSV"
 
 echo "[$(timestamp) All Done."
 echo "[$(timestamp) CSVs available at: $OUTPUT_PP_CSV and $OUTPUT_TG_CSV"
+exit 0 # ensure a clean exit code regardless of any conditional line added above

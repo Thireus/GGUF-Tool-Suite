@@ -322,6 +322,8 @@ grep -L -E 'KL divergence statistics|KL Divergence:|Final estimate:' bench_*resu
 
 Note: When benchmarking with `--hotswap`, invalid rounds are detected automatically and quarantined to `*.txt.failed` files instead of producing corrupted result files, so this check should come back clean; the quarantined tensors are simply retried on the next run. The check remains essential for benchmarks produced without `--hotswap`.
 
+Note: At the end of each qtype pass the script also performs a **coverage audit**: any scheduled tensor/group that produced no result (nor quarantine) file - typically because a shard download failed and the round was skipped with only a console warning - is listed loudly and written to `bench_ppl(_kld)_missing.QTYPE.CHUNKS.txt`. If that file appears, re-run the script with the same parameters to retry the missing entries; do not trust "All qtypes processed" alone.
+
 If you've identified that some benchmark files are missing or that you've had to delete some, you must run the same `benchmark_each_tensor.sh` with the exact same parameters to resume benchmarking the remaining tensors/groups.
 
 ## Prepare the benchmark results collection

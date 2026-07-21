@@ -5,7 +5,7 @@
 #** benchmark PPL and KLD results of benchmark_each_tensor.sh **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-16-2026 -------------------- **#
+#** --------------- Updated: Jul-21-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -1225,3 +1225,4 @@ echo "[$(timestamp)] All Done."
 echo "[$(timestamp)] PPL CSV available at: $OUTPUT_PPL_CSV"
 [[ "$NO_KLD" == "false" ]] && echo "[$(timestamp)] KLD CSV available at: $OUTPUT_KLD_CSV"
 [[ "$REGEX" != "" ]] && echo "[$(timestamp)] REGEX CSV available at: $OUTPUT_REGEX_CSV"
+exit 0 # do not leak the status of the optional echo above as the script's exit code
