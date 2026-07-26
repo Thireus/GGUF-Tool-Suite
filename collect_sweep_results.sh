@@ -5,7 +5,7 @@
 #** the S_PP and S_TG values from bench_sweep_result.* files. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-21-2026 -------------------- **#
+#** --------------- Updated: Jul-26-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -59,10 +59,9 @@ Options:
   --no-percentage                       Disable percent-delta computation (emit raw values; baseline values will be injected as-is)
   -h, --help                            Show this help message and exit
 
-Note: bench_sweep_result.*.txt.unused quarantine files (tensors ignored by the
-      model, produced by benchmark_each_tensor.sh --hotswap) are accepted by
-      default when the normal .txt result is absent, and collected as
-      baseline-equivalent results (PP/TG=baseline).
+Note: bench_sweep_result.*.txt.unused quarantine files (tensors ignored by the model, produced by benchmark_each_tensor.sh --hotswap) are accepted by default when the normal .txt result is absent, and collected as baseline-equivalent results (PP/TG=baseline).
+
+Note: q*_K and q*_KV quants must be used with a capital "K" and "KV" letters at the end of their name (e.g. q2_K, q6_K, q8_KV). All other quants are lowercase (e.g. bf16, iq3_kt, iq4_k, q8_0, q4_k_r4, q8_k_r8). Map and result filenames are matched case-sensitively, so a mis-cased qtype finds no files.
 EOF
 }
 
@@ -186,6 +185,40 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+# Qtype naming rule: q*_K and q*_KV quants must be spelled with a capital "K"
+# and "KV" at the end of their name (q2_K, q6_K, q8_KV). All other quants are
+# lowercase (bf16, iq3_kt, iq4_k, q8_0, q4_k_r4, q8_k_r8). Map and result files
+# are matched case-sensitively, so a mis-cased qtype silently finds nothing.
+canonical_qtype() {
+  local q="${1,,}"
+  if [[ "$q" =~ ^q[^_]+_kv$ ]]; then
+    printf '%s' "${q%_kv}_KV"
+  elif [[ "$q" =~ ^q[^_]+_k$ ]]; then
+    printf '%s' "${q%_k}_K"
+  else
+    printf '%s' "$q"
+  fi
+}
+
+warn_if_bad_qtype_casing() {
+  local origin="$1" q="$2" canon
+  [[ -z "$q" ]] && return 0
+  canon="$(canonical_qtype "$q")"
+  [[ "$q" == "$canon" ]] && return 0
+  echo "⚠️  Warning! ${origin} qtype '$q' does not follow the qtype naming rule - q*_K and q*_KV quants must be used with a capital \"K\" and \"KV\" letters at the end of their name, all other quants are lowercase. Did you mean '$canon'? Map and result filenames are matched case-sensitively, so '$q' will most likely find no files." >&2
+}
+
+warn_if_bad_qtype_casing "--inject-baseline-pp-qtype" "$BASELINE_PP_QTYPE"
+warn_if_bad_qtype_casing "--inject-baseline-tg-qtype" "$BASELINE_TG_QTYPE"
+warn_if_bad_qtype_casing "--auto-baseline" "$AUTO_BASELINE_QTYPE"
+if [[ -n "${qtypes:-}" ]]; then
+  IFS=',' read -r -a __qtypes_to_check <<< "$qtypes"
+  for __q in "${__qtypes_to_check[@]}"; do
+    warn_if_bad_qtype_casing "--qtypes" "$__q"
+  done
+  unset __qtypes_to_check __q
+fi
 
 # Ensure user didn't supply both --group-tensors and --group-tensors-map
 if [[ -n "${GROUP_TENSORS_MAP_FILE:-}" && ${#GROUP_TENSORS_RAW[@]} -gt 0 ]]; then

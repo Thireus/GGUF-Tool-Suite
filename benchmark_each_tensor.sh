@@ -5,7 +5,7 @@
 #** sensitivity to heavy quantisation of each tensor.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jul-21-2026 -------------------- **#
+#** --------------- Updated: Jul-26-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -104,9 +104,9 @@ Options:
   -h, --help                                   Show this help and exit
 
 Notes:
-  - The default for --quant-downloader-options is '-zd' which automatically decompresses .zbst files. The provided OPTS
-    string will be word-split and forwarded to the quant_downloader invocation when the script needs to run that downloader.
+  - The default for --quant-downloader-options is '-zd' which automatically decompresses .zbst files. The provided OPTS string will be word-split and forwarded to the quant_downloader invocation when the script needs to run that downloader.
   - For detailed configuration, edit the USER CONFIGURATION section inside this script.
+  - q*_K and q*_KV quants must be used with a capital "K" and "KV" letters at the end of their name (e.g. q2_K, q6_K, q8_KV). All other quants are lowercase (e.g. bf16, iq3_kt, iq4_k, q8_0, q4_k_r4, q8_k_r8). Map and result filenames are matched case-sensitively, so a mis-cased qtype finds no files.
 USAGE
 }
 # ---------------- end USAGE / HELP ----------------
@@ -290,6 +290,35 @@ if (( ${#GROUP_TENSORS_RAW[@]} == 0 )) || ((( ${#GROUP_TENSORS_RAW[@]} == 1 )) &
   GROUP_TENSORS_RAW=()
 fi
 
+# Qtype naming rule: q*_K and q*_KV quants must be spelled with a capital "K"
+# and "KV" at the end of their name (q2_K, q6_K, q8_KV). All other quants are
+# lowercase (bf16, iq3_kt, iq4_k, q8_0, q4_k_r4, q8_k_r8). Map and result files
+# are matched case-sensitively, so a mis-cased qtype silently finds nothing.
+canonical_qtype() {
+  local q="${1,,}"
+  if [[ "$q" =~ ^q[^_]+_kv$ ]]; then
+    printf '%s' "${q%_kv}_KV"
+  elif [[ "$q" =~ ^q[^_]+_k$ ]]; then
+    printf '%s' "${q%_k}_K"
+  else
+    printf '%s' "$q"
+  fi
+}
+
+warn_if_bad_qtype_casing() {
+  local origin="$1" q="$2" canon
+  [[ -z "$q" ]] && return 0
+  canon="$(canonical_qtype "$q")"
+  [[ "$q" == "$canon" ]] && return 0
+  echo "⚠️  Warning! ${origin} qtype '$q' does not follow the qtype naming rule - q*_K and q*_KV quants must be used with a capital \"K\" and \"KV\" letters at the end of their name, all other quants are lowercase. Did you mean '$canon'? Map and result filenames are matched case-sensitively, so '$q' will most likely find no files." >&2
+}
+
+warn_if_bad_qtype_casing "--benchmark-worst-tensors-from-qtype" "$BENCH_FROM_QTYPE"
+for __q in "${CUSTOM_QTYPES[@]:-}"; do
+  warn_if_bad_qtype_casing "--qtypes" "$__q"
+done
+unset __q
+
 # Validate that if user asked to benchmark groups only, they passed --group-tensors
 if [[ "$BENCH_GROUPS_ONLY" == "true" && "$GROUP_TENSORS_DISABLED" == "true" ]]; then
   echo "Error: --benchmark-groups-only requires --group-tensors to be set (provide one or more group regex specifications)." >&2
@@ -421,6 +450,12 @@ done
 _LOCAL_QTYPES=( $(printf "%s\n" "${PATTERN_QTYPES[@]}" | sort -u) )
 LOCAL_QTYPES=( $(printf "%s\n" "${_LOCAL_QTYPES[@]}" | grep -v '^f32$') )
 
+# Warn about any mis-cased qtype the user configured in USER_REGEX (one warning per unique qtype)
+for __q in "${_LOCAL_QTYPES[@]}"; do
+  warn_if_bad_qtype_casing "USER_REGEX" "$__q"
+done
+unset __q
+
 # Also build USER_REGEX_PATTERNS (left-hand regex portions) for later use
 declare -a USER_REGEX_PATTERNS=()
 for entry in "${USER_REGEX[@]}"; do
@@ -446,6 +481,7 @@ QTYPES=(${CUSTOM_QTYPES[@]:-"iq1_m_r4" "iq2_k"})
 # 8. Baseline QTYPE for baseline PPL+KLD computation, try to best match the recipe's mean quant provided in USER_REGEX
 # Try to use the highest baseline you can that fits in your VRAM+RAM
 BASELINE_QTYPE="iq3_xxs"
+warn_if_bad_qtype_casing "BASELINE_QTYPE" "$BASELINE_QTYPE"
 
 # 9. PPL command template:
 # Do not add KLD parameters, they will be automatically added if necessary at the end of this template - See "Add KLD parameter placeholder" section
