@@ -313,11 +313,37 @@ warn_if_bad_qtype_casing() {
   echo "⚠️  Warning! ${origin} qtype '$q' does not follow the qtype naming rule - q*_K and q*_KV quants must be used with a capital \"K\" and \"KV\" letters at the end of their name, all other quants are lowercase. Did you mean '$canon'? Map and result filenames are matched case-sensitively, so '$q' will most likely find no files." >&2
 }
 
-warn_if_bad_qtype_casing "--benchmark-worst-tensors-from-qtype" "$BENCH_FROM_QTYPE"
-for __q in "${CUSTOM_QTYPES[@]:-}"; do
-  warn_if_bad_qtype_casing "--qtypes" "$__q"
-done
-unset __q
+# The warning above stays a warning, but the qtype is baked verbatim into every
+# filename this script PRODUCES - tensors.<qtype>.map, bench_ppl*_result.*.<qtype>.*.txt,
+# bench_sweep_result.*.<qtype>.*.txt - which collect_ppl_results.sh and
+# collect_sweep_results.sh later discover. A mis-cased qtype is never rejected by the
+# downloader either (it uppercases the qtype for the remote path), so nothing would
+# fail: the wrong spelling would just silently propagate into the CSVs. Correct it
+# here so the produced filenames always use canonical casing. Sets FIXED_QTYPE.
+declare -A __QTYPE_CASING_WARNED=()
+FIXED_QTYPE=""
+fix_qtype_casing() {
+  local origin="$1" q="$2" canon key
+  canon="$(canonical_qtype "$q")"
+  FIXED_QTYPE="$canon"
+  if [[ -n "$q" && "$q" != "$canon" ]]; then
+    key="${origin}|${q}"
+    if [[ -z "${__QTYPE_CASING_WARNED[$key]:-}" ]]; then
+      __QTYPE_CASING_WARNED["$key"]=1
+      warn_if_bad_qtype_casing "$origin" "$q"
+      echo "⚠️  ${origin}: using '$canon' instead of '$q' for the files this script produces - anything previously produced under the '$q' spelling will NOT be reused." >&2
+    fi
+  fi
+}
+
+fix_qtype_casing "--benchmark-worst-tensors-from-qtype" "$BENCH_FROM_QTYPE"; BENCH_FROM_QTYPE="$FIXED_QTYPE"
+if (( ${#CUSTOM_QTYPES[@]} > 0 )); then
+  for __i in "${!CUSTOM_QTYPES[@]}"; do
+    fix_qtype_casing "--qtypes" "${CUSTOM_QTYPES[$__i]}"
+    CUSTOM_QTYPES[$__i]="$FIXED_QTYPE"
+  done
+  unset __i
+fi
 
 # Validate that if user asked to benchmark groups only, they passed --group-tensors
 if [[ "$BENCH_GROUPS_ONLY" == "true" && "$GROUP_TENSORS_DISABLED" == "true" ]]; then
@@ -443,18 +469,16 @@ declare -a PATTERNS PATTERN_QTYPES
 for entry in "${USER_REGEX[@]}"; do
   IFS='=' read -r pat qtype _locked <<< "$entry"
   PATTERNS+=("$pat")
-  PATTERN_QTYPES+=("$qtype")
+  # Correct the casing here (one warning per distinct mis-cased qtype): these values
+  # end up in the tensors.<qtype>.map filenames fetched during initial validation,
+  # which collect_ppl_results.sh later discovers via its tensors.*.map glob.
+  fix_qtype_casing "USER_REGEX" "$qtype"
+  PATTERN_QTYPES+=("$FIXED_QTYPE")
 done
 # Derive unique LOCAL_QTYPES sorted, except f32
 # Build your LOCAL_QTYPES, removing any "f32"
 _LOCAL_QTYPES=( $(printf "%s\n" "${PATTERN_QTYPES[@]}" | sort -u) )
 LOCAL_QTYPES=( $(printf "%s\n" "${_LOCAL_QTYPES[@]}" | grep -v '^f32$') )
-
-# Warn about any mis-cased qtype the user configured in USER_REGEX (one warning per unique qtype)
-for __q in "${_LOCAL_QTYPES[@]}"; do
-  warn_if_bad_qtype_casing "USER_REGEX" "$__q"
-done
-unset __q
 
 # Also build USER_REGEX_PATTERNS (left-hand regex portions) for later use
 declare -a USER_REGEX_PATTERNS=()
@@ -481,7 +505,10 @@ QTYPES=(${CUSTOM_QTYPES[@]:-"iq1_m_r4" "iq2_k"})
 # 8. Baseline QTYPE for baseline PPL+KLD computation, try to best match the recipe's mean quant provided in USER_REGEX
 # Try to use the highest baseline you can that fits in your VRAM+RAM
 BASELINE_QTYPE="iq3_xxs"
-warn_if_bad_qtype_casing "BASELINE_QTYPE" "$BASELINE_QTYPE"
+# Baked into bench_ppl*_result.baseline.<qtype>.<chunks>.txt and
+# bench_sweep_result.baseline.<qtype>.<CONTEXT>.txt, which the collectors read back
+# via --auto-baseline - so correct its casing rather than only warning about it.
+fix_qtype_casing "BASELINE_QTYPE" "$BASELINE_QTYPE"; BASELINE_QTYPE="$FIXED_QTYPE"
 
 # 9. PPL command template:
 # Do not add KLD parameters, they will be automatically added if necessary at the end of this template - See "Add KLD parameter placeholder" section

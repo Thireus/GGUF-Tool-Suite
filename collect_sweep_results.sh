@@ -38,10 +38,8 @@ Options:
   --nkv N_KV                            N_KV value to extract from sweep output (integer). Default: 0
   --baseline-pp VALUE                   Global baseline PP (t/s) value for percent-delta computation (float)
   --baseline-tg VALUE                   Global baseline TG (t/s) value for percent-delta computation (float)
-  --inject-baseline-pp-qtype QTYPE      For this qtype, inject baseline PP (uses --baseline-pp if provided,
-                                        otherwise tries to read bench_sweep_result.baseline.QTYPE.<CONTEXT>.txt)
-  --inject-baseline-tg-qtype QTYPE      For this qtype, inject baseline TG (uses --baseline-tg if provided,
-                                        otherwise tries to read bench_sweep_result.baseline.QTYPE.<CONTEXT>.txt)
+  --inject-baseline-pp-qtype QTYPE      For this qtype, inject baseline PP. The value is resolved from --baseline-pp, else from --auto-baseline, else from bench_sweep_result.baseline.QTYPE.<CONTEXT>.txt in the current directory; the script errors out if none of those yields a value.
+  --inject-baseline-tg-qtype QTYPE      For this qtype, inject baseline TG. The value is resolved from --baseline-tg, else from --auto-baseline, else from bench_sweep_result.baseline.QTYPE.<CONTEXT>.txt in the current directory; the script errors out if none of those yields a value.
   --auto-baseline QTYPE                 Automatically read bench_sweep_result.baseline.QTYPE.<CONTEXT>.txt to obtain
                                         per-qtype baseline PP and TG (only for the named qtype).
 
@@ -334,6 +332,28 @@ echo "Requested N_KV: $N_KV"
 echo "Output PP CSV: $OUTPUT_PP_CSV"
 echo "Output TG CSV: $OUTPUT_TG_CSV"
 ALL_GROUP_IDS=()
+# Split and whitespace-trim every group's regex list ONCE, into a flat table indexed by
+# group. This used to be redone - with a sed(1) fork per regex - on every single call to
+# find_group_indexes_for_tensor and on every group-member rebuild, i.e. tens of thousands
+# of forks per run. Values are identical, this is purely hoisting invariant work.
+declare -a GROUP_REGEX_FLAT=()   # all trimmed regexes, concatenated
+declare -a GROUP_REGEX_START=()  # group idx -> first offset into GROUP_REGEX_FLAT
+declare -a GROUP_REGEX_COUNT=()  # group idx -> number of regexes
+for _gr_idx in "${!GROUP_TENSORS_RAW[@]}"; do
+  IFS=',' read -r -a _gr_regs <<< "${GROUP_TENSORS_RAW[$_gr_idx]}"
+  GROUP_REGEX_START[$_gr_idx]=${#GROUP_REGEX_FLAT[@]}
+  _gr_cnt=0
+  for _gr_r in ${_gr_regs[@]+"${_gr_regs[@]}"}; do
+    _gr_r="${_gr_r#"${_gr_r%%[![:space:]]*}"}"   # ltrim
+    _gr_r="${_gr_r%"${_gr_r##*[![:space:]]}"}"   # rtrim
+    [[ -z "$_gr_r" ]] && continue
+    GROUP_REGEX_FLAT+=("$_gr_r")
+    _gr_cnt=$((_gr_cnt + 1))
+  done
+  GROUP_REGEX_COUNT[$_gr_idx]=$_gr_cnt
+done
+unset _gr_idx _gr_regs _gr_cnt _gr_r
+
 if [[ "$GROUP_TENSORS_DISABLED" != "true" ]]; then
   echo "Group tensors: ENABLED; groups:"
   gid=0
@@ -385,6 +405,22 @@ QTYPES=("${sorted_qtypes[@]}")
 
 echo "Found qtypes: ${QTYPES[*]}"
 
+# The casing warning above is only a warning - it does not stop the run. So that a
+# mis-cased --inject-baseline-pp-qtype / --inject-baseline-tg-qtype does not silently
+# fail to match any discovered qtype (leaving the baseline uninjected), resolve them
+# case-insensitively against the qtypes we actually found and adopt the real spelling.
+for __bq_var in BASELINE_PP_QTYPE BASELINE_TG_QTYPE; do
+  __bq_val="${!__bq_var}"
+  [[ -z "$__bq_val" ]] && continue
+  printf '%s\n' "${QTYPES[@]}" | grep -qxF -- "$__bq_val" && continue
+  __bq_fixed="$(printf '%s\n' "${QTYPES[@]}" | grep -ixF -- "$__bq_val" | head -n1 || true)"
+  if [[ -n "$__bq_fixed" ]]; then
+    echo "[$(timestamp) ⚠️  Corrected ${__bq_var} casing: '$__bq_val' -> '$__bq_fixed' (matched a discovered qtype)"
+    printf -v "$__bq_var" '%s' "$__bq_fixed"
+  fi
+done
+unset __bq_var __bq_val __bq_fixed
+
 declare -A PP_VALUES   # key: "qtype|tensor_or_group" => S_PP value or "404"
 declare -A TG_VALUES   # key: "qtype|tensor_or_group" => S_TG value or "404"
 declare -A TENSOR_SET  # tensor_name or group name => 1 (if to include)
@@ -415,33 +451,29 @@ if [[ -n "$all_bench_sweep_unused_result_files" ]]; then
 fi
 
 # find_group_indexes_for_tensor <tensor> -> prints zero-or-more group indices (one per line)
+declare -a GROUP_IDXS_RESULT=()
 find_group_indexes_for_tensor() {
-  local tensor="$1"
+  # sets GROUP_IDXS_RESULT instead of printing: being read back through a process
+  # substitution cost one fork per tensor per qtype, on top of the sed forks above.
+  GROUP_IDXS_RESULT=()
   if [[ "$GROUP_TENSORS_DISABLED" == "true" ]]; then
-    # print nothing -> caller receives an empty array
-    return
+    # leave GROUP_IDXS_RESULT empty -> caller receives an empty array
+    return 0
   fi
 
-  local -a idxs=()
+  local tensor="$1" idx start count i
   for idx in "${!GROUP_TENSORS_RAW[@]}"; do
-    local group_raw="${GROUP_TENSORS_RAW[$idx]}"
-    IFS=',' read -r -a regs <<< "$group_raw"
-    for reg in "${regs[@]}"; do
-      # trim spaces
-      reg="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$reg")"
-      [[ -z "$reg" ]] && continue
-      if [[ $tensor =~ $reg ]]; then
-        idxs+=("$idx")
+    start="${GROUP_REGEX_START[$idx]}"
+    count="${GROUP_REGEX_COUNT[$idx]}"
+    for (( i = start; i < start + count; i++ )); do
+      if [[ $tensor =~ ${GROUP_REGEX_FLAT[$i]} ]]; then
+        GROUP_IDXS_RESULT+=("$idx")
         # one matching regex per group is enough -> move to next group
         break
       fi
     done
   done
-
-  # print them newline-separated (or nothing if empty)
-  for i in "${idxs[@]}"; do
-    printf '%s\n' "$i"
-  done
+  return 0
 }
 
 # helper: extract S_PP and S_TG from a baseline/sweep file (returns "S_PP|S_TG" or empty string)
@@ -472,15 +504,31 @@ fi
 
 # If auto-baseline requested, attempt to read bench_sweep_result.baseline.<qtype>.<CONTEXT>.txt
 if [[ -n "$AUTO_BASELINE_QTYPE" ]]; then
-  baseline_fname="bench_sweep_result.baseline.${AUTO_BASELINE_QTYPE,,}.${CONTEXT}.txt"
+  # NOTE: do NOT lowercase the qtype here. benchmark_each_tensor.sh writes this file
+  # as bench_sweep_result.baseline.${BASELINE_QTYPE}.<CONTEXT>.txt using the qtype
+  # verbatim, so lowercasing it made every q*_K / q*_KV baseline (q2_K, q6_K, q8_KV)
+  # impossible to find. Match verbatim first, then fall back to a case-insensitive
+  # lookup so a mis-cased --auto-baseline still resolves instead of silently giving up.
+  baseline_fname="bench_sweep_result.baseline.${AUTO_BASELINE_QTYPE}.${CONTEXT}.txt"
+  if ! grep -qF -- "$baseline_fname" <<< "$all_bench_sweep_result_files"; then
+    _ci_fname="$(grep -ixF -- "$baseline_fname" <<< "$all_bench_sweep_result_files" | head -n1 || true)"
+    if [[ -n "$_ci_fname" ]]; then
+      _fixed_qtype="${_ci_fname#bench_sweep_result.baseline.}"
+      _fixed_qtype="${_fixed_qtype%.${CONTEXT}.txt}"
+      echo "[$(timestamp) ⚠️  Auto-baseline: corrected qtype casing '${AUTO_BASELINE_QTYPE}' -> '${_fixed_qtype}' to match the on-disk file '${_ci_fname}'"
+      AUTO_BASELINE_QTYPE="$_fixed_qtype"
+      baseline_fname="$_ci_fname"
+    fi
+    unset _ci_fname _fixed_qtype
+  fi
   if grep -qF -- "$baseline_fname" <<< "$all_bench_sweep_result_files"; then
     parsed=$(extract_pp_tg_from_file "./${baseline_fname}" || true)
     if [[ -n "$parsed" ]]; then
       base_pp="${parsed%%|*}"
       base_tg="${parsed#*|}"
       echo "[$(timestamp) Auto-baseline: extracted for qtype=${AUTO_BASELINE_QTYPE}: PP=${base_pp}, TG=${base_tg}"
-      [[ -n "$BASELINE_PP_QTYPE" && "$AUTO_BASELINE_QTYPE" == "$BASELINE_PP_QTYPE" && -n "$BASELINE_PP" ]] && echo "[$(timestamp) BASELINE_PP already user-defined, not replaced!" || { BASELINE_PP=${base_pp} && BASELINE_PP_QTYPE=${AUTO_BASELINE_QTYPE,,} && echo "[$(timestamp) BASELINE_PP='$BASELINE_PP' and BASELINE_PP_QTYPE='$BASELINE_PP_QTYPE' have now been set"; }
-      [[ -n "$BASELINE_TG_QTYPE" && "$AUTO_BASELINE_QTYPE" == "$BASELINE_TG_QTYPE" && -n "$BASELINE_TG" ]] && echo "[$(timestamp) BASELINE_TG already user-defined, not replaced!" || { BASELINE_TG=${base_tg} && BASELINE_TG_QTYPE=${AUTO_BASELINE_QTYPE,,} && echo "[$(timestamp) BASELINE_TG='$BASELINE_TG' and BASELINE_TG_QTYPE='$BASELINE_TG_QTYPE' have now been set"; }
+      [[ -n "$BASELINE_PP_QTYPE" && "$AUTO_BASELINE_QTYPE" == "$BASELINE_PP_QTYPE" && -n "$BASELINE_PP" ]] && echo "[$(timestamp) BASELINE_PP already user-defined, not replaced!" || { BASELINE_PP=${base_pp} && BASELINE_PP_QTYPE=${AUTO_BASELINE_QTYPE} && echo "[$(timestamp) BASELINE_PP='$BASELINE_PP' and BASELINE_PP_QTYPE='$BASELINE_PP_QTYPE' have now been set"; }
+      [[ -n "$BASELINE_TG_QTYPE" && "$AUTO_BASELINE_QTYPE" == "$BASELINE_TG_QTYPE" && -n "$BASELINE_TG" ]] && echo "[$(timestamp) BASELINE_TG already user-defined, not replaced!" || { BASELINE_TG=${base_tg} && BASELINE_TG_QTYPE=${AUTO_BASELINE_QTYPE} && echo "[$(timestamp) BASELINE_TG='$BASELINE_TG' and BASELINE_TG_QTYPE='$BASELINE_TG_QTYPE' have now been set"; }
     else
       echo "[$(timestamp) Auto-baseline: baseline file exists but no N_KV=${N_KV} row found in $baseline_fname"
     fi
@@ -488,6 +536,41 @@ if [[ -n "$AUTO_BASELINE_QTYPE" ]]; then
     echo "[$(timestamp) Auto-baseline: baseline file $baseline_fname not found for qtype=${AUTO_BASELINE_QTYPE}"
   fi
 fi
+
+# --inject-baseline-pp-qtype / --inject-baseline-tg-qtype only make sense if there is
+# an actual baseline value to inject. It can come from three places:
+#   1. --baseline-pp / --baseline-tg                                  (explicit)
+#   2. --auto-baseline QTYPE                                          (resolved just above)
+#   3. bench_sweep_result.baseline.<qtype>.<CONTEXT>.txt in this directory
+# Source 3 is what the --help text has always promised for these two flags, but it was
+# never actually implemented: a lone --inject-baseline-pp-qtype silently produced 404
+# for the whole qtype even with the baseline file sitting in the directory. Resolve it
+# here, and hard-fail when none of the three yields a value.
+for __ibq in PP TG; do
+  __ibq_qtype_var="BASELINE_${__ibq}_QTYPE"
+  __ibq_val_var="BASELINE_${__ibq}"
+  __ibq_qtype="${!__ibq_qtype_var}"
+  if [[ -z "$__ibq_qtype" || -n "${!__ibq_val_var}" ]]; then
+    continue
+  fi
+  __ibq_file="bench_sweep_result.baseline.${__ibq_qtype}.${CONTEXT}.txt"
+  if [[ -f "$__ibq_file" ]]; then
+    __ibq_parsed="$(extract_pp_tg_from_file "./${__ibq_file}" || true)"
+    if [[ -n "$__ibq_parsed" ]]; then
+      if [[ "$__ibq" == "PP" ]]; then
+        printf -v "$__ibq_val_var" '%s' "${__ibq_parsed%%|*}"
+      else
+        printf -v "$__ibq_val_var" '%s' "${__ibq_parsed#*|}"
+      fi
+      echo "[$(timestamp) --inject-baseline-${__ibq,,}-qtype: resolved ${__ibq}=${!__ibq_val_var} for qtype='${__ibq_qtype}' from ${__ibq_file}"
+    fi
+  fi
+  if [[ -z "${!__ibq_val_var}" ]]; then
+    echo "[$(timestamp) ❌ Error: --inject-baseline-${__ibq,,}-qtype '${__ibq_qtype}' was given but no baseline ${__ibq} value could be resolved for it. Supply one of: --baseline-${__ibq,,} VALUE, or --auto-baseline ${__ibq_qtype}, or place a readable '${__ibq_file}' (with an N_KV=${N_KV} row) in the current directory." >&2
+    exit 1
+  fi
+done
+unset __ibq __ibq_qtype_var __ibq_val_var __ibq_qtype __ibq_file __ibq_parsed
 
 # write result into an output array passed by name
 remove_items_from_list_lines_inplace() {
@@ -528,6 +611,36 @@ for qtype in "${QTYPES[@]}"; do
     TENS_IN_MAP+=("$tensor_name")
   done
 
+  # Precompute each group's member list for THIS qtype's map, once. It depends only on
+  # the map and the group regexes, so it is invariant across the map-line loop below.
+  # It used to be rebuilt for every map line, scanning all tensors and doing a linear
+  # " ${group_members[*]} " substring test per candidate - O(n^2) with a big string
+  # rebuild each time. On a 1524-tensor map with a '.*' group that alone took minutes.
+  declare -a QT_GROUP_MEMBERS_FLAT=()
+  declare -a QT_GROUP_MEMBERS_START=()
+  declare -a QT_GROUP_MEMBERS_COUNT=()
+  for _qgm_idx in "${!GROUP_TENSORS_RAW[@]}"; do
+    QT_GROUP_MEMBERS_START[$_qgm_idx]=${#QT_GROUP_MEMBERS_FLAT[@]}
+    _qgm_cnt=0
+    declare -A _qgm_seen=()
+    _qgm_s="${GROUP_REGEX_START[$_qgm_idx]}"
+    _qgm_c="${GROUP_REGEX_COUNT[$_qgm_idx]}"
+    for (( _qgm_i = _qgm_s; _qgm_i < _qgm_s + _qgm_c; _qgm_i++ )); do
+      _qgm_reg="${GROUP_REGEX_FLAT[$_qgm_i]}"
+      for _qgm_t in ${TENS_IN_MAP[@]+"${TENS_IN_MAP[@]}"}; do
+        if [[ $_qgm_t =~ $_qgm_reg ]] && [[ -z "${_qgm_seen[$_qgm_t]:-}" ]]; then
+          _qgm_seen["$_qgm_t"]=1
+          QT_GROUP_MEMBERS_FLAT+=("$_qgm_t")
+          _qgm_cnt=$((_qgm_cnt + 1))
+        fi
+      done
+    done
+    QT_GROUP_MEMBERS_COUNT[$_qgm_idx]=$_qgm_cnt
+    unset _qgm_seen
+  done
+  unset _qgm_idx _qgm_cnt _qgm_s _qgm_c _qgm_i _qgm_reg _qgm_t
+  _gm_cur_key=""   # which (qtype|group) group_members currently holds
+
   PROCESSED_GROUP_IDS=()
 
   # iterate through entries in MAP_LINES
@@ -549,7 +662,8 @@ for qtype in "${QTYPES[@]}"; do
     [[ "$matched" == true ]] || continue
 
     # Determine all group indices for this tensor (could be zero..N)
-    mapfile -t group_idxs_for_tensor < <(find_group_indexes_for_tensor "$tensor_name")
+    find_group_indexes_for_tensor "$tensor_name"
+    group_idxs_for_tensor=( ${GROUP_IDXS_RESULT[@]+"${GROUP_IDXS_RESULT[@]}"} )
 
     # If grouping is enabled and this tensor belongs to one or more group, attempt to process the groups
     if (( ${#group_idxs_for_tensor[@]} > 0 )); then
@@ -570,20 +684,20 @@ for qtype in "${QTYPES[@]}"; do
         fi
 
         # collect all group members present in this qtype's map
-        group_raw="${GROUP_TENSORS_RAW[$group_idx_for_tensor]}"
-        IFS=',' read -r -a regs <<< "$group_raw"
-        declare -a group_members=() # IMPORTANT: If there is more than one group, this array will be overwritten, which is fine, just make sure to inform the user!
-        for reg in "${regs[@]}"; do
-          reg="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$reg")"
-          [[ -z "$reg" ]] && continue
-          for t in "${TENS_IN_MAP[@]}"; do
-            if [[ $t =~ $reg ]]; then
-              if [[ ! " ${group_members[*]} " =~ " $t " ]]; then
-                group_members+=("$t")
-              fi
-            fi
-          done
-        done
+        # IMPORTANT: If there is more than one group, this array will be overwritten, which is fine, just make sure to inform the user!
+        # Taken from the per-qtype table precomputed above; only re-sliced when the
+        # (qtype, group) actually changes, so the common single-group case copies once.
+        _gm_key="${qtype}|${group_idx_for_tensor}"
+        if [[ "$_gm_cur_key" != "$_gm_key" ]]; then
+          _gm_s="${QT_GROUP_MEMBERS_START[$group_idx_for_tensor]}"
+          _gm_c="${QT_GROUP_MEMBERS_COUNT[$group_idx_for_tensor]}"
+          if (( _gm_c > 0 )); then
+            group_members=( "${QT_GROUP_MEMBERS_FLAT[@]:_gm_s:_gm_c}" )
+          else
+            group_members=()
+          fi
+          _gm_cur_key="$_gm_key"
+        fi
 
         if (( ${#group_members[@]} == 0 )); then
           echo "[$(timestamp) Warning: no group members found in map for group #${group_idx_for_tensor} (qtype=${qtype}). Skipping group." >&2
@@ -642,8 +756,9 @@ for qtype in "${QTYPES[@]}"; do
           if [[ -n "$parsed" ]]; then
             SPP_VAL="${parsed%%|*}"
             STG_VAL="${parsed#*|}"
-            SPP_VAL="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$SPP_VAL")"
-            STG_VAL="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$STG_VAL")"
+            # trim with parameter expansion rather than a sed(1) fork (this runs per result)
+            SPP_VAL="${SPP_VAL#"${SPP_VAL%%[![:space:]]*}"}"; SPP_VAL="${SPP_VAL%"${SPP_VAL##*[![:space:]]}"}"
+            STG_VAL="${STG_VAL#"${STG_VAL%%[![:space:]]*}"}"; STG_VAL="${STG_VAL%"${STG_VAL##*[![:space:]]}"}"
             echo "[$(timestamp) Extracted group #${group_idx_for_tensor} (qtype=${qtype}): S_PP=$SPP_VAL, S_TG=$STG_VAL"
           elif [[ "$group_result_is_unused" == "true" && ( -n "${BASELINE_PP:-}" || -n "${BASELINE_TG:-}" ) ]]; then
             SPP_VAL="${BASELINE_PP:-404}"
@@ -689,18 +804,26 @@ for qtype in "${QTYPES[@]}"; do
     # Fallback: look for individual per-tensor result
     # If we reach here: either grouping disabled, tensor not in group, OR group file not present -> handle per-tensor file
 
-    # Find matching bench_sweep_result file for this tensor and qtype (individual)
-    # regex to match: ^bench_sweep_result\.${tensor_name}\..*\.${CONTEXT}\.txt$
-    regex="^bench_sweep_result\.${tensor_name}\..*\.${CONTEXT}\.txt$"
-    bench_match=$(printf '%s\n' "$all_bench_sweep_result_files" | grep -m1 -E "$regex" 2>/dev/null || true)
+    # Find matching bench_sweep_result file for this tensor AND qtype (individual).
+    # This used to match with the qtype as a wildcard:
+    #   ^bench_sweep_result\.${tensor_name}\..*\.${CONTEXT}\.txt$
+    # combined with grep -m1, so every qtype column was filled from whichever qtype's
+    # file happened to sort first - i.e. individual (non-group) sweep results were
+    # silently attributed to the wrong qtype. benchmark_each_tensor.sh writes the qtype
+    # into the name (bench_sweep_result.<tensor>.<qtype>.<CONTEXT>.txt), so match it
+    # exactly, the same way collect_ppl_results.sh does.
+    bench_name="bench_sweep_result.${tensor_name}.${qtype}.${CONTEXT}.txt"
+    bench_match=""
+    if grep -qxF -- "$bench_name" <<< "$all_bench_sweep_result_files"; then
+      bench_match="$bench_name"
+    fi
 
     result_is_unused=false
     if [[ -z "$bench_match" ]]; then
       # Accept the .txt.unused quarantine variant (tensor ignored by the
       # model: metrics are the baseline's by definition)
-      unused_regex="^bench_sweep_result\.${tensor_name}\..*\.${CONTEXT}\.txt\.unused$"
-      bench_match=$(printf '%s\n' "$all_bench_sweep_unused_result_files" | grep -m1 -E "$unused_regex" 2>/dev/null || true)
-      if [[ -n "$bench_match" ]]; then
+      if grep -qxF -- "${bench_name}.unused" <<< "$all_bench_sweep_unused_result_files"; then
+        bench_match="${bench_name}.unused"
         result_is_unused=true
       else
         # no individual file: leave empty (maybe other qtypes have it)
@@ -745,9 +868,9 @@ for qtype in "${QTYPES[@]}"; do
     if [[ -n "$parsed" ]]; then
       SPP_VAL="${parsed%%|*}"
       STG_VAL="${parsed#*|}"
-      # ensure trimmed
-      SPP_VAL="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$SPP_VAL")"
-      STG_VAL="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$STG_VAL")"
+      # ensure trimmed (parameter expansion rather than a sed(1) fork - this runs per tensor)
+      SPP_VAL="${SPP_VAL#"${SPP_VAL%%[![:space:]]*}"}"; SPP_VAL="${SPP_VAL%"${SPP_VAL##*[![:space:]]}"}"
+      STG_VAL="${STG_VAL#"${STG_VAL%%[![:space:]]*}"}"; STG_VAL="${STG_VAL%"${STG_VAL##*[![:space:]]}"}"
       echo "[$(timestamp) Extracted for tensor='$tensor_name', qtype='$qtype': S_PP=$SPP_VAL, S_TG=$STG_VAL"
     elif [[ "$result_is_unused" == "true" && ( -n "${BASELINE_PP:-}" || -n "${BASELINE_TG:-}" ) ]]; then
       SPP_VAL="${BASELINE_PP:-404}"

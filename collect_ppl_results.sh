@@ -40,7 +40,7 @@ Options:
   --chunks CHUNKS                       Number of PPL chunks to process, default is 250 if not specified (integer)
   --baseline-ppl PPL_VALUE              Baseline PPL value for percent-delta computation (float)
   --baseline-regex REGEX_VALUE          Baseline value for metrics obtained via REGEX for percent-delta computation (float), see --regex parameter
-  --inject-baseline-qtype QTYPE         Baseline PPL/REGEX value will be injected in results for this specific qtype (e.g. bf16)
+  --inject-baseline-qtype QTYPE         Baseline PPL/REGEX value will be injected in results for this specific qtype (e.g. bf16). The value is resolved from --baseline-ppl/--baseline-regex, else from --auto-baseline, else from bench_ppl(_kld)_result.baseline.QTYPE.<CHUNKS>.txt in the current directory; the script errors out if none of those yields a value.
   --auto-baseline QTYPE                 Automatically read bench_ppl(_kld)_result.baseline.QTYPE.<CHUNKS>.txt and use it
   --group-tensors REG1[,REG2] [REG3,..] Specify one or more group specifications (same syntax as benchmark_each_tensor.sh).
                                           Each argument is a group: comma-separated regexes. If omitted, grouping disabled.
@@ -404,6 +404,28 @@ echo "Output PPL CSV: $OUTPUT_PPL_CSV"
 [[ "$REGEX" != "" ]] && echo "Output REGEX CSV: $OUTPUT_REGEX_CSV"
 [[ "$REGEX" != "" ]] && echo "REGEX: $REGEX"
 ALL_GROUP_IDS=()
+# Split and whitespace-trim every group's regex list ONCE, into a flat table indexed by
+# group. This used to be redone - with a sed(1) fork per regex - on every single call to
+# find_group_indexes_for_tensor and on every group-member rebuild, i.e. tens of thousands
+# of forks per run. Values are identical, this is purely hoisting invariant work.
+declare -a GROUP_REGEX_FLAT=()   # all trimmed regexes, concatenated
+declare -a GROUP_REGEX_START=()  # group idx -> first offset into GROUP_REGEX_FLAT
+declare -a GROUP_REGEX_COUNT=()  # group idx -> number of regexes
+for _gr_idx in "${!GROUP_TENSORS_RAW[@]}"; do
+  IFS=',' read -r -a _gr_regs <<< "${GROUP_TENSORS_RAW[$_gr_idx]}"
+  GROUP_REGEX_START[$_gr_idx]=${#GROUP_REGEX_FLAT[@]}
+  _gr_cnt=0
+  for _gr_r in ${_gr_regs[@]+"${_gr_regs[@]}"}; do
+    _gr_r="${_gr_r#"${_gr_r%%[![:space:]]*}"}"   # ltrim
+    _gr_r="${_gr_r%"${_gr_r##*[![:space:]]}"}"   # rtrim
+    [[ -z "$_gr_r" ]] && continue
+    GROUP_REGEX_FLAT+=("$_gr_r")
+    _gr_cnt=$((_gr_cnt + 1))
+  done
+  GROUP_REGEX_COUNT[$_gr_idx]=$_gr_cnt
+done
+unset _gr_idx _gr_regs _gr_cnt _gr_r
+
 if [[ "$GROUP_TENSORS_DISABLED" != "true" ]]; then
   echo "Group tensors: ENABLED; groups:"
   gid=0
@@ -455,6 +477,20 @@ unset IFS
 QTYPES=("${sorted_qtypes[@]}")
 
 echo "Found qtypes: ${QTYPES[*]}"
+
+# The casing warning above is only a warning - it does not stop the run. So that a
+# mis-cased --inject-baseline-qtype does not silently fail to match any discovered
+# qtype (which leaves the baseline uninjected and sends every single tensor down
+# the slow per-tensor baseline path below), resolve it case-insensitively against
+# the qtypes we actually found and adopt the spelling that exists.
+if [[ -n "$BASELINE_QTYPE" ]] && ! printf '%s\n' "${QTYPES[@]}" | grep -qxF -- "$BASELINE_QTYPE"; then
+  _fixed_qtype="$(printf '%s\n' "${QTYPES[@]}" | grep -ixF -- "$BASELINE_QTYPE" | head -n1 || true)"
+  if [[ -n "$_fixed_qtype" ]]; then
+    echo "[$(timestamp)] ⚠️  Corrected --inject-baseline-qtype casing: '$BASELINE_QTYPE' -> '$_fixed_qtype' (matched a discovered qtype)"
+    BASELINE_QTYPE="$_fixed_qtype"
+  fi
+  unset _fixed_qtype
+fi
 
 declare -A PPL_VALUES    # key: "qtype|tensor_name" => PPL value (string)
 declare -A KLD_VALUES    # key: "qtype|tensor_name" => KLD value (string)
@@ -510,34 +546,31 @@ if [[ -n "$all_bench_ppl_unused_result_files" ]]; then
   echo "[$(timestamp)] Found $(printf '%s\n' "$all_bench_ppl_unused_result_files" | wc -l | tr -d ' ') .txt.unused result file(s) (tensors ignored by the model); they will be collected as baseline-equivalent results."
 fi
 
-# find_group_indexes_for_tensor <tensor> -> prints zero-or-more group indices (one per line)
+# find_group_indexes_for_tensor <tensor> -> sets GROUP_IDXS_RESULT to zero-or-more group
+# indices. It used to print them and be read back through a process substitution, which
+# cost one fork per tensor per qtype (tens of thousands of forks per run) on top of the
+# sed forks; the group indices produced are identical.
+declare -a GROUP_IDXS_RESULT=()
 find_group_indexes_for_tensor() {
-  local tensor="$1"
+  GROUP_IDXS_RESULT=()
   if [[ "$GROUP_TENSORS_DISABLED" == "true" ]]; then
-    # print nothing -> caller receives an empty array
-    return
+    # leave GROUP_IDXS_RESULT empty -> caller receives an empty array
+    return 0
   fi
 
-  local -a idxs=()
+  local tensor="$1" idx start count i
   for idx in "${!GROUP_TENSORS_RAW[@]}"; do
-    local group_raw="${GROUP_TENSORS_RAW[$idx]}"
-    IFS=',' read -r -a regs <<< "$group_raw"
-    for reg in "${regs[@]}"; do
-      # trim spaces
-      reg="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$reg")"
-      [[ -z "$reg" ]] && continue
-      if [[ $tensor =~ $reg ]]; then
-        idxs+=("$idx")
+    start="${GROUP_REGEX_START[$idx]}"
+    count="${GROUP_REGEX_COUNT[$idx]}"
+    for (( i = start; i < start + count; i++ )); do
+      if [[ $tensor =~ ${GROUP_REGEX_FLAT[$i]} ]]; then
+        GROUP_IDXS_RESULT+=("$idx")
         # one matching regex per group is enough -> move to next group
         break
       fi
     done
   done
-
-  # print them newline-separated (or nothing if empty)
-  for i in "${idxs[@]}"; do
-    printf '%s\n' "$i"
-  done
+  return 0
 }
 
 # Helper to extract PPL from a result file (returns numeric PPL or empty)
@@ -635,6 +668,22 @@ fi
 # If auto-baseline requested, attempt to read bench_ppl(_kld)_result.baseline.<qtype>.<CHUNKS>.txt
 if [[ -n "$AUTO_BASELINE_QTYPE" ]]; then
   baseline_fname="bench_ppl${_kld}_result.baseline.${AUTO_BASELINE_QTYPE}.${PPL_CHUNKS}.txt"
+  # Filenames are matched case-sensitively, so a mis-cased qtype finds nothing and
+  # leaves BASELINE_PPL_VALUE empty - which is precisely what makes the injected
+  # baseline qtype re-read its baseline file once per tensor further down. The
+  # user was already warned about the casing; retry case-insensitively here and
+  # adopt the spelling that actually exists on disk.
+  if ! grep -qF -- "$baseline_fname" <<< "$all_bench_ppl_result_files"; then
+    _ci_fname="$(grep -ixF -- "$baseline_fname" <<< "$all_bench_ppl_result_files" | head -n1 || true)"
+    if [[ -n "$_ci_fname" ]]; then
+      _fixed_qtype="${_ci_fname#bench_ppl${_kld}_result.baseline.}"
+      _fixed_qtype="${_fixed_qtype%.${PPL_CHUNKS}.txt}"
+      echo "[$(timestamp)] ⚠️  Auto-baseline: corrected qtype casing '${AUTO_BASELINE_QTYPE}' -> '${_fixed_qtype}' to match the on-disk file '${_ci_fname}'"
+      AUTO_BASELINE_QTYPE="$_fixed_qtype"
+      baseline_fname="$_ci_fname"
+    fi
+    unset _ci_fname _fixed_qtype
+  fi
   if grep -qF -- "$baseline_fname" <<< "$all_bench_ppl_result_files"; then
     base_ppl_val=$(extract_ppl_from_file "./${baseline_fname}" || true)
     [[ "$REGEX" != "" ]] && base_regex_val=$(extract_regex_from_file "./${baseline_fname}" || true)
@@ -667,6 +716,36 @@ if [[ -n "$AUTO_BASELINE_QTYPE" ]]; then
   else
     echo "[$(timestamp)] Auto-baseline: baseline file $baseline_fname not found for qtype=${AUTO_BASELINE_QTYPE}"
   fi
+fi
+
+# --inject-baseline-qtype only makes sense if there is an actual baseline value to
+# inject. It can come from three places:
+#   1. --baseline-ppl / --baseline-regex                                (explicit)
+#   2. --auto-baseline QTYPE                                            (resolved just above)
+#   3. bench_ppl*_result.baseline.<qtype>.<chunks>.txt in this directory
+# Source 3 used to be resolved per-tensor much further down, which meant it never
+# reached the group columns (they came out as 404) and behaved unlike sources 1 and 2.
+# Resolve it here instead so all three are equivalent, and hard-fail when none of them
+# yields a value rather than quietly emitting 404 for the entire baseline qtype.
+if [[ -n "$BASELINE_QTYPE" && -z "${BASELINE_PPL_VALUE:-}" && -z "${BASELINE_REGEX_VALUE:-}" ]]; then
+  _ibq_file="bench_ppl${_kld}_result.baseline.${BASELINE_QTYPE}.${PPL_CHUNKS}.txt"
+  if [[ -f "$_ibq_file" ]]; then
+    BASELINE_PPL_VALUE="$(extract_ppl_from_file "./${_ibq_file}" || true)"
+    if [[ "$REGEX" != "" ]]; then
+      BASELINE_REGEX_VALUE="$(extract_regex_from_file "./${_ibq_file}" || true)"
+    fi
+    if [[ -n "${BASELINE_PPL_VALUE:-}" ]]; then
+      echo "[$(timestamp)] --inject-baseline-qtype: resolved PPL=${BASELINE_PPL_VALUE} for qtype='${BASELINE_QTYPE}' from ${_ibq_file}"
+    fi
+    if [[ -n "${BASELINE_REGEX_VALUE:-}" ]]; then
+      echo "[$(timestamp)] --inject-baseline-qtype: resolved REGEX=${BASELINE_REGEX_VALUE} for qtype='${BASELINE_QTYPE}' from ${_ibq_file}"
+    fi
+  fi
+  if [[ -z "${BASELINE_PPL_VALUE:-}" && -z "${BASELINE_REGEX_VALUE:-}" ]]; then
+    echo "[$(timestamp)] ❌ Error: --inject-baseline-qtype '${BASELINE_QTYPE}' was given but no baseline value could be resolved for it. Supply one of: --baseline-ppl VALUE (and/or --baseline-regex VALUE), or --auto-baseline ${BASELINE_QTYPE}, or place a readable '${_ibq_file}' in the current directory." >&2
+    exit 1
+  fi
+  unset _ibq_file
 fi
 
 # write result into an output array passed by name
@@ -708,6 +787,36 @@ for qtype in "${QTYPES[@]}"; do
     TENS_IN_MAP+=("$tensor_name")
   done
 
+  # Precompute each group's member list for THIS qtype's map, once. It depends only on
+  # the map and the group regexes, so it is invariant across the map-line loop below.
+  # It used to be rebuilt for every map line, scanning all tensors and doing a linear
+  # " ${group_members[*]} " substring test per candidate - O(n^2) with a big string
+  # rebuild each time. On a 1524-tensor map with a '.*' group that alone took minutes.
+  declare -a QT_GROUP_MEMBERS_FLAT=()
+  declare -a QT_GROUP_MEMBERS_START=()
+  declare -a QT_GROUP_MEMBERS_COUNT=()
+  for _qgm_idx in "${!GROUP_TENSORS_RAW[@]}"; do
+    QT_GROUP_MEMBERS_START[$_qgm_idx]=${#QT_GROUP_MEMBERS_FLAT[@]}
+    _qgm_cnt=0
+    declare -A _qgm_seen=()
+    _qgm_s="${GROUP_REGEX_START[$_qgm_idx]}"
+    _qgm_c="${GROUP_REGEX_COUNT[$_qgm_idx]}"
+    for (( _qgm_i = _qgm_s; _qgm_i < _qgm_s + _qgm_c; _qgm_i++ )); do
+      _qgm_reg="${GROUP_REGEX_FLAT[$_qgm_i]}"
+      for _qgm_t in ${TENS_IN_MAP[@]+"${TENS_IN_MAP[@]}"}; do
+        if [[ $_qgm_t =~ $_qgm_reg ]] && [[ -z "${_qgm_seen[$_qgm_t]:-}" ]]; then
+          _qgm_seen["$_qgm_t"]=1
+          QT_GROUP_MEMBERS_FLAT+=("$_qgm_t")
+          _qgm_cnt=$((_qgm_cnt + 1))
+        fi
+      done
+    done
+    QT_GROUP_MEMBERS_COUNT[$_qgm_idx]=$_qgm_cnt
+    unset _qgm_seen
+  done
+  unset _qgm_idx _qgm_cnt _qgm_s _qgm_c _qgm_i _qgm_reg _qgm_t
+  _gm_cur_key=""   # which (qtype|group) group_members currently holds
+
   if [[ "$BASELINE_QTYPE" == "$qtype" ]]; then
     echo "[$(timestamp)] Using baseline PPL or REGEX for qtype: $qtype"
     [[ -n "${BASELINE_PPL_VALUE:-}" ]] && echo "[$(timestamp)] Using baseline PPL value: $BASELINE_PPL_VALUE"
@@ -735,7 +844,8 @@ for qtype in "${QTYPES[@]}"; do
     [[ "$matched" == true ]] || continue
 
     # Determine all group indices for this tensor (could be zero..N)
-    mapfile -t group_idxs_for_tensor < <(find_group_indexes_for_tensor "$tensor_name")
+    find_group_indexes_for_tensor "$tensor_name"
+    group_idxs_for_tensor=( ${GROUP_IDXS_RESULT[@]+"${GROUP_IDXS_RESULT[@]}"} )
 
     # If grouping is enabled and this tensor belongs to one or more group, attempt to process the groups
     if (( ${#group_idxs_for_tensor[@]} > 0 )); then
@@ -756,20 +866,20 @@ for qtype in "${QTYPES[@]}"; do
         fi
 
         # collect all group members present in this qtype's map
-        group_raw="${GROUP_TENSORS_RAW[$group_idx_for_tensor]}"
-        IFS=',' read -r -a regs <<< "$group_raw"
-        declare -a group_members=() # IMPORTANT: If there is more than one group, this array will be overwritten, which is fine, just make sure to inform the user!
-        for reg in "${regs[@]}"; do
-          reg="$(sed -E 's/^[[:space:]]+|[[:space:]]+$//g' <<<"$reg")"
-          [[ -z "$reg" ]] && continue
-          for t in "${TENS_IN_MAP[@]}"; do
-            if [[ $t =~ $reg ]]; then
-              if [[ ! " ${group_members[*]} " =~ " $t " ]]; then
-                group_members+=("$t")
-              fi
-            fi
-          done
-        done
+        # IMPORTANT: If there is more than one group, this array will be overwritten, which is fine, just make sure to inform the user!
+        # Taken from the per-qtype table precomputed above; only re-sliced when the
+        # (qtype, group) actually changes, so the common single-group case copies once.
+        _gm_key="${qtype}|${group_idx_for_tensor}"
+        if [[ "$_gm_cur_key" != "$_gm_key" ]]; then
+          _gm_s="${QT_GROUP_MEMBERS_START[$group_idx_for_tensor]}"
+          _gm_c="${QT_GROUP_MEMBERS_COUNT[$group_idx_for_tensor]}"
+          if (( _gm_c > 0 )); then
+            group_members=( "${QT_GROUP_MEMBERS_FLAT[@]:_gm_s:_gm_c}" )
+          else
+            group_members=()
+          fi
+          _gm_cur_key="$_gm_key"
+        fi
 
         if (( ${#group_members[@]} == 0 )); then
           echo "[$(timestamp)] Warning: no group members found in map for group #${group_idx_for_tensor} (qtype=${qtype}). Skipping group." >&2
@@ -835,61 +945,11 @@ for qtype in "${QTYPES[@]}"; do
         fi
       fi
 
-      # We don't proceed further since we have already set the values
-      ([[ -n "${BASELINE_PPL_VALUE:-}" ]] || [[ -n "${BASELINE_REGEX_VALUE:-}" ]]) && continue
-
-      # try to read bench_ppl${_kld}_result.baseline.<qtype>.<chunks>.txt
-      baseline_fname="bench_ppl${_kld}_result.baseline.${qtype}.${PPL_CHUNKS}.txt"
-      if [[ -f "$baseline_fname" ]]; then
-        bpplval=$(extract_ppl_from_file "./${baseline_fname}" || true)
-        [[ "$REGEX" != "" ]] && bregexval=$(extract_regex_from_file "./${baseline_fname}" || true)
-        if [[ -n "${bpplval:-}" ]]; then
-            echo "[$(timestamp)] Read baseline PPL=$bpplval from $baseline_fname"
-            PPL_VALUES["${qtype}|${tensor_name}"]="$bpplval"
-            if [[ "$NO_KLD" == "false" ]]; then 
-              # If grouping is enabled and this tensor belongs to a group
-              if (( ${#group_idxs_for_tensor[@]} > 0 )); then
-                # iterate over all groups this tensor belongs to and handle each group separately
-                for group_idx_for_tensor in "${group_idxs_for_tensor[@]}"; do
-                  if [[ "$EXPAND_GROUPS" == "true" ]]; then
-                    for gm in "${group_members[@]}"; do
-                      KLD_VALUES["${qtype}|${gm}"]=0
-                    done
-                  else
-                    KLD_VALUES["${qtype}|group${group_idx_for_tensor}"]=0
-                  fi
-                done
-              else
-                KLD_VALUES["${qtype}|${tensor_name}"]=0
-              fi
-            fi
-            continue
-          else
-            echo "[$(timestamp)] Warning: baseline file exists but could not extract PPL. Falling back to individual result file."
-          fi
-          if [[ -n "${bregexval:-}" ]]; then
-            echo "[$(timestamp)] Read baseline REGEX=$bregexval from $baseline_fname"
-            REGEX_VALUES["${qtype}|${tensor_name}"]="$bregexval"
-            if [[ "$NO_KLD" == "false" ]] && [[ -z "${bpplval:-}" ]]; then 
-              # If grouping is enabled and this tensor belongs to a group
-              if (( ${#group_idxs_for_tensor[@]} > 0 )); then
-                if [[ "$EXPAND_GROUPS" == "true" ]]; then
-                  for gm in "${group_members[@]}"; do
-                    KLD_VALUES["${qtype}|${gm}"]=0
-                  done
-                else
-                  KLD_VALUES["${qtype}|group${group_idxs_for_tensor[0]}"]=0
-                fi
-              else
-                KLD_VALUES["${qtype}|${tensor_name}"]=0
-              fi
-            fi
-            continue
-          else
-            echo "[$(timestamp)] Warning: baseline file exists but could not extract REGEX. Falling back to individual result file."
-          fi
-      fi
-      # else fallthrough to read individual result file
+      # Nothing left to do for the injected-baseline qtype: BASELINE_PPL_VALUE and/or
+      # BASELINE_REGEX_VALUE is guaranteed to be set here (see the --inject-baseline-qtype
+      # resolution/validation above, which exits when neither can be resolved), so the
+      # values were already assigned by the two blocks above.
+      continue
 
     fi
 
