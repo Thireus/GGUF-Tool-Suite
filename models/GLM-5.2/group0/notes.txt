@@ -10,6 +10,6 @@ cd models/GLM-5.2/group0
 
 ../../../model_tensor_bpw_metric.py --results-csv kld_results_partial.csv --c-free --exclude-qtypes '.*_bn.*$' --transforms "identity" --ignore-outliers 10 --allow-impure-map --p-grid-max 15 --p-grid-steps 100 --d-free --penalize-above 15 --resemblance-metric r2 --plot
 
-y = 0.0113058385884 + 1815.75391003 * ( x + 1.37787609277 )^(-6.00461456672)
+y = 0.0121929552024 + 2582.02936576 * ( x + 1.47116188954 )^(-6.15725677831)
 
-./group0_enricher.py --reference-csv models/GLM-4.7-Flash/group0/kld_results.csv --reference-mean-equation "y = 0 + 4.55567813326e+22 * ( x + 12.3848998959 )^(-18.9726315789)" --target-csv models/GLM-5.2/group0/kld_results_partial.csv --output-csv models/GLM-5.2/group0/kld_results.csv --target-mean-equation "y = 0.0113058385884 + 1815.75391003 * ( x + 1.37787609277 )^(-6.00461456672)"
+./group0_enricher.py --reference-csv models/GLM-4.7-Flash/group0/kld_results.csv --reference-mean-equation "y = 0 + 4.55567813326e+22 * ( x + 12.3848998959 )^(-18.9726315789)" --target-csv models/GLM-5.2/group0/kld_results_partial.csv --output-csv models/GLM-5.2/group0/kld_results.csv --target-mean-equation "y = 0.0121929552024 + 2582.02936576 * ( x + 1.47116188954 )^(-6.15725677831)"
