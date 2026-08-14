@@ -47,7 +47,7 @@ mkdir -p kitchen && cd kitchen
 # Launch ik_llama's llama-cli:
 ulimit -n 9999 # Lifts "too many open files" limitation on Linux
 ~/ik_llama.cpp/build/bin/llama-server \
-  -m Qwen3.5-2B-THIREUS-BF16-SPECIAL_TENSOR-00001-of-00399.gguf \
+  -m Qwen3.5-2B-THIREUS-BF16-SPECIAL_TENSOR-00001-of-00321.gguf \
   -fa auto -amb 1024 -ctk q8_0 -c 32768 -ngl 99 \
   -b 4096 -ub 4096 --warmup-batch --no-mmap --threads 1 \
   --main-gpu 0

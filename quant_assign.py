@@ -5,7 +5,7 @@
 #** to produce recipes that can be cooked and used by others. **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jun-12-2026 -------------------- **#
+#** --------------- Updated: Aug-02-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -5723,7 +5723,7 @@ def main():
                         help='Exponent for scaling group degradation values per tensor based on its loss relative to the mean. Only valid when greedy quant assign method is used. '
                             '0 = disabled. Higher values protect highly sensitive tensors more strongly. '
                             'Recommended range 0.0 - 0.5. Default (disabled when parameter isn\'t set): 0.0')
-    parser.add_argument('--synergistic-tensors', nargs='+', default=[["blk\\..*\\.ffn_up_exps.*","blk\\..*\\.ffn_gate_exps.*","blk\\..*\\.ffn_down_exps.*"]],
+    parser.add_argument('--synergistic-tensors', nargs='+', default=None,
                         help=('A Python literal list-of-lists of regex patterns. Each inner list defines tensors that '
                             'exhibit synergistic effects and should have their loss adjusted together. '
                             'Example: --synergistic-tensors blk\\..\\*\\.ffn_up_exps.\\*,blk\\..\\*\\.ffn_gate_exps.\\*,blk\\..\\*\\.ffn_down_exps.\\* '
@@ -5796,9 +5796,18 @@ def main():
     if args.quant_degradation_csv and not using_degradation_method:
         parser.error("--quant-degradation-csv may only be used with --use-greedy-quant-assign or --use-auto-quant-assign")
 
-    # Enforce: --synergistic-tensors only valid with greedy/auto methods
+    # --synergistic-tensors "" is the documented way to disable synergy adjustment.
+    if args.synergistic_tensors == ['']:
+        args.synergistic_tensors = []
+
+    # Enforce: --synergistic-tensors only valid with greedy/auto methods.
+    # Only an explicitly supplied value is rejected here; the default is applied below
+    # so that the non-degradation methods stay reachable from the CLI.
     if args.synergistic_tensors and not using_degradation_method:
         parser.error("--synergistic-tensors may only be used with --use-greedy-quant-assign or --use-auto-quant-assign")
+
+    if args.synergistic_tensors is None:
+        args.synergistic_tensors = [["blk\\..*\\.ffn_up_exps.*","blk\\..*\\.ffn_gate_exps.*","blk\\..*\\.ffn_down_exps.*"]]
 
     # Enforce: --synergy-strength is only valid when using --synergistic-tensors
     if args.synergy_strength and args.synergy_strength > 0 and not args.synergistic_tensors:

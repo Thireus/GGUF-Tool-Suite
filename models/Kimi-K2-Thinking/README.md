@@ -47,7 +47,7 @@ mkdir -p kitchen && cd kitchen
 # Launch ik_llama's llama-cli:
 ulimit -n 9999 # Lifts "too many open files" limitation on Linux
 ~/ik_llama.cpp/build/bin/llama-cli \
-  -m Kimi-K2-Thinking-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01148.gguf \
+  -m Kimi-K2-Thinking-THIREUS-BF16-SPECIAL_TENSOR-00001-of-01097.gguf \
   -mla 3 -fa auto -amb 512 -ctk f16 -c 4096 -ngl 99 \
   -ot "blk\.(3|4|5|6)\.ffn_.*=CUDA0" \
   -ot "blk\.(7|8|9|10)\.ffn_.*=CUDA1" \
