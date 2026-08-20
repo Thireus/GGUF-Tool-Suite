@@ -48,7 +48,7 @@ mkdir -p kitchen && cd kitchen
 ulimit -n 9999 # Lifts "too many open files" limitation on Linux
 ~/ik_llama.cpp/build/bin/llama-server \
   -m Qwen3.5-35B-A3B-THIREUS-BF16-SPECIAL_TENSOR-00001-of-*.gguf \
-  -md mtp-Qwen3.5-35B-A3B-THIREUS-BF16-SPECIAL_TENSOR-00001-of-*.gguf --spec-type draft-mtp \
+  -md mtp-Qwen3.5-35B-A3B-THIREUS-BF16-SPECIAL_TENSOR-00001-of-*.gguf --spec-type mtp \
   -fa auto -amb 1024 -ctk q8_0 -c 32768 -ngl 99 \
   -b 4096 -ub 4096 --warmup-batch --no-mmap --threads 1 \
   --main-gpu 0

@@ -602,7 +602,7 @@ I also recommend you to validate that the nodes produce the same baseline PPL es
 cd "$WORKING_DIRECTORY" && \
 cd "$MODEL"-BENCH && \
 cd "$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT && \
-cat bench_*_result.baseline."$TARGET_QTYPE"."$CHUNKS".txt | grep "^Final estimate: "
+cat bench_*_result.baseline."$BASELINE_QTYPE"."$CHUNKS".txt | grep "^Final estimate: "
 ```
 
 Once benchmarking is completed on all nodes, the `bench_*_result.*."$TARGET_QTYPE"."$CHUNKS".txt` files must be sent to the master node `"$WORKING_DIRECTORY"/"$MODEL"-BENCH/"$MODEL"-"${MAINTAINER^^}"-"${BASELINE_QTYPE^^}"-SPECIAL_SPLIT` directory so that the `collect_ppl_results.sh` can combine them all and produce the calibration (or degradation) csv files.

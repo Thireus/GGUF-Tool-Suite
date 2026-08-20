@@ -47,7 +47,7 @@ Obtain original model data:
 ```
 cd "$WORKING_DIRECTORY"
 mkdir -p huggingface && cd huggingface && \
-git lfs clone --depth 1 "$MODEL_URL" "$MODEL" && cd "$MODEL" && rm -rf "$MODEL"/.git
+git lfs clone --depth 1 "$MODEL_URL" "$MODEL" && cd "$MODEL" && rm -rf .git
 ```
 
 Obtain llama.cpp:
