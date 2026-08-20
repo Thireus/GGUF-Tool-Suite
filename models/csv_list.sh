@@ -5,7 +5,7 @@
 #** data files of models listed in the models directory.      **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jan-25-2026 -------------------- **#
+#** --------------- Updated: Aug-20-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -38,5 +38,5 @@ $FIND_CMD . -name "*.csv" \
   -not -path "*/benchmark_files/*" \
   -not -path "*/group0_logs/*" \
   -not -path "*/group0_files/*" \
-  -printf "%P\n" | grep -v 'bpw_kld_results.csv' > csv_list.txt
+  -printf "%P\n" | grep -v 'bpw_kld_results' > csv_list.txt
   
