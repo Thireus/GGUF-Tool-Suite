@@ -5,7 +5,7 @@
 #** tensors are the heaviest, thus to be benchmarked.         **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Apr-07-2026 -------------------- **#
+#** --------------- Updated: Sep-07-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -786,6 +786,7 @@ def main():
     parser.add_argument("--model-name", dest="model_name", type=str, default="", help="Optional. Prepends NAME to the output filename.")
     parser.add_argument("--model-link", dest="model_link", type=str, default="", help="Optional. Link to original model.")
     parser.add_argument("--add-ppl", dest="add_ppl", type=str, default="", help="Optional. Adds VALUE_PPL right after username in the filename.")
+    parser.add_argument("--add-kld", dest="add_kld", type=str, default="", help="Optional. Adds VALUE_KLD to the filename. Pass a number, or auto to take the predicted degradation the assigner wrote in the footer. Recipes normally carry PPL (see --add-ppl); this is for the rare case where only a predicted KLD exists.")
     parser.add_argument("--input", dest="input_file", type=str, default="", help="Optional. Read custom regex block from FILE instead of stdin.")
     args = parser.parse_args()
 
@@ -812,6 +813,19 @@ def main():
             PPL = f"{float(raw_ppl):.4f}"
         except Exception:
             PPL = f"{float(raw_ppl):.4f}"
+
+    # Validate add_kld numeric (same rules as --add-ppl)
+    KLD = ""
+    KLD_AUTO = False
+    raw_kld = args.add_kld
+    if raw_kld:
+        if raw_kld.strip().lower() == "auto":
+            KLD_AUTO = True
+        elif not re.match(r"^[0-9]*\.?[0-9]+$", raw_kld):
+            print("Error: --add-kld value must be numeric or auto", file=sys.stderr)
+            sys.exit(1)
+        else:
+            KLD = f"{float(raw_kld):.4f}"
 
     # If --input provided, read file; else if stdin piped, read; otherwise use default
     if args.input_file:
@@ -2042,12 +2056,19 @@ def main():
 
     # Add PPL if set
     ppl_part = ""
+    kld_part = ""
+    if KLD_AUTO and not KLD:
+        mk = re.search(r"predicted degradation ([0-9]+\.[0-9]+)", all_text)
+        if mk:
+            KLD = f"{float(mk.group(1)):.4f}"
+    if KLD:
+        kld_part = f"{KLD}kld."
     if PPL:
         ppl_part = f"{PPL}ppl."
 
     # Build dynamic filename
     whoami = getpass.getuser()
-    filename = f"{whoami.upper()}-{bpw}bpw-{ppl_part}{totalGiB}GB-GGUF_{gpuGiB}GB-GPU_{cpuGiB}GB-CPU.{shaPart}_{cmdPart}.recipe"
+    filename = f"{whoami.upper()}-{bpw}bpw-{ppl_part}{kld_part}{totalGiB}GB-GGUF_{gpuGiB}GB-GPU_{cpuGiB}GB-CPU.{shaPart}_{cmdPart}.recipe"
 
     out("")  # blank line
     out("## THE END!")

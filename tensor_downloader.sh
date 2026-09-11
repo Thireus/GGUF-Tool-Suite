@@ -5,7 +5,7 @@
 #** downloads pre-quantised tensors/shards to cook recipes.   **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-16-2026 -------------------- **#
+#** --------------- Updated: Sep-10-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -62,7 +62,7 @@ fi
 #
 # Params:
 #   QUANT           (mandatory) quantization tag, e.g. "BF16"
-#   FileID          (mandatory) integer chunk ID (prepend + for .gguf.zbst); 0 => "tensors.map"; -1 => "tensors.map.sig"; -2 => "*-00001-of-*.gguf.sig;"
+#   FileID          (mandatory) integer chunk ID (prepend + for .zbst); 0 => "tensors.map"; -1 => "tensors.map.sig"; -2 => "*-00001-of-*.sig;"
 #   DestinationDir  (optional)  default: "."
 #   Filename        (optional)  default: same as downloaded file
 #
@@ -105,7 +105,14 @@ DEFAULT_ORDER=(SYMLINK COPY RSYNC HUGGINGFACE CURL)
 # Load user config if present (must be in same directory)
 # Any variable or array defined in download.conf will override the above defaults.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_FILE="$SCRIPT_DIR/download.conf"
+# WHICH MODEL AM I?  Historically the answer was global mutable state: the
+# suite-root `download.conf` symlink, repointed by hand at the model being
+# worked on.  That is fine interactively and wrong for anything that drives
+# several models - `quant_assign.py --frontier` spawns child assigner runs, and
+# two models cannot share one symlink.  GGUF_DOWNLOAD_CONF lets a caller name
+# the config explicitly, per process, with no global side effect.  Unset, the
+# behaviour is exactly as before.
+CONFIG_FILE="${GGUF_DOWNLOAD_CONF:-$SCRIPT_DIR/download.conf}"
 if [[ -f "$CONFIG_FILE" ]]; then
   # shellcheck source=/dev/null
   source "$CONFIG_FILE"
@@ -145,7 +152,8 @@ show_help() {
 Usage: $0 QUANT FileID [DestinationDir] [Filename]
 
 QUANT           (mandatory) quantization tag, e.g. "BF16"
-FileID          (mandatory) integer chunk ID (prepend + for .gguf.zbst); 0 => "tensors.map"; -1 => "tensors.map.sig"; -2 => "*-00001-of-*.gguf.sig;"
+FileID          (mandatory) integer chunk ID (prepend + for .zbst); 0 => "tensors.map"; -1 => "tensors.map.sig"; -2 => "*-00001-of-*.sig;"
+                  Shards are .gguf, or .safetensors when QUANT is an sgl_* SGLang qtype.
 DestinationDir  (optional)  default: "."
 Filename        (optional)  default: same as downloaded file
 EOF
@@ -171,6 +179,19 @@ CUSTOM_FILENAME="${4:-}"
 QUANT_U="${QUANT^^}"
 REPOSITORY_NAME="${MODEL_NAME}-${MAINTAINER}-${QUANT_U}-SPECIAL_SPLIT"
 CHUNKS=$(printf "%05d" "$CHUNKS_TOTAL") # Total number of chunks of the model
+
+# -----------------------------------------------------------------------------
+# WHAT A SHARD FILE IS CALLED.  An SGLang per-tensor split (an sgl_* qtype) ships
+# safetensors where a GGUF split ships GGUF, and NOTHING else about the layout
+# changes: same <MODEL>-<MAINTAINER>-<QTYPE>-SPECIAL_SPLIT repository, same
+# SPECIAL_TENSOR-NNNNN-of-MMMMM numbering, same tensors.map, same .sig files,
+# same .zbst variants. The qtype decides, because it is the only thing here that
+# knows what is in the file.
+if [[ "${QUANT_U}" == SGL_* ]]; then
+  SHARD_EXT=".safetensors"
+else
+  SHARD_EXT=".gguf"
+fi
 
 # -----------------------------------------------------------------------------
 # Logging helper
@@ -214,6 +235,19 @@ verify_chunk() {
   if [[ "$FileID_zbst_chunk" == true ]]; then
     # zbst files cannot be validated the same way, so we always return 0
     return 0
+  elif [[ "$SHARD_EXT" == ".safetensors" ]]; then
+    # A safetensors file has no magic: it opens with a little-endian uint64
+    # header length followed by that many bytes of JSON, so the cheap check a
+    # truncated or HTML-error download cannot pass is that the length fits
+    # inside the file and the byte after it is '{'.  od reads that word in HOST
+    # order, which is the file's order on every machine this suite runs on.
+    local n sz
+    n=$(od -An -tu8 -N8 -j0 "$f" 2>/dev/null | tr -d '[:space:]')
+    sz=$(wc -c < "$f" 2>/dev/null | tr -d '[:space:]')
+    [[ -z "$n" || -z "$sz" ]] && return 1
+    [ "$n" -gt 0 ] 2>/dev/null || return 1
+    [ $((n + 8)) -le "$sz" ] 2>/dev/null || return 1
+    [[ "$(head -c 9 "$f" | tail -c 1)" == "{" ]] || return 1
   else
     if ! head -c 4 "$f" | grep -q '^GGUF'; then
       return 1
@@ -231,7 +265,7 @@ verify_map() {
   # avoid empty
   [ -z "$num" ] && num=0
 
-  pattern="^${MODEL_NAME}-${MAINTAINER}-${QUANT_U}-SPECIAL_TENSOR-.*-of-${CHUNKS}.gguf:"
+  pattern="^${MODEL_NAME}-${MAINTAINER}-${QUANT_U}-SPECIAL_TENSOR-.*-of-${CHUNKS}${SHARD_EXT}:"
   count=$(grep -c "$pattern" "$f")
   if [ "$count" -ne $((CHUNKS_TOTAL-CHUNK_FIRST+1)) ]; then
     log "  ✗ Missing or duplicate entry for chunk(s) (found $count chunks)"
@@ -330,16 +364,16 @@ verify_download() {
 # Build filename and prepare download
 if [[ "$FileID_zbst_chunk" == true ]]; then
   IDX=$(printf "%05d" "${FileID#+}")
-  FILENAME="${MODEL_NAME}-${MAINTAINER}-${QUANT_U}-SPECIAL_TENSOR-${IDX}-of-${CHUNKS}.gguf.zbst"
+  FILENAME="${MODEL_NAME}-${MAINTAINER}-${QUANT_U}-SPECIAL_TENSOR-${IDX}-of-${CHUNKS}${SHARD_EXT}.zbst"
 elif [ "$FileID" -eq 0 ]; then
   FILENAME="tensors.map"
 elif [ "$FileID" -eq -1 ]; then
   FILENAME="tensors.map.sig"
 elif [ "$FileID" -eq -2 ]; then
-  FILENAME="${MODEL_NAME}-${MAINTAINER}-${QUANT_U}-SPECIAL_TENSOR-00001-of-${CHUNKS}.gguf.sig"
+  FILENAME="${MODEL_NAME}-${MAINTAINER}-${QUANT_U}-SPECIAL_TENSOR-00001-of-${CHUNKS}${SHARD_EXT}.sig"
 else
   IDX=$(printf "%05d" "$FileID")
-  FILENAME="${MODEL_NAME}-${MAINTAINER}-${QUANT_U}-SPECIAL_TENSOR-${IDX}-of-${CHUNKS}.gguf"
+  FILENAME="${MODEL_NAME}-${MAINTAINER}-${QUANT_U}-SPECIAL_TENSOR-${IDX}-of-${CHUNKS}${SHARD_EXT}"
 fi
 if [[ "${CUSTOM_FILENAME}" == "" ]]; then
   CUSTOM_FILENAME="${FILENAME}"
@@ -829,7 +863,7 @@ else
   # Special-case: if the request was for a non-.zbst file, but at least one repository
   # reported a .gguf.zbst (compressed .gguf) variant (HTTP 200), then return special exit code 69
   if [[ "${FileID_zbst_chunk}" == false ]] && [[ "${ANY_ZBST_200}" -eq 1 ]]; then
-    log "NOTICE: ${FILENAME} not found, but at least one .gguf.zbst (compressed .gguf) variant exists. Exiting with code 69."
+    log "NOTICE: ${FILENAME} not found, but at least one ${SHARD_EXT}.zbst (compressed) variant exists. Exiting with code 69."
     exit 69
   fi
   exit 1

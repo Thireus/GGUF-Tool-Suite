@@ -1,0 +1,147 @@
+## Quant mix recipe created using Thireus' GGUF Tool Suite - https://gguf.thireus.com/
+# Model name: GLM-4.7
+# Link to the original model: https://huggingface.co/zai-org/GLM-4.7
+
+## Model head & embeddings — qbits: 16 
+^token_embd\.weight$=sgl_bf16
+^output\.weight$=sgl_bf16
+
+## Multi-headed attention parameters — qbits: 8 
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_k\.weight$=sgl_fp8_pb_wo
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_v\.weight$=sgl_fp8_pb_wo
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_q\.weight$=sgl_fp8_pb_wo
+^blk\.([0-9]|[1-8][0-9]|9[0-2])\.attn_output\.weight$=sgl_fp8_pb_wo
+
+## Dense Feed-Forward Network weights — qbits: 8 
+^blk\.[0-2]\.ffn_up\.weight$=sgl_fp8_pb_wo
+^blk\.[0-2]\.ffn_down\.weight$=sgl_fp8_pb_wo
+^blk\.[0-2]\.ffn_gate\.weight$=sgl_fp8_pb_wo
+
+## NextN tensors — qbits: 8 4 
+^blk\.92\.nextn\.embed_tokens\.weight$=sgl_nvfp4
+^blk\.92\.nextn\.shared_head_head\.weight$=sgl_nvfp4
+^blk\.92\.nextn\.eh_proj\.weight$=sgl_fp8_pb_wo
+
+## MoE Gating & Routing — qbits: 16 
+^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_inp\.weight$=sgl_bf16
+^blk\.([3-9]|[1-8][0-9]|9[0-2])\.exp_probs_b\.bias$=sgl_bf16
+
+## GPU-loaded - MoE Shared Experts Feed-Forward Network - ffn_*_shexp
+# ffn_down_shexp — down-projection (shared experts) — qbits: 16 8 
+^blk\.([4-9]|10|1[2-8]|2[3-5]|4[3-5]|4[7-9]|[5-7][0-9]|8[0-8]|9[1-2])\.ffn_down_shexp\.weight$=sgl_fp8_pb_wo
+^blk\.(3|11|19|2[0-2]|2[6-9]|3[0-9]|4[0-2]|46|89|90)\.ffn_down_shexp\.weight$=sgl_bf16
+
+# ffn_up_shexp — up-projection (shared experts) — qbits: 16 8 
+^blk\.([4-9]|10|1[2-8]|2[3-5]|4[3-5]|4[7-9]|[5-7][0-9]|8[0-8]|9[1-2])\.ffn_up_shexp\.weight$=sgl_fp8_pb_wo
+^blk\.(3|11|19|2[0-2]|2[6-9]|3[0-9]|4[0-2]|46|89|90)\.ffn_up_shexp\.weight$=sgl_bf16
+
+# ffn_gate_shexp — gating network (shared experts) — qbits: 16 8 
+^blk\.([4-9]|10|1[2-8]|2[3-5]|4[3-5]|4[7-9]|[5-7][0-9]|8[0-8]|9[1-2])\.ffn_gate_shexp\.weight$=sgl_fp8_pb_wo
+^blk\.(3|11|19|2[0-2]|2[6-9]|3[0-9]|4[0-2]|46|89|90)\.ffn_gate_shexp\.weight$=sgl_bf16
+
+## CPU-friendly - MoE Per-expert Feed-Forward Network - ffn_*_exps
+# ffn_down_exps — down-projection (per-expert) — qbits: 4 
+^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_down_exps\.weight$=sgl_nvfp4
+
+# ffn_up_exps — up-projection (per-expert) — qbits: 4 
+^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_up_exps\.weight$=sgl_nvfp4
+
+# ffn_gate_exps — gating network (per-expert) — qbits: 4 
+^blk\.([3-9]|[1-8][0-9]|9[0-2])\.ffn_gate_exps\.weight$=sgl_nvfp4
+
+## Summary of tensor sizes per class
+# GPU Total: 196.75 GiB (29.48%) | 667.45 GiB max, if all were sgl_bf16 | 189.90 GiB min, if all were sgl_nvfp4
+
+## Summary of tensor counts and bpw per qtype
+#
+# GPU-loaded quants:
+# QTYPE		Count	BPW	Assigned GiB	% Assigned	Max GiB (all)
+# +!:sgl_bf16	182	16.0001	  3.03 GiB	-		-
+# !:sgl_bf16	78 	16.0001	  1.14 GiB	 0.17%		664.42
+# !sgl_fp8_pb_wo	574	8.002 	 13.79 GiB	 4.14%		333.02
+# !sgl_fp8  	0  	8     	  0.00 GiB	 0.00%		332.93
+# !:sgl_nvfp4	272	4.5   	178.79 GiB	95.68%		186.87
+#
+# -Average BPW: 4.7166
+#
+# -Notes:
+# - '+' means user-defined pre-assigned tensors, or tensor missing from csv data or f32 tensors
+# - ':' means this qtype has a tensor-shape-dependent bpw in this recipe due to a discovered additional per-row scale overhead;
+#   For more information: https://github.com/Thireus/GGUF-Tool-Suite/discussions/53
+# - '!' means qtypes for which the tensors map file was computed instead of downloaded;
+#   This means the tensors assigned to these '!<qtype>' will likely need to be quantized locally as download links may not be available. 
+#   This also means there is alaways a chance that these tensors can't be quantized to their assigned '!<qtype>'.
+# - Recipe produced on the 2026-09-11 07:54:52 BST+0100 using Thireus' GGUF tools (https://gguf.thireus.com/)
+# - Script SHA-256: 2bc59afd3871ebfadde886efd9127bd95fdd11651bb7c994c5bba1f913650470
+# - Calibration dataset 'kld_results.csv' SHA-256: 367dfde19a6783c153b8c32263b88426fcc112feadd99dd8516016d0639712d1
+# - Degradation dataset: built-in rows measured on Qwen3.8-27B: sgl_bf16=0.000000, sgl_fp8_pb_wo=0.005291, sgl_fp8=0.005301, sgl_mxfp8=0.005332, sgl_nvfp4a16=0.036930, sgl_int4_g128=0.054767, sgl_nvfp4=0.066930
+# - tensors.sgl_bf16.map SHA-256: c1f33ab586ede9bcf8546145eedbf7f719467776b46eb0a0ab87248572c5f636
+# - tensors.sgl_bf16.map model name: GLM-4.7-THIREUS-BF16-SPECIAL_TENSOR-01762-of-01762 (computed)
+# - tensors.bf16.map SHA-256: a66421b3582476a3ef8622c2f281e270b7c0f434c1c837e8b2945a1da17086ad
+# - tensors.bf16.map model name: GLM-4.7-THIREUS-BF16-SPECIAL_TENSOR-01762-of-01762
+# - tensors.sgl_fp8_pb_wo.map SHA-256: c193531934fcfe78e107a80cad8d3b79c99b43f6711b93773577d6535b582c7b
+# - tensors.sgl_fp8_pb_wo.map model name: GLM-4.7-THIREUS-BF16-SPECIAL_TENSOR-01762-of-01762 (computed)
+# - tensors.sgl_fp8.map SHA-256: 8496ad870e4b6cd52af6ec7c1b8653c7759dad4dc151ecd022b1fff9206a2503
+# - tensors.sgl_fp8.map model name: GLM-4.7-THIREUS-BF16-SPECIAL_TENSOR-01762-of-01762 (computed)
+# - tensors.sgl_nvfp4.map SHA-256: a5d5f2d7b80135406476f819abe79279572151e95c103a97bf4703d20a5216d3
+# - tensors.sgl_nvfp4.map model name: GLM-4.7-THIREUS-BF16-SPECIAL_TENSOR-01762-of-01762 (computed)
+# - tensors.iq1_kt.map SHA-256: 6d7e002738bf88177d82e5ad7b594497d35a0285b7ec6d89cb8e99fa9e9993a9
+# - tensors.iq1_kt.map model name: GLM-4.7-THIREUS-IQ1_KT-SPECIAL_TENSOR-01762-of-01762 (computed)
+# - Hardware speed profile:
+#   [GPU] profile: sglang; matmul tensors: 924 (356,709,826,560 weight elements)
+# - Two-sided speed model (sglang_speed.py):
+#   [GPU] cell: chat-c1, anchor: the pool floor, computed from --gpu-quants and this model (375 assignable unit(s), 837 fixed tensor(s)); no reference recipe
+#   [GPU] prefill index 1.6282 -> 1.6282 (floor 1.0811); predicted prompt-processing throughput 80.1% of the floor, budget 78.55%, cap 1.682128
+#   [GPU] decode bytes/token 27,732,043,400 -> 27,732,043,400 (floor 20,369,068,776); byte floor 203,905,586,540; predicted token-generation throughput 77.2% of the floor
+#   [GPU] --decode-budget auto -> unconstrained (reported below against the pool floor). The size cap is the decode lever on a dense model, and on a MoE total bytes and per-token active bytes move at different rates, so an automatic cap would bind on something you cannot steer. Pass --decode-budget <fraction> or --decode-max-bytes to cap it.
+#   [GPU] requested size cap 211,275,244,537 B; this recipe spends 211,263,901,452 B (100.0% of it)
+#   [GPU] pool byte floor 203,905,586,540; size cap on the same basis 211,279,904,249
+#   [GPU] repair moves applied: 0, all budgets met: True
+# - Predicted quality (separable estimator over the degradation table; a PREDICTION, see docs/sglang.md SS7):
+#   [GPU] predicted degradation 0.023152 over 926 tensor(s); 211,263,901,452 B assigned+pinned, 4.7165 bpw (--ignore-f32 excludes the norms/1-D tensors SGLang keeps at BF16, so this is not the checkpoint size)
+# - SGLang preset (--speed-profile sglang):
+#   architecture: glm4_moe (auto-detected from 1761 tensor name(s) in group0/tensors.bf16.map)
+#   degradation table: built-in rows measured on Qwen3.8-27B (no file needed - the rows are a property of the FORMAT, measured in SGLang on Qwen3.8-27B, and on every model they set the predicted degradation and not the assignment)
+#   NEXTN/EAGLE-compatible embedding: OFF - off (the default): the embedding is quantised like any other tensor - 6 MTP/NEXTN tensor(s) in the tensor map (e.g. blk.92.nextn.eh_proj.weight)
+#   -> ^token_embd\.weight$=sgl_bf16 (glm4_moe's SGLang model file builds the embedding without a quant_config, so SGLang loads it as bf16 only and a packed one does not load at all - not a budget choice)
+#   NEXTN/EAGLE head detected and the token embedding stays quantized: speculation then needs an engine carrying the shared-embedding fix (SGLang PR pending) - pass --nextn-optimization on for a stock engine.
+#   HF source inspected: <hf-cache>/models--zai-org--GLM-4.7/snapshots/602d01efcdd332c5238ca4bcede555defbe83eb7
+#   GGUF_DOWNLOAD_CONF used (resolved next to the CSV): download.conf
+#   SGL_ARCH used (map synthesis): glm4_moe
+#   defaults supplied (every one overridable by passing the flag): --gpu-tensors --gpu-quants --gpu-assign-qtype --gpu-assign-tensors --harmonize-tensors --harmonization-technique --ignore-f32 --use-auto-quant-assign --auto-no-pareto-filter --compute-all-map --ignore-imatrix-rules --with-imatrix --info --fill-leftover-budget --moe-top-k --moe-n-experts --prefill-budget --decode-budget
+#   --prefill-budget auto (FILL rule, spend the target then be as fast as possible), 12-point sweep: fills the budget at the strictest prefill budget: 211,263,901,452 B is 100.0% of the 211,275,244,537 B asked for, at or above the 98% fill fraction, and no stricter budget in the sweep also reaches it
+#        prefill-budget prefill index predicted deg           bytes     bpw   fill
+#        -------------- ------------- ------------- --------------- ------- ------
+#        0.410206       1.628200      0.023152      211,263,901,452  4.7165 100.0%
+#        0.463823       1.628200      0.023152      211,263,901,452  4.7165 100.0%
+#        0.517441       1.628200      0.023152      211,263,901,452  4.7165 100.0%
+#        0.571059       1.628200      0.023152      211,263,901,452  4.7165 100.0%
+#        0.624676       1.628200      0.023152      211,263,901,452  4.7165 100.0%
+#        0.678294       1.628200      0.023152      211,263,901,452  4.7165 100.0%
+#        0.731912       1.628200      0.023152      211,263,901,452  4.7165 100.0%
+#     -> 0.785529       1.628200      0.023152      211,263,901,452  4.7165 100.0%
+#        0.839147       1.544200      0.023613      210,646,874,988  4.7028  99.7%
+#        0.892765       1.544200      0.023613      210,646,874,988  4.7028  99.7%
+#        0.946382       1.544200      0.023613      210,646,874,988  4.7028  99.7%
+#        1.000000       1.544200      0.023613      210,646,874,988  4.7028  99.7%
+#   the same recipe, with every default spelled out:
+#     ../../quant_assign.py kld_results.csv --speed-profile sglang --gpu-tensors-max-size 211275244537B --sgl-arch
+#     glm4_moe --gpu-tensors '.*' --gpu-quants sgl_nvfp4 sgl_fp8 sgl_fp8_pb_wo sgl_bf16 --gpu-assign-qtype sgl_bf16
+#     --gpu-assign-tensors '^blk\.\d+\.ffn_gate_inp\.weight$=sgl_bf16' '^blk\.\d+\.exp_probs_b\.bias$=sgl_bf16'
+#     '^output\.weight$=sgl_bf16' '^token_embd\.weight$=sgl_bf16' --harmonize-tensors
+#     '^blk\.\d+\.ffn_down_exps\.weight$,^blk\.\d+\.ffn_gate_exps\.weight$,^blk\.\d+\.ffn_up_exps\.weight$'
+#     '^blk\.\d+\.ffn_gate\.weight$,^blk\.\d+\.ffn_up\.weight$'
+#     '^blk\.\d+\.attn_k\.weight$,^blk\.\d+\.attn_q\.weight$,^blk\.\d+\.attn_v\.weight$'
+#     '^blk\.\d+\.ffn_down_shexp\.weight$,^blk\.\d+\.ffn_gate_shexp\.weight$,^blk\.\d+\.ffn_up_shexp\.weight$'
+#     --harmonization-technique 3 --moe-top-k 8 --moe-n-experts 160 --ignore-f32 --use-auto-quant-assign
+#     --auto-no-pareto-filter --compute-all-map --ignore-imatrix-rules --with-imatrix --info --fill-leftover-budget
+#     --nextn-optimization off --prefill-budget 0.7855293243805042
+# - VERDICT: all speed budgets met [GPU]
+# - GPG signatures: PASSED
+# - Hidden parameters (not passed as CLI args):
+#   Loss exponent (p) [GPU]: 0.5
+#   Degradation exponent (q) [GPU]: 0.5
+# - Command used:
+# ../../quant_assign.py kld_results.csv --speed-profile sglang --gpu-tensors-max-size 211275244537B
+
+## THE END!

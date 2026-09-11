@@ -13,3 +13,4 @@ cd models/GLM-4.7/group0
 y = 0 + 4.13628942573 * ( x - 0.282031218544 )^(-3.23393939394)
 
 ./group0_enricher.py --reference-csv models/GLM-4.7-Flash/group0/kld_results.csv --reference-mean-equation "y = 0 + 4.55567813326e+22 * ( x + 12.3848998959 )^(-18.9726315789)" --target-csv models/GLM-4.7/group0/kld_results_partial.csv --output-csv models/GLM-4.7/group0/kld_results.csv --target-mean-equation "y = 0 + 4.13628942573 * ( x - 0.282031218544 )^(-3.23393939394)"
+SGLang-specific notes: sglang_notes.txt

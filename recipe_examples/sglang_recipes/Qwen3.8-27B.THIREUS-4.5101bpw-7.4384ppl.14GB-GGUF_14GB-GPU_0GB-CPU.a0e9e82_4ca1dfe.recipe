@@ -1,0 +1,112 @@
+## Quant mix recipe created using Thireus' GGUF Tool Suite - https://gguf.thireus.com/
+# Model name: Qwen3.8-27B
+# Link to the original model: https://huggingface.co/Qwen/Qwen3.8-27B
+
+## Model head & embeddings — qbits: 4 
+^token_embd\.weight$=sgl_nvfp4
+^output\.weight$=sgl_nvfp4
+
+## Multi-headed attention parameters — qbits: 4 
+^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30|3[2-4]|3[6-8]|4[0-2]|4[4-6]|4[8-9]|50|5[2-4]|5[6-8]|6[0-2])\.attn_gate\.weight$=sgl_nvfp4
+^blk\.(3|7|11|15|19|23|27|31|35|39|43|47|51|55|59|63)\.attn_output\.weight$=sgl_nvfp4
+^blk\.(3|7|11|15|19|23|27|31|35|39|43|47|51|55|59|63)\.attn_k\.weight$=sgl_nvfp4
+^blk\.(3|7|11|15|19|23|27|31|35|39|43|47|51|55|59|63)\.attn_q\.weight$=sgl_nvfp4
+^blk\.(3|7|11|15|19|23|27|31|35|39|43|47|51|55|59|63)\.attn_v\.weight$=sgl_nvfp4
+^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30|3[2-4]|3[6-8]|4[0-2]|4[4-6]|4[8-9]|50|5[2-4]|5[6-8]|6[0-2])\.attn_qkv\.weight$=sgl_nvfp4
+
+## Dense Feed-Forward Network weights — qbits: 4 
+^blk\.([0-9]|[1-5][0-9]|6[0-3])\.ffn_down\.weight$=sgl_nvfp4
+^blk\.([0-9]|[1-5][0-9]|6[0-3])\.ffn_up\.weight$=sgl_nvfp4
+
+## Gating network — qbits: 4 
+^blk\.([0-9]|[1-5][0-9]|6[0-3])\.ffn_gate\.weight$=sgl_nvfp4
+
+## Misc / Other tensors — qbits: 16 4 
+^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30|3[2-4]|3[6-8]|4[0-2]|4[4-6]|4[8-9]|50|5[2-4]|5[6-8]|6[0-2])\.ssm_alpha\.weight$=sgl_bf16
+^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30|3[2-4]|3[6-8]|4[0-2]|4[4-6]|4[8-9]|50|5[2-4]|5[6-8]|6[0-2])\.ssm_out\.weight$=sgl_nvfp4
+^blk\.([0-2]|[4-6]|[8-9]|10|1[2-4]|1[6-8]|2[0-2]|2[4-6]|2[8-9]|30|3[2-4]|3[6-8]|4[0-2]|4[4-6]|4[8-9]|50|5[2-4]|5[6-8]|6[0-2])\.ssm_beta\.weight$=sgl_bf16
+
+## Summary of tensor sizes per class
+# GPU Total: 14.12 GiB (28.19%) | 50.09 GiB max, if all were sgl_bf16 | 14.12 GiB min, if all were sgl_nvfp4
+
+## Summary of tensor counts and bpw per qtype
+#
+# GPU-loaded quants:
+# QTYPE		Count	BPW	Assigned GiB	% Assigned	Max GiB (all)
+# +!sgl_bf16 	96 	16    	  0.04 GiB	-		-
+# !sgl_bf16 	0  	16    	  0.00 GiB	 0.00%		50.05
+# !sgl_fp8_pb_wo	0  	8.002 	  0.00 GiB	 0.00%		27.40
+# !sgl_fp8  	0  	8     	  0.00 GiB	 0.00%		26.21
+# !:sgl_nvfp4	402	4.5   	 14.08 GiB	100.00%		14.08
+#
+# -Average BPW: 4.5101
+#
+# -Notes:
+# - '+' means user-defined pre-assigned tensors, or tensor missing from csv data or f32 tensors
+# - ':' means this qtype has a tensor-shape-dependent bpw in this recipe due to a discovered additional per-row scale overhead;
+#   For more information: https://github.com/Thireus/GGUF-Tool-Suite/discussions/53
+# - '!' means qtypes for which the tensors map file was computed instead of downloaded;
+#   This means the tensors assigned to these '!<qtype>' will likely need to be quantized locally as download links may not be available. 
+#   This also means there is alaways a chance that these tensors can't be quantized to their assigned '!<qtype>'.
+# - Recipe produced on the 2026-09-10 19:10:55 BST+0100 using Thireus' GGUF tools (https://gguf.thireus.com/)
+# - Script SHA-256: a0e9e8277f48f288697091d6a1f267fe66b5869805e72bb59ee8ea7b74c605e6
+# - Calibration dataset 'kld_results.csv' SHA-256: e8a46ba43e6b8effe1442d3cccd1da2a4e7a3b8c86f44df36c6810d17b8047e1
+# - Degradation dataset 'group0/kld_results_sglang.csv' SHA-256: ad7f92feaff368084c1896522dfdf32cb522e5de60ed84b00d4e31c248b2770d
+# - tensors.sgl_bf16.map SHA-256: c12430d2bf62b4ef6912927c24bf861a4fe280fd0de7fd658af10c15580453d0
+# - tensors.sgl_bf16.map model name: Qwen3.8-27B-THIREUS-BF16-SPECIAL_TENSOR-00852-of-00852 (computed)
+# - tensors.bf16.map SHA-256: 8b3491c54a71b2579815b6baadb0d2eeb7439837624d47061a2a18d4ac0f60ff
+# - tensors.bf16.map model name: Qwen3.8-27B-THIREUS-BF16-SPECIAL_TENSOR-00852-of-00852
+# - tensors.sgl_fp8_pb_wo.map SHA-256: 5d7c76f747748d6c2030489751a760a169b68bcd2144a6b6133c9c1b8d64eab1
+# - tensors.sgl_fp8_pb_wo.map model name: Qwen3.8-27B-THIREUS-BF16-SPECIAL_TENSOR-00852-of-00852 (computed)
+# - tensors.sgl_fp8.map SHA-256: f5a6cd8ae5aafa3c17693148244971edb84374c1bcae3aaab5a318a59dbfaf94
+# - tensors.sgl_fp8.map model name: Qwen3.8-27B-THIREUS-BF16-SPECIAL_TENSOR-00852-of-00852 (computed)
+# - tensors.sgl_nvfp4.map SHA-256: 5a09ca2337612c91f347ac0d0c5514db4c440429e29fda01071b25702749d158
+# - tensors.sgl_nvfp4.map model name: Qwen3.8-27B-THIREUS-BF16-SPECIAL_TENSOR-00852-of-00852 (computed)
+# - tensors.iq1_kt.map SHA-256: b9673808fcc9db54722a259ec0944be7176f4cb8f914a0562462cd1b98a361fc
+# - tensors.iq1_kt.map model name: Qwen3.8-27B-THIREUS-IQ1_KT-SPECIAL_TENSOR-00852-of-00852 (computed)
+# - Hardware speed profile:
+#   [GPU] profile: sglang; matmul tensors: 401 (25,598,361,600 weight elements)
+#   [GPU] embedding rule: narrowed 1 global embedding tensor(s) to sgl_bf16 sgl_nvfp4 - get_quant_method's VocabParallelEmbedding branch knows NVFP4 and nothing else, so no other algo is loadable there
+# - Two-sided speed model (sglang_speed.py):
+#   [GPU] cell: chat-c1, anchor: the pool floor, computed from --gpu-quants and this model (258 assignable unit(s), 449 fixed tensor(s)); no reference recipe
+#   [GPU] prefill index 1.0030 -> 1.0030 (floor 1.0030); predicted prompt-processing throughput 100.0% of the floor, budget 100.00%, cap 1.002989
+#   [GPU] decode bytes/token 14,451,558,536 -> 14,451,558,536 (floor 14,451,558,536); byte floor 15,166,720,140; predicted token-generation throughput 100.0% of the floor
+#   [GPU] --decode-budget auto -> unconstrained (reported below against the pool floor). The size cap is the decode lever on a dense model, and on a MoE total bytes and per-token active bytes move at different rates, so an automatic cap would bind on something you cannot steer. Pass --decode-budget <fraction> or --decode-max-bytes to cap it.
+#   [GPU] requested size cap 15,100,000,000 B; this recipe spends 15,161,429,132 B (100.4% of it)
+#   [GPU] pool byte floor 15,166,720,140; size cap on the same basis 15,105,291,008  <- the cap is AT OR BELOW the floor: exactly one recipe exists here
+#   [GPU] repair moves applied: 0, all budgets met: True
+# - Predicted quality (separable estimator over the degradation table; a PREDICTION, see docs/sglang.md SS7):
+#   [GPU] predicted degradation 0.063954 over 498 tensor(s); 15,161,429,132 B assigned+pinned, 4.5096 bpw (--ignore-f32 excludes the norms/1-D tensors SGLang keeps at BF16, so this is not the checkpoint size)
+# - SGLang preset (--speed-profile sglang):
+#   architecture: qwen3_5 (auto-detected from 851 tensor name(s) in group0/tensors.bf16.map)
+#   degradation table: group0/kld_results_sglang.csv (this model's own group0/kld_results_sglang.csv, which overrides the built-in rows measured on Qwen3.8-27B)
+#   NEXTN/EAGLE-compatible embedding: OFF - off (the default): the embedding is quantised like any other tensor - no MTP/NEXTN tensor in the map, but this suite carries the draft head's own split (models/mtp-Qwen3.8-27B/download.conf)
+#   NEXTN/EAGLE head detected and the token embedding stays quantized: speculation then needs an engine carrying the shared-embedding fix (SGLang PR pending) - pass --nextn-optimization on for a stock engine.
+#   HF source inspected: <hf-cache>/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0
+#   GGUF_DOWNLOAD_CONF used (resolved next to the CSV): download.conf
+#   SGL_ARCH used (map synthesis): qwen3_5
+#   defaults supplied (every one overridable by passing the flag): --gpu-tensors --gpu-quants --gpu-assign-qtype --gpu-assign-tensors --harmonize-tensors --harmonization-technique --quant-degradation-csv --ignore-f32 --use-auto-quant-assign --auto-no-pareto-filter --compute-all-map --ignore-imatrix-rules --with-imatrix --info --fill-leftover-budget --prefill-budget --decode-budget
+#   --prefill-budget auto (FILL rule, spend the target then be as fast as possible), 1-point sweep: sweep skipped after 1 of 12 passes: the size cap (15,105,291,008 B on the floor's basis) is at or below the pool's byte floor (15,166,720,140 B), where exactly one recipe exists - no prefill budget can change it, so the strictest one, 1.0, is recorded
+#        prefill-budget prefill index predicted deg           bytes     bpw   fill
+#        -------------- ------------- ------------- --------------- ------- ------
+#     -> 1.000000       1.003000      0.063954       15,161,429,132  4.5096 100.4%
+#   the same recipe, with every default spelled out:
+#     ../../quant_assign.py kld_results.csv --speed-profile sglang --gpu-tensors-max-size 15.1GB --sgl-arch qwen3_5
+#     --gpu-tensors '.*' --gpu-quants sgl_nvfp4 sgl_fp8 sgl_fp8_pb_wo sgl_bf16 --gpu-assign-qtype sgl_bf16
+#     --gpu-assign-tensors '^blk\.\d+\.ssm_(alpha|beta)\.weight$=sgl_bf16' --harmonize-tensors
+#     '^blk\.\d+\.ffn_gate\.weight$,^blk\.\d+\.ffn_up\.weight$'
+#     '^blk\.\d+\.ssm_alpha\.weight$,^blk\.\d+\.ssm_beta\.weight$'
+#     '^blk\.\d+\.attn_gate\.weight$,^blk\.\d+\.attn_qkv\.weight$'
+#     '^blk\.\d+\.attn_k\.weight$,^blk\.\d+\.attn_q\.weight$,^blk\.\d+\.attn_v\.weight$' --harmonization-technique 3
+#     --quant-degradation-csv group0/kld_results_sglang.csv --ignore-f32 --use-auto-quant-assign
+#     --auto-no-pareto-filter --compute-all-map --ignore-imatrix-rules --with-imatrix --info --fill-leftover-budget
+#     --nextn-optimization off --prefill-budget 1.0
+# - VERDICT: all speed budgets met [GPU]
+# - GPG signatures: PASSED
+# - Hidden parameters (not passed as CLI args):
+#   Loss exponent (p) [GPU]: 1
+#   Degradation exponent (q) [GPU]: 1
+# - Command used:
+# ../../quant_assign.py kld_results.csv --speed-profile sglang --gpu-tensors-max-size 15.1GB
+
+## THE END!

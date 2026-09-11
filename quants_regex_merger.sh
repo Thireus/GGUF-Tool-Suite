@@ -5,7 +5,7 @@
 #** regex for llama-quantize consumption.                     **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Apr-07-2026 -------------------- **#
+#** --------------- Updated: Sep-07-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -103,6 +103,7 @@ NO_FILE=0
 MODEL_NAME=""
 MODEL_LINK=""
 PPL=""
+KLD=""
 
 raw_ppl=""
 # Parse arguments
@@ -126,12 +127,19 @@ while [[ "$#" -gt 0 ]]; do
       PPL=$(printf "%.4f" "$2")
       shift 2
       ;;
+    --add-kld)
+      raw_kld="$2"
+      # a number (4 decimals like --add-ppl) or "auto" (the footer's predicted degradation)
+      if [[ "$2" == "auto" ]]; then KLD=auto; else KLD=$(printf "%.4f" "$2"); fi
+      shift 2
+      ;;
     -h|--help)
-      echo "Usage: $0 [--no-file] [--model-name NAME] [--add-ppl VALUE]"
+      echo "Usage: $0 [--no-file] [--model-name NAME] [--add-ppl VALUE] [--add-kld VALUE]"
       echo
       echo "  --no-file         Do not write output to a file; just print."
       echo "  --model-name NAME Optional. Prepends NAME to the output filename."
       echo "  --add-ppl VALUE   Optional. Adds VALUE_PPL right after username in the filename."
+      echo "  --add-kld VALUE   Optional. Adds VALUE_KLD to the filename; VALUE may be auto (the footer predicted degradation). Recipes normally carry PPL."
       echo
       echo "Example output filename:"
       echo "  MODEL.USER.PPL_PPL.TOTALGB_GGUF-GPUGB_GPU-CPUGB_CPU.HASH1-HASH2.recipe"
@@ -140,7 +148,7 @@ while [[ "$#" -gt 0 ]]; do
       ;;
     *)
       echo "Unknown option: $1"
-      echo "Usage: $0 [--no-file] [--model-name NAME] [--add-ppl VALUE]"
+      echo "Usage: $0 [--no-file] [--model-name NAME] [--add-ppl VALUE] [--add-kld VALUE]"
       exit 1
       ;;
   esac
@@ -2096,9 +2104,19 @@ if [[ -n "$PPL" ]]; then
   ppl_part="${PPL}ppl."
 fi
 
+# Add KLD only when asked: a number, or "auto" to read the predicted degradation the assigner wrote in the footer
+kld_part=""
+if [[ "$KLD" == "auto" ]]; then
+  KLD=$(printf "%s" "$all" | sed -E -n 's/.*predicted degradation ([0-9]+\.[0-9]+).*/\1/p' | head -n1)
+  [[ -n "$KLD" ]] && KLD=$(printf "%.4f" "$KLD")
+fi
+if [[ -n "$KLD" ]]; then
+  kld_part="${KLD}kld."
+fi
+
 # Build dynamic filename
 whoami=$(whoami)
-filename="${whoami^^}-${bpw}bpw-${ppl_part}${totalGiB}GB-GGUF_${gpuGiB}GB-GPU_${cpuGiB}GB-CPU.${shaPart}_${cmdPart}.recipe"
+filename="${whoami^^}-${bpw}bpw-${ppl_part}${kld_part}${totalGiB}GB-GGUF_${gpuGiB}GB-GPU_${cpuGiB}GB-CPU.${shaPart}_${cmdPart}.recipe"
 
 echo 
 echo "## THE END!"

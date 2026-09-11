@@ -1,0 +1,95 @@
+{
+ "architecture": "Glm4MoeForCausalLM",
+ "attn_implementation": "sdpa",
+ "batch": 8,
+ "check_monolithic": null,
+ "convention": {
+  "fp8": "input_scale = amax / 448",
+  "nvfp4": "input_scale = amax / 2688",
+  "safetensors": "fp8"
+ },
+ "device": "NVIDIA GeForce RTX 5090",
+ "expert_coverage": {
+  "experts_per_layer": 160,
+  "idle_experts": 0,
+  "layer_max": {
+   "max": 110359,
+   "median": 59629,
+   "min": 37948
+  },
+  "layer_median": {
+   "max": 20990,
+   "median": 19742,
+   "min": 18349
+  },
+  "layer_min": {
+   "max": 8781,
+   "median": 5753,
+   "min": 2365
+  },
+  "moe_layers": 89,
+  "routed_tokens": 294551552
+ },
+ "experts_implementation": "grouped_mm",
+ "hf_files": null,
+ "hist_stride": 1,
+ "histogram": false,
+ "load_seconds": 0.9087722301483154,
+ "seq_len": 512,
+ "snapshot_of": {
+  "snapshots": [
+   131072,
+   413696
+  ],
+  "walk_tokens": 413696
+ },
+ "source": "<hf-cache>/models--zai-org--GLM-4.7/snapshots/602d01efcdd332c5238ca4bcede555defbe83eb7",
+ "source_kind": "snapshot",
+ "source_tensors": 44691,
+ "text": {
+  "bytes_read": 1699017,
+  "path": "imatrix-calibration-corpus-v02.txt",
+  "seq_len": 512,
+  "sequences": 808,
+  "sha256": "6fd2187f10ab1b742cf85eaf35cf9fa20863a557f68451d6535195774cf1fd0a",
+  "tokens": 413696
+ },
+ "tokens": 413696,
+ "tool": "sglang_calibrate.py",
+ "torch": "2.13.0+cu130",
+ "transformers": "5.16.1",
+ "uncalibrated": {
+  "families": [
+   "model.layers.N.eh_proj.weight",
+   "model.layers.N.embed_tokens.weight",
+   "model.layers.N.enorm.weight",
+   "model.layers.N.hnorm.weight",
+   "model.layers.N.input_layernorm.weight",
+   "model.layers.N.mlp.experts.N.down_proj.weight",
+   "model.layers.N.mlp.experts.N.gate_proj.weight",
+   "model.layers.N.mlp.experts.N.up_proj.weight",
+   "model.layers.N.mlp.gate.e_score_correction_bias",
+   "model.layers.N.mlp.gate.weight",
+   "model.layers.N.mlp.shared_experts.down_proj.weight",
+   "model.layers.N.mlp.shared_experts.gate_proj.weight",
+   "model.layers.N.mlp.shared_experts.up_proj.weight",
+   "model.layers.N.post_attention_layernorm.weight",
+   "model.layers.N.self_attn.k_norm.weight",
+   "model.layers.N.self_attn.k_proj.bias",
+   "model.layers.N.self_attn.k_proj.weight",
+   "model.layers.N.self_attn.o_proj.weight",
+   "model.layers.N.self_attn.q_norm.weight",
+   "model.layers.N.self_attn.q_proj.bias",
+   "model.layers.N.self_attn.q_proj.weight",
+   "model.layers.N.self_attn.v_proj.bias",
+   "model.layers.N.self_attn.v_proj.weight",
+   "model.layers.N.shared_head.head.weight",
+   "model.layers.N.shared_head.norm.weight"
+  ],
+  "source_tensors": 502,
+  "why": "the model class builds no module for these, so no hook can see them; the draft head is the usual case and every published checkpoint drops it too"
+ },
+ "walk_seconds": 1125.6282937526703,
+ "walk_tokens_per_s": 367.5245214570803,
+ "weights": "streamed"
+}

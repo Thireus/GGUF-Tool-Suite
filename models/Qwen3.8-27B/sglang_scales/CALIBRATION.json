@@ -1,0 +1,73 @@
+{
+ "architecture": "Qwen3_5ForConditionalGeneration",
+ "attn_implementation": "sdpa",
+ "batch": 8,
+ "check_monolithic": null,
+ "convention": {
+  "fp8": "input_scale = amax / 448",
+  "nvfp4": "input_scale = amax / 2688",
+  "safetensors": "fp8"
+ },
+ "device": "NVIDIA GeForce RTX 5090",
+ "expert_coverage": null,
+ "experts_implementation": "eager",
+ "hf_files": "<hf-cache>/models--Qwen--Qwen3.8-27B/snapshots/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+ "hist_stride": 1,
+ "histogram": true,
+ "load_seconds": 1.1490488052368164,
+ "seq_len": 512,
+ "snapshot_of": {
+  "snapshots": [
+   32768,
+   131072
+  ],
+  "walk_tokens": 131072
+ },
+ "source": "<models>/Qwen3.8-27B-THIREUS-BF16-SPECIAL_SPLIT",
+ "source_kind": "gguf-split",
+ "source_tensors": 1199,
+ "split_parts": {
+  "mtp": "<models>/mtp-Qwen3.8-27B-THIREUS-BF16-SPECIAL_SPLIT",
+  "text": "<models>/Qwen3.8-27B-THIREUS-BF16-SPECIAL_SPLIT",
+  "vision": "<models>/mmproj-Qwen3.8-27B-THIREUS-BF16-SPECIAL_SPLIT"
+ },
+ "tensor_order": "model.safetensors.index.json",
+ "tensors_map": "<models>/Qwen3.8-27B-THIREUS-BF16-SPECIAL_SPLIT/tensors.map",
+ "tensors_map_sha256": "8b3491c54a71b2579815b6baadb0d2eeb7439837624d47061a2a18d4ac0f60ff",
+ "text": {
+  "bytes_read": 1699017,
+  "path": "imatrix-calibration-corpus-v02.txt",
+  "seq_len": 512,
+  "sequences": 256,
+  "sha256": "6fd2187f10ab1b742cf85eaf35cf9fa20863a557f68451d6535195774cf1fd0a",
+  "tokens": 131072
+ },
+ "tokens": 131072,
+ "tool": "sglang_calibrate.py",
+ "torch": "2.13.0+cu130",
+ "transformers": "5.16.1",
+ "uncalibrated": {
+  "families": [
+   "mtp.fc.weight",
+   "mtp.layers.N.input_layernorm.weight",
+   "mtp.layers.N.mlp.down_proj.weight",
+   "mtp.layers.N.mlp.gate_proj.weight",
+   "mtp.layers.N.mlp.up_proj.weight",
+   "mtp.layers.N.post_attention_layernorm.weight",
+   "mtp.layers.N.self_attn.k_norm.weight",
+   "mtp.layers.N.self_attn.k_proj.weight",
+   "mtp.layers.N.self_attn.o_proj.weight",
+   "mtp.layers.N.self_attn.q_norm.weight",
+   "mtp.layers.N.self_attn.q_proj.weight",
+   "mtp.layers.N.self_attn.v_proj.weight",
+   "mtp.norm.weight",
+   "mtp.pre_fc_norm_embedding.weight",
+   "mtp.pre_fc_norm_hidden.weight"
+  ],
+  "source_tensors": 15,
+  "why": "the model class builds no module for these, so no hook can see them; the draft head is the usual case and every published checkpoint drops it too"
+ },
+ "walk_seconds": 130.67870163917542,
+ "walk_tokens_per_s": 1003.0096592320801,
+ "weights": "streamed"
+}

@@ -5,7 +5,7 @@
 #** different .map file qtype.                                **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Mar-29-2026 -------------------- **#
+#** --------------- Updated: Sep-10-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -75,6 +75,11 @@ GGML_QUANT_SIZES: Dict[str, Tuple[int, int]] = {
     "IQ1_M" : ( 256,   56),
     "BF16" : (   1,    2),
     "MXFP4" : (  32,   17),
+    # NVFP4 (llama.cpp GGML_TYPE_NVFP4 = 40, ggml-common.h:221-227): 64 values per
+    # block, stored as 4 x UE4M3 sub-block scales (one per 16 values) + 32 bytes of
+    # packed E2M1 pairs = 36 bytes. There is no second-level per-tensor FP32 scale
+    # in the ggml block, unlike NVIDIA's reference NVFP4 layout.
+    "NVFP4" : (  64,   36),
     "Q4_0_4_4" : (  32,   18),
     "Q4_0_4_8" : (  32,   18),
     "Q4_0_8_8" : (  32,   18),
@@ -134,11 +139,41 @@ GGML_QUANT_SIZES: Dict[str, Tuple[int, int]] = {
     "IQ5_KS_R4" : ( 256,  168),
     "Q8_KV_R8" : (  32,   32),
     "Q8_K_R8" : ( 256,  258),
+    # --- SGLang modelopt_mixed native types (see sglang_native.py) ----------
+    # Not ggml types; present so --qtype sgl_* validates and so the bpw-ordered
+    # fallback ladder can see them.  Their real sizes come from
+    # sglang_native.synthesise_map_lines(), not from this pair - the per-tensor
+    # scalars (8 B for NVFP4/FP8, 4 B for W4A16) cannot be expressed as a block.
+    "SGL_NVFP4" : (  16,     9),
+    "SGL_NVFP4A16" : (  16,     9),
+    "SGL_FP8" : (   1,     1),
+    "SGL_FP8_PB_WO" : ( 16384, 16388),
+    "SGL_MXFP8" : (  32,    33),
+    "SGL_BF16" : (   1,     2),
+    # compressed-tensors pack-quantized INT4 g128 asymmetric.  Nominal pair
+    # only; the real per-tensor size (which carries a 16 B weight_shape) comes
+    # from sglang_native.synthesise_map_lines() like every other sgl_* type.
+    "SGL_INT4_G128" : ( 256,   133),
 }
 
 # --- BPW lookup table for GGUF quant dtypes ---
 BPW_TABLE = {
     'F32': 32,
+    # --- Blackwell FP4 pair ------------------------------------------------
+    # NVFP4: 36 bytes / 64 values = 4.5 bpw.  MXFP4: 17 bytes / 32 values = 4.25 bpw.
+    # MXFP4 was already in GGML_QUANT_SIZES but missing here, which made
+    # get_bpw('mxfp4') return None and _quant_sort_key() blow up the moment the
+    # qtype was named on the command line -- so it could never be used.
+    'NVFP4': 4.5,
+    'MXFP4': 4.25,
+    # --- SGLang modelopt_mixed native types (see sglang_native.py) ----------
+    'SGL_NVFP4': 4.5,
+    'SGL_NVFP4A16': 4.5,
+    'SGL_FP8': 8.0,
+    'SGL_FP8_PB_WO': 8.001953125,
+    'SGL_MXFP8': 8.25,
+    'SGL_INT4_G128': 4.15625,
+    'SGL_BF16': 16,
     'F16': 16,
     'BF16': 16,
     'Q8_0_R8': 8.5,
@@ -348,6 +383,7 @@ QK_IQ1BN = 64
 QK_IQ2BN = 64
 KBLOCKSIZE_32 = 32
 QK_MXFP4 = 32  # corresponds to QK_MXFP4 used in mxfp4 assert
+QK_NVFP4 = 64  # llama.cpp ggml-common.h:221 - block_nvfp4 holds 64 values
 QK4_NL = 32
 
 # Additional QK constants derived from the GGML_ASSERT defines referenced
@@ -390,6 +426,7 @@ def check_shape_constraints(qtype_upper: str, qtype_lower: str, nrows: int or No
      - many "K" types require n_per_row % QK_K == 0 (we check non-row variant against PER_ROW_QK_K_TYPES)
      - _BN types (importance-batch normalization) require n_per_row % QK_IQ1BN == 0
      - MXFP4 requires n_per_row % QK_MXFP4 == 0
+     - NVFP4 requires n_per_row % QK_NVFP4 == 0
      - IQ1_S_R4 and IQ1_M_R4 require n_per_row % 32 == 0
      - special Q8_KV_R8 requires nrows%8==0 and n_per_row%16==0
      - special Q8_K_R8 / Q8_K_R16 require nrows%8/16 and n_per_row%QK_K
@@ -429,7 +466,22 @@ def check_shape_constraints(qtype_upper: str, qtype_lower: str, nrows: int or No
             reason = f"Quant '{qtype_upper}' requires n_per_row % {QK_IQ1BN} == 0, got n_per_row={n_per_row!r}"
             failed_to_transform(tensor_name, qtype_upper, reason)
 
-    # MXFP4 specific requirement
+    # NVFP4 specific requirement.
+    # Unlike every other type handled here, a non-conforming NVFP4 tensor cannot
+    # silently fall back: llama.cpp's tensor_type_fallback() (src/llama-quant.cpp:372-410)
+    # only demotes 256-block types, and for a 64-block type it reaches `default:` with
+    # qk_k = 64 > 32 and THROWS "no tensor type fallback is defined for type nvfp4",
+    # aborting the whole quantisation. So the recipe must never emit nvfp4 for a row
+    # length that is not a multiple of 64 - reject it here instead.
+    if 'NVFP4' in qtype_upper:
+        if n_per_row is None or (n_per_row % QK_NVFP4) != 0:
+            reason = f"Quant '{qtype_upper}' requires n_per_row % {QK_NVFP4} == 0, got n_per_row={n_per_row!r}"
+            failed_to_transform(tensor_name, qtype_upper, reason)
+
+    # MXFP4 specific requirement.
+    # MXFP4 is a 32-block type, so tensor_type_fallback() takes the `qk_k <= 32`
+    # branch and llama.cpp demotes the tensor to F16 rather than throwing - still
+    # not what the recipe asked for, so reject it here too.
     if 'MXFP4' in qtype_upper:
         if n_per_row is None or (n_per_row % QK_MXFP4) != 0:
             reason = f"Quant '{qtype_upper}' requires n_per_row % {QK_MXFP4} == 0, got n_per_row={n_per_row!r}"
@@ -683,6 +735,30 @@ def attempt_transform_line(parts: List[str],
     return new_line
 
 
+# --- Which family a qtype belongs to, and what the ladder may pick ---------
+# The fallback ladder rewrites a tensor to a DIFFERENT qtype when the one that
+# was asked for cannot hold that row, so everything on it has to be a drop-in
+# for what it replaces.  Two groups of entries in the tables above are not, and
+# both entered the ladder the moment they were given a BPW_TABLE row:
+#   * SGL_* are not ggml types at all.  llama-quantize cannot cook one and
+#     quant_downloader.sh has no shard set to fetch, so an sgl_* line in a GGUF
+#     recipe is a line nothing can produce.  The SGLang path never comes
+#     through here anyway - main() hands an SGL_* request to sglang_native.py,
+#     which decides its own legality.
+#   * NVFP4 (64-value blocks) and MXFP4 (32-value blocks) ARE ggml types, but
+#     they are not silent substitutes: llama.cpp's tensor_type_fallback()
+#     (src/llama-quant.cpp) throws outright on a non-conforming nvfp4 row and
+#     demotes a non-conforming mxfp4 one to F16.  Requested by name they are
+#     honoured, as they always were; the ladder does not reach for them by
+#     itself, only when --fallback-quants names one.
+def qtype_family(qtype_upper: str) -> str:
+    """'sglang' for the SGLang native types, 'gguf' for the ggml ones."""
+    return 'sglang' if qtype_upper.upper().startswith('SGL_') else 'gguf'
+
+
+LADDER_NOT_BY_DEFAULT = {'NVFP4', 'MXFP4'}
+
+
 def build_fallback_candidates(initial_qtype_upper: str,
                               bpw_table: Dict[str, float],
                               whitelist: List[str],
@@ -696,6 +772,8 @@ def build_fallback_candidates(initial_qtype_upper: str,
       - For equal BPW, qtypes without an additional scale factor are ordered before those with one.
       - Among qtypes that have an additional scale factor, lower scale factor comes first.
       - Never select any qtype containing '_BN' unless allowed_bn is True.
+      - Never leave the family the requested qtype belongs to (see qtype_family).
+      - Never reach for a LADDER_NOT_BY_DEFAULT qtype unless the whitelist names it.
       - Apply whitelist (if non-empty) and forbidden regexes.
     Returns list of candidate qtypes (uppercase).
     """
@@ -708,6 +786,17 @@ def build_fallback_candidates(initial_qtype_upper: str,
 
     # Prepare whitelist set (uppercase) if provided
     whitelist_set = set([w.upper() for w in whitelist]) if whitelist else None
+
+    # The requested qtype's own family: a candidate outside it is not a
+    # substitution, it is a different file format.
+    initial_family = qtype_family(initial)
+
+    def ladder_may_pick(q: str) -> bool:
+        if qtype_family(q) != initial_family:
+            return False
+        if q in LADDER_NOT_BY_DEFAULT and not (whitelist_set and q in whitelist_set):
+            return False
+        return True
 
     def sort_key(item):
         q, bpw = item
@@ -729,7 +818,8 @@ def build_fallback_candidates(initial_qtype_upper: str,
 
     # Step 1: try non-row variant if initial was row-interleaved
     non_row = non_row_variant(initial)
-    if non_row != initial and non_row in bpw_table and non_row in GGML_QUANT_SIZES:
+    if (non_row != initial and non_row in bpw_table and non_row in GGML_QUANT_SIZES
+            and ladder_may_pick(non_row)):
         # Check BN rule and whitelist/forbidden
         if (allowed_bn or '_BN' not in non_row) and (not whitelist_set or non_row in whitelist_set) and (not any(r.search(non_row) for r in forbidden_regexes)):
             filtered.append(non_row)
@@ -742,6 +832,8 @@ def build_fallback_candidates(initial_qtype_upper: str,
         if q in seen:
             continue
         if q not in GGML_QUANT_SIZES:
+            continue
+        if not ladder_may_pick(q):
             continue
         if (not allowed_bn) and ('_BN' in q):
             continue
@@ -908,6 +1000,78 @@ def process_map_lines(lines,
     return output_lines
 
 
+def _sglang_native_lines(raw_lines: List[str], qtype_lower: str,
+                         arch_override: str = None) -> List[str]:
+    """tensors.<sgl_*>.map lines, via sglang_native.py.
+
+    The architecture is DETECTED from the tensor names rather than passed in,
+    because quant_assign.py's --compute-missing-map has no place to put an arch
+    flag; set SGL_ARCH in the environment to override.  Detection is strict: an
+    arch qualifies only if it can name every tensor in the map, since a tensor
+    we cannot name is one we would silently leave at BF16.
+    """
+    import os as _os
+    here = _os.path.dirname(_os.path.realpath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    try:
+        import sglang_native as sgl
+    except ImportError as e:
+        print(f"Error: qtype '{qtype_lower}' needs sglang_native.py next to this "
+              f"script ({e}).", file=sys.stderr)
+        sys.exit(2)
+    rows = []
+    for line in raw_lines:
+        parts = line.rstrip('\n').split(':')
+        if len(parts) < 5:
+            continue
+        name = parts[2]
+        shape = elems = None
+        for kv in parts[3:]:
+            if kv.startswith('shape='):
+                shape = sgl._parse_shape(kv.split('=', 1)[1])
+            elif kv.startswith('elements='):
+                elems = int(kv.split('=', 1)[1])
+        if name and shape is not None and elems is not None:
+            rows.append((name, shape, elems, None, parts[0], parts[1]))
+    # --sgl-arch first, then SGL_ARCH, then detection.  The FLAG exists because
+    # quant_assign.py's own architecture refusal tells the user to pass
+    # `--sgl-arch`, and that flag used to stop at the preset: this subprocess
+    # read only the environment variable, re-detected, failed, and the parent
+    # died on a missing file with no explanation.  The env var stays for the
+    # long-form command, which has no preset to pass anything.
+    arch_key = (arch_override or _os.environ.get('SGL_ARCH')
+                or sgl.detect_arch(r[0] for r in rows))
+    if arch_key is None or arch_key not in sgl.ARCHS:
+        print("Error: could not identify the model architecture for an SGLang "
+              "native map from the tensor names; pass --sgl-arch (or set "
+              "SGL_ARCH) to one of: " + ", ".join(sorted(sgl.ARCHS))
+              + ". If none of them describes this model it needs its own "
+                "sglang_native.ARCHS entry - a declarative table, no GPU; see "
+                "docs/sglang.md SS9.", file=sys.stderr)
+        sys.exit(2)
+    try:
+        lines, census = sgl.synthesise_map_lines(rows, qtype_lower,
+                                                 sgl.ARCHS[arch_key])
+    except KeyError as e:
+        # THE REFUSAL IS RIGHT, THE TRACEBACK IS NOT.  `map_tensor` refuses to
+        # guess a tensor the arch cannot name - which is exactly what stops a
+        # forced wrong --sgl-arch from producing a plausible wrong recipe - but
+        # a novice following the architecture refusal's own advice saw a raw
+        # KeyError and no statement of the situation.
+        print(f"Error: architecture {arch_key!r} does not name every tensor in "
+              f"this map, so the SGLang size model refuses to guess: "
+              f"{str(e).strip(chr(34))}. That is the guard working: a forced "
+              f"architecture cannot produce a wrong recipe. This model needs its "
+              f"own sglang_native.ARCHS entry - a declarative table, no GPU; see "
+              f"docs/sglang.md SS9, with `sglang_native.py --smoke-hf <an HF "
+              f"checkpoint of this model>` as the pre-flight.", file=sys.stderr)
+        sys.exit(2)
+    print(f"sglang_native[{arch_key}] {qtype_lower}: {census['tensors']} tensors, "
+          f"{census['bytes']:,} B, {len(census['fallbacks'])} BF16 fallback(s)")
+    return lines
+
+
 def main():
     p = argparse.ArgumentParser(
         description=(
@@ -957,6 +1121,12 @@ def main():
                    help=("Space-separated list of regex patterns (case-insensitive) matching qtypes that must NOT be used as fallbacks. "
                          "Example: --fallback-quants-forbidden '^(iq1_|Q8_K$)' '.*_bn$'"))
 
+    p.add_argument("--sgl-arch", default=None,
+                   help=("Which sglang_native.ARCHS entry synthesises an sgl_* map. "
+                         "Overrides the SGL_ARCH environment variable, which overrides "
+                         "detection from the tensor names. quant_assign.py passes this "
+                         "for you under --speed-profile sglang."))
+
     args = p.parse_args()
 
     input_path = Path(args.input_map)
@@ -990,16 +1160,28 @@ def main():
     raw_lines = input_path.read_text(encoding='utf-8').splitlines(keepends=True)
 
     # Process lines
-    new_lines = process_map_lines(
-        raw_lines,
-        initial_qtype_upper=qtype_upper,
-        initial_qtype_lower=qtype_lower,
-        ignore_imatrix_rules=args.ignore_imatrix_rules,
-        imatrix=args.with_imatrix,
-        allow_fallback=allow_fallback,
-        fallback_whitelist=fallback_whitelist,
-        fallback_forbidden_patterns=fallback_forbidden_patterns
-    )
+    if qtype_upper.startswith('SGL_'):
+        # SGLang modelopt_mixed target: the GGUF path below cannot size these -
+        # its whole size model is `elements * type_size // block_size` plus a
+        # per-ROW scale bump, and SGLang's formats need per-TENSOR scalars, a
+        # transposed shape convention (GGUF shape=(K, N), safetensors [N, K])
+        # and an f32 -> bf16 rule for every non-matmul tensor.  All of that
+        # lives in sglang_native.py, which is also what proves itself to the
+        # byte against a real ModelOpt checkpoint.  Everything downstream is
+        # unchanged: the same .map text, the same writer, the same '!' computed
+        # provenance in the recipe.
+        new_lines = _sglang_native_lines(raw_lines, qtype_lower, args.sgl_arch)
+    else:
+        new_lines = process_map_lines(
+            raw_lines,
+            initial_qtype_upper=qtype_upper,
+            initial_qtype_lower=qtype_lower,
+            ignore_imatrix_rules=args.ignore_imatrix_rules,
+            imatrix=args.with_imatrix,
+            allow_fallback=allow_fallback,
+            fallback_whitelist=fallback_whitelist,
+            fallback_forbidden_patterns=fallback_forbidden_patterns
+        )
 
     if args.no_map:
         # print to stdout

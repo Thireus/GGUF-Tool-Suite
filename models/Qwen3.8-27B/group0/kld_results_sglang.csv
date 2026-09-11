@@ -1,0 +1,8 @@
+QTYPE,group0
+sgl_bf16,0.000000
+sgl_fp8,0.005301
+sgl_fp8_pb_wo,0.005291
+sgl_mxfp8,0.005332
+sgl_int4_g128,0.054767
+sgl_nvfp4a16,0.036930
+sgl_nvfp4,0.066930

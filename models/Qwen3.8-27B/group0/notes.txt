@@ -13,3 +13,4 @@ cd models/Qwen3.8-27B/group0
 y = 0 + 62.8285474279 * ( x + 1.20836223679 )^(-5.08876129718)
 
 ./group0_enricher.py --reference-csv models/Qwen3.5-4B/group0/kld_results.csv --reference-mean-equation "y = 0 + 5.77261777687e+22 * ( x + 10.2181080113 )^(-20.8421052632)" --target-csv models/Qwen3.8-27B/group0/kld_results_partial.csv --output-csv models/Qwen3.8-27B/group0/kld_results.csv --target-mean-equation "y = 0 + 62.8285474279 * ( x + 1.20836223679 )^(-5.08876129718)"
+SGLang-specific notes: sglang_notes.txt

@@ -8,3 +8,5 @@ models/*/group0_logs
 models/*/group0_files
 .DS_Store
 *.dat
+__pycache__/
+models/*/group0/sglang_maps

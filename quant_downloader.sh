@@ -5,7 +5,7 @@
 #** from a recipe file containing tensor regex entries.       **#
 #**                                                           **#
 #** ********************************************************* **#
-#** --------------- Updated: Jun-07-2026 -------------------- **#
+#** --------------- Updated: Sep-10-2026 -------------------- **#
 #** ********************************************************* **#
 #**                                                           **#
 #** Author: Thireus <gguf@thireus.com>                        **#
@@ -386,6 +386,9 @@ usage() {
   echo "       --verify                          Only verify existing shard hashes; report mismatches; skip downloads" >&2
   echo "       --verify-readonly                 Same as --verify but do not create files in the target directory (use a temporary workspace)." >&2
   echo "       --qtype QUANT                     Set quantization type for the first shard and filenames (default: $QTYPE); use highest qtype of the model!" >&2
+  echo "                                         For an SGLang recipe (sgl_* qtypes) this is REQUIRED and must be an sgl_* qtype: shards are" >&2
+  echo "                                         .safetensors, and a tensor the recipe does not name is fetched as this qtype, because in the" >&2
+  echo "                                         SGLang container BF16 is encoded by absence. Use --qtype sgl_bf16." >&2
   echo "                                         NOTE: When --qtype is explicitly provided and the corresponding" >&2
   echo "                                         tensors.<qtype,,>.map and tensors.<qtype,,>.map.sig files are present (<qtype,,> is automatically lowercased)," >&2
   echo "                                         the script will create these helpful symlinks in the model dir:" >&2
@@ -460,6 +463,8 @@ usage() {
   echo "    ./quant_downloader.sh -z --qtype Q8_0_R8 --z-custom-tools 'zstd:28B52FFD,lbzip2:425A68,brotli:' --z-compress-opt 'zstd:-19,lbzip2:-9 -u,brotli:-Z' -j 18 q8_0_r8.recipe" >&2
   echo "  # Automatically decompresses .zbst GGUF shards - must ensure the list of custom tools matches all the tools that may have been used to create the .zbst present on the host repositories" >&2
   echo "    ./quant_downloader.sh -zd --z-custom-tools 'zstd:28B52FFD,lbzip2:425A68,brotli:' my_custom.recipe" >&2
+  echo "  # Download an SGLang recipe (per-tensor safetensors; assemble it afterwards with sglang_write.py --assemble):" >&2
+  echo "    ./quant_downloader.sh Qwen3.8-27B.THIREUS-4.5101bpw-7.4528ppl.14GB-GGUF_14GB-GPU_0GB-CPU.71a5e8f_4ca1dfe.recipe --qtype sgl_bf16 -j 8" >&2
   echo "  # Verify only individual tensors 2,3,1094:" >&2
   echo "    ./quant_downloader.sh --individual-tensors 2,3,1094 --verify my_custom.recipe" >&2
   echo "  # Compute maps of quants that aren't available for download and locally quantize token_embd.weight to q8_0 using Thireus's special llama-quantize:" >&2
@@ -1024,6 +1029,75 @@ else
   GGUF_INFO_EXTRA=(--venv)
 fi
 
+# --------------- SGLANG SPLITS (sgl_* qtypes) ----------------
+# ONE EXTENSION, NOT A SECOND SCRIPT.  An SGLang model ships exactly the way a
+# GGUF one does - a <MODEL>-<MAINTAINER>-<QTYPE>-SPECIAL_SPLIT repository per
+# qtype, one file per tensor, a tensors.map giving each tensor's file, sha256,
+# shape and byte count, a gpg signature on the map and on shard 00001 - and the
+# only difference is that the file is a .safetensors holding that module's HF
+# tensors instead of a .gguf holding one ggml tensor.  So everything below that
+# is about FILES stays as it is: the hashing, the signatures, the resume, the
+# .zbst variants, --verify, --individual-tensors and the node sharding.  What
+# changes is the extension in every name this script builds and every map line
+# it parses, and the GGUF-only extras (gguf_info.py verification, the computed
+# maps, quantise-from-bf16) which have nothing to inspect here.
+#
+# AND ONE RULE THAT IS NEW.  In the SGLang container BF16 IS ENCODED BY ABSENCE:
+# a module missing from quantized_layers resolves to UnquantizedLinearMethod.
+# `quant_assign.py --ignore-f32` therefore emits a recipe that names only the
+# tensors it quantised, and a tensor no pattern matches must still be FETCHED -
+# from the repository of --qtype, which is why --qtype is required here and
+# should be sgl_bf16.  A GGUF recipe names every tensor and keeps its old
+# behaviour (an unmatched tensor is skipped) untouched.
+SHARD_EXT=".gguf"        # what a shard file is called, everywhere below
+SHARD_EXT_RE="\.gguf"    # the same, escaped for =~ and sed -E
+SGL_MODE=false
+_sgl_recipe=""
+for _arg in "$@"; do
+  if [[ "$_arg" == *.recipe || "$_arg" == *.recipe.txt ]]; then
+    _sgl_recipe="$_arg"
+  fi
+done
+_sgl_n=0; _gguf_n=0
+if [[ -n "$_sgl_recipe" && -f "$_sgl_recipe" ]]; then
+  while IFS= read -r _line || [[ -n "$_line" ]]; do
+    [[ -z "$_line" || "$_line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$_line" != *=* ]] && continue
+    IFS='=' read -r _p _q _ <<< "$_line"
+    if [[ "${_q,,}" == sgl_* ]]; then _sgl_n=$((_sgl_n+1)); else _gguf_n=$((_gguf_n+1)); fi
+  done < "$_sgl_recipe"
+fi
+if (( _sgl_n > 0 )) || [[ "${QTYPE,,}" == sgl_* ]]; then
+  if (( _gguf_n > 0 )); then
+    echo "❌ Error: '$_sgl_recipe' mixes SGLang qtypes ($_sgl_n line(s) of sgl_*) with GGUF ones ($_gguf_n line(s))." >&2
+    echo "   The two are different containers in different repositories and cannot make one model. Split the recipe." >&2
+    exit 1
+  fi
+  if [[ "${QTYPE,,}" != sgl_* ]]; then
+    echo "❌ Error: this recipe assigns SGLang qtypes, so --qtype must be an sgl_* one too (it names the files and it is what an" >&2
+    echo "   unmatched tensor is fetched as). Re-run with --qtype sgl_bf16 - in the SGLang container BF16 is encoded by absence," >&2
+    echo "   so sgl_bf16 is what every tensor the recipe does not name has to be." >&2
+    exit 1
+  fi
+  SGL_MODE=true
+  SHARD_EXT=".safetensors"
+  SHARD_EXT_RE="\.safetensors"
+  SKIP_GGUF_VERIFICATION=true
+  if [[ -n "$LLAMA_QUANTIZE_BIN" || "$QUANTIZE_ALL_SHARDS" == true || -n "$QUANTIZE_FAILED_DOWNLOAD" ]]; then
+    echo "❌ Error: the quantize-from-bf16 options are llama-quantize's and produce GGUF; an sgl_* recipe is served by" >&2
+    echo "   sglang_write.py --split, which writes the per-tensor safetensors a recipe like this is assembled from." >&2
+    exit 1
+  fi
+  if [[ "$COMPUTE_MISSING_MAP" == true || "$COMPUTE_ALL_MAP" == true || "$COMPUTE_QTYPES_REGEX_MAP_ENABLED" == true ]]; then
+    echo "❌ Error: --compute-*-map derives a GGUF map from tensors.bf16.map with convert_map_qtype.py; an SGLang split ships" >&2
+    echo "   its own tensors.<qtype>.map, written by sglang_write.py --split alongside the files it describes." >&2
+    exit 1
+  fi
+  echo "[Info] SGLang mode: shards are *${SHARD_EXT}; GGUF file verification is not applicable and is disabled."
+  echo "[Info] SGLang mode: a tensor no recipe pattern matches is fetched as ${QTYPE^^} (absence encodes BF16)."
+fi
+# -------------------------------------------------------------
+
 # Automatic selection of z mode based on files present
 #
 # 1) If neither -z nor -zd specified and neither was auto-disabled (--z-noauto),
@@ -1035,8 +1109,8 @@ fi
 if [[ "$ARCHIVE_COMPRESS" != true && "$ARCHIVE_DECOMPRESS" != true && "$ARCHIVE_NOAUTO" != true ]]; then
   # Count files robustly using nullglob to avoid find portability differences
   shopt -s nullglob 2>/dev/null || true
-  gguf_files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf )
-  zbst_files=(  "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf.zbst )
+  gguf_files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*${SHARD_EXT} )
+  zbst_files=(  "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*${SHARD_EXT}.zbst )
   shopt -u nullglob 2>/dev/null || true
 
   # Get array lengths (do NOT use ${#array[@]:-0} — some shells reject that)
@@ -2330,8 +2404,8 @@ run_downloader() {
     if (( _n >= 2 )); then
       destdir="${_args[$((_n-2))]}"
     fi
-    # Only consider files that are .gguf or .gguf.zbst
-    if [[ "$filename" == *.gguf || "$filename" == *.gguf.zbst ]]; then
+    # Only consider shard files (.gguf / .safetensors) and their .zbst variants
+    if [[ "$filename" == *${SHARD_EXT} || "$filename" == *${SHARD_EXT}.zbst ]]; then
       # Build full path (if destdir empty, assume current)
       local fullpath
       if [[ -n "$destdir" ]]; then
@@ -2357,11 +2431,11 @@ run_downloader() {
 
         # Enforce symlink-only policy conditions:
         if [[ "$SYMLINK_ONLY" == true ]]; then
-          if [[ "$filename" == *.gguf && "$ARCHIVE_COMPRESS" == true ]]; then
+          if [[ "$filename" == *${SHARD_EXT} && "$ARCHIVE_COMPRESS" == true ]]; then
             echo "❌ Error: Download created a .gguf symlink at '$fullpath'. --z (compress) is enabled and --symlink-only is set, so we cannot compress this symlink into a regular .gguf.zbst file. Remove --symlink-only or disable -z to proceed." >&2
             exit_from_subprocess 11
           fi
-          if [[ "$filename" == *.gguf.zbst && "$ARCHIVE_DECOMPRESS" == true ]]; then
+          if [[ "$filename" == *${SHARD_EXT}.zbst && "$ARCHIVE_DECOMPRESS" == true ]]; then
             echo "❌ Error: Download created a .gguf.zbst symlink at '$fullpath'. -zd (decompress) is enabled and --symlink-only is set, so we cannot decompress this symlink into a regular .gguf file in the working dir. Remove --symlink-only or disable -zd to proceed." >&2
             exit_from_subprocess 12
           fi
@@ -2370,7 +2444,7 @@ run_downloader() {
 
       # If downloader produced a .gguf.zbst but user has not enabled -z or -zd, that is unexpected:
       if [[ -f "$destdir/$filename" || -L "$destdir/$filename" ]]; then
-        if [[ "$filename" == *.gguf.zbst && "$ARCHIVE_COMPRESS" != true && "$ARCHIVE_DECOMPRESS" != true ]]; then
+        if [[ "$filename" == *${SHARD_EXT}.zbst && "$ARCHIVE_COMPRESS" != true && "$ARCHIVE_DECOMPRESS" != true ]]; then
           echo "❌ Error: The downloader fetched a compressed file '$destdir/$filename' (.gguf.zbst) but you did not enable -z or -zd. Please rerun the script with either --z-compress (-z) or --z-decompress (-zd) to work with compressed files." >&2
           exit_from_subprocess 13
         fi
@@ -2436,9 +2510,9 @@ _transform_to_zbst_request() {
   fi
 
   # Transform the filename suffixes
-  if [[ "$filename" == *.gguf ]]; then
-    out_filename="${filename%.gguf}.gguf.zbst"
-  elif [[ "$filename" == *.gguf.zbst ]]; then
+  if [[ "$filename" == *${SHARD_EXT} ]]; then
+    out_filename="${filename}.zbst"
+  elif [[ "$filename" == *${SHARD_EXT}.zbst ]]; then
     out_filename="$filename"
   fi
 
@@ -2606,6 +2680,19 @@ for entry in "${USER_REGEX[@]}"; do
 done
 readarray -t UNIQUE_QTYPES < <(printf "%s\n" "${PATTERN_QTYPES[@]}" | sort -u)
 
+# THE EFFECTIVE PATTERN LIST THE FETCHER USES.  In SGLang mode a tensor no recipe
+# pattern names is BF16 BY ABSENCE (a module missing from quantized_layers gets
+# UnquantizedLinearMethod), so `quant_assign.py --ignore-f32` leaves the norms,
+# the biases and the 1-D tensors out of the recipe and they must still be fetched
+# - from the repository of --qtype.  A catch-all is therefore appended LAST,
+# where it can only ever answer for a tensor no real pattern claimed.  A GGUF
+# recipe names every tensor and gets the list unchanged.
+declare -a FETCH_PATTERNS=("${PATTERNS[@]}") FETCH_QTYPES=("${PATTERN_QTYPES[@]}")
+if [[ "$SGL_MODE" == true ]]; then
+  FETCH_PATTERNS+=('.*')
+  FETCH_QTYPES+=("$QTYPE")
+fi
+
 # Ensure QTYPE is present and is the first element (case-insensitive)
 if [[ " ${UNIQUE_QTYPES[*]^^} " != *" ${QTYPE^^} "* ]]; then
   # not present -> prepend
@@ -2765,7 +2852,7 @@ compute_map_for_qtype() {
   if last_line="$(tail -n1 "$local_map" 2>/dev/null || true)"; then
     if [[ -n "$last_line" ]]; then
       # extract filename part before first ':' and strip .gguf suffix if present
-      last_line="$(printf '%s' "$last_line" | awk -F: '{print $1}' | sed -E 's/\.gguf.*$//')"
+      last_line="$(printf '%s' "$last_line" | awk -F: '{print $1}' | sed -E "s/${SHARD_EXT_RE}.*\$//")"
     else
       last_line=""
     fi
@@ -3268,7 +3355,7 @@ for _q in "${UNIQUE_QTYPES[@]}"; do
 
   # If we reach here, parse the map file lines to populate shard lists and hashes
   while IFS=: read -r fname hash tname shape dtype elements bytes imatrix || [[ -n "$fname" ]]; do
-    if [[ $fname =~ -([0-9]{5})-of-[0-9]{5}\.gguf$ ]]; then
+    if [[ $fname =~ -([0-9]{5})-of-[0-9]{5}${SHARD_EXT_RE}$ ]]; then
       shard_id=$((10#${BASH_REMATCH[1]}))
       set_shard_id "$tname" "$shard_id"
       set_t_hash "$qtype" "$tname" "$hash"
@@ -4125,14 +4212,14 @@ download_shard() {
     echo "[$(timestamp)] Tensor='$tensor' chunk_id=$chunk_id HASH verification — proceeding"
   fi
 
-  for i in "${!PATTERNS[@]}"; do
-    local pat="${PATTERNS[$i]}"
+  for i in "${!FETCH_PATTERNS[@]}"; do
+    local pat="${FETCH_PATTERNS[$i]}"
     if [[ "$tensor" =~ $pat ]]; then
-      local qtype="${PATTERN_QTYPES[$i]^^]}"
+      local qtype="${FETCH_QTYPES[$i]^^]}"
       local dl_type="$qtype"
       [[ "${qtype^^}" == "F32" ]] && dl_type="${QTYPE}"
 
-      local shard_id=$(echo "$shard_file" | sed -E 's/.*-([0-9]{5})-of-[0-9]{5}\.gguf/\1/')
+      local shard_id=$(echo "$shard_file" | sed -E "s/.*-([0-9]{5})-of-[0-9]{5}${SHARD_EXT_RE}/\\1/")
 
       local got=""
       local need_download=false
@@ -4386,15 +4473,15 @@ if [[ "$VERIFY" == true ]]; then
   # - If -z is used with --verify: verify only .gguf.zbst; warn if any .gguf present (they will be ignored)
   # - If neither -z nor -zd used with --verify: verify only .gguf; warn if any .gguf.zbst present (they will be ignored)
   if [[ "$ARCHIVE_COMPRESS" == true ]]; then
-    # Verify only .gguf.zbst
-    if comp=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -name "*-${QTYPE^^}-*-of-*.gguf" -print -quit 2>/dev/null || true); then
+    # Verify only the compressed variant
+    if comp=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -name "*-${QTYPE^^}-*-of-*${SHARD_EXT}" -print -quit 2>/dev/null || true); then
       if [[ -n "$comp" ]]; then
         echo "⚠️  Warning: found .gguf files in model dir while --verify + -z is used. These will be ignored; verifying only .gguf.zbst files." >&2
       fi
     fi
   else
-    # Verify only .gguf
-    if comp=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -name "*-${QTYPE^^}-*-of-*.gguf.zbst" -print -quit 2>/dev/null || true); then
+    # Verify only the uncompressed shards
+    if comp=$(find "$LOCAL_MODEL_DIR" -maxdepth 1 -name "*-${QTYPE^^}-*-of-*${SHARD_EXT}.zbst" -print -quit 2>/dev/null || true); then
       if [[ -n "$comp" ]]; then
         echo "⚠️  Warning: found .gguf.zbst files in model dir while --verify without -z. These will be ignored; verifying only .gguf files." >&2
       fi
@@ -4408,14 +4495,14 @@ if [[ "$VERIFY" == true ]]; then
     shopt -s nullglob 2>/dev/null || true
     files=()
     if [[ "$ARCHIVE_COMPRESS" == true ]]; then
-      files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf.zbst )
+      files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*${SHARD_EXT}.zbst )
     else
-      files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf )
+      files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*${SHARD_EXT} )
     fi
     shopt -u nullglob 2>/dev/null || true
 
     IFS= read -r first <<< "$(printf '%s\n' "${files[@]:-}" | head -n1 || true)"
-    if [[ -n "$first" && "$first" =~ -${QTYPE^^}-SPECIAL_TENSOR-([0-9]{5})-of-([0-9]{5})\.gguf(\.zbst)?$ ]]; then
+    if [[ -n "$first" && "$first" =~ -${QTYPE^^}-SPECIAL_TENSOR-([0-9]{5})-of-([0-9]{5})${SHARD_EXT_RE}(\.zbst)?$ ]]; then
       total="${BASH_REMATCH[2]}"
     else
       total=""
@@ -4438,7 +4525,7 @@ if [[ "$VERIFY" == true ]]; then
 
     if [[ "$should_verify_first" == true ]]; then
       if [[ -n "$first" ]]; then
-        gguf_first=$(basename "$(printf '%s\n' "$first" | sed -E "s/-[0-9]{5}-of-$total\.gguf(\.zbst)?$/-00001-of-$total.gguf/")")
+        gguf_first=$(basename "$(printf '%s\n' "$first" | sed -E "s/-[0-9]{5}-of-$total${SHARD_EXT_RE}(\.zbst)?\$/-00001-of-$total${SHARD_EXT}/")")
         local_first="$LOCAL_MODEL_DIR/$gguf_first"
         local_first_z="${local_first}.zbst"
 
@@ -4600,10 +4687,10 @@ if [[ "$VERIFY" == true ]]; then
           fi
         fi
         if [[ "$proceed" == true ]]; then
-          for l in "${!PATTERNS[@]}"; do
-            pat="${PATTERNS[$l]}"
+          for l in "${!FETCH_PATTERNS[@]}"; do
+            pat="${FETCH_PATTERNS[$l]}"
             if [[ "$tensor" =~ $pat ]]; then
-              qtype="${PATTERN_QTYPES[$l]^^]}"
+              qtype="${FETCH_QTYPES[$l]^^]}"
               shardfile="${SHARD_FILENAMES_DYNAMIC[$i]}"
               local_gguf="$LOCAL_MODEL_DIR/$shardfile"
               local_z="${local_gguf}.zbst"
@@ -4702,10 +4789,10 @@ if [[ "$VERIFY" == true ]]; then
           fi
         fi
         if [[ "$proceed" == true ]]; then
-          for l in "${!PATTERNS[@]}"; do
-            pat="${PATTERNS[$l]}"
+          for l in "${!FETCH_PATTERNS[@]}"; do
+            pat="${FETCH_PATTERNS[$l]}"
             if [[ "$tensor" =~ $pat ]]; then
-              qtype="${PATTERN_QTYPES[$l]^^]}"
+              qtype="${FETCH_QTYPES[$l]^^]}"
               shardfile="${SHARD_QUANTIZE_FILENAMES_DYNAMIC[$j]}"
               local_gguf="$LOCAL_MODEL_DIR/$shardfile"
               local_z="${local_gguf}.zbst"
@@ -4775,14 +4862,14 @@ if [[ "$VERIFY" == true ]]; then
     if [[ "$SKIP_HASH" == true ]]; then
       echo "[$(timestamp)] ❌ VERIFY: some files missing"
     else
-      echo "[$(timestamp)] ❌ VERIFY: some files missing or with hash mismatch or invalid gguf"
+      echo "[$(timestamp)] ❌ VERIFY: some files missing or with hash mismatch or invalid ${SHARD_EXT#.} shard"
     fi
     exit 1
   else
     if [[ "$SKIP_HASH" == true ]]; then
       echo "[$(timestamp)] ✅ VERIFY: all files present"
     else
-      echo "[$(timestamp)] ✅ VERIFY: all files present and with valid hashes/gguf"
+      echo "[$(timestamp)] ✅ VERIFY: all files present and with valid hashes/${SHARD_EXT#.}"
     fi
     rm -f "$FAIL_MARKER" 2>/dev/null || true
     exit 0
@@ -5316,24 +5403,24 @@ shopt -u nullglob
 # Use shell globbing (nullglob) for portability and predictable behavior.
 shopt -s nullglob 2>/dev/null || true
 if [[ "$ARCHIVE_COMPRESS" == true ]]; then
-  files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf.zbst )
+  files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*${SHARD_EXT}.zbst )
 elif [[ "$ARCHIVE_DECOMPRESS" == true ]]; then
-  # prefer already-decompressed .gguf if present, otherwise accept .gguf.zbst
-  files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf.zbst )
+  # prefer an already-decompressed shard if present, otherwise accept the .zbst
+  files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*${SHARD_EXT} "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*${SHARD_EXT}.zbst )
 else
-  files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf )
+  files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*${SHARD_EXT} )
 fi
 shopt -u nullglob 2>/dev/null || true
 
 IFS= read -r first <<< "$(printf '%s\n' "${files[@]:-}" | head -n1 || true)"
-if [[ -n "$first" && "$first" =~ -${QTYPE^^}-SPECIAL_TENSOR-([0-9]{5})-of-([0-9]{5})\.gguf(\.zbst)?$ ]]; then
+if [[ -n "$first" && "$first" =~ -${QTYPE^^}-SPECIAL_TENSOR-([0-9]{5})-of-([0-9]{5})${SHARD_EXT_RE}(\.zbst)?$ ]]; then
   total="${BASH_REMATCH[2]}"
-  gguf_first=$(basename "$(printf '%s\n' "$first" | sed -E "s/-[0-9]{5}-of-$total\.gguf(\.zbst)?$/-00001-of-$total.gguf/")")
+  gguf_first=$(basename "$(printf '%s\n' "$first" | sed -E "s/-[0-9]{5}-of-$total${SHARD_EXT_RE}(\.zbst)?\$/-00001-of-$total${SHARD_EXT}/")")
 else
   # Attempt to build file name from .map file instead
   num_shards=${#SHARD_FILENAMES_FULL[@]}
   total="$(printf "%05d" "$((num_shards + 1))")"
-  gguf_first=$(basename "$(printf '%s\n' "${SHARD_FILENAMES_FULL[0]}" | sed -E "s/-[0-9]{5}-of-$total\.gguf(\.zbst)?$/-00001-of-$total.gguf/")")
+  gguf_first=$(basename "$(printf '%s\n' "${SHARD_FILENAMES_FULL[0]}" | sed -E "s/-[0-9]{5}-of-$total${SHARD_EXT_RE}(\.zbst)?\$/-00001-of-$total${SHARD_EXT}/")")
 fi
 
 # Determine whether we should perform first-shard GPG download/verification under special-node-mode (does it by default for BF16 models)
@@ -5649,27 +5736,27 @@ else
   # Build full_indices from the files list we assembled above (respecting z modes)
   full_indices=()
   if [[ "$ARCHIVE_COMPRESS" == true ]]; then
-    # only consider .gguf.zbst for completeness
+    # only consider the compressed variant for completeness
     shopt -s nullglob 2>/dev/null || true
-    files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf.zbst )
+    files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*${SHARD_EXT}.zbst )
     shopt -u nullglob 2>/dev/null || true
   elif [[ "$ARCHIVE_DECOMPRESS" == true ]]; then
-    # if z-decompress, prefer .gguf files (we expect decompressed .gguf). If .gguf absent, consider .gguf.zbst
+    # if z-decompress, prefer the decompressed shards; if absent, consider the .zbst
     shopt -s nullglob 2>/dev/null || true
-    files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf )
+    files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*${SHARD_EXT} )
     if [[ ${#files[@]} -eq 0 ]]; then
-      files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf.zbst )
+      files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*${SHARD_EXT}.zbst )
     fi
     shopt -u nullglob 2>/dev/null || true
   else
     shopt -s nullglob 2>/dev/null || true
-    files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*.gguf )
+    files=( "$LOCAL_MODEL_DIR"/*-${QTYPE^^}-*-of-*${SHARD_EXT} )
     shopt -u nullglob 2>/dev/null || true
   fi
 
   for f in "${files[@]}"; do
     base=$(basename "$f")
-    if [[ "$base" =~ -${QTYPE^^}-SPECIAL_TENSOR-([0-9]{5})-of-([0-9]{5})\.gguf(\.zbst)?$ ]]; then
+    if [[ "$base" =~ -${QTYPE^^}-SPECIAL_TENSOR-([0-9]{5})-of-([0-9]{5})${SHARD_EXT_RE}(\.zbst)?$ ]]; then
       full_indices+=( "${BASH_REMATCH[1]}" )
       # capture total if not already set
       if [[ -z "${total:-}" ]]; then
@@ -5851,4 +5938,8 @@ echo
 rm -f "$FAIL_MARKER" 2>/dev/null || true
 if [[ "${SKIP_FINAL_MESSAGE:-false}" != true ]]; then
   echo "✅ Download and verification complete. Enjoy!"
+  if [[ "$SGL_MODE" == true ]]; then
+    echo "   These are per-tensor safetensors, not a checkpoint yet. Turn them into one SGLang can serve with:"
+    echo "     sglang_write.py --assemble $LOCAL_MODEL_DIR [<mtp-/mmproj- companion dir> ...] --out <checkpoint dir>"
+  fi
 fi

@@ -1,0 +1,45 @@
+# 2026-09-05 — SGLang-native rows (sgl_*) appended; 2026-09-07 — cross-calibrated against the GGUF rows.
+# Each sgl row is the exact full-vocabulary mean KLD, measured in SGLang on one RTX PRO 6000 Blackwell (SGLang 0.5.19.dev932,
+# bfloat16 KV cache), of a uniform checkpoint of that type against the in-engine BF16 model over 2,550 positions of the same
+# calibration corpus as the rows above (10 windows of 512 tokens, second half scored), divided by the share of the model's
+# sensitivity mass the type can cover (0.93 for the 401-module NVFP4/FP8 sets, 0.80 for the 400-module int4 set; token
+# embedding kept BF16). They are on the same scale as the llama-perplexity rows: the same weights put back into BF16 and
+# measured the standard way (250 chunks) give int4_g128 0.0450 vs 0.0441 raw here and nvfp4 weight-only 0.0384 vs 0.0344,
+# i.e. 1.02x and 1.12x, within a 10-window sample's spread. sgl_nvfp4 (W4A4) and sgl_fp8 (W8A8) also quantise the
+# activations at runtime, which a weight-only measurement cannot see: the uniform NVFP4 checkpoint measures 0.0624 in the
+# engine against 0.0344 for its weights alone. The weights are rounded to nearest with absmax block scales, without the
+# imatrix, which is why these rows sit above the imatrix-weighted GGUF rows at similar bits. The assigner uses the rows to
+# rank and scale the SGLang pool; measured and estimated rows were checked to give identical recipes. sgl_bf16 = 0 by
+# definition. fp4_rtn_metric.py remains an optional estimator for a model that has no measured rows.
+
+# 2026-09-07 (later) — sgl_fp8_pb_wo is a weight-only checkpoint format, but the SGLang block-FP8 kernel quantises the activations per token group inside the GEMM, so the engine runs it as W8A8 and the row includes that cost (0.0028 weights alone on the standard axis against 0.0043 in the engine), which is what the cross-calibration measured.
+
+
+# 2026-09-07 (later still) — THE sgl_* ROWS NOW LIVE IN group0/kld_results_sglang.csv, not in
+# group0/kld_results.csv. Same numbers, same axis, own file: a GGUF row here is a weight-only
+# llama-perplexity measurement at full coverage, while four of the seven sgl_* rows also carry the
+# activation quantisation the engine's kernels apply at runtime and every one of them is divided by
+# the sensitivity mass its checkpoint covers. Keeping both in one file is what let sgl_nvfp4 0.0669
+# be read as '2.4x worse than q3_K 0.0280'. --speed-profile sglang finds the new file by itself
+# (and other models borrow it, printing that they did); --quant-degradation-csv still overrides.
+# The split is a layout change only. Measured before shipping it: the shipped rows and an
+# 'ik-scale' rebuild of them (weight-only round trip on the 250-chunk axis PLUS the measured
+# activation cost, with and without the /mass_covered step) give byte-identical assignments at all
+# 27 size targets from 14.5 to 20.0 GB, including the four shipped anchors -- provided the
+# sgl_fp8 : sgl_fp8_pb_wo ordering is kept. Forcing those two 8-bit rows to an exact tie (the
+# cross-calibration measured only fp8_pb_wo) is the ONLY thing that moves a recipe, and it moves
+# 8-bit tensors between the two 8-bit rungs: predicted quality on a common axis changes by 2e-7
+# to 7e-5 nats. The /mass_covered normalisation changes nothing at all.
+
+# 2026-09-10 — ACTIVATION SCALES ARE THE SUITE'S OWN. The static input_scale every NVFP4 and per-tensor FP8
+# module needs used to be harvested from RadixArk's Qwen3.8-27B-NVFP4 checkpoint. It is now measured by
+# sglang_calibrate.py on 131,072 tokens of imatrix-calibration-corpus-v02.txt (a running absmax of every linear's
+# input over one forward pass of the BF16 model, the same statistic ModelOpt calibrates), streamed from the BF16 GGUF
+# split, and shipped as ../sglang_scales/ (safetensors of <module>.input_scale F32 scalars in the FP8 convention
+# amax/448, plus CALIBRATION.json with the text's sha256 and the token count). The four shipped recipes were rebuilt
+# with it and re-measured in the engine, paired against the RadixArk-scaled builds over the same 2,550 positions and
+# the same 580 wiki.test.raw chunks: KLD 0.0605->0.0590 (F), 0.0446->0.0444 (E2), 0.0362->0.0349 (P), 0.0254->0.0266
+# (B2); perplexity 7.4527->7.4384, 7.2689->7.2763, 7.1928->7.1846, 7.0806->7.0780; no pair reaches |t| = 1.5 on either
+# metric, so the two scale sources are equal within the corpus sample and the filenames carry the own-scale numbers.
+# The sgl_* rows above are unchanged: they were measured on uniform checkpoints and are a property of the format.
+# The comparison of scale sources, corpora and token budgets is recorded in the calibration notes (the CALIBRATION.json next to the shipped scale set carries the chosen corpus and token budget).

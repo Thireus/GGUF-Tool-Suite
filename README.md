@@ -241,6 +241,26 @@ Examples of recipes are included in the `recipe_examples` folder. Have a look at
 
 ---
 
+## ⚡ SGLang recipes (NVFP4 / FP8)
+
+The suite can also produce recipes and checkpoints for [SGLang](https://github.com/sgl-project/sglang) instead of GGUF files. SGLang serves many users at once and, on Blackwell GPUs, its NVFP4 and FP8 kernels are the fastest way to run a model that fits in VRAM. The trade-off is quality per byte, 4-bit is the floor, so if you need to squeeze a big model into a small space, stick to GGUF recipes.
+
+The recipe is produced the same way as a GGUF one, from the same `kld_results.csv` calibration data of the model, with one preset that handles everything:
+
+```bash
+cd models/Qwen3.8-27B
+../../quant_assign.py kld_results.csv --speed-profile sglang --gpu-tensors-max-size 17.41GB --hf-files /AI/huggingface/Qwen3.8-27B | ../../quants_regex_merger.sh --model-name Qwen3.8-27B --model-link https://huggingface.co/Qwen/Qwen3.8-27B
+```
+
+`--gpu-tensors-max-size` is the most important parameter, and pretty much the only one you need to think about: it is the size budget of the quantized tensors. The reason it matters so much more than for GGUF recipes is that SGLang has very few quant types to choose from: a tensor is either 4-bit (NVFP4), 8-bit (FP8) or left in BF16. There is no q3, no q6, no intermediate types and no variants of the same bits per weight, so the whole recipe boils down to which tensors deserve 8 bits or BF16 within your budget, and the calibration data is what decides that. `--hf-files` is the directory holding the model's own `config.json` and tokenizer files (the guide says how to fetch them). `--speed-profile sglang` takes care of the rest automatically: it picks the quant types SGLang can load, detects the model architecture, keeps fused tensors on the same type, prices each type with the degradation rows it carries (measured in SGLang, no benchmark of your own needed) and chooses the speed budgets so that your bytes are spent first and speed is maximised second. Everything it decided is printed as `[Preset]` lines and written in the recipe footer, together with the full command that reproduces the run.
+
+> 💡 The merger script names the recipe for you (model, bits per weight, size, hashes) and the merged recipe is exactly what the checkpoint writer takes as input, so always pipe the output through it as above.
+
+> ⚠️ Every quality and speed figure printed by the recipe step is a prediction from the calibration data. The measured numbers of the shipped recipes are in [docs/sglang.md](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/docs/sglang.md).
+
+Turning the recipe into a checkpoint, and serving it, is four more commands, all from the same `-BF16-SPECIAL_SPLIT` GGUF shards this suite uses everywhere else: `sglang_calibrate.py` measures the activation scales NVFP4 and FP8 need (a couple of minutes on one GPU, on the calibration corpus), `sglang_write.py` writes the checkpoint on CPU and verifies it (two commands), and SGLang loads it with `--quantization modelopt_mixed`. SGLang checkpoints also ship the way GGUF ones do, one repository per quant type and one file per tensor, so `quant_downloader.sh` cooks a recipe out of them and `sglang_write.py --assemble` turns the download into the checkpoint. The whole step-by-step guide, the measured quality and speed of the shipped recipes, and the notes on models with a speculative decoding head are in [docs/sglang.md](https://github.com/Thireus/GGUF-Tool-Suite/blob/main/docs/sglang.md). Recipe examples are in `recipe_examples/sglang_recipes/`.
+
+---
 ## 📥 Download Model Shards from a Recipe
 
 > 🎉 A web-based port of quant_downloader.sh is available at https://gguf.thireus.com/quant_downloader.html

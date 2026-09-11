@@ -1,0 +1,24 @@
+# 2026-09-07 — SGLang per-FORMAT degradation rows: this model has NONE of its own. There is no
+# group0/kld_results_sglang.csv here, so `--speed-profile sglang` uses the rows measured on
+# Qwen3.8-27B (models/Qwen3.8-27B/group0/kld_results_sglang.csv) and prints that they are
+# TRANSFERRED; the recipe footer records it as well. They are a property of the FORMAT, not of the
+# model, which is what makes the transfer legitimate — but the predicted degradation for GLM-4.7 is
+# therefore a transferred prediction, and it measures optimistic: docs/sglang.md reports the shipped
+# GLM recipes at 0.0537/0.0347/0.0307 weights-only against predictions of 0.0669/0.0230/0.0208.
+# To make them this model's own, measure them and write group0/kld_results_sglang.csv here; the
+# preset prefers a local file over the transferred one without any flag.
+#
+# Do NOT put sgl_* rows into group0/kld_results.csv. That table is measured against an iq6_k
+# baseline rather than BF16 (its q8_0 sits at 0.0098), so it is not even the same axis as the
+# Qwen GGUF rows, let alone the same kind of number as an in-engine sgl_* row.
+
+# 2026-09-11 — ACTIVATION SCALES ARE THE SUITE'S OWN, AND THE HEAD STAYS BF16. The shipped recipes were first built
+# with the input_scale tensors harvested from Salyut1's GLM-4.7-NVFP4 checkpoint, which left the output head BF16 for
+# want of a published scale. The shipped set ../sglang_scales/ (sglang_calibrate.py, 413,696 tokens = the whole
+# imatrix-calibration-corpus-v02.txt, streamed from the BF16 snapshot in 19 minutes on an RTX 5090) calibrates the head
+# too, and quantising it measured +0.5% perplexity / +0.005 KLD at the floor size (paired against the same build with
+# the head in BF16, t = 11 and 6) for 1.1 GB: ^output\.weight$ is pinned to sgl_bf16 by the glm4_moe advisory. With
+# the head pinned, the own-scale builds read floor 4.3640/0.0911, mid 4.1510/0.0630, top 4.1396/0.0632 (PPL on
+# wiki.test.raw / KLD in the engine) against 4.3389/0.0912, 4.1389/0.0593, 4.1258/0.0566 with Salyut1's scales; no
+# pair reaches |t| = 1.8. Pricing the pinned head exposed two byte-accounting slips in quant_assign.py's auto sweep
+# (a pinned tensor priced at the candidate type, and a fallback that was not a lower bound); both fixed on 2026-09-11.
